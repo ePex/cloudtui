@@ -1,4 +1,4 @@
-# 0002 — tui app scaffold
+# 2026-07-07 — tui app scaffold
 
 Commit: `feat(tui): scaffold tview app skeleton with command prompt and placeholder views`
 

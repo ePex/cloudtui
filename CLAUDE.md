@@ -20,6 +20,32 @@ Instructions for AI assistants (and humans) working in this repository.
   or account IDs — not in code, config, examples, or commit history. Local
   configuration goes in ignored files (e.g. `.env`, `*.local.yaml`).
 
+## Feature & bugfix workflow
+
+When asked to implement a new feature or fix a bug (not a trivial typo or
+config tweak), any agent or contributor follows this sequence and **stops
+for feedback at each gate** — do not proceed to the next stage until the
+current one is explicitly approved:
+
+1. **Specification.** Write a short spec to `spec/` (see `spec/README.md`):
+   what the feature/bug is, why, scope and explicit out-of-scope. Ask for
+   feedback. Revise until approved.
+2. **Implementation plan.** Once the spec is approved, propose a plan:
+   approach, files/modules touched, key technical decisions and trade-offs.
+   Ask for feedback. Revise until approved.
+3. **Task breakdown.** Once the plan is approved, break it into discrete,
+   reviewable steps. Ask for approval on each step before implementing it —
+   do not implement several steps and present them together.
+
+This gating applies to features and bugfixes alike; trivial changes can
+skip straight to implementation.
+
+Every spec file lives in `spec/` and is named with the date it was started,
+so the folder sorts into a correct chronological order:
+
+- Features: `spec/YYYY-MM-DD_feat-<slug>.md`
+- Bugfixes: `spec/YYYY-MM-DD_bugfix-<slug>.md`
+
 ## Architecture (agreed decisions)
 
 - `tui/` — Go, using **tview/tcell** (k9s-style: command prompt, resource

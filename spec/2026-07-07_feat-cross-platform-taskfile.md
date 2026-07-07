@@ -1,4 +1,4 @@
-# 0001 — Cross-platform Taskfile
+# 2026-07-07 — Cross-platform Taskfile
 
 Commit: `chore: add cross-platform Taskfile with doctor/build/run/test targets`
 
@@ -37,6 +37,7 @@ task test     # go test ./... — no test files yet, exits 0
 ## Scope note
 
 Only `tui` is wired up. `mq-proxy` has no `pom.xml`/`mvnw` yet (see
-[0002](0002-tui-app-scaffold.md) — out of scope for that change too), so no
-`build:mq-proxy`/`test:mq-proxy` targets were added; `build`/`test` will gain
-a second dependency once the Spring Boot module exists.
+[2026-07-07_feat-tui-app-scaffold.md](2026-07-07_feat-tui-app-scaffold.md) —
+out of scope for that change too), so no `build:mq-proxy`/`test:mq-proxy`
+targets were added; `build`/`test` will gain a second dependency once the
+Spring Boot module exists.
