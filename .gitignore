@@ -1,0 +1,28 @@
+# --- Binaries & build output ---
+bin/
+dist/
+
+# --- Go ---
+*.test
+*.out
+coverage.*
+vendor/
+
+# --- IDEs & editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Local configuration & secrets (never commit) ---
+.env
+.env.*
+*.local.yaml
+*.local.yml
+*.pem
+*.key
+tui/config.yaml
