@@ -1,0 +1,45 @@
+# --- Binaries & build output ---
+bin/
+dist/
+build/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# --- Go ---
+*.test
+*.out
+coverage.*
+vendor/
+
+# --- Java ---
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*
+replay_pid*
+
+# --- Generated code (built from api/ spec at build time) ---
+**/generated/
+
+# --- IDEs & editors ---
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Local configuration & secrets (never commit) ---
+.env
+.env.*
+*.local.yaml
+*.local.yml
+*.pem
+*.key
