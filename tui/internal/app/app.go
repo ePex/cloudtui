@@ -1,6 +1,7 @@
 // Package app wires up the k9s-style shell: a top bar (connection info /
-// command prompt on the left, shortcuts and logo on the right), a pages
-// area that resource views are switched into, and a minimal status bar.
+// command prompt / filter input on the left, shortcuts and logo on the
+// right), a pages area that resource views are switched into, a minimal
+// status bar, and a global-hotkey-driven help overlay.
 package app
 
 import (
@@ -16,13 +17,16 @@ import (
 )
 
 // App is the root of the TUI: it owns the tview.Application and routes
-// command-prompt input to the registered resource views.
+// command-prompt/hotkey input to the registered resource views.
 type App struct {
-	tv      *tview.Application
-	pages   *tview.Pages
-	topLeft *tview.Pages
-	prompt  *tview.InputField
-	views   []ui.View
+	tv          *tview.Application
+	rootPages   *tview.Pages
+	pages       *tview.Pages
+	topLeft     *tview.Pages
+	prompt      *tview.InputField
+	filterInput *tview.InputField
+	helpVisible bool
+	views       []ui.View
 }
 
 // New builds the app shell and registers the placeholder resource views.
@@ -37,9 +41,11 @@ func New() *App {
 		tv:    tview.NewApplication(),
 		pages: tview.NewPages(),
 		views: []ui.View{
+			views.NewHome(),
 			views.NewSecrets(),
 			views.NewParams(),
 			views.NewQueues(),
+			views.NewSettings(),
 		},
 	}
 
@@ -52,7 +58,12 @@ func New() *App {
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
 
-	tb := newTopBar(cfg, a.prompt)
+	a.filterInput = tview.NewInputField().
+		SetLabel(" /").
+		SetFieldBackgroundColor(tcell.ColorDefault)
+	a.filterInput.SetDoneFunc(a.onFilterDone)
+
+	tb := newTopBar(cfg, a.prompt, a.filterInput)
 	a.topLeft = tb.left
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -60,9 +71,14 @@ func New() *App {
 		AddItem(a.pages, 0, 1, true).
 		AddItem(newStatusBar(), 1, 0, false)
 
+	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
+	a.rootPages = tview.NewPages().
+		AddPage("main", layout, true, true).
+		AddPage("help", helpOverlay, true, false)
+
 	a.switchTo(a.views[0].Name())
 
-	a.tv.SetRoot(layout, true).SetFocus(a.pages)
+	a.tv.SetRoot(a.rootPages, true).SetFocus(a.pages)
 	a.tv.SetInputCapture(a.onGlobalKey)
 
 	return a
@@ -73,17 +89,40 @@ func (a *App) Run() error {
 	return a.tv.Run()
 }
 
-// onGlobalKey focuses the command prompt when ':' is pressed anywhere
-// outside the prompt itself, k9s-style, swapping the top-left panel from
-// connection info to the prompt.
+// onGlobalKey handles the app's hotkeys (h/s/q/?//) and the ':' command
+// prompt, all inert while the prompt or filter input has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
-	if a.tv.GetFocus() == a.prompt {
+	if a.tv.GetFocus() == a.prompt || a.tv.GetFocus() == a.filterInput {
 		return event
 	}
-	if event.Rune() == ':' {
+
+	if a.helpVisible {
+		if event.Key() == tcell.KeyEscape || event.Rune() == '?' {
+			a.closeHelp()
+		}
+		return nil
+	}
+
+	switch event.Rune() {
+	case ':':
 		a.prompt.SetText("")
 		a.topLeft.SwitchToPage("prompt")
 		a.tv.SetFocus(a.prompt)
+		return nil
+	case 'h':
+		a.switchTo("home")
+		return nil
+	case 's':
+		a.switchTo("settings")
+		return nil
+	case 'q':
+		a.tv.Stop()
+		return nil
+	case '?':
+		a.openHelp()
+		return nil
+	case '/':
+		a.beginFilter()
 		return nil
 	}
 	return event
@@ -111,6 +150,48 @@ func (a *App) onPromptDone(key tcell.Key) {
 	a.switchTo(cmd)
 }
 
+// beginFilter switches to the filter input if the active view supports
+// filtering; otherwise it's a no-op.
+func (a *App) beginFilter() {
+	if _, ok := a.activeView().(ui.Filterable); !ok {
+		return
+	}
+	a.filterInput.SetText("")
+	a.topLeft.SwitchToPage("filter")
+	a.tv.SetFocus(a.filterInput)
+}
+
+// onFilterDone applies the typed query to the active view on Enter (if it
+// supports filtering), restoring the top-left panel to connection info
+// either way.
+func (a *App) onFilterDone(key tcell.Key) {
+	defer func() {
+		a.filterInput.SetText("")
+		a.topLeft.SwitchToPage("info")
+		a.tv.SetFocus(a.pages)
+	}()
+
+	if key != tcell.KeyEnter {
+		return
+	}
+
+	if f, ok := a.activeView().(ui.Filterable); ok {
+		f.Filter(a.filterInput.GetText())
+	}
+}
+
+// openHelp shows the help overlay on top of the main layout.
+func (a *App) openHelp() {
+	a.rootPages.ShowPage("help")
+	a.helpVisible = true
+}
+
+// closeHelp hides the help overlay.
+func (a *App) closeHelp() {
+	a.rootPages.HidePage("help")
+	a.helpVisible = false
+}
+
 // switchTo activates the named view if it is registered.
 func (a *App) switchTo(name string) {
 	for _, v := range a.views {
@@ -119,4 +200,16 @@ func (a *App) switchTo(name string) {
 			return
 		}
 	}
+}
+
+// activeView returns the currently front-most registered view, or nil if
+// pages' front page doesn't match any registered view.
+func (a *App) activeView() ui.View {
+	name, _ := a.pages.GetFrontPage()
+	for _, v := range a.views {
+		if v.Name() == name {
+			return v
+		}
+	}
+	return nil
 }

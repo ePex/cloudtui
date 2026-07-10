@@ -10,21 +10,23 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-// topBar is the app's top row: a "info"/"prompt" Pages on the left
-// (connection info, replaced by the command prompt while it's active) and
-// a shortcuts+logo panel on the right.
+// topBar is the app's top row: a "info"/"prompt"/"filter" Pages on the
+// left (connection info, replaced by the command prompt or the filter
+// input while either is active) and a shortcuts+logo panel on the right.
 type topBar struct {
 	root   *tview.Flex
 	left   *tview.Pages
 	height int
 }
 
-// newTopBar builds the top bar. prompt is added as the left Pages'
-// "prompt" page so the app can switch to it while a command is being typed.
-func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
+// newTopBar builds the top bar. prompt and filterInput are added as the
+// left Pages' "prompt"/"filter" pages so the app can switch to either
+// while a command or a filter query is being typed.
+func newTopBar(cfg config.Config, prompt, filterInput *tview.InputField) *topBar {
 	left := tview.NewPages().
 		AddPage("info", newInfoPanel(cfg), true, true).
-		AddPage("prompt", prompt, true, false)
+		AddPage("prompt", prompt, true, false).
+		AddPage("filter", filterInput, true, false)
 
 	right := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(newShortcutsPanel(cfg), 0, 1, false).

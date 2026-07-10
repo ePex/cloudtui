@@ -16,9 +16,11 @@ func TestViewConstructors(t *testing.T) {
 		wantName    string
 		wantTitle   string
 	}{
+		{"home", NewHome, "home", "Home"},
 		{"secrets", NewSecrets, "secrets", "Secrets Manager"},
 		{"params", NewParams, "params", "Parameter Store"},
 		{"queues", NewQueues, "queues", "Queues"},
+		{"settings", NewSettings, "settings", "Settings"},
 	}
 
 	for _, tt := range tests {

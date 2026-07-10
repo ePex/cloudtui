@@ -45,22 +45,31 @@ func TestLogoWidth(t *testing.T) {
 
 func TestNewTopBarHeightGrowsWithLogo(t *testing.T) {
 	prompt := tview.NewInputField()
+	filterInput := tview.NewInputField()
 
-	tall := newTopBar(config.Config{Logo: []string{"1", "2", "3", "4", "5"}}, prompt)
+	tall := newTopBar(config.Config{Logo: []string{"1", "2", "3", "4", "5"}}, prompt, filterInput)
 	if tall.height != 5 {
 		t.Errorf("height with 5-line logo = %d, want 5", tall.height)
 	}
 
-	short := newTopBar(config.Config{Logo: []string{"1"}}, prompt)
+	short := newTopBar(config.Config{Logo: []string{"1"}}, prompt, filterInput)
 	if short.height != 3 {
 		t.Errorf("height with 1-line logo = %d, want 3 (shortcuts line count floor)", short.height)
 	}
 }
 
 func TestNewTopBarLeftPagesDefaultsToInfo(t *testing.T) {
-	tb := newTopBar(config.Default(), tview.NewInputField())
+	tb := newTopBar(config.Default(), tview.NewInputField(), tview.NewInputField())
 
 	if name, _ := tb.left.GetFrontPage(); name != "info" {
 		t.Errorf("front page = %q, want %q", name, "info")
+	}
+}
+
+func TestNewTopBarHasFilterPage(t *testing.T) {
+	tb := newTopBar(config.Default(), tview.NewInputField(), tview.NewInputField())
+
+	if !tb.left.HasPage("filter") {
+		t.Error("topLeft has no \"filter\" page")
 	}
 }
