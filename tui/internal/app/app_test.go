@@ -49,6 +49,9 @@ func TestOnGlobalKeyFocusesPromptOnColon(t *testing.T) {
 	if a.tv.GetFocus() != a.prompt {
 		t.Errorf("focus after ':' = %v, want prompt", a.tv.GetFocus())
 	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "prompt" {
+		t.Errorf("topLeft front page after ':' = %q, want %q", name, "prompt")
+	}
 }
 
 func TestOnGlobalKeyPassesThroughOtherKeys(t *testing.T) {
@@ -58,6 +61,9 @@ func TestOnGlobalKeyPassesThroughOtherKeys(t *testing.T) {
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
 		t.Errorf("onGlobalKey('x') = %v, want event passed through unchanged", got)
+	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "info" {
+		t.Errorf("topLeft front page after 'x' = %q, want unchanged %q", name, "info")
 	}
 }
 
@@ -83,6 +89,9 @@ func TestOnPromptDoneQuit(t *testing.T) {
 	if want := a.pages.GetPage("secrets"); a.tv.GetFocus() != want {
 		t.Errorf("focus after quit = %v, want front page's primitive %v", a.tv.GetFocus(), want)
 	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "info" {
+		t.Errorf("topLeft front page after quit = %q, want %q", name, "info")
+	}
 }
 
 func TestOnPromptDoneSwitchesToKnownView(t *testing.T) {
@@ -100,6 +109,9 @@ func TestOnPromptDoneSwitchesToKnownView(t *testing.T) {
 	if want := a.pages.GetPage("params"); a.tv.GetFocus() != want {
 		t.Errorf("focus after Enter = %v, want front page's primitive %v", a.tv.GetFocus(), want)
 	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "info" {
+		t.Errorf("topLeft front page after Enter = %q, want %q", name, "info")
+	}
 }
 
 func TestOnPromptDoneUnknownCommandLeavesViewUnchanged(t *testing.T) {
@@ -112,12 +124,16 @@ func TestOnPromptDoneUnknownCommandLeavesViewUnchanged(t *testing.T) {
 	if name, _ := a.pages.GetFrontPage(); name != "queues" {
 		t.Errorf("front page after unknown command = %q, want unchanged %q", name, "queues")
 	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "info" {
+		t.Errorf("topLeft front page after unknown command = %q, want %q", name, "info")
+	}
 }
 
 func TestOnPromptDoneNonEnterReturnsFocusWithoutSwitching(t *testing.T) {
 	a := New()
 	a.switchTo("queues")
 	a.prompt.SetText("params")
+	a.topLeft.SwitchToPage("prompt")
 	a.tv.SetFocus(a.prompt)
 
 	a.onPromptDone(tcell.KeyEscape)
@@ -130,5 +146,8 @@ func TestOnPromptDoneNonEnterReturnsFocusWithoutSwitching(t *testing.T) {
 	}
 	if want := a.pages.GetPage("queues"); a.tv.GetFocus() != want {
 		t.Errorf("focus after Escape = %v, want front page's primitive %v", a.tv.GetFocus(), want)
+	}
+	if name, _ := a.topLeft.GetFrontPage(); name != "info" {
+		t.Errorf("topLeft front page after Escape = %q, want %q", name, "info")
 	}
 }

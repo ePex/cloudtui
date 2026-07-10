@@ -1,0 +1,106 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+func TestDefault(t *testing.T) {
+	want := Config{
+		Logo: []string{
+			"╔═══════════╗",
+			"║ CLOUDTUI  ║",
+			"╚═══════════╝",
+		},
+		Colors: Palette{
+			Border: "green",
+			Label:  "yellow",
+			Value:  "white",
+			Accent: "aqua",
+		},
+	}
+	if got := Default(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Default() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadMissingFileReturnsDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if want := Default(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Load(missing) = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadFullOverride(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+logo:
+  - "AAA"
+  - "BBB"
+colors:
+  border: red
+  label: blue
+  value: black
+  accent: pink
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := Config{
+		Logo: []string{"AAA", "BBB"},
+		Colors: Palette{
+			Border: "red",
+			Label:  "blue",
+			Value:  "black",
+			Accent: "pink",
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadPartialOverrideMergesDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+colors:
+  accent: red
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := Default()
+	want.Colors.Accent = "red"
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() = %#v, want %#v (defaults preserved for untouched fields)", got, want)
+	}
+}
+
+func TestLoadDefaultFallsBackWhenAbsent(t *testing.T) {
+	got, err := LoadDefault()
+	if err != nil {
+		t.Fatalf("LoadDefault() error = %v, want nil", err)
+	}
+	if want := Default(); !reflect.DeepEqual(got, want) {
+		t.Errorf("LoadDefault() = %#v, want %#v (no config.yaml in test cwd)", got, want)
+	}
+}

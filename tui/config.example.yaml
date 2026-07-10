@@ -1,0 +1,19 @@
+# cloudtui shell config — example/template.
+#
+# Copy this file to config.yaml in the same directory to customize the
+# logo and color palette. config.yaml is gitignored, so local changes are
+# never committed; if it's absent, cloudtui uses its built-in defaults
+# (the values shown below).
+
+logo:
+  - "╔═══════════╗"
+  - "║ CLOUDTUI  ║"
+  - "╚═══════════╝"
+
+# Colors accept a tview/tcell color name (e.g. "yellow") or a hex code
+# (e.g. "#ffcc00"). Any field left out here falls back to its default.
+colors:
+  border: green   # main resource-view border color
+  label: yellow   # field labels, e.g. "Profile:"
+  value: white    # field values / default text
+  accent: aqua    # key-binding tokens in the shortcuts panel

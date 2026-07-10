@@ -1,11 +1,16 @@
-// Package app wires up the k9s-style shell: a header, a command prompt, and
-// a pages area that resource views are switched into.
+// Package app wires up the k9s-style shell: a top bar (connection info /
+// command prompt on the left, shortcuts and logo on the right), a pages
+// area that resource views are switched into, and a minimal status bar.
 package app
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
@@ -13,14 +18,21 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt input to the registered resource views.
 type App struct {
-	tv     *tview.Application
-	pages  *tview.Pages
-	prompt *tview.InputField
-	views  []ui.View
+	tv      *tview.Application
+	pages   *tview.Pages
+	topLeft *tview.Pages
+	prompt  *tview.InputField
+	views   []ui.View
 }
 
 // New builds the app shell and registers the placeholder resource views.
 func New() *App {
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cloudtui: loading config: %v (using defaults)\n", err)
+		cfg = config.Default()
+	}
+
 	a := &App{
 		tv:    tview.NewApplication(),
 		pages: tview.NewPages(),
@@ -40,14 +52,13 @@ func New() *App {
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
 
-	header := tview.NewTextView().
-		SetDynamicColors(true).
-		SetText("[::b]cloudtui[::-] — secrets · params · queues   ([gray]: command, esc cancel, ctrl-c quit[-])")
+	tb := newTopBar(cfg, a.prompt)
+	a.topLeft = tb.left
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(header, 1, 0, false).
-		AddItem(a.prompt, 1, 0, false).
-		AddItem(a.pages, 0, 1, true)
+		AddItem(tb.root, tb.height, 0, false).
+		AddItem(a.pages, 0, 1, true).
+		AddItem(newStatusBar(), 1, 0, false)
 
 	a.switchTo(a.views[0].Name())
 
@@ -63,13 +74,15 @@ func (a *App) Run() error {
 }
 
 // onGlobalKey focuses the command prompt when ':' is pressed anywhere
-// outside the prompt itself, k9s-style.
+// outside the prompt itself, k9s-style, swapping the top-left panel from
+// connection info to the prompt.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.tv.GetFocus() == a.prompt {
 		return event
 	}
 	if event.Rune() == ':' {
 		a.prompt.SetText("")
+		a.topLeft.SwitchToPage("prompt")
 		a.tv.SetFocus(a.prompt)
 		return nil
 	}
@@ -77,10 +90,12 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 }
 
 // onPromptDone handles Enter (switch view) and Escape (cancel) on the
-// command prompt.
+// command prompt, restoring the top-left panel to connection info either
+// way.
 func (a *App) onPromptDone(key tcell.Key) {
 	defer func() {
 		a.prompt.SetText("")
+		a.topLeft.SwitchToPage("info")
 		a.tv.SetFocus(a.pages)
 	}()
 
