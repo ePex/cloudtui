@@ -16,6 +16,7 @@ import (
 type topBar struct {
 	root   *tview.Flex
 	left   *tview.Pages
+	info   *tview.TextView
 	height int
 }
 
@@ -23,8 +24,9 @@ type topBar struct {
 // left Pages' "prompt"/"filter" pages so the app can switch to either
 // while a command or a filter query is being typed.
 func newTopBar(cfg config.Config, prompt, filterInput *tview.InputField) *topBar {
+	info := newInfoPanel(cfg)
 	left := tview.NewPages().
-		AddPage("info", newInfoPanel(cfg), true, true).
+		AddPage("info", info, true, true).
 		AddPage("prompt", prompt, true, false).
 		AddPage("filter", filterInput, true, false)
 
@@ -39,22 +41,34 @@ func newTopBar(cfg config.Config, prompt, filterInput *tview.InputField) *topBar
 	return &topBar{
 		root:   root,
 		left:   left,
+		info:   info,
 		height: maxInt(2, 3, len(cfg.Logo)),
 	}
 }
 
-func newInfoPanel(cfg config.Config) *tview.TextView {
+// infoPanelText renders the connection-info panel's content from cfg —
+// shared between the initial render and later refreshes (e.g. after the
+// AWS profile changes).
+func infoPanelText(cfg config.Config) string {
 	line := func(label, value string) string {
 		return fmt.Sprintf("[%s]%s:[-] [%s]%s[-]", cfg.Colors.Label, label, cfg.Colors.Value, value)
 	}
-	text := strings.Join([]string{
-		line("Profile", "(not configured)"),
+
+	profile := cfg.AWS.Profile
+	if profile == "" {
+		profile = "(not configured)"
+	}
+
+	return strings.Join([]string{
+		line("Profile", profile),
 		line("Queue Broker", "(not configured)"),
 	}, "\n")
+}
 
+func newInfoPanel(cfg config.Config) *tview.TextView {
 	return tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(text)
+		SetText(infoPanelText(cfg))
 }
 
 func newShortcutsPanel(cfg config.Config) *tview.TextView {

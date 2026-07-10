@@ -10,10 +10,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds everything about the shell's appearance a user can override.
+// Config holds everything about the shell's appearance and AWS selection
+// a user can override.
 type Config struct {
-	Logo   []string `yaml:"logo"`
-	Colors Palette  `yaml:"colors"`
+	Logo   []string  `yaml:"logo"`
+	Colors Palette   `yaml:"colors"`
+	AWS    AWSConfig `yaml:"aws"`
+}
+
+// AWSConfig holds the user's selected AWS profile. The profile is
+// normally set via the Settings view's profile picker rather than
+// hand-edited.
+type AWSConfig struct {
+	Profile string `yaml:"profile"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values
@@ -102,4 +111,22 @@ func Load(path string) (Config, error) {
 // tui/config.yaml under normal dev usage).
 func LoadDefault() (Config, error) {
 	return Load("config.yaml")
+}
+
+// Save writes cfg to path as YAML.
+func Save(path string, cfg Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("encoding config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing config %s: %w", path, err)
+	}
+	return nil
+}
+
+// SaveDefault saves cfg to config.yaml in the working directory,
+// mirroring LoadDefault's path resolution.
+func SaveDefault(cfg Config) error {
+	return Save("config.yaml", cfg)
 }

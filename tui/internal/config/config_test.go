@@ -34,6 +34,9 @@ func TestDefault(t *testing.T) {
 	if got := Default(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Default() = %#v, want %#v", got, want)
 	}
+	if got := Default().AWS.Profile; got != "" {
+		t.Errorf("Default().AWS.Profile = %q, want empty (not set)", got)
+	}
 }
 
 func TestPaletteViewColor(t *testing.T) {
@@ -180,6 +183,26 @@ colors:
 	want.Colors.Views["queues"] = "red"
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() = %#v, want %#v (other Views entries preserved)", got, want)
+	}
+}
+
+func TestSaveLoadRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.AWS.Profile = "my-profile"
+	cfg.Colors.Accent = "red"
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, cfg) {
+		t.Errorf("Load() after Save() = %#v, want %#v", got, cfg)
 	}
 }
 

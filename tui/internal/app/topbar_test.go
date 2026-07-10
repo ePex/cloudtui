@@ -19,6 +19,21 @@ func TestInfoPanelContainsPlaceholders(t *testing.T) {
 	}
 }
 
+func TestInfoPanelTextShowsConfiguredProfile(t *testing.T) {
+	cfg := config.Default()
+	cfg.AWS.Profile = "my-profile"
+
+	text := infoPanelText(cfg)
+
+	if !strings.Contains(text, "my-profile") {
+		t.Errorf("info panel text = %q, want it to contain %q", text, "my-profile")
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) == 0 || strings.Contains(lines[0], "(not configured)") {
+		t.Errorf("Profile line = %q, want no placeholder once a profile is configured", lines[0])
+	}
+}
+
 func TestShortcutsPanelContainsBindings(t *testing.T) {
 	text := newShortcutsPanel(config.Default()).GetText(true)
 
@@ -71,5 +86,17 @@ func TestNewTopBarHasFilterPage(t *testing.T) {
 
 	if !tb.left.HasPage("filter") {
 		t.Error("topLeft has no \"filter\" page")
+	}
+}
+
+func TestNewTopBarExposesInfoPanel(t *testing.T) {
+	cfg := config.Default()
+	tb := newTopBar(cfg, tview.NewInputField(), tview.NewInputField())
+
+	if tb.info == nil {
+		t.Fatal("topBar.info is nil")
+	}
+	if got, want := tb.info.GetText(false), infoPanelText(cfg); got != want {
+		t.Errorf("tb.info.GetText(false) = %q, want %q", got, want)
 	}
 }

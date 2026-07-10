@@ -33,3 +33,8 @@ colors:
     params: teal
     queues: fuchsia
     settings: gray
+
+# Normally set via the Settings view's profile picker ('s', then select
+# from your ~/.aws profiles), not hand-edited.
+aws:
+  profile: ""

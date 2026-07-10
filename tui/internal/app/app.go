@@ -19,15 +19,17 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered resource views.
 type App struct {
-	tv          *tview.Application
-	rootPages   *tview.Pages
-	pages       *tview.Pages
-	topLeft     *tview.Pages
-	prompt      *tview.InputField
-	filterInput *tview.InputField
-	helpVisible bool
-	views       []ui.View
-	cfg         config.Config
+	tv           *tview.Application
+	rootPages    *tview.Pages
+	pages        *tview.Pages
+	topLeft      *tview.Pages
+	prompt       *tview.InputField
+	filterInput  *tview.InputField
+	helpVisible  bool
+	views        []ui.View
+	cfg          config.Config
+	infoPanel    *tview.TextView
+	settingsList *tview.List
 }
 
 // New builds the app shell and registers the placeholder resource views.
@@ -47,9 +49,9 @@ func New() *App {
 			views.NewSecrets(),
 			views.NewParams(),
 			views.NewQueues(),
-			views.NewSettings(),
 		},
 	}
+	a.views = append(a.views, newSettingsView(a))
 
 	for _, v := range a.views {
 		prim := v.Primitive()
@@ -69,6 +71,7 @@ func New() *App {
 
 	tb := newTopBar(cfg, a.prompt, a.filterInput)
 	a.topLeft = tb.left
+	a.infoPanel = tb.info
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
@@ -196,14 +199,25 @@ func (a *App) closeHelp() {
 	a.helpVisible = false
 }
 
-// switchTo activates the named view if it is registered.
+// switchTo activates the named view if it is registered, re-focusing
+// pages so the newly active view's own input handling (e.g. the
+// settings list's navigation) actually receives key events — tview.Pages
+// only re-delegates focus to its front item when Focus() is (re-)called
+// on it, not automatically on SwitchToPage.
 func (a *App) switchTo(name string) {
 	for _, v := range a.views {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
+			a.tv.SetFocus(a.pages)
 			return
 		}
 	}
+}
+
+// refreshInfoPanel re-renders the connection-info panel from the current
+// config — called after the AWS profile selection changes.
+func (a *App) refreshInfoPanel() {
+	a.infoPanel.SetText(infoPanelText(a.cfg))
 }
 
 // activeView returns the currently front-most registered view, or nil if
