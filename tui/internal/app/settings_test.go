@@ -47,6 +47,21 @@ func TestSettingsListReflectsCurrentProfile(t *testing.T) {
 	}
 }
 
+func TestSettingsListReflectsQueueConnection(t *testing.T) {
+	a := New()
+
+	if got, want := a.settingsList.GetItemCount(), 2; got != want {
+		t.Fatalf("settings list item count = %d, want %d", got, want)
+	}
+	main, secondary := a.settingsList.GetItemText(1)
+	if main != "Queue Connection" {
+		t.Errorf("item main text = %q, want %q", main, "Queue Connection")
+	}
+	if want := queueConnectionSecondaryText(a.cfg); secondary != want {
+		t.Errorf("item secondary text = %q, want %q", secondary, want)
+	}
+}
+
 func TestOpenProfilePickerPopulatesAndPreselects(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config")

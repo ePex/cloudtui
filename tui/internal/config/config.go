@@ -10,12 +10,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds everything about the shell's appearance and AWS selection
-// a user can override.
+// Config holds everything about the shell's appearance, AWS selection, and
+// queue connection a user can override.
 type Config struct {
-	Logo   []string  `yaml:"logo"`
-	Colors Palette   `yaml:"colors"`
-	AWS    AWSConfig `yaml:"aws"`
+	Logo   []string    `yaml:"logo"`
+	Colors Palette     `yaml:"colors"`
+	AWS    AWSConfig   `yaml:"aws"`
+	Queue  QueueConfig `yaml:"queue"`
 }
 
 // AWSConfig holds the user's selected AWS profile. The profile is
@@ -23,6 +24,16 @@ type Config struct {
 // hand-edited.
 type AWSConfig struct {
 	Profile string `yaml:"profile"`
+}
+
+// QueueConfig holds the mq-proxy connection settings (Settings view's
+// "Queue Connection" row). Password can be overridden via the
+// MQPROXY_CLIENT_PASSWORD env var for scripted/CI use, which takes
+// precedence over whatever is in config.yaml.
+type QueueConfig struct {
+	ProxyURL string `yaml:"proxyUrl"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values
@@ -81,26 +92,33 @@ func Default() Config {
 				"settings": "gray",
 			},
 		},
+		Queue: QueueConfig{
+			ProxyURL: "http://localhost:8081",
+			Username: "admin",
+		},
 	}
 }
 
 // Load reads and parses the YAML config at path, merging it on top of
 // Default() so a file that only overrides part of the config still gets
 // defaults for the rest. A missing file is not an error — Default() is
-// returned as-is.
+// used as-is. MQPROXY_CLIENT_PASSWORD, if set, overrides
+// Queue.Password regardless of what config.yaml has (or whether it
+// exists), for scripted/CI use.
 func Load(path string) (Config, error) {
 	cfg := Default()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
+		if !os.IsNotExist(err) {
+			return Config{}, fmt.Errorf("reading config %s: %w", path, err)
 		}
-		return Config{}, fmt.Errorf("reading config %s: %w", path, err)
+	} else if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
 	}
 
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
+	if pw := os.Getenv("MQPROXY_CLIENT_PASSWORD"); pw != "" {
+		cfg.Queue.Password = pw
 	}
 
 	return cfg, nil

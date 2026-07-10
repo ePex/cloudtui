@@ -1,0 +1,12 @@
+# Local dev profile: an embedded ActiveMQ broker (LocalBrokerConfig) is
+# started in this same JVM on the same connector the default
+# mqproxy.broker.url already points at — no override needed here.
+
+spring:
+  security:
+    user:
+      # Fixed dev credentials, not a secret — overridable if needed.
+      # The base (non-local) profile leaves these unset, so Spring Boot
+      # falls back to its own generated-and-logged random password.
+      name: ${MQPROXY_LOCAL_USERNAME:admin}
+      password: ${MQPROXY_LOCAL_PASSWORD:admin}

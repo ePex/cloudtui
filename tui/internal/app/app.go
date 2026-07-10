@@ -12,6 +12,8 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/queue/proxy"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
@@ -29,7 +31,14 @@ type App struct {
 	views        []ui.View
 	cfg          config.Config
 	infoPanel    *tview.TextView
+	statusBar    *tview.TextView
 	settingsList *tview.List
+
+	backend          queue.Backend
+	queuesRoot       *tview.Pages
+	queuesList       *tview.List
+	messagesList     *tview.List
+	currentQueueName string
 }
 
 // New builds the app shell and registers the placeholder resource views.
@@ -40,6 +49,11 @@ func New() *App {
 		cfg = config.Default()
 	}
 
+	backend, err := proxy.New(cfg.Queue.ProxyURL, cfg.Queue.Username, cfg.Queue.Password)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cloudtui: creating mq-proxy client: %v\n", err)
+	}
+
 	a := &App{
 		tv:    tview.NewApplication(),
 		pages: tview.NewPages(),
@@ -48,10 +62,9 @@ func New() *App {
 			views.NewHome(),
 			views.NewSecrets(),
 			views.NewParams(),
-			views.NewQueues(),
 		},
 	}
-	a.views = append(a.views, newSettingsView(a))
+	a.views = append(a.views, newQueuesView(a, backend), newSettingsView(a))
 
 	for _, v := range a.views {
 		prim := v.Primitive()
@@ -73,10 +86,12 @@ func New() *App {
 	a.topLeft = tb.left
 	a.infoPanel = tb.info
 
+	a.statusBar = newStatusBar()
+
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
 		AddItem(a.pages, 0, 1, true).
-		AddItem(newStatusBar(), 1, 0, false)
+		AddItem(a.statusBar, 1, 0, false)
 
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
@@ -199,6 +214,17 @@ func (a *App) closeHelp() {
 	a.helpVisible = false
 }
 
+// activatable is implemented by views that need to (re)load data each
+// time they become the active view, rather than only once at
+// construction — e.g. the queues view's list, which would otherwise go
+// stale. Implementations typically kick off a goroutine that finishes
+// via tv.QueueUpdateDraw, which blocks forever unless tv's event loop is
+// actually running (see runApp in queues_test.go) — tests that call
+// switchTo on a view implementing this must account for that.
+type activatable interface {
+	activate()
+}
+
 // switchTo activates the named view if it is registered, re-focusing
 // pages so the newly active view's own input handling (e.g. the
 // settings list's navigation) actually receives key events — tview.Pages
@@ -209,9 +235,17 @@ func (a *App) switchTo(name string) {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
 			a.tv.SetFocus(a.pages)
+			if act, ok := v.(activatable); ok {
+				act.activate()
+			}
 			return
 		}
 	}
+}
+
+// setStatus updates the bottom status bar.
+func (a *App) setStatus(text string) {
+	a.statusBar.SetText(text)
 }
 
 // refreshInfoPanel re-renders the connection-info panel from the current

@@ -10,26 +10,66 @@ tasks:
 
   build:
     desc: Build all binaries.
-    deps: [build:tui]
+    deps: [build:tui, build:mq-proxy]
 
   build:tui:
     desc: Build the tui binary into tui/bin/.
     dir: tui
+    deps: [generate:mqproxy-client]
     cmds:
       - go build -o bin/cloudtui{{exeExt}} ./cmd/tui
+
+  generate:
+    desc: Regenerate all build-time code from the api/ OpenAPI spec.
+    deps: [generate:mqproxy-client]
+
+  generate:mqproxy-client:
+    desc: Generate the mq-proxy Go client from api/openapi.yaml.
+    dir: tui/internal/mqproxyclient
+    cmds:
+      - go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.2 -config oapi-codegen-config.yaml ../../../api/openapi.yaml
+
+  build:mq-proxy:
+    desc: Build the mq-proxy jar.
+    dir: mq-proxy
+    cmds:
+      - cmd: ./mvnw -q -DskipTests package
+        platforms: [linux, darwin]
+      - cmd: cmd.exe /c .\\mvnw.cmd -DskipTests package
+        platforms: [windows]
 
   run:tui:
     desc: Run the tui application from source.
     dir: tui
+    deps: [generate:mqproxy-client]
     cmds:
       - go run ./cmd/tui
 
+  run:mq-proxy:
+    desc: Run mq-proxy locally (local profile, embedded broker).
+    dir: mq-proxy
+    cmds:
+      - cmd: ./mvnw -q spring-boot:run -Dspring-boot.run.profiles=local
+        platforms: [linux, darwin]
+      - cmd: cmd.exe /c .\\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
+        platforms: [windows]
+
   test:
     desc: Run all tests.
-    deps: [test:tui]
+    deps: [test:tui, test:mq-proxy]
 
   test:tui:
     desc: Run tui unit tests.
     dir: tui
+    deps: [generate:mqproxy-client]
     cmds:
       - go test ./...
+
+  test:mq-proxy:
+    desc: Run mq-proxy unit tests.
+    dir: mq-proxy
+    cmds:
+      - cmd: ./mvnw -q test
+        platforms: [linux, darwin]
+      - cmd: cmd.exe /c .\\mvnw.cmd test
+        platforms: [windows]

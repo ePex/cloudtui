@@ -1,0 +1,15 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: mq-proxy
+
+mqproxy:
+  broker:
+    # The JMS/OpenWire URL mq-proxy connects to (its own connection to the
+    # broker, separate from the HTTP Basic Auth callers of this API use).
+    # Defaults to the local embedded broker's connector.
+    url: ${MQPROXY_BROKER_URL:tcp://localhost:61616}
+    username: ${MQPROXY_BROKER_USERNAME:}
+    password: ${MQPROXY_BROKER_PASSWORD:}

@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: cloudtui mq-proxy API
+  description: >
+    REST proxy for Amazon MQ (ActiveMQ) queue operations over JMS/OpenWire.
+    Single source of truth for both the Spring controller interfaces and the
+    tui's Go client, both generated from this file at build time.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8081
+    description: Local (embedded broker profile)
+
+security:
+  - basicAuth: []
+
+tags:
+  - name: queues
+
+paths:
+  /queues:
+    get:
+      operationId: listQueues
+      tags: [queues]
+      summary: List queues known to the broker.
+      responses:
+        '200':
+          description: The queues known to the broker.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueueSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /queues/{name}/messages:
+    parameters:
+      - $ref: '#/components/parameters/QueueName'
+    get:
+      operationId: browseMessages
+      tags: [queues]
+      summary: Browse messages currently on a queue, without consuming them.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of messages to return.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: Messages currently on the queue (up to limit).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: sendMessage
+      tags: [queues]
+      summary: Send a message to a queue.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: The message was sent.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /queues/{name}/purge:
+    parameters:
+      - $ref: '#/components/parameters/QueueName'
+    post:
+      operationId: purgeQueue
+      tags: [queues]
+      summary: Remove all messages currently on a queue.
+      responses:
+        '204':
+          description: The queue was purged.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /queues/{name}/move:
+    parameters:
+      - $ref: '#/components/parameters/QueueName'
+    post:
+      operationId: moveMessages
+      tags: [queues]
+      summary: Move messages from this queue to another queue.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveMessagesRequest'
+      responses:
+        '204':
+          description: The messages were moved.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
+  parameters:
+    QueueName:
+      name: name
+      in: path
+      required: true
+      description: The queue's name.
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The named queue does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Error:
+      description: An unexpected error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    QueueSummary:
+      type: object
+      required: [name, pendingCount, consumerCount]
+      properties:
+        name:
+          type: string
+        pendingCount:
+          type: integer
+          format: int64
+        consumerCount:
+          type: integer
+          format: int64
+
+    Message:
+      type: object
+      required: [id, body]
+      properties:
+        id:
+          type: string
+        body:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+
+    SendMessageRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+
+    MoveMessagesRequest:
+      type: object
+      required: [targetQueue]
+      properties:
+        targetQueue:
+          type: string
+        maxMessages:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Maximum number of messages to move; unset means all.
+
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string

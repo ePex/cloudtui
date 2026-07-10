@@ -38,3 +38,13 @@ colors:
 # from your ~/.aws profiles), not hand-edited.
 aws:
   profile: ""
+
+# mq-proxy connection ("Queue Connection" in Settings — currently a
+# read-only display there, hand-edited here). password can also be set
+# via the MQPROXY_CLIENT_PASSWORD env var, which always wins over this
+# file — handy for scripted/CI use without putting a real password in a
+# checked-out file, even a gitignored one.
+queue:
+  proxyUrl: http://localhost:8081
+  username: admin
+  password: ""

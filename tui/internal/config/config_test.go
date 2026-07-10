@@ -31,11 +31,16 @@ func TestDefault(t *testing.T) {
 			},
 		},
 	}
+	want.Queue = QueueConfig{ProxyURL: "http://localhost:8081", Username: "admin"}
+
 	if got := Default(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Default() = %#v, want %#v", got, want)
 	}
 	if got := Default().AWS.Profile; got != "" {
 		t.Errorf("Default().AWS.Profile = %q, want empty (not set)", got)
+	}
+	if got := Default().Queue.Password; got != "" {
+		t.Errorf("Default().Queue.Password = %q, want empty (not set)", got)
 	}
 }
 
@@ -113,6 +118,7 @@ colors:
 				"settings": "white",
 			},
 		},
+		Queue: QueueConfig{ProxyURL: "http://localhost:8081", Username: "admin"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() = %#v, want %#v", got, want)
@@ -186,12 +192,68 @@ colors:
 	}
 }
 
+func TestLoadPartialQueueOverrideMergesDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+queue:
+  proxyUrl: http://example.com:9000
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := Default()
+	want.Queue.ProxyURL = "http://example.com:9000"
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Load() = %#v, want %#v (Username default preserved)", got, want)
+	}
+}
+
+func TestLoadMqproxyClientPasswordEnvVarOverridesConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+queue:
+  password: from-file
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MQPROXY_CLIENT_PASSWORD", "from-env")
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Queue.Password != "from-env" {
+		t.Errorf("Queue.Password = %q, want %q (env var takes precedence)", got.Queue.Password, "from-env")
+	}
+}
+
+func TestLoadMqproxyClientPasswordEnvVarAppliesEvenWithoutConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+	t.Setenv("MQPROXY_CLIENT_PASSWORD", "from-env")
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Queue.Password != "from-env" {
+		t.Errorf("Queue.Password = %q, want %q", got.Queue.Password, "from-env")
+	}
+}
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 
 	cfg := Default()
 	cfg.AWS.Profile = "my-profile"
 	cfg.Colors.Accent = "red"
+	cfg.Queue.Password = "secret"
 
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)

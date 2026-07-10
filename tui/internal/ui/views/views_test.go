@@ -19,7 +19,6 @@ func TestViewConstructors(t *testing.T) {
 		{"home", NewHome, "home", "Home"},
 		{"secrets", NewSecrets, "secrets", "Secrets Manager"},
 		{"params", NewParams, "params", "Parameter Store"},
-		{"queues", NewQueues, "queues", "Queues"},
 	}
 
 	for _, tt := range tests {

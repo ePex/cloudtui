@@ -66,7 +66,9 @@ so the folder sorts into a correct chronological order:
   list/browse/send/purge/move, implemented over JMS/OpenWire (statistics
   plugin for listing, QueueBrowser for browsing, transacted consume for
   purge/move). Deployed inside the VPC next to the broker; API secured
-  with a bearer token from Secrets Manager.
+  with HTTP Basic Auth (credentials from Secrets Manager in AWS, from
+  local config for the `local` profile) — both environments use the same
+  auth mechanism, not a bearer-token scheme.
   - A `local` Spring profile starts an **embedded ActiveMQ broker**
     (`BrokerService` with a TCP connector) in the same JVM — this is the
     local dev stack. No Docker required.
