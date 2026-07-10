@@ -58,3 +58,10 @@ used as the substitute check.
 Placeholder views only — no AWS SDK wiring, no `QueueBackend` interface, no
 `mq-proxy` client yet. Those land when each resource view gets its real
 implementation.
+
+## Predates workflow update
+
+This spec predates the plan/tasks-file and mandatory-unit-test rules added
+to `CLAUDE.md`'s "Feature & bugfix workflow" — see
+[2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md)
+for the retroactive plan/tasks files brought in line with those rules.

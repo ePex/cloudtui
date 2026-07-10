@@ -41,3 +41,10 @@ Only `tui` is wired up. `mq-proxy` has no `pom.xml`/`mvnw` yet (see
 out of scope for that change too), so no `build:mq-proxy`/`test:mq-proxy`
 targets were added; `build`/`test` will gain a second dependency once the
 Spring Boot module exists.
+
+## Predates workflow update
+
+This spec predates the plan/tasks-file and mandatory-unit-test rules added
+to `CLAUDE.md`'s "Feature & bugfix workflow" — see
+[2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md)
+for the retroactive plan/tasks files brought in line with those rules.

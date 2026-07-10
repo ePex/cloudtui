@@ -28,14 +28,19 @@ for feedback at each gate** — do not proceed to the next stage until the
 current one is explicitly approved:
 
 1. **Specification.** Write a short spec to `spec/` (see `spec/README.md`):
-   what the feature/bug is, why, scope and explicit out-of-scope. Ask for
+   what the feature/bug is, why, scope and explicit out-of-scope. File:
+   `spec/YYYY-MM-DD_feat-<slug>.md` (or `bugfix-`). Ask for feedback.
+   Revise until approved.
+2. **Implementation plan.** Once the spec is approved, write the plan to its
+   own file: `spec/YYYY-MM-DD_feat-<slug>-plan.md` (or `bugfix-`) — approach,
+   files/modules touched, key technical decisions and trade-offs. Ask for
    feedback. Revise until approved.
-2. **Implementation plan.** Once the spec is approved, propose a plan:
-   approach, files/modules touched, key technical decisions and trade-offs.
-   Ask for feedback. Revise until approved.
-3. **Task breakdown.** Once the plan is approved, break it into discrete,
-   reviewable steps. Ask for approval on each step before implementing it —
-   do not implement several steps and present them together.
+3. **Task breakdown.** Once the plan is approved, write the breakdown to its
+   own file: `spec/YYYY-MM-DD_feat-<slug>-tasks.md` (or `bugfix-`) — a list
+   of discrete, reviewable steps. Each task requires explicit manual
+   approval before it is implemented — do not implement several tasks and
+   present them together, and do not move to the next task until the
+   current one is done and the next has been separately approved.
 
 This gating applies to features and bugfixes alike; trivial changes can
 skip straight to implementation.
@@ -105,9 +110,20 @@ and test the application **and the full local stack** with the same commands.
 - **Docs (`docs/`):** significant design decisions get a short ADR-style
   markdown file.
 
+## Testing
+
+- **Every feature or bugfix must include unit tests.** New code paths need
+  new tests; changed behavior needs updated tests. This applies across
+  modules: table-driven tests in Go (`tui/`), JUnit tests in Java
+  (`mq-proxy/`).
+- A change without tests is not done, even if the spec/plan gates above
+  were followed. If something is genuinely untestable (e.g. a thin
+  wrapper with no logic), say so explicitly instead of skipping silently.
+
 ## Definition of done for a change
 
 1. Builds cleanly, formatted, linted.
-2. No new files that belong in `.gitignore`.
-3. Commit message follows Conventional Commits.
-4. README/docs updated if behavior or structure changed.
+2. Unit tests added/updated and passing.
+3. No new files that belong in `.gitignore`.
+4. Commit message follows Conventional Commits.
+5. README/docs updated if behavior or structure changed.

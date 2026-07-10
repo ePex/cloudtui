@@ -9,8 +9,13 @@ notes and ADRs.
 
 Naming:
 
-- Features: `YYYY-MM-DD_feat-<slug>.md`
-- Bugfixes: `YYYY-MM-DD_bugfix-<slug>.md`
+- Spec: `YYYY-MM-DD_feat-<slug>.md` / `YYYY-MM-DD_bugfix-<slug>.md`
+- Implementation plan: `YYYY-MM-DD_feat-<slug>-plan.md` / `-bugfix-<slug>-plan.md`
+- Task breakdown: `YYYY-MM-DD_feat-<slug>-tasks.md` / `-bugfix-<slug>-tasks.md`
+
+Each stage is its own file, written once its predecessor is approved (see
+`CLAUDE.md`, "Feature & bugfix workflow"). Each task listed in a
+`-tasks.md` file needs explicit manual approval before it's implemented.
 
 | File                                                                                       | Change                                            |
 |--------------------------------------------------------------------------------------------|----------------------------------------------------|
