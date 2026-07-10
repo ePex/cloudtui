@@ -13,7 +13,23 @@ logo:
 # Colors accept a tview/tcell color name (e.g. "yellow") or a hex code
 # (e.g. "#ffcc00"). Any field left out here falls back to its default.
 colors:
-  border: green   # main resource-view border color
+  border: green   # fallback resource-view border color (see views: below)
   label: yellow   # field labels, e.g. "Profile:"
   value: white    # field values / default text
   accent: aqua    # key-binding tokens in the shortcuts panel
+
+  # Not yet shown anywhere (no feature renders success/warning/error
+  # state today), but defined so a later feature doesn't need another
+  # config-schema change.
+  success: green
+  warning: yellow
+  error: red
+
+  # Per-view border/title color. A view left out here falls back to
+  # border: above, so adding a new view later doesn't require an update.
+  views:
+    home: aqua
+    secrets: yellow
+    params: teal
+    queues: fuchsia
+    settings: gray

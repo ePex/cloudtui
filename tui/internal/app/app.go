@@ -27,6 +27,7 @@ type App struct {
 	filterInput *tview.InputField
 	helpVisible bool
 	views       []ui.View
+	cfg         config.Config
 }
 
 // New builds the app shell and registers the placeholder resource views.
@@ -40,6 +41,7 @@ func New() *App {
 	a := &App{
 		tv:    tview.NewApplication(),
 		pages: tview.NewPages(),
+		cfg:   cfg,
 		views: []ui.View{
 			views.NewHome(),
 			views.NewSecrets(),
@@ -50,7 +52,9 @@ func New() *App {
 	}
 
 	for _, v := range a.views {
-		a.pages.AddPage(v.Name(), v.Primitive(), true, false)
+		prim := v.Primitive()
+		a.colorBordered(v, prim)
+		a.pages.AddPage(v.Name(), prim, true, false)
 	}
 
 	a.prompt = tview.NewInputField().
@@ -212,4 +216,24 @@ func (a *App) activeView() ui.View {
 		}
 	}
 	return nil
+}
+
+// colorBordered applies v's configured (or Border-fallback) color to
+// prim's border and title, if prim supports it.
+func (a *App) colorBordered(v ui.View, prim tview.Primitive) {
+	b, ok := prim.(bordered)
+	if !ok {
+		return
+	}
+	c := tcell.GetColor(a.cfg.Colors.ViewColor(v.Name()))
+	b.SetBorderColor(c)
+	b.SetTitleColor(c)
+}
+
+// bordered is implemented by tview primitives (via an embedded
+// *tview.Box) that expose settable border/title colors — every current
+// placeholder view, and any future real view built the same way.
+type bordered interface {
+	SetBorderColor(color tcell.Color) *tview.Box
+	SetTitleColor(color tcell.Color) *tview.Box
 }

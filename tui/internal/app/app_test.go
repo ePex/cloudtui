@@ -297,6 +297,37 @@ func TestFilterAppliesToFilterableView(t *testing.T) {
 	}
 }
 
+func TestViewBorderColorMatchesConfiguredPerViewColor(t *testing.T) {
+	a := New()
+
+	prim, ok := a.pages.GetPage("secrets").(*tview.TextView)
+	if !ok {
+		t.Fatalf("secrets page is %T, want *tview.TextView", a.pages.GetPage("secrets"))
+	}
+
+	want := tcell.GetColor(a.cfg.Colors.Views["secrets"])
+	if got := prim.GetBorderColor(); got != want {
+		t.Errorf("secrets border color = %v, want %v", got, want)
+	}
+}
+
+func TestViewBorderColorFallsBackForUnmappedView(t *testing.T) {
+	a := New()
+	fv := &fakeFilterableView{name: "unmapped-view"}
+	prim := fv.Primitive()
+
+	a.colorBordered(fv, prim)
+
+	box, ok := prim.(*tview.Box)
+	if !ok {
+		t.Fatalf("Primitive() = %T, want *tview.Box", prim)
+	}
+	want := tcell.GetColor(a.cfg.Colors.Border)
+	if got := box.GetBorderColor(); got != want {
+		t.Errorf("border color for unmapped view = %v, want fallback %v", got, want)
+	}
+}
+
 func TestOnGlobalKeySlashRoutesToBeginFilter(t *testing.T) {
 	a := New()
 	fv := &fakeFilterableView{name: "fake2"}

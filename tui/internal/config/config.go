@@ -23,6 +23,28 @@ type Palette struct {
 	Label  string `yaml:"label"`
 	Value  string `yaml:"value"`
 	Accent string `yaml:"accent"`
+
+	// Success, Warning, and Error are intentionally unused in rendering
+	// for now — no feature currently shows that state — but are defined
+	// up front so a later status/help feature doesn't need another
+	// palette-schema change.
+	Success string `yaml:"success"`
+	Warning string `yaml:"warning"`
+	Error   string `yaml:"error"`
+
+	// Views maps a view name (e.g. "secrets") to the color used for that
+	// view's border and title, so views are distinguishable at a glance.
+	Views map[string]string `yaml:"views"`
+}
+
+// ViewColor returns the configured color for the named view, falling back
+// to Border if the view isn't listed — so a view added later without a
+// palette update still gets a sensible border color.
+func (p Palette) ViewColor(name string) string {
+	if c, ok := p.Views[name]; ok && c != "" {
+		return c
+	}
+	return p.Border
 }
 
 // Default returns the built-in configuration used when no config file is
@@ -35,10 +57,20 @@ func Default() Config {
 			"╚═══════════╝",
 		},
 		Colors: Palette{
-			Border: "green",
-			Label:  "yellow",
-			Value:  "white",
-			Accent: "aqua",
+			Border:  "green",
+			Label:   "yellow",
+			Value:   "white",
+			Accent:  "aqua",
+			Success: "green",
+			Warning: "yellow",
+			Error:   "red",
+			Views: map[string]string{
+				"home":     "aqua",
+				"secrets":  "yellow",
+				"params":   "teal",
+				"queues":   "fuchsia",
+				"settings": "gray",
+			},
 		},
 	}
 }
