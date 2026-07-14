@@ -59,7 +59,7 @@ Three types:
 
 Every feature/bugfix/change-request gets its own folder under `spec/`,
 named `NN-<type>-<slug>/` (e.g. `spec/03-fe-mq-proxy/`,
-`spec/04-cr-shell-color-palette-evolution/`). `NN` is a single running
+`spec/05-bugfix-queue-purge-timeout/`). `NN` is a single running
 counter shared across all three types — never reset, never per-type — so
 the folder listing itself preserves the order things were actually done
 in (folder names carry no date; see `spec/README.md` for why).

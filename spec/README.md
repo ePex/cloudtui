@@ -37,6 +37,5 @@ task still needs its own explicit manual approval before it's implemented
 | Folder | Change |
 |---|---|
 | [01-fe-repo-foundations](01-fe-repo-foundations/spec.md) | `Taskfile.yml` + the spec/plan/tasks workflow itself |
-| [02-fe-tui-shell-and-starting-features](02-fe-tui-shell-and-starting-features/spec.md) | tui app skeleton, k9s-style layout, global hotkeys, AWS profile selection |
+| [02-fe-tui-shell-and-starting-features](02-fe-tui-shell-and-starting-features/spec.md) | tui app skeleton, k9s-style layout + color palette, global hotkeys, AWS profile selection |
 | [03-fe-mq-proxy](03-fe-mq-proxy/spec.md) | `mq-proxy` service + tui queues view |
-| [04-cr-shell-color-palette-evolution](04-cr-shell-color-palette-evolution/spec.md) | the shell's color palette, revised twice so far |
