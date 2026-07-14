@@ -20,17 +20,19 @@ Instructions for AI assistants (and humans) working in this repository.
   or account IDs — not in code, config, examples, or commit history. Local
   configuration goes in ignored files (e.g. `.env`, `*.local.yaml`).
 
-## Feature & bugfix workflow
+## Feature, bugfix & change-request workflow
 
-When asked to implement a new feature or fix a bug (not a trivial typo or
-config tweak), any agent or contributor follows this sequence and **stops
-for feedback at each gate** — do not proceed to the next stage until the
-current one is explicitly approved:
+When asked to implement a new feature, fix a bug, or change already-
+shipped behavior (not a trivial typo or config tweak), any agent or
+contributor follows this sequence and **stops for feedback at each
+gate** — do not proceed to the next stage until the current one is
+explicitly approved:
 
 1. **Specification.** Write a short spec (see `spec/README.md`): what the
-   feature/bug is, why, scope and explicit out-of-scope. File:
-   `spec/YYYY-MM-DD_feat-NN-<slug>/spec.md` (or `bugfix-NN-`). Ask for
-   feedback. Revise until approved.
+   feature/bug/change is, why, scope and explicit out-of-scope. File:
+   `spec/feat-NN-<slug>/spec.md` (or `bugfix-NN-`/`chg-NN-`), noting the
+   date inside `spec.md` itself (not the folder name). Ask for feedback.
+   Revise until approved.
 2. **Implementation plan.** Once the spec is approved, write the plan to
    `plan.md` in that same folder — approach, files/modules touched, key
    technical decisions and trade-offs. Ask for feedback. Revise until
@@ -44,15 +46,26 @@ current one is explicitly approved:
    task's box (`1. [x] ...`) once it's actually been implemented, not
    before.
 
-This gating applies to features and bugfixes alike; trivial changes can
-skip straight to implementation.
+This gating applies to features, bugfixes, and change requests alike;
+trivial changes can skip straight to implementation.
 
-Every feature/bugfix gets its own folder under `spec/`, named with the
-date it was started plus a same-day sequence number, so folders sort into
-a correct chronological order even when several land on the same day:
+Three types:
 
-- Features: `spec/YYYY-MM-DD_feat-NN-<slug>/`
-- Bugfixes: `spec/YYYY-MM-DD_bugfix-NN-<slug>/`
+- **`feat`** — new capability.
+- **`bugfix`** — fixing broken behavior.
+- **`chg`** ("change request") — a deliberate change to already-shipped
+  behavior that isn't a bug (e.g. a re-theme, a reworked flow),
+  documented separately from the feature that originally shipped it.
+
+Every feature/bugfix/change-request gets its own folder under `spec/`:
+
+- `spec/feat-NN-<slug>/`
+- `spec/bugfix-NN-<slug>/`
+- `spec/chg-NN-<slug>/`
+
+`NN` is a two-digit counter starting at `01`, counted separately per type
+and never reset (it does not reset by date — folder names carry no date;
+see `spec/README.md` for why).
 
 `NN` is a two-digit counter starting at `01`, reset each day and counted
 separately for `feat` vs `bugfix`.
