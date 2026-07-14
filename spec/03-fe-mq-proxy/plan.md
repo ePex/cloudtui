@@ -80,7 +80,7 @@ implementation, using `oapi-codegen`'s `ClientWithResponses` +
 `WithRequestEditorFn` for Basic Auth. `internal/config` gains a `Queue`
 section (`ProxyURL`/`Username`/`Password`, the latter overridable via
 `MQPROXY_CLIENT_PASSWORD`) — the "Queue Connection" setting deferred
-from `feat-02`. The `settings` view gains a second, read-only row for
+from `02-fe-tui-shell-and-starting-features`. The `settings` view gains a second, read-only row for
 it (no picker — a free-text URL isn't a discoverable list like AWS
 profiles). `queues` moves into `internal/app` (mirroring `settings`):
 list, browse/detail pane, send/purge/move actions, all non-blocking

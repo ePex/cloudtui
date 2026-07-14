@@ -3,20 +3,21 @@
 Date: 2026-07-10 (revision 1), 2026-07-14 (revision 2) — condensed
 2026-07-14 from two originally separate feature entries. First tracked as
 a "change request": both revisions modify shell chrome that
-`feat-02-tui-shell-and-starting-features` already shipped, rather than
+`02-fe-tui-shell-and-starting-features` already shipped, rather than
 adding new capability.
 
 ## Change request
 
 The shell's color palette (`internal/config.Palette`), first shipped
-with `feat-02`'s built-in defaults, has been revised twice so far:
+with `02-fe-tui-shell-and-starting-features`'s built-in defaults, has
+been revised twice so far:
 
 **Revision 1 (2026-07-10).** Added per-view border/title colors (each of
 `home`/`secrets`/`params`/`queues`/`settings` got its own accent, k9s-
 style, falling back to a shared `Border` color if a view wasn't listed)
 and schema-only `Success`/`Warning`/`Error` fields for a later feature to
-use. This also finally wired up `Border` itself, which `feat-02` had
-defined but nothing read.
+use. This also finally wired up `Border` itself, which
+`02-fe-tui-shell-and-starting-features` had defined but nothing read.
 
 **Revision 2 (2026-07-14).** Replaced revision 1's per-view rainbow
 scheme entirely with a single new default palette matching a reference

@@ -27,7 +27,7 @@ plan → tasks gating documented in `CLAUDE.md`.
   silently skipped).
 - **Retroactive compliance pass.** The workflow rules above were written
   after the repo's first two changes (the Taskfile itself, and the tui's
-  initial app scaffold — see `feat-02-tui-shell-and-starting-features`)
+  initial app scaffold — see `02-fe-tui-shell-and-starting-features`)
   already existed without plans, task files, or tests. Rather than leave
   the historical record contradicting the process everything after it is
   held to, both got retroactive plan/task files (clearly labeled as
@@ -59,7 +59,7 @@ retroactive pass had to do for the two changes that predated it.
 ## Out of scope
 
 - `mq-proxy`'s own Taskfile targets — added later, once that module
-  existed (see `feat-03-mq-proxy`).
+  existed (see `03-fe-mq-proxy`).
 - Any production-code changes as part of the retroactive-compliance
   pass — tests only.
 
@@ -68,5 +68,5 @@ retroactive pass had to do for the two changes that predated it.
 Unlike the other buckets, this one documents process and tooling that's
 expected to keep evolving — new Taskfile targets, workflow tweaks, and
 so on. Future changes to these conventions should be tracked as their
-own `chg-NN-<slug>` entries referencing back here, rather than by
+own `NN-cr-<slug>` entries referencing back here, rather than by
 rewriting this spec after the fact.

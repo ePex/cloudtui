@@ -62,6 +62,6 @@ tests, by design, per the carve-out above.
 - Workflow rules: process/documentation, not code — nothing to unit
   test; the historical record itself (this condensation) is the closest
   thing to a compliance check.
-- Retroactive scaffold tests: see `feat-02-tui-shell-and-starting-features`
+- Retroactive scaffold tests: see `02-fe-tui-shell-and-starting-features`
   for what they actually cover, since the scaffold's behavior lives
   there now.

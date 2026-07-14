@@ -72,9 +72,9 @@ matches how the AWS CLI already presents the choice.
 ## Out of scope
 
 - Real secrets/parameters behavior — those views stay placeholders.
-- Queues/mq-proxy — see `feat-03-mq-proxy`.
+- Queues/mq-proxy — see `03-fe-mq-proxy`.
 - Validating the selected AWS profile against AWS in any way (no STS
   call, no credential resolution) — this is name selection only.
 - The specific color palette values shipped this pass — later revisions
   (including a full re-theme) are tracked separately, see
-  `chg-01-shell-color-palette-evolution`.
+  `04-cr-shell-color-palette-evolution`.

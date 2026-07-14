@@ -30,7 +30,7 @@ explicitly approved:
 
 1. **Specification.** Write a short spec (see `spec/README.md`): what the
    feature/bug/change is, why, scope and explicit out-of-scope. File:
-   `spec/feat-NN-<slug>/spec.md` (or `bugfix-NN-`/`chg-NN-`), noting the
+   `spec/NN-fe-<slug>/spec.md` (or `NN-bugfix-`/`NN-cr-`), noting the
    date inside `spec.md` itself (not the folder name). Ask for feedback.
    Revise until approved.
 2. **Implementation plan.** Once the spec is approved, write the plan to
@@ -51,21 +51,18 @@ trivial changes can skip straight to implementation.
 
 Three types:
 
-- **`feat`** — new capability.
+- **`fe`** — new capability.
 - **`bugfix`** — fixing broken behavior.
-- **`chg`** ("change request") — a deliberate change to already-shipped
+- **`cr`** ("change request") — a deliberate change to already-shipped
   behavior that isn't a bug (e.g. a re-theme, a reworked flow),
   documented separately from the feature that originally shipped it.
 
-Every feature/bugfix/change-request gets its own folder under `spec/`:
-
-- `spec/feat-NN-<slug>/`
-- `spec/bugfix-NN-<slug>/`
-- `spec/chg-NN-<slug>/`
-
-`NN` is a two-digit counter starting at `01`, counted separately per type
-and never reset (it does not reset by date — folder names carry no date;
-see `spec/README.md` for why).
+Every feature/bugfix/change-request gets its own folder under `spec/`,
+named `NN-<type>-<slug>/` (e.g. `spec/03-fe-mq-proxy/`,
+`spec/04-cr-shell-color-palette-evolution/`). `NN` is a single running
+counter shared across all three types — never reset, never per-type — so
+the folder listing itself preserves the order things were actually done
+in (folder names carry no date; see `spec/README.md` for why).
 
 `NN` is a two-digit counter starting at `01`, reset each day and counted
 separately for `feat` vs `bugfix`.

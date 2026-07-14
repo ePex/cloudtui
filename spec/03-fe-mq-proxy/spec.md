@@ -38,7 +38,7 @@ interactive view instead of a placeholder.
   uses — becoming a real, interactive view (queue list, browse/detail
   pane, send/purge/move actions) instead of a placeholder, the same
   progression `settings` already went through in
-  `feat-02-tui-shell-and-starting-features`.
+  `02-fe-tui-shell-and-starting-features`.
 
 ## Why
 
