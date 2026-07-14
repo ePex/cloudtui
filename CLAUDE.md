@@ -19,6 +19,9 @@ Instructions for AI assistants (and humans) working in this repository.
 - **Secrets never enter the repo.** No credentials, tokens, broker passwords,
   or account IDs — not in code, config, examples, or commit history. Local
   configuration goes in ignored files (e.g. `.env`, `*.local.yaml`).
+- **Never commit without explicit permission.** Stage and prepare changes,
+  but wait for the human (or, for an agent, the user) to explicitly say to
+  commit before running `git commit`.
 
 ## Feature, bugfix & change-request workflow
 
