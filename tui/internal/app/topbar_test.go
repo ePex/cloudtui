@@ -10,9 +10,11 @@ import (
 )
 
 func TestInfoPanelContainsPlaceholders(t *testing.T) {
-	text := newInfoPanel(config.Default()).GetText(true)
+	cfg := config.Default()
+	cfg.AWS.Profile = ""
+	text := newInfoPanel(cfg).GetText(true)
 
-	for _, want := range []string{"Profile:", "Queue Broker:", "(not configured)"} {
+	for _, want := range []string{"Active connection:", "User:", "AWS Profile:", "(not configured)"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("info panel text = %q, want it to contain %q", text, want)
 		}
@@ -29,18 +31,26 @@ func TestInfoPanelTextShowsConfiguredProfile(t *testing.T) {
 		t.Errorf("info panel text = %q, want it to contain %q", text, "my-profile")
 	}
 	lines := strings.Split(text, "\n")
-	if len(lines) == 0 || strings.Contains(lines[0], "(not configured)") {
-		t.Errorf("Profile line = %q, want no placeholder once a profile is configured", lines[0])
+	if len(lines) < 3 || strings.Contains(lines[2], "(not configured)") {
+		t.Errorf("AWS Profile line = %q, want no placeholder once a profile is configured", lines[2])
 	}
 }
 
 func TestShortcutsPanelContainsBindings(t *testing.T) {
 	text := newShortcutsPanel(config.Default()).GetText(true)
 
-	for _, want := range []string{":", "command", "q", "quit", "esc", "cancel"} {
+	for _, want := range []string{"Navigation:", "<:>", "command", "<q>", "quit", "<esc>", "cancel"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("shortcuts panel text = %q, want it to contain %q", text, want)
 		}
+	}
+}
+
+func TestNewTopBarHasDividerBetweenInfoAndNav(t *testing.T) {
+	tb := newTopBar(config.Default(), tview.NewInputField(), tview.NewInputField())
+
+	if got, want := tb.root.GetItemCount(), 4; got != want {
+		t.Errorf("root.GetItemCount() = %d, want %d (info, divider, nav, logo)", got, want)
 	}
 }
 

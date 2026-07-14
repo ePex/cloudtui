@@ -39,8 +39,13 @@ type QueueConfig struct {
 // Palette is the set of named colors used across the shell chrome. Values
 // are tview/tcell color names (e.g. "yellow") or hex codes (e.g. "#ffcc00").
 type Palette struct {
-	Border string `yaml:"border"`
-	Label  string `yaml:"label"`
+	// Background is the app's base background, applied globally so every
+	// primitive is this color by default without per-widget wiring.
+	Background string `yaml:"background"`
+	Border     string `yaml:"border"`
+	Label      string `yaml:"label"`
+	// Text is the general/primary text color (list item text, body copy).
+	Text   string `yaml:"text"`
 	Value  string `yaml:"value"`
 	Accent string `yaml:"accent"`
 
@@ -51,6 +56,15 @@ type Palette struct {
 	Success string `yaml:"success"`
 	Warning string `yaml:"warning"`
 	Error   string `yaml:"error"`
+
+	// SelectionBg and SelectionText color the currently selected row in
+	// every tview.List the shell constructs.
+	SelectionBg   string `yaml:"selectionBg"`
+	SelectionText string `yaml:"selectionText"`
+
+	// StatusBarBg and StatusBarText color the bottom status bar.
+	StatusBarBg   string `yaml:"statusBarBg"`
+	StatusBarText string `yaml:"statusBarText"`
 
 	// Views maps a view name (e.g. "secrets") to the color used for that
 	// view's border and title, so views are distinguishable at a glance.
@@ -77,19 +91,25 @@ func Default() Config {
 			"╚═══════════╝",
 		},
 		Colors: Palette{
-			Border:  "green",
-			Label:   "yellow",
-			Value:   "white",
-			Accent:  "aqua",
-			Success: "green",
-			Warning: "yellow",
-			Error:   "red",
+			Background:    "#1a1b26",
+			Border:        "#c0caf5",
+			Label:         "#e0af68",
+			Text:          "#c0caf5",
+			Value:         "#7dcfff",
+			Accent:        "#ff79c6",
+			Success:       "#9ece6a",
+			Warning:       "#e0af68",
+			Error:         "#f7768e",
+			SelectionBg:   "#2ac3de",
+			SelectionText: "#1a1b26",
+			StatusBarBg:   "#ff9e64",
+			StatusBarText: "#1a1b26",
 			Views: map[string]string{
-				"home":     "aqua",
-				"secrets":  "yellow",
-				"params":   "teal",
-				"queues":   "fuchsia",
-				"settings": "gray",
+				"home":     "#c0caf5",
+				"secrets":  "#c0caf5",
+				"params":   "#c0caf5",
+				"queues":   "#c0caf5",
+				"settings": "#c0caf5",
 			},
 		},
 		Queue: QueueConfig{

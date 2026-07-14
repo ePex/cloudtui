@@ -30,20 +30,33 @@ func newTopBar(cfg config.Config, prompt, filterInput *tview.InputField) *topBar
 		AddPage("prompt", prompt, true, false).
 		AddPage("filter", filterInput, true, false)
 
-	right := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(newShortcutsPanel(cfg), 0, 1, false).
-		AddItem(newLogoPanel(cfg), logoWidth(cfg.Logo), 0, false)
+	height := maxInt(2, 3, len(cfg.Logo))
 
 	root := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(left, 0, 1, false).
-		AddItem(right, 0, 1, false)
+		AddItem(newDivider(cfg, height), 1, 0, false).
+		AddItem(newShortcutsPanel(cfg), 0, 1, false).
+		AddItem(newLogoPanel(cfg), logoWidth(cfg.Logo), 0, false)
 
 	return &topBar{
 		root:   root,
 		left:   left,
 		info:   info,
-		height: maxInt(2, 3, len(cfg.Logo)),
+		height: height,
 	}
+}
+
+// newDivider renders a one-column vertical rule between the
+// connection-info panel and the nav panel, colored with the border color
+// so it reads as a quiet separator rather than content.
+func newDivider(cfg config.Config, height int) *tview.TextView {
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = "│"
+	}
+	return tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(fmt.Sprintf("[%s]%s[-]", cfg.Colors.Border, strings.Join(lines, "\n")))
 }
 
 // infoPanelText renders the connection-info panel's content from cfg —
@@ -54,14 +67,17 @@ func infoPanelText(cfg config.Config) string {
 		return fmt.Sprintf("[%s]%s:[-] [%s]%s[-]", cfg.Colors.Label, label, cfg.Colors.Value, value)
 	}
 
-	profile := cfg.AWS.Profile
-	if profile == "" {
-		profile = "(not configured)"
+	placeholderIfEmpty := func(v string) string {
+		if v == "" {
+			return "(not configured)"
+		}
+		return v
 	}
 
 	return strings.Join([]string{
-		line("Profile", profile),
-		line("Queue Broker", "(not configured)"),
+		line("Active connection", placeholderIfEmpty(cfg.Queue.ProxyURL)),
+		line("User", placeholderIfEmpty(cfg.Queue.Username)),
+		line("AWS Profile", placeholderIfEmpty(cfg.AWS.Profile)),
 	}, "\n")
 }
 
@@ -72,12 +88,14 @@ func newInfoPanel(cfg config.Config) *tview.TextView {
 }
 
 func newShortcutsPanel(cfg config.Config) *tview.TextView {
+	heading := fmt.Sprintf("[%s]Navigation:[-]", cfg.Colors.Label)
 	key := func(k string) string {
-		return fmt.Sprintf("[%s]%s[-]", cfg.Colors.Accent, k)
+		return fmt.Sprintf("[%s]<%s>[-]", cfg.Colors.Accent, k)
 	}
 	text := strings.Join([]string{
+		heading,
 		key(":") + " command",
-		key("q") + "/" + key("quit") + " quit",
+		key("q") + " quit",
 		key("esc") + " cancel",
 	}, "\n")
 

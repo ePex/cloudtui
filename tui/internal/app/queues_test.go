@@ -208,7 +208,7 @@ func TestSendMessageReloadsDetail(t *testing.T) {
 	if gotQueue != "foo" {
 		t.Errorf("sent.queueName = %q, want %q", gotQueue, "foo")
 	}
-	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == statusReadyText })
+	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == a.readyText() })
 }
 
 func TestOpenSendModalShowsFormAndAKeyOpensIt(t *testing.T) {
@@ -239,7 +239,7 @@ func TestPurgeQueueReloadsListAndDetail(t *testing.T) {
 		defer fb.mu.Unlock()
 		return fb.purged == "foo"
 	})
-	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == statusReadyText })
+	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == a.readyText() })
 }
 
 func TestOpenPurgeConfirmShowsModalAndDKeyOpensIt(t *testing.T) {
@@ -277,7 +277,7 @@ func TestMoveMessagesReloadsListAndDetail(t *testing.T) {
 	if gotSource != "source" {
 		t.Errorf("moved.source = %q, want %q", gotSource, "source")
 	}
-	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == statusReadyText })
+	waitFor(t, a, func() bool { return a.statusBar.GetText(true) == a.readyText() })
 }
 
 func TestOpenMoveModalShowsFormAndVKeyOpensIt(t *testing.T) {

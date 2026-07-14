@@ -49,6 +49,10 @@ func New() *App {
 		cfg = config.Default()
 	}
 
+	// applyTheme must run before any tview primitive is constructed —
+	// primitives capture tview.Styles once, at construction time.
+	applyTheme(cfg.Colors)
+
 	backend, err := proxy.New(cfg.Queue.ProxyURL, cfg.Queue.Username, cfg.Queue.Password)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cloudtui: creating mq-proxy client: %v\n", err)
@@ -86,7 +90,7 @@ func New() *App {
 	a.topLeft = tb.left
 	a.infoPanel = tb.info
 
-	a.statusBar = newStatusBar()
+	a.statusBar = newStatusBar(cfg)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
@@ -246,6 +250,12 @@ func (a *App) switchTo(name string) {
 // setStatus updates the bottom status bar.
 func (a *App) setStatus(text string) {
 	a.statusBar.SetText(text)
+}
+
+// readyText returns the idle-state status bar text (the global hotkey
+// legend) rendered from the app's current config.
+func (a *App) readyText() string {
+	return readyStatusText(a.cfg)
 }
 
 // refreshInfoPanel re-renders the connection-info panel from the current

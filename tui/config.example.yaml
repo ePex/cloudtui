@@ -13,26 +13,39 @@ logo:
 # Colors accept a tview/tcell color name (e.g. "yellow") or a hex code
 # (e.g. "#ffcc00"). Any field left out here falls back to its default.
 colors:
-  border: green   # fallback resource-view border color (see views: below)
-  label: yellow   # field labels, e.g. "Profile:"
-  value: white    # field values / default text
-  accent: aqua    # key-binding tokens in the shortcuts panel
+  background: "#1a1b26"  # app-wide background
+  border: "#c0caf5"      # fallback resource-view border color (see views: below)
+  label: "#e0af68"       # field labels, e.g. "Active connection:"
+  text: "#c0caf5"        # general/primary text (list items, body copy)
+  value: "#7dcfff"       # field values in label/value rows
+  accent: "#ff79c6"      # key-binding tokens in the shortcuts/nav panel
 
   # Not yet shown anywhere (no feature renders success/warning/error
   # state today), but defined so a later feature doesn't need another
   # config-schema change.
-  success: green
-  warning: yellow
-  error: red
+  success: "#9ece6a"
+  warning: "#e0af68"
+  error: "#f7768e"
+
+  # Selected-row colors, applied to every list the shell builds (queues,
+  # messages, settings, AWS-profile picker).
+  selectionBg: "#2ac3de"
+  selectionText: "#1a1b26"
+
+  # Bottom status bar background/text.
+  statusBarBg: "#ff9e64"
+  statusBarText: "#1a1b26"
 
   # Per-view border/title color. A view left out here falls back to
   # border: above, so adding a new view later doesn't require an update.
+  # Ships with one shared color for all views by default — set these
+  # individually for k9s-style per-view coloring.
   views:
-    home: aqua
-    secrets: yellow
-    params: teal
-    queues: fuchsia
-    settings: gray
+    home: "#c0caf5"
+    secrets: "#c0caf5"
+    params: "#c0caf5"
+    queues: "#c0caf5"
+    settings: "#c0caf5"
 
 # Normally set via the Settings view's profile picker ('s', then select
 # from your ~/.aws profiles), not hand-edited.

@@ -31,7 +31,7 @@ func (s *settingsView) Primitive() tview.Primitive { return s.list }
 // newSettingsView builds the Settings view and wires its "AWS Profile"
 // row to a's profile picker.
 func newSettingsView(a *App) ui.View {
-	list := tview.NewList().ShowSecondaryText(true)
+	list := styleList(tview.NewList().ShowSecondaryText(true), a.cfg.Colors)
 	list.AddItem("AWS Profile", profileSecondaryText(a.cfg), 0, a.openProfilePicker)
 	// Read-only for now: unlike AWS profiles, a proxy URL isn't a
 	// discoverable list to pick from, so there's no picker here — edit
@@ -66,7 +66,7 @@ func queueConnectionSecondaryText(cfg config.Config) string {
 func (a *App) openProfilePicker() {
 	names, err := awsprofile.List()
 
-	picker := tview.NewList().ShowSecondaryText(false)
+	picker := styleList(tview.NewList().ShowSecondaryText(false), a.cfg.Colors)
 	picker.SetBorder(true).SetTitle(" AWS Profile ")
 	picker.SetDoneFunc(a.closeProfilePicker)
 

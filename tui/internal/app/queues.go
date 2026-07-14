@@ -39,19 +39,21 @@ func (v *queuesView) activate() { v.app.loadQueues() }
 func newQueuesView(a *App, backend queue.Backend) ui.View {
 	a.backend = backend
 
-	a.queuesList = tview.NewList().ShowSecondaryText(true)
+	a.queuesList = styleList(tview.NewList().ShowSecondaryText(true), a.cfg.Colors)
 	a.queuesList.SetBorder(true).SetTitle(" Queues ")
 	a.queuesList.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
 		a.showQueueDetail(mainText)
 	})
 
-	a.messagesList = tview.NewList().ShowSecondaryText(true)
+	a.messagesList = styleList(tview.NewList().ShowSecondaryText(true), a.cfg.Colors)
 	a.messagesList.SetBorder(true)
 	a.messagesList.SetInputCapture(a.onMessagesKey)
 
+	accent := a.cfg.Colors.Accent
 	hint := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[green]a[-] send  [green]d[-] purge  [green]v[-] move  [green]esc[-] back")
+		SetText(fmt.Sprintf("[%s]a[-] send  [%s]d[-] purge  [%s]v[-] move  [%s]esc[-] back",
+			accent, accent, accent, accent))
 
 	detail := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(a.messagesList, 0, 1, true).
@@ -80,7 +82,7 @@ func (a *App) loadQueues() {
 				a.queuesList.AddItem(s.Name,
 					fmt.Sprintf("pending: %d  consumers: %d", s.PendingCount, s.ConsumerCount), 0, nil)
 			}
-			a.setStatus(statusReadyText)
+			a.setStatus(a.readyText())
 		})
 	}()
 }
@@ -110,7 +112,7 @@ func (a *App) loadMessages(queueName string) {
 				a.messagesList.AddItem(m.Body, m.ID, 0, nil)
 			}
 			a.messagesList.SetTitle(fmt.Sprintf(" %s ", queueName))
-			a.setStatus(statusReadyText)
+			a.setStatus(a.readyText())
 		})
 	}()
 }
@@ -163,7 +165,7 @@ func (a *App) sendMessage(queueName, body string) {
 				a.setStatus(fmt.Sprintf("error sending: %v", err))
 				return
 			}
-			a.setStatus(statusReadyText)
+			a.setStatus(a.readyText())
 			a.loadMessages(queueName)
 		})
 	}()
@@ -194,7 +196,7 @@ func (a *App) purgeQueue(queueName string) {
 				a.setStatus(fmt.Sprintf("error purging: %v", err))
 				return
 			}
-			a.setStatus(statusReadyText)
+			a.setStatus(a.readyText())
 			a.loadMessages(queueName)
 			a.loadQueues()
 		})
@@ -226,7 +228,7 @@ func (a *App) moveMessages(sourceQueueName, targetQueueName string) {
 				a.setStatus(fmt.Sprintf("error moving: %v", err))
 				return
 			}
-			a.setStatus(statusReadyText)
+			a.setStatus(a.readyText())
 			a.loadMessages(sourceQueueName)
 			a.loadQueues()
 		})
