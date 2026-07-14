@@ -1,6 +1,6 @@
 # Plan — Global hotkeys
 
-Spec: [2026-07-10_feat-global-hotkeys.md](2026-07-10_feat-global-hotkeys.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

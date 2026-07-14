@@ -1,19 +1,19 @@
 # Tasks — mq-proxy service
 
-Plan: [2026-07-10_feat-mq-proxy-plan.md](2026-07-10_feat-mq-proxy-plan.md)
+Plan: [plan.md](plan.md)
 
 Each task below needs explicit manual approval before it is implemented.
 Given the size of this feature, tasks are ordered so each subsequent
 step has everything it depends on already in place.
 
-1. **`mq-proxy/` Maven scaffold** — `pom.xml`, Maven wrapper
+1. [x] **`mq-proxy/` Maven scaffold** — `pom.xml`, Maven wrapper
    (`mvnw`/`mvnw.cmd`/`.mvn/wrapper/`), `MqProxyApplication.java`, base
    `application.yaml`. Boots to an empty Spring context; no endpoints,
    no broker, no security yet.
    Status: done. Spring Boot 4.1.0 / Java 21, group `dev.cloudtui`.
    `./mvnw test` passes (context-load test).
 
-2. **Taskfile: mq-proxy targets** — `build:mq-proxy`, `run:mq-proxy`,
+2. [x] **Taskfile: mq-proxy targets** — `build:mq-proxy`, `run:mq-proxy`,
    `test:mq-proxy`; top-level `build`/`test` gain them as a second
    dependency (the gap flagged in the original Taskfile spec).
    Status: done. Windows needed `cmd.exe /c .\\mvnw.cmd ...` (mvdan/sh,
@@ -25,7 +25,7 @@ step has everything it depends on already in place.
    only. Verified `task build`, `task test`, `task build:mq-proxy`,
    `task test:mq-proxy` all work end-to-end.
 
-3. **`api/openapi.yaml`** — the full contract: all five operations,
+3. [x] **`api/openapi.yaml`** — the full contract: all five operations,
    `QueueSummary`/`Message`/`SendMessageRequest`/`MoveMessagesRequest`/
    `ErrorResponse` schemas, Basic Auth security scheme on every
    operation.
@@ -33,7 +33,7 @@ step has everything it depends on already in place.
    OpenAPI validation happens implicitly in tasks 4/5 when the codegen
    tools parse it.
 
-4. **Java codegen wiring** — `openapi-generator-maven-plugin` in
+4. [x] **Java codegen wiring** — `openapi-generator-maven-plugin` in
    `mq-proxy/pom.xml` (Spring interface-only + delegate); a minimal
    stub `QueuesController` implementing the generated delegate (each
    method unimplemented/501) just to prove the generated code compiles
@@ -54,7 +54,7 @@ step has everything it depends on already in place.
    `MockMvc`/`MockMvcRequestBuilders`, not the newer `MockMvcTester`
    (no parameter-resolver support for it in this setup).
 
-5. **Go codegen wiring** — `tui/internal/mqproxyclient/oapi-codegen-config.yaml`;
+5. [x] **Go codegen wiring** — `tui/internal/mqproxyclient/oapi-codegen-config.yaml`;
    Taskfile `generate:mqproxy-client` target; `build:tui`/`test:tui`/
    `run:tui` gain it as a dependency. Verify the generated package
    (under `tui/internal/mqproxyclient/generated/`) compiles.
@@ -66,7 +66,7 @@ step has everything it depends on already in place.
    Verified end-to-end: deleted the generated dir, ran `task test:tui`,
    it regenerated and passed.
 
-6. **Local embedded broker + JMS connection factory** —
+6. [x] **Local embedded broker + JMS connection factory** —
    `LocalBrokerConfig` (`@Profile("local")`, in-memory `BrokerService`),
    `BrokerConfig` (profile-aware `ActiveMQConnectionFactory`),
    `application-local.yaml`. A test confirming the embedded broker
@@ -78,7 +78,7 @@ step has everything it depends on already in place.
    `LocalBrokerConfigTest` (`@ActiveProfiles("local")`) opens a real JMS
    connection/session against the embedded broker — passes.
 
-7. **HTTP Basic Auth** — `SecurityConfig` (stateless, CSRF disabled,
+7. [x] **HTTP Basic Auth** — `SecurityConfig` (stateless, CSRF disabled,
    `httpBasic()`); `SecurityConfigTest` confirming missing/bad
    credentials get 401 and valid credentials succeed.
    Status: done. Base profile relies on Spring Boot's own
@@ -97,7 +97,7 @@ step has everything it depends on already in place.
    one broker) for both — documented on `LocalBrokerConfigTest` as the
    pattern future local-profile tests should follow.
 
-8. **List endpoint** — `QueueService.list()` (via
+8. [x] **List endpoint** — `QueueService.list()` (via
    `ActiveMQConnection.getDestinationSource()` + the statistics-query
    mechanism), `QueuesController` wiring, `ApiExceptionHandler`/
    `QueueNotFoundException` (error-handling pattern established here,
@@ -119,7 +119,7 @@ step has everything it depends on already in place.
    task 9 (browse), since `list()` has no queue-name parameter that
    could 404 — introducing it now would've been unused code.
 
-9. **Browse endpoint** — `QueueService.browse()` (`QueueBrowser`,
+9. [x] **Browse endpoint** — `QueueService.browse()` (`QueueBrowser`,
    client-side `limit`), controller wiring, tests.
    Status: done. `QueueNotFoundException` introduced here (list() had no
    use for it). Design call: JMS/ActiveMQ auto-creates queues on
@@ -131,18 +131,18 @@ step has everything it depends on already in place.
    semantics — the OpenAPI contract's 404 response for send stays
    declared (harmless) but won't actually trigger.
 
-10. **Send endpoint** — `QueueService.send()`, controller wiring, tests.
+10. [x] **Send endpoint** — `QueueService.send()`, controller wiring, tests.
     Status: done. Confirmed (as designed in task 9): sending to a
     brand-new queue name succeeds and auto-creates it — no
     `requireQueueExists` check here.
 
-11. **Purge endpoint** — `QueueService.purge()` (transacted consume),
+11. [x] **Purge endpoint** — `QueueService.purge()` (transacted consume),
     controller wiring, tests.
     Status: done. `QueuesControllerWiringTest` (the "still-a-stub" wiring
     proof) retargeted to `moveMessages`, the only operation left
     unimplemented after this task.
 
-12. **Move endpoint** — `QueueService.move()` (transacted consume +
+12. [x] **Move endpoint** — `QueueService.move()` (transacted consume +
     send, single commit), controller wiring, tests.
     Status: done. All five operations now have real logic, so
     `QueuesControllerWiringTest` (whose whole point was proving an
@@ -150,14 +150,14 @@ step has everything it depends on already in place.
     a subject — deleted; wiring is now proven by every endpoint-specific
     test instead.
 
-13. **`tui/internal/queue/backend.go`** — `Backend` interface
+13. [x] **`tui/internal/queue/backend.go`** — `Backend` interface
     (`List`/`Browse`/`Send`/`Purge`/`Move`, context-aware) and domain
     types (`Summary`, `Message`), independent of the generated client's
     types.
     Status: done. No test file — bare interface/types, no logic (same
     carve-out already used for `ui.Filterable`).
 
-14. **`tui/internal/queue/proxy`** — the real `Backend` implementation
+14. [x] **`tui/internal/queue/proxy`** — the real `Backend` implementation
     wrapping the generated Go client; tests against an `httptest.Server`
     covering all five methods and error propagation.
     Status: done. Uses `oapi-codegen`'s `ClientWithResponses` +
@@ -166,7 +166,7 @@ step has everything it depends on already in place.
     `error` and the message text happens to say "queue not found" for
     404s. Can be revisited if a later UI task needs to special-case it.
 
-15. **`tui/internal/config`: `Queue` section** — `ProxyURL`/`Username`/
+15. [x] **`tui/internal/config`: `Queue` section** — `ProxyURL`/`Username`/
     `Password` fields (password overridable via env var), `Default()`,
     save/load round-trip tests, `config.example.yaml` update.
     Status: done. Defaults: `proxyUrl: http://localhost:8081` (matches
@@ -176,12 +176,12 @@ step has everything it depends on already in place.
     `MQPROXY_CLIENT_PASSWORD`, which wins over the file and applies even
     if config.yaml is absent entirely).
 
-16. **Settings view: Queue Connection row** — a second, read-only row
+16. [x] **Settings view: Queue Connection row** — a second, read-only row
     showing the configured proxy URL or "not set" (no picker, no
     editor this pass); test update.
     Status: done.
 
-17. **Queues view — list** — replaces the placeholder's list rendering:
+17. [x] **Queues view — list** — replaces the placeholder's list rendering:
     calls `Backend.List()` in a goroutine, applies results via
     `QueueUpdateDraw`, shows a loading indicator in the status bar while
     in flight; tests using a fake `Backend`.
@@ -203,27 +203,27 @@ step has everything it depends on already in place.
     `"params"`, which is unaffected either way.
     Status: done.
 
-18. **Queues view — browse/detail pane** — selecting a queue shows its
+18. [x] **Queues view — browse/detail pane** — selecting a queue shows its
     messages (same non-blocking pattern); tests.
     Status: done (see task 17's notes).
 
-19. **Queues view — send action** — a small input form, calls
+19. [x] **Queues view — send action** — a small input form, calls
     `Backend.Send()`; tests.
     Status: done (see task 17's notes). Bound to `a` (not `s`, already
     claimed globally for Settings) via `SetInputCapture` on the messages
     list, not a global hotkey.
 
-20. **Queues view — purge action** — confirmation step, calls
+20. [x] **Queues view — purge action** — confirmation step, calls
     `Backend.Purge()`; tests.
     Status: done (see task 17's notes). Bound to `d`; reloads both the
     detail pane and the queue list afterward (pending count changes).
 
-21. **Queues view — move action** — prompts for a target queue, calls
+21. [x] **Queues view — move action** — prompts for a target queue, calls
     `Backend.Move()`; tests.
     Status: done (see task 17's notes). Bound to `v`; also reloads both
     panes afterward.
 
-22. **`internal/app/app.go` wiring** — construct the `queue.Backend`
+22. [x] **`internal/app/app.go` wiring** — construct the `queue.Backend`
     from config, replace the `queues` placeholder with the real view
     (moving it into `internal/app`, same pattern as `settings`); delete
     `internal/ui/views/queues.go`; update `views_test.go`/`app_test.go`.
@@ -234,7 +234,7 @@ step has everything it depends on already in place.
     non-fatal (in practice `proxy.New` can't fail for a plain string
     URL, confirmed by reading its source, so this is a formality).
 
-23. **Verify** — `task build`, `task test` (both Java and Go through
+23. [x] **Verify** — `task build`, `task test` (both Java and Go through
     Task), `gofmt`/`go vet` clean; best-effort run check (same
     tty/tmux caveat as prior features) plus a manual note on what still
     needs a human with a real terminal (and, ideally, a real or

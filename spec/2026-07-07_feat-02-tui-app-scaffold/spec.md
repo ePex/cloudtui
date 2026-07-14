@@ -63,5 +63,5 @@ implementation.
 
 This spec predates the plan/tasks-file and mandatory-unit-test rules added
 to `CLAUDE.md`'s "Feature & bugfix workflow" — see
-[2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md)
+[2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md](../2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md)
 for the retroactive plan/tasks files brought in line with those rules.

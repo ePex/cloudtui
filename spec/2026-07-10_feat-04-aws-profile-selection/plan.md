@@ -1,6 +1,6 @@
 # Plan — AWS profile selection
 
-Spec: [2026-07-10_feat-aws-profile-selection.md](2026-07-10_feat-aws-profile-selection.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

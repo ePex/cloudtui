@@ -1,6 +1,6 @@
 # Plan — mq-proxy service
 
-Spec: [2026-07-10_feat-mq-proxy.md](2026-07-10_feat-mq-proxy.md)
+Spec: [spec.md](spec.md)
 
 This is the largest feature in the repo so far. The plan below fixes the
 architecture and file layout; a few Java-library specifics (exact

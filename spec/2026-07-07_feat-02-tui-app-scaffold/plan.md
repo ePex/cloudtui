@@ -1,12 +1,12 @@
 # Plan — tui app scaffold (retroactive)
 
-Spec: [2026-07-07_feat-tui-app-scaffold.md](2026-07-07_feat-tui-app-scaffold.md)
+Spec: [spec.md](spec.md)
 
 > **Retroactive.** Written 2026-07-10, after the change was already
 > implemented and committed, to bring this spec into line with the
 > plan/tasks-file rule added to `CLAUDE.md`'s "Feature & bugfix workflow".
 > See
-> [2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md).
+> [2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md](../2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md).
 > It documents the design actually built, not a plan written in advance.
 
 ## Approach
@@ -59,7 +59,7 @@ UI), with no AWS wiring yet:
 No unit tests were written at commit time — this is the gap this
 retroactive-compliance pass backfills. Testable surface identified for the
 backfill (implemented as tasks 4–5 of
-[2026-07-10_bugfix-retroactive-workflow-compliance-tasks.md](2026-07-10_bugfix-retroactive-workflow-compliance-tasks.md)):
+[2026-07-10_bugfix-01-retroactive-workflow-compliance/tasks.md](../2026-07-10_bugfix-01-retroactive-workflow-compliance/tasks.md)):
 
 - `internal/ui/views`: each constructor's `Name()`/`Title()`.
 - `internal/app`: default active view on `New()`, `switchTo` routing,

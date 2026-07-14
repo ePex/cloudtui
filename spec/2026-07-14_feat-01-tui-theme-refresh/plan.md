@@ -1,6 +1,6 @@
 # Plan — TUI theme refresh
 
-Spec: [2026-07-14_feat-tui-theme-refresh.md](2026-07-14_feat-tui-theme-refresh.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

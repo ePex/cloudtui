@@ -1,6 +1,6 @@
 # Plan — k9s-style shell layout
 
-Spec: [2026-07-10_feat-k9s-style-shell-layout.md](2026-07-10_feat-k9s-style-shell-layout.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

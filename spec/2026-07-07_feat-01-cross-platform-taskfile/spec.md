@@ -37,7 +37,7 @@ task test     # go test ./... — no test files yet, exits 0
 ## Scope note
 
 Only `tui` is wired up. `mq-proxy` has no `pom.xml`/`mvnw` yet (see
-[2026-07-07_feat-tui-app-scaffold.md](2026-07-07_feat-tui-app-scaffold.md) —
+[2026-07-07_feat-02-tui-app-scaffold/spec.md](../2026-07-07_feat-02-tui-app-scaffold/spec.md) —
 out of scope for that change too), so no `build:mq-proxy`/`test:mq-proxy`
 targets were added; `build`/`test` will gain a second dependency once the
 Spring Boot module exists.
@@ -46,5 +46,5 @@ Spring Boot module exists.
 
 This spec predates the plan/tasks-file and mandatory-unit-test rules added
 to `CLAUDE.md`'s "Feature & bugfix workflow" — see
-[2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md)
+[2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md](../2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md)
 for the retroactive plan/tasks files brought in line with those rules.

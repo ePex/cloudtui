@@ -1,6 +1,6 @@
 # Plan — Richer color palette
 
-Spec: [2026-07-10_feat-richer-color-palette.md](2026-07-10_feat-richer-color-palette.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

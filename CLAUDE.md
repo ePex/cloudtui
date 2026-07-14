@@ -27,29 +27,35 @@ config tweak), any agent or contributor follows this sequence and **stops
 for feedback at each gate** — do not proceed to the next stage until the
 current one is explicitly approved:
 
-1. **Specification.** Write a short spec to `spec/` (see `spec/README.md`):
-   what the feature/bug is, why, scope and explicit out-of-scope. File:
-   `spec/YYYY-MM-DD_feat-<slug>.md` (or `bugfix-`). Ask for feedback.
-   Revise until approved.
-2. **Implementation plan.** Once the spec is approved, write the plan to its
-   own file: `spec/YYYY-MM-DD_feat-<slug>-plan.md` (or `bugfix-`) — approach,
-   files/modules touched, key technical decisions and trade-offs. Ask for
+1. **Specification.** Write a short spec (see `spec/README.md`): what the
+   feature/bug is, why, scope and explicit out-of-scope. File:
+   `spec/YYYY-MM-DD_feat-NN-<slug>/spec.md` (or `bugfix-NN-`). Ask for
    feedback. Revise until approved.
-3. **Task breakdown.** Once the plan is approved, write the breakdown to its
-   own file: `spec/YYYY-MM-DD_feat-<slug>-tasks.md` (or `bugfix-`) — a list
-   of discrete, reviewable steps. Each task requires explicit manual
+2. **Implementation plan.** Once the spec is approved, write the plan to
+   `plan.md` in that same folder — approach, files/modules touched, key
+   technical decisions and trade-offs. Ask for feedback. Revise until
+   approved.
+3. **Task breakdown.** Once the plan is approved, write the breakdown to
+   `tasks.md` in that same folder — a numbered checkbox list (`1. [ ]
+   ...`) of discrete, reviewable steps. Each task requires explicit manual
    approval before it is implemented — do not implement several tasks and
    present them together, and do not move to the next task until the
-   current one is done and the next has been separately approved.
+   current one is done and the next has been separately approved. Check a
+   task's box (`1. [x] ...`) once it's actually been implemented, not
+   before.
 
 This gating applies to features and bugfixes alike; trivial changes can
 skip straight to implementation.
 
-Every spec file lives in `spec/` and is named with the date it was started,
-so the folder sorts into a correct chronological order:
+Every feature/bugfix gets its own folder under `spec/`, named with the
+date it was started plus a same-day sequence number, so folders sort into
+a correct chronological order even when several land on the same day:
 
-- Features: `spec/YYYY-MM-DD_feat-<slug>.md`
-- Bugfixes: `spec/YYYY-MM-DD_bugfix-<slug>.md`
+- Features: `spec/YYYY-MM-DD_feat-NN-<slug>/`
+- Bugfixes: `spec/YYYY-MM-DD_bugfix-NN-<slug>/`
+
+`NN` is a two-digit counter starting at `01`, reset each day and counted
+separately for `feat` vs `bugfix`.
 
 ## Architecture (agreed decisions)
 

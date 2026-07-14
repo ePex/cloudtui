@@ -1,6 +1,6 @@
 # Plan — Retroactive workflow compliance for pre-existing specs
 
-Spec: [2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md)
+Spec: [spec.md](spec.md)
 
 ## Approach
 

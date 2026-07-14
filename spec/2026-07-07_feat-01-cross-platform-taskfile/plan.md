@@ -1,12 +1,12 @@
 # Plan — Cross-platform Taskfile (retroactive)
 
-Spec: [2026-07-07_feat-cross-platform-taskfile.md](2026-07-07_feat-cross-platform-taskfile.md)
+Spec: [spec.md](spec.md)
 
 > **Retroactive.** Written 2026-07-10, after the change was already
 > implemented and committed, to bring this spec into line with the
 > plan/tasks-file rule added to `CLAUDE.md`'s "Feature & bugfix workflow".
 > See
-> [2026-07-10_bugfix-retroactive-workflow-compliance.md](2026-07-10_bugfix-retroactive-workflow-compliance.md).
+> [2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md](../2026-07-10_bugfix-01-retroactive-workflow-compliance/spec.md).
 > It documents the approach actually taken, not a plan written in advance.
 
 ## Approach
