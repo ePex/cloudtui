@@ -122,12 +122,11 @@ and test the application **and the full local stack** with the same commands.
 
 ## Conventions per module
 
-- **Go (`tui/`):** `gofmt`/`goimports` formatting is mandatory. Errors are
-  wrapped with context (`fmt.Errorf("...: %w", err)`). Secret values are
-  masked by default in the UI and never logged.
-- **Java (`mq-proxy/`):** Spring Boot with Maven wrapper (`mvnw` is committed,
-  `target/` is not). Configuration via `application.yaml` +
-  environment variables; no credentials in config files.
+- **Go (`tui/`):** see `tui/CLAUDE.md` for module-specific conventions
+  (style, package layout, testing, dependencies).
+- **Java (`mq-proxy/`):** Spring Boot with Maven wrapper (`mvnw` is
+  committed, `target/` is not). See `mq-proxy/CLAUDE.md` for
+  module-specific conventions.
 - **Docs (`docs/`):** significant design decisions get a short ADR-style
   markdown file.
 
