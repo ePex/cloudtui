@@ -1,0 +1,66 @@
+# config.example.yaml — full cloudtui configuration schema.
+#
+# Copy this file to config.yaml in the same directory to customise the logo,
+# theme, or individual palette colors. config.yaml is gitignored, so local
+# changes are never committed. If the file is absent, cloudtui uses its
+# built-in defaults (the dark theme, shown below).
+
+# theme selects the active built-in palette: "dark" or "cyberpunk".
+# Individual colors: fields below override palette values for fine-tuning.
+# Theme can also be switched at runtime via Settings (s) or :theme <name>.
+theme: dark
+
+# logo is rendered in the top-right corner. Any UTF-8 art is accepted.
+# Dynamic color tags ([red], [#ff0000]) are intentionally NOT parsed here,
+# so box-drawing characters are safe to use.
+logo:
+  - "╔═══════════╗"
+  - "║ CLOUDTUI  ║"
+  - "╚═══════════╝"
+
+# colors overrides individual palette fields on top of the selected theme.
+# Omit this section entirely to use the built-in theme palette as-is.
+# All values: tview/tcell color names ("red", "navy") or hex codes ("#rrggbb").
+colors:
+  # background: base background applied to every primitive by default.
+  background: "#1a1b26"
+  # border: box borders, dividers, and view titles.
+  border: "#c0caf5"
+  # label: field labels, section headings, key hints in the nav panel.
+  label: "#e0af68"
+  # text: primary body text in tables and lists.
+  text: "#c0caf5"
+  # value: secondary content (values, descriptions).
+  value: "#7dcfff"
+  # accent: highlighted key names in the status bar and navigation panel.
+  accent: "#ff79c6"
+  # selectionBg / selectionText: selected-row highlight in lists and forms.
+  selectionBg: "#2ac3de"
+  selectionText: "#1a1b26"
+  # statusBarBg / statusBarText: bottom hotkey legend strip.
+  statusBarBg: "#ff9e64"
+  statusBarText: "#1a1b26"
+  # views: per-view border/title color overrides.
+  # Any view not listed here falls back to the border color above.
+  views:
+    home: "#c0caf5"
+    settings: "#c0caf5"
+
+# ─── Cyberpunk 2077-inspired palette ─────────────────────────────────────────
+# Uncomment and replace the colors block above, or just set theme: cyberpunk.
+#
+# theme: cyberpunk
+# colors:
+#   background: "#0d0221"      # near-black
+#   border: "#ff003c"          # neon pink/magenta
+#   label: "#00d4ff"           # electric cyan
+#   text: "#e0e0e0"            # light grey
+#   value: "#00d4ff"           # electric cyan
+#   accent: "#ffe400"          # neon yellow (primary)
+#   selectionBg: "#ffe400"     # neon yellow highlight
+#   selectionText: "#0d0221"
+#   statusBarBg: "#ff003c"     # neon pink bar
+#   statusBarText: "#0d0221"
+#   views:
+#     home: "#ff003c"
+#     settings: "#ffe400"
