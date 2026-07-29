@@ -28,12 +28,13 @@ type App struct {
 	helpVisible    bool
 	views          []ui.View
 	cfg            config.Config
-	infoPanel    *tview.TextView
-	divider      *tview.TextView
-	contextPanel *tview.TextView
-	logoPanel    *tview.TextView
+	infoPanel      *tview.TextView
+	divider        *tview.TextView
+	contextPanel   *tview.TextView
+	logoPanel      *tview.TextView
 	statusBar      *tview.TextView
 	settingsForm   *tview.Form
+	logV           *logView
 	homeTable      *tview.Table
 	homeViewInfos  []views.ViewInfo
 	topBarHeight   int
@@ -49,6 +50,7 @@ func New(cfg config.Config) *App {
 	homeInfos := []views.ViewInfo{
 		{Name: "home", Description: "Dashboard: all available views"},
 		{Name: "settings", Description: "Edit and persist app configuration"},
+		{Name: "log", Description: "View the application log"},
 	}
 
 	a := &App{
@@ -86,8 +88,9 @@ func New(cfg config.Config) *App {
 	a.switchingTheme = true
 	settingsView := newSettingsView(a)
 	a.switchingTheme = false
+	a.logV = newLogView(a)
 
-	a.views = []ui.View{homeView, settingsView}
+	a.views = []ui.View{homeView, settingsView, a.logV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -142,6 +145,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case 's':
 		a.switchTo("settings")
+		return nil
+	case 'l':
+		a.switchTo("log")
 		return nil
 	case 'q':
 		a.tv.Stop()
@@ -212,14 +218,17 @@ func (a *App) closeHelp() {
 	a.helpVisible = false
 }
 
-// switchTo activates the named view if it is registered, and updates the
-// top bar's context panel with that view's shortcuts (if any).
+// switchTo activates the named view if it is registered, updates the top
+// bar's context panel, and calls Activate() if the view implements activatable.
 func (a *App) switchTo(name string) {
 	for _, v := range a.views {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
 			a.tv.SetFocus(a.pages)
 			a.updateContextPanel(v)
+			if act, ok := v.(activatable); ok {
+				act.Activate()
+			}
 			return
 		}
 	}
@@ -269,4 +278,10 @@ func (a *App) colorBordered(v ui.View, prim tview.Primitive) {
 type bordered interface {
 	SetBorderColor(color tcell.Color) *tview.Box
 	SetTitleColor(color tcell.Color) *tview.Box
+}
+
+// activatable is implemented by views that want to refresh their content each
+// time they become active (e.g. logView reloads the log file on switchTo).
+type activatable interface {
+	Activate()
 }

@@ -92,6 +92,13 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.settingsForm.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
 	}
 
+	// Log text view
+	if a.logV != nil {
+		a.logV.textView.SetBackgroundColor(bg)
+		a.logV.textView.SetBorderColor(tcell.GetColor(p.ViewColor("log")))
+		a.logV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
+	}
+
 }
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after
 // every event handler returns when the event loop is running. An explicit

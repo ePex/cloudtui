@@ -24,7 +24,7 @@ func TestNewStatusBar(t *testing.T) {
 func TestReadyStatusTextContainsGlobalHotkeys(t *testing.T) {
 	text := readyStatusText(config.Default())
 
-	for _, want := range []string{"Help", "Home", "Settings", "Quit", "Command"} {
+	for _, want := range []string{"Help", "Home", "Log", "Settings", "Quit", "Command"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("readyStatusText() = %q, want it to contain %q", text, want)
 		}

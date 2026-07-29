@@ -11,7 +11,7 @@ import (
 
 const (
 	helpModalWidth  = 40
-	helpModalHeight = 10
+	helpModalHeight = 11
 )
 
 // newHelpModal renders the '?' overlay's bordered keybinding list.
@@ -21,6 +21,7 @@ func newHelpModal(cfg config.Config) *tview.TextView {
 	}
 	lines := []string{
 		key("h", "home"),
+		key("l", "log"),
 		key("s", "settings"),
 		key("q", "quit"),
 		key("?", "toggle this help"),

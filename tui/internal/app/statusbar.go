@@ -19,6 +19,7 @@ func readyStatusText(cfg config.Config) string {
 	return strings.Join([]string{
 		key("?", "Help"),
 		key("h", "Home"),
+		key("l", "Log"),
 		key("s", "Settings"),
 		key("q", "Quit"),
 		key(":", "Command"),

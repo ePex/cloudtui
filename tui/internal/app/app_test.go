@@ -15,7 +15,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings"}
+	wantNames := []string{"home", "settings", "log"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -358,3 +358,30 @@ func TestViewBorderColorFallsBackForUnmappedView(t *testing.T) {
 		t.Errorf("border color for unmapped view = %v, want fallback %v", got, want)
 	}
 }
+
+func TestActivatableCalledBySwitchTo(t *testing.T) {
+	a := New(config.Default())
+	var activated bool
+	fv := &fakeActivatableView{name: "act-test", activateFn: func() { activated = true }}
+	a.views = append(a.views, fv)
+	a.pages.AddPage(fv.Name(), fv.Primitive(), true, false)
+
+	a.switchTo("act-test")
+
+	if !activated {
+		t.Error("Activate() not called by switchTo for activatable view")
+	}
+}
+
+// fakeActivatableView implements ui.View and activatable.
+type fakeActivatableView struct {
+	name       string
+	activateFn func()
+}
+
+var _ ui.View = (*fakeActivatableView)(nil)
+
+func (f *fakeActivatableView) Name() string               { return f.name }
+func (f *fakeActivatableView) Title() string              { return f.name }
+func (f *fakeActivatableView) Primitive() tview.Primitive { return tview.NewBox() }
+func (f *fakeActivatableView) Activate()                  { f.activateFn() }
