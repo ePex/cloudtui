@@ -113,6 +113,12 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.messagesV.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	}
 
+	// Message detail text view
+	if a.messageDetailV != nil {
+		a.messageDetailV.textView.SetBackgroundColor(bg)
+		a.messageDetailV.textView.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
+		a.messageDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+	}
 
 }
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after

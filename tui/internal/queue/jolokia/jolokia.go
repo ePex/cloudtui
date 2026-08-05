@@ -288,6 +288,7 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 			CorrelationID: correlationID,
 			Timestamp:     time.UnixMilli(ts),
 			Preview:       preview,
+			RawFields:     m,
 		})
 	}
 	return messages, nil

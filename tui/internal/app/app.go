@@ -39,6 +39,7 @@ type App struct {
 	logV           *logView
 	queuesV        *queuesView
 	messagesV      *messagesView
+	messageDetailV *messageDetailView
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -107,6 +108,7 @@ func New(cfg config.Config) *App {
 	a.backend = jolokia.NewClient(cfg.Queue)
 	a.queuesV = newQueuesView(a, a.backend)
 	a.messagesV = newMessagesView(a)
+	a.messageDetailV = newMessageDetailView(a)
 
 	// Wire Enter in the queues table to open the messages view for the
 	// selected queue. Done here because messagesV must exist first.
@@ -118,14 +120,25 @@ func New(cfg config.Config) *App {
 		a.openMessages(cell.Text)
 	})
 
+	// Wire Enter in the messages table to open the detail view for the
+	// selected message. Done here because messageDetailV must exist first.
+	a.messagesV.table.SetSelectedFunc(func(row, _ int) {
+		msgIdx := row - 1 // row 0 is the header
+		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
+			return
+		}
+		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
+	})
+
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
 		a.pages.AddPage(v.Name(), prim, true, false)
 	}
-	// messages page: not in a.views (no home entry / switchTo), but needs a page slot.
+	// messages and message-detail pages: not in a.views (no home entry / switchTo).
 	a.pages.AddPage("messages", a.messagesV.table, true, false)
+	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
@@ -279,6 +292,20 @@ func (a *App) openMessages(queueName string) {
 	}
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
 	a.messagesV.load()
+}
+
+// openMessageDetail renders the full detail for msg and switches to the
+// message-detail page.
+func (a *App) openMessageDetail(queueName string, msg queue.Message) {
+	a.messageDetailV.render(queueName, msg)
+	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
+	a.pages.SwitchToPage("message-detail")
+	a.tv.SetFocus(a.pages)
+	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
+	for _, sc := range a.messageDetailV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // updateContextPanel renders v's shortcuts into the context panel, or clears

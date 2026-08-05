@@ -20,6 +20,7 @@ type messagesView struct {
 	table     *tview.Table
 	app       *App
 	queueName string
+	msgs      []queue.Message // sorted snapshot, index 0 = row 1
 }
 
 func (mv *messagesView) Shortcuts() []ui.Shortcut {
@@ -95,6 +96,8 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 	sort.Slice(msgs, func(i, j int) bool {
 		return msgs[i].Timestamp.After(msgs[j].Timestamp)
 	})
+	mv.msgs = msgs
+
 	for mv.table.GetRowCount() > 1 {
 		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
 	}

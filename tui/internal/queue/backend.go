@@ -20,7 +20,8 @@ type Message struct {
 	JMSType       string // jMSType header, or inferred type ("text"/"bytes"/"other")
 	CorrelationID string // jMSCorrelationID header
 	Timestamp     time.Time
-	Preview       string // first 80 chars of body text; "(binary)" for non-text messages
+	Preview       string                 // first 80 chars of body text; "(binary)" for non-text messages
+	RawFields     map[string]interface{} // full Jolokia response map for the message
 }
 
 // Backend is the interface all queue data sources must implement.
