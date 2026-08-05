@@ -242,6 +242,10 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 		qv.table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%d", s.EnqueueCount)).SetTextColor(textColor).SetExpansion(1).SetAlign(tview.AlignRight))
 		qv.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%d", s.DequeueCount)).SetTextColor(textColor).SetExpansion(1).SetAlign(tview.AlignRight))
 	}
+
+	if qv.table.GetRowCount() > 1 {
+		qv.table.Select(1, 0)
+	}
 }
 
 func (qv *queuesView) showError(err error) {
