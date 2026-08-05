@@ -36,10 +36,15 @@ func TestListHappyPath(t *testing.T) {
 			})
 			return
 		}
-		// bulk read response: QueueSize=3, ConsumerCount=1 for foo; 0,0 for bar
+		// bulk read: QueueSize=3, ConsumerCount=1, EnqueueCount=10, DequeueCount=7 for foo
+		//            0, 0, 0, 0 for bar
 		json.NewEncoder(w).Encode([]map[string]any{
 			{"status": 200, "value": int64(3)},
 			{"status": 200, "value": int64(1)},
+			{"status": 200, "value": int64(10)},
+			{"status": 200, "value": int64(7)},
+			{"status": 200, "value": int64(0)},
+			{"status": 200, "value": int64(0)},
 			{"status": 200, "value": int64(0)},
 			{"status": 200, "value": int64(0)},
 		})
@@ -62,6 +67,12 @@ func TestListHappyPath(t *testing.T) {
 	}
 	if summaries[0].ConsumerCount != 1 {
 		t.Errorf("summaries[0].ConsumerCount = %d, want 1", summaries[0].ConsumerCount)
+	}
+	if summaries[0].EnqueueCount != 10 {
+		t.Errorf("summaries[0].EnqueueCount = %d, want 10", summaries[0].EnqueueCount)
+	}
+	if summaries[0].DequeueCount != 7 {
+		t.Errorf("summaries[0].DequeueCount = %d, want 7", summaries[0].DequeueCount)
 	}
 	if summaries[1].Name != "bar" {
 		t.Errorf("summaries[1].Name = %q, want %q", summaries[1].Name, "bar")

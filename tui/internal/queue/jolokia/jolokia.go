@@ -94,12 +94,14 @@ func (c *Client) searchQueues(ctx context.Context) ([]string, error) {
 }
 
 func (c *Client) readMetrics(ctx context.Context, mbeans []string) ([]queue.Summary, error) {
-	// Build a bulk request: two entries per queue (QueueSize, ConsumerCount).
-	bulk := make([]bulkItem, 0, len(mbeans)*2)
+	// Build a bulk request: four entries per queue.
+	bulk := make([]bulkItem, 0, len(mbeans)*4)
 	for _, mb := range mbeans {
 		bulk = append(bulk,
 			bulkItem{Type: "read", MBean: mb, Attribute: "QueueSize"},
 			bulkItem{Type: "read", MBean: mb, Attribute: "ConsumerCount"},
+			bulkItem{Type: "read", MBean: mb, Attribute: "EnqueueCount"},
+			bulkItem{Type: "read", MBean: mb, Attribute: "DequeueCount"},
 		)
 	}
 
@@ -130,23 +132,35 @@ func (c *Client) readMetrics(ctx context.Context, mbeans []string) ([]queue.Summ
 		return nil, fmt.Errorf("jolokia bulk decode: %w", err)
 	}
 
-	// Each queue produced two consecutive entries: [QueueSize, ConsumerCount].
+	// Each queue produced four consecutive entries:
+	// [QueueSize, ConsumerCount, EnqueueCount, DequeueCount].
 	summaries := make([]queue.Summary, 0, len(mbeans))
 	for i, mb := range mbeans {
-		queueSize := results[i*2]
-		consumerCount := results[i*2+1]
+		queueSize    := results[i*4]
+		consumerCount := results[i*4+1]
+		enqueueCount  := results[i*4+2]
+		dequeueCount  := results[i*4+3]
 
-		if queueSize.Status != 200 {
-			return nil, fmt.Errorf("jolokia read QueueSize error (status %d): %s", queueSize.Status, queueSize.Error)
-		}
-		if consumerCount.Status != 200 {
-			return nil, fmt.Errorf("jolokia read ConsumerCount error (status %d): %s", consumerCount.Status, consumerCount.Error)
+		for _, r := range []struct {
+			item bulkResponseItem
+			name string
+		}{
+			{queueSize, "QueueSize"},
+			{consumerCount, "ConsumerCount"},
+			{enqueueCount, "EnqueueCount"},
+			{dequeueCount, "DequeueCount"},
+		} {
+			if r.item.Status != 200 {
+				return nil, fmt.Errorf("jolokia read %s error (status %d): %s", r.name, r.item.Status, r.item.Error)
+			}
 		}
 
 		summaries = append(summaries, queue.Summary{
 			Name:          queueNameFromMBean(mb),
 			PendingCount:  queueSize.Value,
 			ConsumerCount: consumerCount.Value,
+			EnqueueCount:  enqueueCount.Value,
+			DequeueCount:  dequeueCount.Value,
 		})
 	}
 

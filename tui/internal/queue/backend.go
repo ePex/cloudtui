@@ -7,6 +7,8 @@ type Summary struct {
 	Name          string
 	PendingCount  int64
 	ConsumerCount int64
+	EnqueueCount  int64
+	DequeueCount  int64
 }
 
 // Backend is the interface all queue data sources must implement.
