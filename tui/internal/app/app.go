@@ -39,9 +39,9 @@ type App struct {
 	logV           *logView
 	queuesV        *queuesView
 	backend        queue.Backend
-	homeTable      *tview.Table
-	homeViewInfos  []views.ViewInfo
-	topBarHeight   int
+	homeTable     *tview.Table
+	homeSections  []views.SectionInfo
+	topBarHeight  int
 	switchingTheme bool
 }
 
@@ -51,21 +51,30 @@ type App struct {
 func New(cfg config.Config) *App {
 	applyTheme(cfg.Colors)
 
-	homeInfos := []views.ViewInfo{
-		{Name: "home", Description: "Dashboard: all available views"},
-		{Name: "settings", Description: "Edit and persist app configuration"},
-		{Name: "log", Description: "View the application log"},
-		{Name: "queues", Description: "List ActiveMQ queues via Jolokia"},
+	homeSections := []views.SectionInfo{
+		{
+			Title: "Apps",
+			Entries: []views.ViewInfo{
+				{Name: "queues", Description: "List ActiveMQ queues via Jolokia"},
+			},
+		},
+		{
+			Title: "System",
+			Entries: []views.ViewInfo{
+				{Name: "settings", Description: "Edit and persist app configuration"},
+				{Name: "log", Description: "View the application log"},
+			},
+		},
 	}
 
 	a := &App{
 		tv:            tview.NewApplication(),
 		pages:         tview.NewPages(),
 		cfg:           cfg,
-		homeViewInfos: homeInfos,
+		homeSections:  homeSections,
 	}
 
-	homeView := views.NewHome(homeInfos, cfg.Colors.Label, cfg.Colors.Text)
+	homeView := views.NewHome(homeSections, a.switchTo, cfg.Colors.Label, cfg.Colors.Text, cfg.Colors.Border, cfg.Colors.SelectionBg, cfg.Colors.SelectionText)
 	a.homeTable, _ = homeView.Primitive().(*tview.Table)
 
 	a.prompt = tview.NewInputField().

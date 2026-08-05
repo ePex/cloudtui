@@ -80,7 +80,7 @@ func reapplyTheme(a *App, p config.Palette) {
 	a.logoPanel.SetBackgroundColor(bg)
 
 	// Home table
-	views.RepaintHomeTable(a.homeTable, a.homeViewInfos, p.Label, p.Text)
+	views.RepaintHomeTable(a.homeTable, a.homeSections, p.Label, p.Text, p.Border, p.SelectionBg, p.SelectionText)
 	a.homeTable.SetBackgroundColor(bg)
 	a.homeTable.SetBorderColor(tcell.GetColor(p.ViewColor("home")))
 	a.homeTable.SetTitleColor(tcell.GetColor(p.ViewColor("home")))
