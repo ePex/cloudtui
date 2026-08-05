@@ -123,6 +123,21 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.messageDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	}
 
+	// Confirm dialog
+	if a.confirmFlex != nil {
+		a.confirmFlex.SetBackgroundColor(bg)
+		a.confirmFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.confirmFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.confirmText != nil {
+		a.confirmText.SetBackgroundColor(bg)
+		a.confirmText.SetTextColor(tcell.GetColor(p.Text))
+	}
+	if a.confirmList != nil {
+		styleList(a.confirmList, p)
+		a.confirmList.SetBackgroundColor(bg)
+	}
+
 }
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after
 // every event handler returns when the event loop is running. An explicit

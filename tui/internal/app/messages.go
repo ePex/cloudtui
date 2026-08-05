@@ -26,6 +26,7 @@ type messagesView struct {
 func (mv *messagesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
+		{Key: "p", Description: "purge"},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -45,6 +46,22 @@ func newMessagesView(a *App) *messagesView {
 		switch {
 		case event.Rune() == 'r':
 			mv.load()
+			return nil
+		case event.Rune() == 'p':
+			name := mv.queueName
+			a.showConfirm(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+				go func() {
+					err := a.backend.PurgeQueue(context.Background(), name)
+					a.tv.QueueUpdateDraw(func() {
+						if err != nil {
+							slog.Error("messages: purge failed", "queue", name, "error", err)
+							mv.showError(err)
+							return
+						}
+						mv.load()
+					})
+				}()
+			})
 			return nil
 		case event.Rune() == 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)

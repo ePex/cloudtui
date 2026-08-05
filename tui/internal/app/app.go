@@ -40,6 +40,10 @@ type App struct {
 	queuesV        *queuesView
 	messagesV      *messagesView
 	messageDetailV *messageDetailView
+	confirmFlex    *tview.Flex
+	confirmText    *tview.TextView
+	confirmList    *tview.List
+	confirmVisible bool
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -145,10 +149,19 @@ func New(cfg config.Config) *App {
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
+	a.confirmText = tview.NewTextView().SetWrap(true)
+	a.confirmList = tview.NewList().ShowSecondaryText(false)
+	a.confirmFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.confirmText, 2, 0, false).
+		AddItem(a.confirmList, 0, 1, true)
+	a.confirmFlex.SetBorder(true).SetTitle(" Confirm ")
+	confirmOverlay := centered(a.confirmFlex, 52, 8)
+
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
 		AddPage("main", layout, true, true).
-		AddPage("help", helpOverlay, true, false)
+		AddPage("help", helpOverlay, true, false).
+		AddPage("confirm", confirmOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
 
@@ -170,6 +183,10 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.queuesV != nil && a.tv.GetFocus() == a.queuesV.filterInput {
+		return event
+	}
+
+	if a.confirmVisible {
 		return event
 	}
 
@@ -251,6 +268,41 @@ func (a *App) switchTheme(name string) {
 }
 
 
+
+// showConfirm presents a confirmation dialog with the given question.
+// onConfirm is called when the user selects "Yes". "No" is item 0 (default
+// focus) to prevent accidental actions.
+func (a *App) showConfirm(question string, onConfirm func()) {
+	a.confirmText.SetText(question)
+	a.confirmList.Clear()
+
+	dismiss := func() { a.closeConfirm() }
+
+	a.confirmList.AddItem("No", "", 0, dismiss)
+	a.confirmList.AddItem("Yes", "", 0, func() {
+		a.closeConfirm()
+		onConfirm()
+	})
+
+	a.confirmList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.closeConfirm()
+			return nil
+		}
+		return event
+	})
+
+	a.rootPages.ShowPage("confirm")
+	a.tv.SetFocus(a.confirmList)
+	a.confirmVisible = true
+}
+
+// closeConfirm hides the confirmation dialog and restores focus.
+func (a *App) closeConfirm() {
+	a.rootPages.HidePage("confirm")
+	a.tv.SetFocus(a.pages)
+	a.confirmVisible = false
+}
 
 // openHelp shows the help overlay on top of the main layout.
 func (a *App) openHelp() {

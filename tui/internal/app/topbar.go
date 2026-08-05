@@ -34,7 +34,10 @@ func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
 
 	contextPanel := tview.NewTextView().SetDynamicColors(true)
 	logoPanel := newLogoPanel(cfg)
-	height := maxInt(1, len(cfg.Logo))
+	// Ensure the top bar is tall enough to display all view shortcuts.
+	// shortcutPanelRows is the maximum number of shortcut lines any view shows.
+	const shortcutPanelRows = 4
+	height := maxInt(shortcutPanelRows, len(cfg.Logo))
 	divider := newDivider(cfg, height)
 
 	root := tview.NewFlex().SetDirection(tview.FlexColumn).

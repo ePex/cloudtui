@@ -2,8 +2,10 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -18,12 +20,15 @@ import (
 // It is not a registered ui.View; it is opened via App.openMessageDetail
 // and returns to "messages" on Esc/Backspace.
 type messageDetailView struct {
-	textView *tview.TextView
-	app      *App
+	textView  *tview.TextView
+	app       *App
+	queueName string
+	msg       queue.Message
 }
 
 func (dv *messageDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
+		{Key: "d", Description: "delete message"},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -43,6 +48,30 @@ func newMessageDetailView(a *App) *messageDetailView {
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Rune() == 'd':
+			queueName := dv.queueName
+			msgID := dv.msg.ID
+			a.showConfirm(fmt.Sprintf("Delete message from %q?", queueName), func() {
+				go func() {
+					err := a.backend.RemoveMessage(context.Background(), queueName, msgID)
+					a.tv.QueueUpdateDraw(func() {
+						if err != nil {
+							slog.Error("message detail: remove failed", "queue", queueName, "id", msgID, "error", err)
+							return
+						}
+						// Return to messages list and reload.
+						a.pages.SwitchToPage("messages")
+						a.tv.SetFocus(a.messagesV.table)
+						lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+						for _, sc := range a.messagesV.Shortcuts() {
+							lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+						}
+						a.contextPanel.SetText(strings.Join(lines, "\n"))
+						a.messagesV.load()
+					})
+				}()
+			})
+			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.SwitchToPage("messages")
 			a.tv.SetFocus(a.messagesV.table)
@@ -98,6 +127,8 @@ func decodePropertyValue(v interface{}) string {
 
 // render builds and displays the detail text for msg in the context of queueName.
 func (dv *messageDetailView) render(queueName string, msg queue.Message) {
+	dv.queueName = queueName
+	dv.msg = msg
 	p := dv.app.cfg.Colors
 	accent := p.Label
 	text := p.Text

@@ -28,4 +28,6 @@ type Message struct {
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
 	BrowseMessages(ctx context.Context, queueName string) ([]Message, error)
+	PurgeQueue(ctx context.Context, queueName string) error
+	RemoveMessage(ctx context.Context, queueName, messageID string) error
 }

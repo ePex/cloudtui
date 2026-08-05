@@ -40,6 +40,7 @@ func (qv *queuesView) Primitive() tview.Primitive { return qv.flex }
 func (qv *queuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
+		{Key: "p", Description: "purge"},
 		{Key: "/", Description: "filter"},
 		{Key: "o/O", Description: "sort col/dir"},
 	}
@@ -103,6 +104,27 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 		case 'O':
 			qv.sortAsc = !qv.sortAsc
 			qv.repaint(qv.allSummaries)
+			return nil
+		case 'p':
+			row, _ := qv.table.GetSelection()
+			cell := qv.table.GetCell(row, 0)
+			if cell == nil || cell.Text == "" || row == 0 {
+				return nil
+			}
+			name := cell.Text
+			qv.app.showConfirm(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+				go func() {
+					err := qv.backend.PurgeQueue(context.Background(), name)
+					qv.app.tv.QueueUpdateDraw(func() {
+						if err != nil {
+							slog.Error("queues: purge failed", "queue", name, "error", err)
+							qv.showError(err)
+							return
+						}
+						qv.load()
+					})
+				}()
+			})
 			return nil
 		}
 		return event

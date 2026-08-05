@@ -23,6 +23,14 @@ func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string) ([]queue.
 	return nil, nil
 }
 
+func (f *fakeQueueBackend) PurgeQueue(_ context.Context, _ string) error {
+	return nil
+}
+
+func (f *fakeQueueBackend) RemoveMessage(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func newTestQueuesView(t *testing.T) *queuesView {
 	t.Helper()
 	a := New(config.Default())
@@ -58,6 +66,16 @@ func TestQueuesViewShortcutRPresent(t *testing.T) {
 		}
 	}
 	t.Error("Shortcuts() missing key \"r\"")
+}
+
+func TestQueuesViewPurgeShortcutPresent(t *testing.T) {
+	qv := newTestQueuesView(t)
+	for _, s := range qv.Shortcuts() {
+		if s.Key == "p" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"p\"")
 }
 
 func TestQueuesViewShortcutFilterPresent(t *testing.T) {
@@ -133,6 +151,7 @@ func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 		t.Errorf("title after clear = %q, want %q", got, want)
 	}
 }
+
 
 func TestQueuesViewSortShortcutsPresent(t *testing.T) {
 	qv := newTestQueuesView(t)

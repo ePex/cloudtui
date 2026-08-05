@@ -330,6 +330,103 @@ func extractMessageID(raw interface{}) string {
 	return fmt.Sprintf("ID:?:%d:%d", int64(prodSeq), int64(brokerSeq))
 }
 
+// PurgeQueue removes all messages from queueName by browsing and removing
+// each message individually via removeMessage(java.lang.String).
+// purgeQueue() is not used because it is unavailable on some ActiveMQ deployments.
+func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
+	msgs, err := c.BrowseMessages(ctx, queueName)
+	if err != nil {
+		return fmt.Errorf("purge queue %s: browse: %w", queueName, err)
+	}
+
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+
+	for _, msg := range msgs {
+		reqBody := map[string]any{
+			"type":      "exec",
+			"mbean":     mbean,
+			"operation": "removeMessage(java.lang.String)",
+			"arguments": []string{msg.ID},
+		}
+		body, err := json.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("purge queue %s: marshal removeMessage: %w", queueName, err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("purge queue %s: removeMessage request: %w", queueName, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		c.setHeaders(req)
+
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return fmt.Errorf("purge queue %s: removeMessage: %w", queueName, err)
+		}
+		var result struct {
+			Status int    `json:"status"`
+			Error  string `json:"error"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("purge queue %s: removeMessage decode: %w", queueName, err)
+		}
+		if result.Status != 200 {
+			return fmt.Errorf("purge queue %s: removeMessage error (status %d): %s", queueName, result.Status, result.Error)
+		}
+	}
+	return nil
+}
+
+// RemoveMessage removes a single message by ID from queueName via the
+// removeMessage(java.lang.String) Jolokia exec operation.
+func (c *Client) RemoveMessage(ctx context.Context, queueName, messageID string) error {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "removeMessage(java.lang.String)",
+		"arguments": []string{messageID},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("removeMessage marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("removeMessage request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("removeMessage: %w", err)
+	}
+	var result struct {
+		Status int    `json:"status"`
+		Error  string `json:"error"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("removeMessage decode: %w", err)
+	}
+	if result.Status != 200 {
+		return fmt.Errorf("removeMessage error (status %d): %s", result.Status, result.Error)
+	}
+	return nil
+}
+
 func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Origin", c.origin)
 	if c.cfg.Username != "" {
