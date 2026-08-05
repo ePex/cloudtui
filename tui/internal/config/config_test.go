@@ -195,3 +195,69 @@ func TestLoadDefaultFallsBackWhenAbsent(t *testing.T) {
 		t.Errorf("LoadDefault() = %#v, want %#v (no config.yaml in test cwd)", got, want)
 	}
 }
+
+func TestDefaultQueueConfigPopulated(t *testing.T) {
+	q := Default().Queue
+	if q.BrokerName == "" {
+		t.Error("Default().Queue.BrokerName is empty")
+	}
+	if q.URL == "" {
+		t.Error("Default().Queue.URL is empty")
+	}
+	if q.Username == "" {
+		t.Error("Default().Queue.Username is empty")
+	}
+}
+
+func TestLoadPasswordEnvInjectsWhenEmpty(t *testing.T) {
+	t.Setenv("MQPROXY_CLIENT_PASSWORD", "secret")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	got, err := Load(path) // missing file → defaults + env override
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Queue.Password != "secret" {
+		t.Errorf("Queue.Password = %q, want %q", got.Queue.Password, "secret")
+	}
+}
+
+func TestLoadPasswordEnvDoesNotOverrideExplicit(t *testing.T) {
+	t.Setenv("MQPROXY_CLIENT_PASSWORD", "should-not-win")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "queue:\n  password: explicit\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Queue.Password != "explicit" {
+		t.Errorf("Queue.Password = %q, want %q (explicit value should win)", got.Queue.Password, "explicit")
+	}
+}
+
+func TestSaveLoadRoundTripWithQueue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.Queue.URL = "http://mybroker:8161/api/jolokia"
+	cfg.Queue.Password = "secret"
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Queue.URL != cfg.Queue.URL {
+		t.Errorf("Queue.URL = %q, want %q", got.Queue.URL, cfg.Queue.URL)
+	}
+	if got.Queue.Password != cfg.Queue.Password {
+		t.Errorf("Queue.Password = %q, want %q", got.Queue.Password, cfg.Queue.Password)
+	}
+}

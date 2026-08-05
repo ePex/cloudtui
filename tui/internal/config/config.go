@@ -12,9 +12,20 @@ import (
 
 // Config holds everything about the shell's appearance a user can override.
 type Config struct {
-	Theme  string   `yaml:"theme"`  // "dark" | "cyberpunk" | "" (falls back to "dark")
-	Logo   []string `yaml:"logo"`
-	Colors Palette  `yaml:"colors"`
+	Theme  string      `yaml:"theme"`  // "dark" | "cyberpunk" | "" (falls back to "dark")
+	Queue  QueueConfig `yaml:"queue"`
+	Logo   []string    `yaml:"logo"`
+	Colors Palette     `yaml:"colors"`
+}
+
+// QueueConfig holds the connection settings for the ActiveMQ Jolokia backend.
+// Password is intentionally kept out of version control: leave it empty here
+// and set MQPROXY_CLIENT_PASSWORD instead.
+type QueueConfig struct {
+	BrokerName string `yaml:"brokerName"` // broker name used in JMX MBean ObjectNames
+	URL        string `yaml:"url"`        // Jolokia HTTP endpoint
+	Username   string `yaml:"username"`
+	Password   string `yaml:"password"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values are
@@ -64,6 +75,7 @@ func DarkPalette() Palette {
 		Views: map[string]string{
 			"home":     "#c0caf5",
 			"settings": "#c0caf5",
+			"queues":   "#c0caf5",
 		},
 	}
 }
@@ -86,6 +98,7 @@ func CyberpunkPalette() Palette {
 		Views: map[string]string{
 			"home":     "#ff003c",
 			"settings": "#ffe400",
+			"queues":   "#00d4ff",
 		},
 	}
 }
@@ -108,6 +121,12 @@ func PaletteForTheme(name string) (Palette, bool) {
 func Default() Config {
 	return Config{
 		Theme: "dark",
+		Queue: QueueConfig{
+			BrokerName: "localhost",
+			URL:        "http://localhost:8161/api/jolokia",
+			Username:   "admin",
+			Password:   "",
+		},
 		Logo: []string{
 			"╔═══════════╗",
 			"║ CLOUDTUI  ║",
@@ -120,6 +139,9 @@ func Default() Config {
 // Load reads and parses the YAML config at path, merging it on top of
 // Default() so a partial file still gets defaults for unset fields.
 // A missing file is not an error — Default() is used as-is.
+//
+// If MQPROXY_CLIENT_PASSWORD is set and Queue.Password is empty, the env var
+// value is injected so credentials stay out of config.yaml.
 func Load(path string) (Config, error) {
 	cfg := Default()
 
@@ -130,6 +152,10 @@ func Load(path string) (Config, error) {
 		}
 	} else if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
+	}
+
+	if p := os.Getenv("MQPROXY_CLIENT_PASSWORD"); p != "" && cfg.Queue.Password == "" {
+		cfg.Queue.Password = p
 	}
 
 	return cfg, nil

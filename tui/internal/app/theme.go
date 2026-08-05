@@ -99,6 +99,13 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.logV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
 	}
 
+	// Queues table
+	if a.queuesV != nil {
+		a.queuesV.table.SetBackgroundColor(bg)
+		a.queuesV.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
+		a.queuesV.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+	}
+
 }
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after
 // every event handler returns when the event loop is running. An explicit

@@ -1,0 +1,9 @@
+services:
+  activemq:
+    image: apache/activemq-classic:latest
+    ports:
+      - "8161:8161"    # web console + Jolokia HTTP API
+      - "61616:61616"  # OpenWire broker port
+    environment:
+      ACTIVEMQ_CONNECTION_USER: admin
+      ACTIVEMQ_CONNECTION_PASSWORD: admin

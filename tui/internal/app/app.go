@@ -13,6 +13,8 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
@@ -35,6 +37,8 @@ type App struct {
 	statusBar      *tview.TextView
 	settingsForm   *tview.Form
 	logV           *logView
+	queuesV        *queuesView
+	backend        queue.Backend
 	homeTable      *tview.Table
 	homeViewInfos  []views.ViewInfo
 	topBarHeight   int
@@ -51,6 +55,7 @@ func New(cfg config.Config) *App {
 		{Name: "home", Description: "Dashboard: all available views"},
 		{Name: "settings", Description: "Edit and persist app configuration"},
 		{Name: "log", Description: "View the application log"},
+		{Name: "queues", Description: "List ActiveMQ queues via Jolokia"},
 	}
 
 	a := &App{
@@ -89,8 +94,10 @@ func New(cfg config.Config) *App {
 	settingsView := newSettingsView(a)
 	a.switchingTheme = false
 	a.logV = newLogView(a)
+	a.backend = jolokia.NewClient(cfg.Queue)
+	a.queuesV = newQueuesView(a, a.backend)
 
-	a.views = []ui.View{homeView, settingsView, a.logV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)

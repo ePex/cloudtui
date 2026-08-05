@@ -15,7 +15,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log"}
+	wantNames := []string{"home", "settings", "log", "queues"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -385,3 +385,24 @@ func (f *fakeActivatableView) Name() string               { return f.name }
 func (f *fakeActivatableView) Title() string              { return f.name }
 func (f *fakeActivatableView) Primitive() tview.Primitive { return tview.NewBox() }
 func (f *fakeActivatableView) Activate()                  { f.activateFn() }
+
+func TestQueuesViewRegistered(t *testing.T) {
+	a := New(config.Default())
+	for _, v := range a.views {
+		if v.Name() == "queues" {
+			return
+		}
+	}
+	t.Error("queues view not registered in app.views")
+}
+
+func TestPromptQueuesCommandSwitchesToQueuesView(t *testing.T) {
+	a := New(config.Default())
+	a.prompt.SetText("queues")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if name, _ := a.pages.GetFrontPage(); name != "queues" {
+		t.Errorf("front page after ':queues' = %q, want %q", name, "queues")
+	}
+}

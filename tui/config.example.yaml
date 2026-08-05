@@ -45,6 +45,16 @@ colors:
   views:
     home: "#c0caf5"
     settings: "#c0caf5"
+    queues: "#c0caf5"
+
+# queue: connection settings for the ActiveMQ Jolokia endpoint.
+# Password can also be supplied via the MQPROXY_CLIENT_PASSWORD env var
+# (the env var is only used when the password field is absent or empty).
+queue:
+  brokerName: localhost
+  url: http://localhost:8161/api/jolokia
+  username: admin
+  # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
 
 # ─── Cyberpunk 2077-inspired palette ─────────────────────────────────────────
 # Uncomment and replace the colors block above, or just set theme: cyberpunk.
@@ -64,3 +74,4 @@ colors:
 #   views:
 #     home: "#ff003c"
 #     settings: "#ffe400"
+#     queues: "#00d4ff"

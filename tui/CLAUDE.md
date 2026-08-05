@@ -20,6 +20,8 @@ this module.
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
 - `internal/ui/` — the `View` interface shared across resource views.
 - `internal/ui/views/` — individual resource view implementations.
+- `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
+- `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
 
 ## Testing
 
