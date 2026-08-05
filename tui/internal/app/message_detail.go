@@ -45,9 +45,12 @@ func newMessageDetailView(a *App) *messageDetailView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.ShowPage("messages")
-			if av := a.activeView(); av != nil {
-				a.updateContextPanel(av)
+			a.tv.SetFocus(a.messagesV.table)
+			lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+			for _, sc := range a.messagesV.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
 			}
+			a.contextPanel.SetText(strings.Join(lines, "\n"))
 			return nil
 		}
 		return event
