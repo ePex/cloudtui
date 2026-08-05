@@ -44,7 +44,7 @@ func newMessageDetailView(a *App) *messageDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.ShowPage("messages")
+			a.pages.SwitchToPage("messages")
 			a.tv.SetFocus(a.messagesV.table)
 			lines := make([]string, 0, len(a.messagesV.Shortcuts()))
 			for _, sc := range a.messagesV.Shortcuts() {

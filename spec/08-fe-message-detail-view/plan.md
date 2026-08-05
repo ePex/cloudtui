@@ -86,7 +86,7 @@ If the body is valid JSON it is pretty-printed with 2-space indentation via
 ### Input capture
 
 - `j` → `KeyDown`, `k` → `KeyUp`
-- `Esc` / `Backspace` → `a.pages.ShowPage("messages")` + `a.tv.SetFocus(a.messagesV.table)` + manually repopulate context panel with `messagesV.Shortcuts()` (does not reload messages; `activeView()` is not used because "messages" is not in `a.views`)
+- `Esc` / `Backspace` → `a.pages.SwitchToPage("messages")` + `a.tv.SetFocus(a.messagesV.table)` + manually repopulate context panel with `messagesV.Shortcuts()` (does not reload messages; `activeView()` is not used because "messages" is not in `a.views`)
 
 ### Shortcuts
 
