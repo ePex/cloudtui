@@ -18,6 +18,10 @@ func (f *fakeQueueBackend) List(_ context.Context) ([]queue.Summary, error) {
 	return f.summaries, nil
 }
 
+func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string) ([]queue.Message, error) {
+	return nil, nil
+}
+
 func newTestQueuesView(t *testing.T) *queuesView {
 	t.Helper()
 	a := New(config.Default())

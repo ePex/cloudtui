@@ -107,3 +107,74 @@ func TestListJolokiaErrorStatus(t *testing.T) {
 		t.Fatal("List() expected error for Jolokia status 404, got nil")
 	}
 }
+
+func TestBrowseMessagesHappyPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value": []map[string]any{
+				{
+					"messageId": "ID:msg-1",
+					"timestamp": int64(1721000000000),
+					"text":      "Hello World",
+				},
+				{
+					"messageId": "ID:msg-2",
+					"timestamp": int64(1721000001000),
+					"text":      "",
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("len(msgs) = %d, want 2", len(msgs))
+	}
+	if msgs[0].ID != "ID:msg-1" {
+		t.Errorf("msgs[0].ID = %q, want %q", msgs[0].ID, "ID:msg-1")
+	}
+	if msgs[0].Preview != "Hello World" {
+		t.Errorf("msgs[0].Preview = %q, want %q", msgs[0].Preview, "Hello World")
+	}
+	if msgs[1].Preview != "(binary)" {
+		t.Errorf("msgs[1].Preview = %q, want %q", msgs[1].Preview, "(binary)")
+	}
+	if msgs[0].Timestamp.IsZero() {
+		t.Error("msgs[0].Timestamp is zero")
+	}
+}
+
+func TestBrowseMessagesHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err == nil {
+		t.Fatal("BrowseMessages() expected error for HTTP 500, got nil")
+	}
+}
+
+func TestBrowseMessagesJolokiaError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 500,
+			"error":  "operation failed",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err == nil {
+		t.Fatal("BrowseMessages() expected error for Jolokia status 500, got nil")
+	}
+}

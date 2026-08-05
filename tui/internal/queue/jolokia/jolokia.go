@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -200,6 +201,132 @@ func splitComma(s string) []string {
 		}
 	}
 	return parts
+}
+
+// BrowseMessages fetches the messages currently in queueName via the Jolokia
+// browseMessages() exec operation.
+func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.Message, error) {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "browseMessages()",
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browseMessages marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browseMessages request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browseMessages: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jolokia browseMessages: HTTP %d", resp.StatusCode)
+	}
+
+	// Decode value as []map so any field can be a string, number, or object
+	// (ActiveMQ returns messageId as a JMX CompositeData object, not a plain string).
+	var result struct {
+		Status int                      `json:"status"`
+		Error  string                   `json:"error"`
+		Value  []map[string]interface{} `json:"value"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("jolokia browseMessages decode: %w", err)
+	}
+	if result.Status != 200 {
+		return nil, fmt.Errorf("jolokia browseMessages error (status %d): %s", result.Status, result.Error)
+	}
+
+	messages := make([]queue.Message, 0, len(result.Value))
+	for _, m := range result.Value {
+		id := extractMessageID(m["messageId"])
+
+		var ts int64
+		if f, ok := m["timestamp"].(float64); ok {
+			ts = int64(f)
+		}
+
+		// JMS type: use the jMSType header if set, otherwise infer from body fields.
+		jmsType, _ := m["jMSType"].(string)
+		if jmsType == "" {
+			textVal := m["text"]
+			if textVal != nil && textVal != "" {
+				jmsType = "text"
+			} else if _, hasLen := m["bodyLength"].(float64); hasLen {
+				jmsType = "bytes"
+			} else {
+				jmsType = "other"
+			}
+		}
+
+		correlationID, _ := m["jMSCorrelationID"].(string)
+
+		preview, _ := m["text"].(string)
+		if preview == "" {
+			preview = "(binary)"
+		} else if len(preview) > 80 {
+			preview = preview[:80]
+		}
+
+		messages = append(messages, queue.Message{
+			ID:            id,
+			JMSType:       jmsType,
+			CorrelationID: correlationID,
+			Timestamp:     time.UnixMilli(ts),
+			Preview:       preview,
+		})
+	}
+	return messages, nil
+}
+
+// extractMessageID converts whatever Jolokia returns for messageId into a
+// display string. ActiveMQ returns a CompositeData object whose fields can be
+// used to reconstruct the canonical "ID:..." string; if the field is already a
+// plain string it is returned as-is.
+func extractMessageID(raw interface{}) string {
+	if raw == nil {
+		return ""
+	}
+	// Plain string (some brokers / Jolokia versions return this directly).
+	if s, ok := raw.(string); ok {
+		return s
+	}
+	// CompositeData object: try to reconstruct the JMS message ID string from
+	// the known ActiveMQ MessageId fields.
+	m, ok := raw.(map[string]interface{})
+	if !ok {
+		return fmt.Sprintf("%v", raw)
+	}
+	// ActiveMQ MessageId toString: "ID:<connectionId>:<producerSequenceId>:<brokerSequenceId>"
+	var connID string
+	if prod, ok := m["producerId"].(map[string]interface{}); ok {
+		if sess, ok := prod["producerSessionId"].(map[string]interface{}); ok {
+			if conn, ok := sess["connectionId"].(map[string]interface{}); ok {
+				connID, _ = conn["value"].(string)
+			}
+		}
+	}
+	prodSeq, _ := m["producerSequenceId"].(float64)
+	brokerSeq, _ := m["brokerSequenceId"].(float64)
+	if connID != "" {
+		return fmt.Sprintf("ID:%s:%d:%d", connID, int64(prodSeq), int64(brokerSeq))
+	}
+	// Fallback: just show the producer sequence numbers.
+	return fmt.Sprintf("ID:?:%d:%d", int64(prodSeq), int64(brokerSeq))
 }
 
 func (c *Client) setHeaders(req *http.Request) {

@@ -38,6 +38,7 @@ type App struct {
 	settingsForm   *tview.Form
 	logV           *logView
 	queuesV        *queuesView
+	messagesV      *messagesView
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -105,6 +106,17 @@ func New(cfg config.Config) *App {
 	a.logV = newLogView(a)
 	a.backend = jolokia.NewClient(cfg.Queue)
 	a.queuesV = newQueuesView(a, a.backend)
+	a.messagesV = newMessagesView(a)
+
+	// Wire Enter in the queues table to open the messages view for the
+	// selected queue. Done here because messagesV must exist first.
+	a.queuesV.table.SetSelectedFunc(func(row, _ int) {
+		cell := a.queuesV.table.GetCell(row, 0)
+		if cell == nil || cell.Text == "" {
+			return
+		}
+		a.openMessages(cell.Text)
+	})
 
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV}
 	for _, v := range a.views {
@@ -112,6 +124,8 @@ func New(cfg config.Config) *App {
 		a.colorBordered(v, prim)
 		a.pages.AddPage(v.Name(), prim, true, false)
 	}
+	// messages page: not in a.views (no home entry / switchTo), but needs a page slot.
+	a.pages.AddPage("messages", a.messagesV.table, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
@@ -248,6 +262,23 @@ func (a *App) switchTo(name string) {
 			return
 		}
 	}
+}
+
+// openMessages switches to the messages page for the given queue, sets the
+// title, and starts loading messages asynchronously.
+func (a *App) openMessages(queueName string) {
+	a.messagesV.queueName = queueName
+	a.messagesV.table.SetTitle(fmt.Sprintf(" Messages — %s ", queueName))
+	a.messagesV.setHeader()
+	a.pages.SwitchToPage("messages")
+	a.tv.SetFocus(a.pages)
+	// Show messagesV shortcuts in the context panel.
+	lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+	for _, sc := range a.messagesV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
+	a.messagesV.load()
 }
 
 // updateContextPanel renders v's shortcuts into the context panel, or clears
