@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -130,6 +131,79 @@ func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 	qv.applyFilter("")
 	if got, want := qv.table.GetTitle(), " Queues "; got != want {
 		t.Errorf("title after clear = %q, want %q", got, want)
+	}
+}
+
+func TestQueuesViewSortShortcutsPresent(t *testing.T) {
+	qv := newTestQueuesView(t)
+	for _, s := range qv.Shortcuts() {
+		if s.Key == "o/O" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"o/O\"")
+}
+
+func TestQueuesViewSortByPendingDescending(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+	qv.sortCol = 1
+	qv.sortAsc = false
+
+	qv.repaint([]queue.Summary{
+		{Name: "a", PendingCount: 1},
+		{Name: "b", PendingCount: 5},
+		{Name: "c", PendingCount: 3},
+	})
+
+	wantOrder := []string{"b", "c", "a"}
+	for i, name := range wantOrder {
+		cell := qv.table.GetCell(i+1, 0)
+		if cell == nil {
+			t.Fatalf("row %d is nil", i+1)
+		}
+		if got := cell.Text; got != name {
+			t.Errorf("row %d = %q, want %q", i+1, got, name)
+		}
+	}
+}
+
+func TestQueuesViewSortDirectionToggle(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+
+	summaries := []queue.Summary{{Name: "b"}, {Name: "a"}}
+	qv.repaint(summaries) // asc by name: a, b
+	firstAsc := qv.table.GetCell(1, 0).Text
+
+	qv.sortAsc = false
+	qv.repaint(summaries) // desc: b, a
+	firstDesc := qv.table.GetCell(1, 0).Text
+
+	if firstAsc == firstDesc {
+		t.Errorf("direction toggle had no effect: both rows[1] = %q", firstAsc)
+	}
+}
+
+func TestQueuesViewSortHeaderMarker(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+	qv.sortCol = 2
+	qv.sortAsc = true
+	qv.setHeader()
+
+	for col := 0; col < len(queueColumns); col++ {
+		cell := qv.table.GetCell(0, col)
+		if cell == nil {
+			t.Fatalf("header col %d is nil", col)
+		}
+		hasMarker := strings.Contains(cell.Text, "▲") || strings.Contains(cell.Text, "▼")
+		if col == 2 && !hasMarker {
+			t.Errorf("active sort col 2 header %q missing marker", cell.Text)
+		}
+		if col != 2 && hasMarker {
+			t.Errorf("non-sort col %d header %q has unexpected marker", col, cell.Text)
+		}
 	}
 }
 

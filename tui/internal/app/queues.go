@@ -16,6 +16,8 @@ import (
 
 // queuesView is the Queues screen: a bordered tview.Table showing Name,
 // Pending, Consumers, Enqueued, and Dequeued for each queue on the broker.
+var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
+
 type queuesView struct {
 	table        *tview.Table
 	filterInput  *tview.InputField
@@ -24,6 +26,8 @@ type queuesView struct {
 	backend      queue.Backend
 	filter       string          // active filter (empty = no filter)
 	allSummaries []queue.Summary // full unfiltered list from last load
+	sortCol      int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
+	sortAsc      bool            // true = ascending
 }
 
 var _ ui.View = (*queuesView)(nil)
@@ -37,6 +41,7 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "o/O", Description: "sort col/dir"},
 	}
 }
 
@@ -58,7 +63,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, app: a, backend: b}
+	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, app: a, backend: b, sortAsc: true}
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -91,6 +96,14 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 			qv.filterInput.SetText(qv.filter)
 			qv.app.tv.SetFocus(qv.filterInput)
 			return nil
+		case 'o':
+			qv.sortCol = (qv.sortCol + 1) % len(queueColumns)
+			qv.repaint(qv.allSummaries)
+			return nil
+		case 'O':
+			qv.sortAsc = !qv.sortAsc
+			qv.repaint(qv.allSummaries)
+			return nil
 		}
 		return event
 	})
@@ -109,8 +122,15 @@ func (qv *queuesView) setHeader() {
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 
-	headers := []string{"NAME ▲", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
-	for i, label := range headers {
+	for i, col := range queueColumns {
+		label := col
+		if i == qv.sortCol {
+			if qv.sortAsc {
+				label += " ▲"
+			} else {
+				label += " ▼"
+			}
+		}
 		qv.table.SetCell(0, i,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
@@ -166,10 +186,32 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 		}
 	}
 
-	// Sort ascending by name.
-	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].Name < filtered[j].Name
+	// Sort by active column and direction, with name as tiebreaker.
+	sort.SliceStable(filtered, func(i, j int) bool {
+		a, b := filtered[i], filtered[j]
+		var less, equal bool
+		switch qv.sortCol {
+		case 1:
+			less, equal = a.PendingCount < b.PendingCount, a.PendingCount == b.PendingCount
+		case 2:
+			less, equal = a.ConsumerCount < b.ConsumerCount, a.ConsumerCount == b.ConsumerCount
+		case 3:
+			less, equal = a.EnqueueCount < b.EnqueueCount, a.EnqueueCount == b.EnqueueCount
+		case 4:
+			less, equal = a.DequeueCount < b.DequeueCount, a.DequeueCount == b.DequeueCount
+		default:
+			less, equal = a.Name < b.Name, a.Name == b.Name
+		}
+		if equal {
+			return a.Name < b.Name // stable tiebreaker
+		}
+		if qv.sortAsc {
+			return less
+		}
+		return !less
 	})
+
+	qv.setHeader()
 
 	// Clear data rows (keep header at row 0).
 	for qv.table.GetRowCount() > 1 {
