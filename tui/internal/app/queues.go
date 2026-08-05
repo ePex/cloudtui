@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -16,9 +17,13 @@ import (
 // queuesView is the Queues screen: a bordered tview.Table showing Name,
 // Pending, Consumers, Enqueued, and Dequeued for each queue on the broker.
 type queuesView struct {
-	table   *tview.Table
-	app     *App
-	backend queue.Backend
+	table        *tview.Table
+	filterInput  *tview.InputField
+	flex         *tview.Flex
+	app          *App
+	backend      queue.Backend
+	filter       string          // active filter (empty = no filter)
+	allSummaries []queue.Summary // full unfiltered list from last load
 }
 
 var _ ui.View = (*queuesView)(nil)
@@ -26,11 +31,12 @@ var _ ui.Shortcuttable = (*queuesView)(nil)
 
 func (qv *queuesView) Name() string               { return "queues" }
 func (qv *queuesView) Title() string              { return "Queues" }
-func (qv *queuesView) Primitive() tview.Primitive { return qv.table }
+func (qv *queuesView) Primitive() tview.Primitive { return qv.flex }
 
 func (qv *queuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
+		{Key: "/", Description: "filter"},
 	}
 }
 
@@ -41,8 +47,36 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0) // keep header row visible when scrolling
 
-	qv := &queuesView{table: table, app: a, backend: b}
+	p := a.cfg.Colors
+	filterInput := tview.NewInputField()
+	filterInput.SetLabel(" / filter: ")
+	filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(table, 0, 1, true).
+		AddItem(filterInput, 1, 0, false)
+
+	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, app: a, backend: b}
 	qv.setHeader()
+
+	filterInput.SetChangedFunc(func(text string) {
+		qv.applyFilter(text)
+	})
+	filterInput.SetDoneFunc(func(_ tcell.Key) {
+		qv.applyFilter(qv.filterInput.GetText())
+		qv.app.tv.SetFocus(qv.table)
+	})
+	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
+			qv.applyFilter(qv.filterInput.GetText())
+			qv.app.tv.SetFocus(qv.table)
+			qv.table.InputHandler()(event, func(tview.Primitive) {})
+			return nil
+		}
+		return event
+	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -53,6 +87,10 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case '/':
+			qv.filterInput.SetText(qv.filter)
+			qv.app.tv.SetFocus(qv.filterInput)
+			return nil
 		}
 		return event
 	})
@@ -99,10 +137,38 @@ func (qv *queuesView) load() {
 	}()
 }
 
+func (qv *queuesView) applyFilter(s string) {
+	qv.filter = s
+	qv.updateTitle()
+	qv.repaint(qv.allSummaries)
+}
+
+func (qv *queuesView) updateTitle() {
+	if qv.filter == "" {
+		qv.table.SetTitle(" Queues ")
+	} else {
+		qv.table.SetTitle(fmt.Sprintf(" Queues [%s] ", qv.filter))
+	}
+}
+
 func (qv *queuesView) repaint(summaries []queue.Summary) {
+	qv.allSummaries = summaries
+
+	// Apply filter.
+	filtered := summaries
+	if qv.filter != "" {
+		lower := strings.ToLower(qv.filter)
+		filtered = make([]queue.Summary, 0, len(summaries))
+		for _, s := range summaries {
+			if strings.Contains(strings.ToLower(s.Name), lower) {
+				filtered = append(filtered, s)
+			}
+		}
+	}
+
 	// Sort ascending by name.
-	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].Name < summaries[j].Name
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Name < filtered[j].Name
 	})
 
 	// Clear data rows (keep header at row 0).
@@ -115,7 +181,7 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 	textColor := tcell.GetColor(p.Text)
 	accentColor := tcell.GetColor(p.Accent)
 
-	for i, s := range summaries {
+	for i, s := range filtered {
 		row := i + 1
 
 		pendingColor := textColor

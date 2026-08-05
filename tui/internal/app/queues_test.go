@@ -59,6 +59,80 @@ func TestQueuesViewShortcutRPresent(t *testing.T) {
 	t.Error("Shortcuts() missing key \"r\"")
 }
 
+func TestQueuesViewShortcutFilterPresent(t *testing.T) {
+	qv := newTestQueuesView(t)
+	for _, s := range qv.Shortcuts() {
+		if s.Key == "/" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"/\"")
+}
+
+func TestQueuesViewFilterApplied(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+
+	summaries := []queue.Summary{
+		{Name: "foo.queue"},
+		{Name: "bar.queue"},
+		{Name: "foo.other"},
+	}
+	qv.applyFilter("foo")
+	qv.repaint(summaries)
+
+	// Rows 1 and 2 should be the two "foo" queues; row 3 should be empty.
+	if got := qv.table.GetRowCount(); got != 3 { // header + 2 matches
+		t.Errorf("row count = %d, want 3 (header + 2 matches)", got)
+	}
+}
+
+func TestQueuesViewFilterPersistsAfterRepaint(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+
+	qv.applyFilter("foo")
+	qv.repaint([]queue.Summary{{Name: "foo.queue"}, {Name: "bar.queue"}})
+	// Second repaint with new data — filter must still apply.
+	qv.repaint([]queue.Summary{{Name: "foo.queue"}, {Name: "bar.queue"}, {Name: "foo.other"}})
+
+	if got := qv.table.GetRowCount(); got != 3 {
+		t.Errorf("row count after second repaint = %d, want 3 (header + 2 matches)", got)
+	}
+}
+
+func TestQueuesViewFilterClear(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+
+	summaries := []queue.Summary{
+		{Name: "foo.queue"},
+		{Name: "bar.queue"},
+	}
+	qv.applyFilter("foo")
+	qv.repaint(summaries)
+	qv.applyFilter("")
+
+	if got := qv.table.GetRowCount(); got != 3 { // header + 2 rows
+		t.Errorf("row count after clear = %d, want 3", got)
+	}
+}
+
+func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
+	a := New(config.Default())
+	qv := newQueuesView(a, &fakeQueueBackend{})
+
+	qv.applyFilter("foo")
+	if got, want := qv.table.GetTitle(), " Queues [foo] "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+
+	qv.applyFilter("")
+	if got, want := qv.table.GetTitle(), " Queues "; got != want {
+		t.Errorf("title after clear = %q, want %q", got, want)
+	}
+}
+
 func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
 	a := New(config.Default())
 	qv := newQueuesView(a, &fakeQueueBackend{})

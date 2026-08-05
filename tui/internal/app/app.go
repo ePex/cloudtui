@@ -164,9 +164,12 @@ func (a *App) Run() error {
 }
 
 // onGlobalKey handles the app's hotkeys (h/s/q/?) and the ':' command
-// prompt, all inert while the prompt has focus.
+// prompt, all inert while the prompt or any input field has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.tv.GetFocus() == a.prompt {
+		return event
+	}
+	if a.queuesV != nil && a.tv.GetFocus() == a.queuesV.filterInput {
 		return event
 	}
 

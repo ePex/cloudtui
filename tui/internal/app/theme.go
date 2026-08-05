@@ -99,11 +99,14 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.logV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
 	}
 
-	// Queues table
+	// Queues table + filter input
 	if a.queuesV != nil {
 		a.queuesV.table.SetBackgroundColor(bg)
 		a.queuesV.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 		a.queuesV.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+		a.queuesV.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+		a.queuesV.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.queuesV.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 	}
 
 	// Messages table
