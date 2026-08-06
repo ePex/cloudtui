@@ -4,15 +4,22 @@
 package config
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+//go:embed themes/*.yaml
+var themesFS embed.FS
+
 // Config holds everything about the shell's appearance a user can override.
 type Config struct {
-	Theme  string      `yaml:"theme"`  // "dark" | "cyberpunk" | "" (falls back to "dark")
+	Theme  string      `yaml:"theme"`  // name of an embedded theme file (e.g. "dark", "cyberpunk")
 	Queue  QueueConfig `yaml:"queue"`
 	Logo   []string    `yaml:"logo"`
 	Colors Palette     `yaml:"colors"`
@@ -31,20 +38,20 @@ type QueueConfig struct {
 // Palette is the set of named colors used across the shell chrome. Values are
 // tview/tcell color names (e.g. "yellow") or hex codes (e.g. "#ffcc00").
 type Palette struct {
-	Background    string `yaml:"background"`
-	Border        string `yaml:"border"`
-	Label         string `yaml:"label"`
-	Text          string `yaml:"text"`
-	Value         string `yaml:"value"`
-	Accent        string `yaml:"accent"`
-	SelectionBg   string `yaml:"selectionBg"`
-	SelectionText string `yaml:"selectionText"`
-	StatusBarBg   string `yaml:"statusBarBg"`
-	StatusBarText string `yaml:"statusBarText"`
+	Background    string `yaml:"background,omitempty"`
+	Border        string `yaml:"border,omitempty"`
+	Label         string `yaml:"label,omitempty"`
+	Text          string `yaml:"text,omitempty"`
+	Value         string `yaml:"value,omitempty"`
+	Accent        string `yaml:"accent,omitempty"`
+	SelectionBg   string `yaml:"selectionBg,omitempty"`
+	SelectionText string `yaml:"selectionText,omitempty"`
+	StatusBarBg   string `yaml:"statusBarBg,omitempty"`
+	StatusBarText string `yaml:"statusBarText,omitempty"`
 
 	// Views maps a view name to the color used for that view's border/title.
 	// Falls back to Border for any name not listed.
-	Views map[string]string `yaml:"views"`
+	Views map[string]string `yaml:"views,omitempty"`
 }
 
 // ViewColor returns the configured color for the named view, falling back to
@@ -57,68 +64,138 @@ func (p Palette) ViewColor(name string) string {
 	return p.Border
 }
 
-// DarkPalette returns the built-in dark theme palette: navy background,
-// orange labels, cyan values, pink/magenta accents, teal selection, orange
-// status bar.
-func DarkPalette() Palette {
-	return Palette{
-		Background:    "#1a1b26",
-		Border:        "#c0caf5",
-		Label:         "#e0af68",
-		Text:          "#c0caf5",
-		Value:         "#7dcfff",
-		Accent:        "#ff79c6",
-		SelectionBg:   "#2ac3de",
-		SelectionText: "#1a1b26",
-		StatusBarBg:   "#ff9e64",
-		StatusBarText: "#1a1b26",
-		Views: map[string]string{
-			"home":     "#c0caf5",
-			"settings": "#c0caf5",
-			"queues":   "#c0caf5",
-		},
+
+// ApplyPaletteOverrides returns a copy of base with any non-empty field in
+// overrides applied on top. For Views, individual keys are merged rather than
+// the whole map being replaced.
+func ApplyPaletteOverrides(base, overrides Palette) Palette {
+	result := base
+	if overrides.Background != "" {
+		result.Background = overrides.Background
 	}
+	if overrides.Border != "" {
+		result.Border = overrides.Border
+	}
+	if overrides.Label != "" {
+		result.Label = overrides.Label
+	}
+	if overrides.Text != "" {
+		result.Text = overrides.Text
+	}
+	if overrides.Value != "" {
+		result.Value = overrides.Value
+	}
+	if overrides.Accent != "" {
+		result.Accent = overrides.Accent
+	}
+	if overrides.SelectionBg != "" {
+		result.SelectionBg = overrides.SelectionBg
+	}
+	if overrides.SelectionText != "" {
+		result.SelectionText = overrides.SelectionText
+	}
+	if overrides.StatusBarBg != "" {
+		result.StatusBarBg = overrides.StatusBarBg
+	}
+	if overrides.StatusBarText != "" {
+		result.StatusBarText = overrides.StatusBarText
+	}
+	if len(overrides.Views) > 0 {
+		merged := make(map[string]string, len(base.Views)+len(overrides.Views))
+		for k, v := range base.Views {
+			merged[k] = v
+		}
+		for k, v := range overrides.Views {
+			merged[k] = v
+		}
+		result.Views = merged
+	}
+	return result
 }
 
-// CyberpunkPalette returns the built-in cyberpunk theme palette, inspired by
-// the neon aesthetic of Cyberpunk 2077: near-black background, neon yellow
-// primary, neon pink/magenta secondary, electric cyan labels.
-func CyberpunkPalette() Palette {
-	return Palette{
-		Background:    "#0d0221",
-		Border:        "#ff003c",
-		Label:         "#00d4ff",
-		Text:          "#e0e0e0",
-		Value:         "#00d4ff",
-		Accent:        "#ffe400",
-		SelectionBg:   "#ffe400",
-		SelectionText: "#0d0221",
-		StatusBarBg:   "#ff003c",
-		StatusBarText: "#0d0221",
-		Views: map[string]string{
-			"home":     "#ff003c",
-			"settings": "#ffe400",
-			"queues":   "#00d4ff",
-		},
+// PaletteUserOverrides returns a sparse Palette containing only the fields
+// where effective differs from base. Used at save time to strip theme defaults
+// so only genuine user customisations are written to config.yaml.
+func PaletteUserOverrides(effective, base Palette) Palette {
+	var out Palette
+	if effective.Background != base.Background {
+		out.Background = effective.Background
 	}
+	if effective.Border != base.Border {
+		out.Border = effective.Border
+	}
+	if effective.Label != base.Label {
+		out.Label = effective.Label
+	}
+	if effective.Text != base.Text {
+		out.Text = effective.Text
+	}
+	if effective.Value != base.Value {
+		out.Value = effective.Value
+	}
+	if effective.Accent != base.Accent {
+		out.Accent = effective.Accent
+	}
+	if effective.SelectionBg != base.SelectionBg {
+		out.SelectionBg = effective.SelectionBg
+	}
+	if effective.SelectionText != base.SelectionText {
+		out.SelectionText = effective.SelectionText
+	}
+	if effective.StatusBarBg != base.StatusBarBg {
+		out.StatusBarBg = effective.StatusBarBg
+	}
+	if effective.StatusBarText != base.StatusBarText {
+		out.StatusBarText = effective.StatusBarText
+	}
+	for k, v := range effective.Views {
+		bv := base.Views[k]
+		if v != bv {
+			if out.Views == nil {
+				out.Views = make(map[string]string)
+			}
+			out.Views[k] = v
+		}
+	}
+	return out
 }
 
-// PaletteForTheme looks up the built-in palette for name. Returns the palette
-// and true on success, or the zero Palette and false for an unknown name.
+// PaletteForTheme loads the built-in palette for name from the embedded
+// themes directory. Returns the palette and true on success, or the zero
+// Palette and false for an unknown name or malformed file.
 func PaletteForTheme(name string) (Palette, bool) {
-	switch name {
-	case "dark":
-		return DarkPalette(), true
-	case "cyberpunk":
-		return CyberpunkPalette(), true
-	default:
+	data, err := themesFS.ReadFile("themes/" + name + ".yaml")
+	if err != nil {
 		return Palette{}, false
 	}
+	var p Palette
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return Palette{}, false
+	}
+	return p, true
+}
+
+// AvailableThemes returns the sorted list of built-in theme names derived
+// from the embedded themes directory (one name per .yaml file, extension stripped).
+func AvailableThemes() []string {
+	entries, err := fs.ReadDir(themesFS, "themes")
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+			names = append(names, strings.TrimSuffix(e.Name(), ".yaml"))
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Default returns the built-in configuration used when no config file is
 // present or a config file only overrides some fields.
 func Default() Config {
+	p, _ := PaletteForTheme("dark")
 	return Config{
 		Theme: "dark",
 		Queue: QueueConfig{
@@ -132,7 +209,7 @@ func Default() Config {
 			"║ CLOUDTUI  ║",
 			"╚═══════════╝",
 		},
-		Colors: DarkPalette(),
+		Colors: p,
 	}
 }
 
@@ -140,18 +217,38 @@ func Default() Config {
 // Default() so a partial file still gets defaults for unset fields.
 // A missing file is not an error — Default() is used as-is.
 //
+// The effective Colors palette is derived from the active theme plus any
+// explicit per-field overrides present in the file's colors: block.
+//
 // If MQPROXY_CLIENT_PASSWORD is set and Queue.Password is empty, the env var
 // value is injected so credentials stay out of config.yaml.
 func Load(path string) (Config, error) {
 	cfg := Default()
 
 	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return Config{}, fmt.Errorf("reading config %s: %w", path, err)
+	if err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("reading config %s: %w", path, err)
+	}
+
+	if len(data) > 0 {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
 		}
-	} else if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
+
+		// Second unmarshal into a zero Config captures only the fields explicitly
+		// present in the YAML (no Default() noise), so raw.Colors holds the
+		// user's actual color overrides rather than a blend of defaults and overrides.
+		var raw Config
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
+		}
+
+		// Compute effective palette: theme base + user color overrides.
+		base, ok := PaletteForTheme(cfg.Theme)
+		if !ok {
+			base, _ = PaletteForTheme("dark")
+		}
+		cfg.Colors = ApplyPaletteOverrides(base, raw.Colors)
 	}
 
 	if p := os.Getenv("MQPROXY_CLIENT_PASSWORD"); p != "" && cfg.Queue.Password == "" {

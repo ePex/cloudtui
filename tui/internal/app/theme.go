@@ -90,6 +90,9 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.settingsForm.SetBackgroundColor(bg)
 		a.settingsForm.SetBorderColor(tcell.GetColor(p.ViewColor("settings")))
 		a.settingsForm.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
+		if dd, ok := a.settingsForm.GetFormItem(0).(*tview.DropDown); ok {
+			styleDropDown(dd, p)
+		}
 	}
 
 	// Log text view

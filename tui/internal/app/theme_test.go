@@ -9,6 +9,15 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
+func mustTheme(t *testing.T, name string) config.Palette {
+	t.Helper()
+	p, ok := config.PaletteForTheme(name)
+	if !ok {
+		t.Fatalf("config.PaletteForTheme(%q) = (_, false)", name)
+	}
+	return p
+}
+
 func TestApplyThemeSetsBoxDefaults(t *testing.T) {
 	p := config.Palette{
 		Background:    "#111111",
@@ -51,7 +60,7 @@ func TestReapplyThemeUpdatesStatusBarColors(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
-	p := config.CyberpunkPalette()
+	p := mustTheme(t, "cyberpunk")
 	a.cfg.Colors = p
 	reapplyTheme(a, p)
 
@@ -65,7 +74,7 @@ func TestReapplyThemeUpdatesInfoPanelText(t *testing.T) {
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
 	a.cfg.Theme = "cyberpunk"
-	a.cfg.Colors = config.CyberpunkPalette()
+	a.cfg.Colors = mustTheme(t, "cyberpunk")
 	reapplyTheme(a, a.cfg.Colors)
 
 	text := a.infoPanel.GetText(true)
@@ -78,7 +87,7 @@ func TestReapplyThemeUpdatesGlobalStyles(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
-	p := config.CyberpunkPalette()
+	p := mustTheme(t, "cyberpunk")
 	a.cfg.Colors = p
 	reapplyTheme(a, p)
 

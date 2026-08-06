@@ -5,9 +5,10 @@
 # changes are never committed. If the file is absent, cloudtui uses its
 # built-in defaults (the dark theme, shown below).
 
-# theme selects the active built-in palette: "dark" or "cyberpunk".
-# Individual colors: fields below override palette values for fine-tuning.
-# Theme can also be switched at runtime via Settings (s) or :theme <name>.
+# theme selects the active built-in palette. The value must match the name of
+# a theme file embedded in the binary (e.g. "dark", "cyberpunk"). Available
+# themes are listed in the Settings view (s) and can be applied at runtime
+# via the dropdown or with :theme <name>.
 theme: dark
 
 # logo is rendered in the top-right corner. Any UTF-8 art is accepted.
@@ -19,33 +20,27 @@ logo:
   - "╚═══════════╝"
 
 # colors overrides individual palette fields on top of the selected theme.
-# Omit this section entirely to use the built-in theme palette as-is.
+# Omit this section entirely (or leave it empty) to use the built-in theme
+# palette as-is. Only list the fields you actually want to customise.
 # All values: tview/tcell color names ("red", "navy") or hex codes ("#rrggbb").
-colors:
-  # background: base background applied to every primitive by default.
-  background: "#1a1b26"
-  # border: box borders, dividers, and view titles.
-  border: "#c0caf5"
-  # label: field labels, section headings, key hints in the nav panel.
-  label: "#e0af68"
-  # text: primary body text in tables and lists.
-  text: "#c0caf5"
-  # value: secondary content (values, descriptions).
-  value: "#7dcfff"
-  # accent: highlighted key names in the status bar and navigation panel.
-  accent: "#ff79c6"
-  # selectionBg / selectionText: selected-row highlight in lists and forms.
-  selectionBg: "#2ac3de"
-  selectionText: "#1a1b26"
-  # statusBarBg / statusBarText: bottom hotkey legend strip.
-  statusBarBg: "#ff9e64"
-  statusBarText: "#1a1b26"
-  # views: per-view border/title color overrides.
-  # Any view not listed here falls back to the border color above.
-  views:
-    home: "#c0caf5"
-    settings: "#c0caf5"
-    queues: "#c0caf5"
+#
+# Available fields:
+#   background    — base background applied to every primitive by default
+#   border        — box borders, dividers, and view titles
+#   label         — field labels, section headings, key hints in the nav panel
+#   text          — primary body text in tables and lists
+#   value         — secondary content (values, descriptions)
+#   accent        — highlighted key names in the status bar and navigation panel
+#   selectionBg   — selected-row highlight background in lists and forms
+#   selectionText — selected-row highlight text color
+#   statusBarBg   — bottom hotkey legend strip background
+#   statusBarText — bottom hotkey legend strip text
+#   views         — per-view border/title color (falls back to border if absent)
+#     home / settings / queues
+#
+# Example — override just the accent color:
+# colors:
+#   accent: "#ff0000"
 
 # queue: connection settings for the ActiveMQ broker.
 # Password can also be supplied via the MQPROXY_CLIENT_PASSWORD env var
@@ -56,22 +51,7 @@ queue:
   username: admin
   # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
 
-# ─── Cyberpunk 2077-inspired palette ─────────────────────────────────────────
-# Uncomment and replace the colors block above, or just set theme: cyberpunk.
-#
-# theme: cyberpunk
-# colors:
-#   background: "#0d0221"      # near-black
-#   border: "#ff003c"          # neon pink/magenta
-#   label: "#00d4ff"           # electric cyan
-#   text: "#e0e0e0"            # light grey
-#   value: "#00d4ff"           # electric cyan
-#   accent: "#ffe400"          # neon yellow (primary)
-#   selectionBg: "#ffe400"     # neon yellow highlight
-#   selectionText: "#0d0221"
-#   statusBarBg: "#ff003c"     # neon pink bar
-#   statusBarText: "#0d0221"
-#   views:
-#     home: "#ff003c"
-#     settings: "#ffe400"
-#     queues: "#00d4ff"
+# ─── Switching themes ─────────────────────────────────────────────────────────
+# Change the theme: field above to any available theme name.
+# Only the theme name is saved — the full palette is never written to this file.
+# Any colors: overrides you set here are preserved across theme switches.

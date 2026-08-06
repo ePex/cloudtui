@@ -50,7 +50,7 @@ func TestSwitchThemeAppliesPalette(t *testing.T) {
 	if got := a.cfg.Theme; got != "cyberpunk" {
 		t.Errorf("cfg.Theme after switchTheme(\"cyberpunk\") = %q, want %q", got, "cyberpunk")
 	}
-	want := config.CyberpunkPalette()
+	want, _ := config.PaletteForTheme("cyberpunk")
 	if got := a.cfg.Colors.Background; got != want.Background {
 		t.Errorf("cfg.Colors.Background = %q, want %q", got, want.Background)
 	}

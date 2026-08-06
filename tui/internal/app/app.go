@@ -327,17 +327,32 @@ func (a *App) onPromptDone(key tcell.Key) {
 
 // switchTheme applies the named built-in palette, saves config, and repaints
 // all live shell primitives. Unknown names are silently ignored.
+//
+// Only the theme name (and any pre-existing user color overrides) are written
+// to config.yaml — the full derived palette is never persisted.
 func (a *App) switchTheme(name string) {
-	p, ok := config.PaletteForTheme(name)
+	newBase, ok := config.PaletteForTheme(name)
 	if !ok {
 		return
 	}
 	a.switchingTheme = true
 	defer func() { a.switchingTheme = false }()
+
+	// Preserve any color overrides the user had relative to the old theme.
+	oldBase, ok := config.PaletteForTheme(a.cfg.Theme)
+	if !ok {
+		oldBase, _ = config.PaletteForTheme("dark")
+	}
+	userOverrides := config.PaletteUserOverrides(a.cfg.Colors, oldBase)
+
 	a.cfg.Theme = name
-	a.cfg.Colors = p
-	reapplyTheme(a, p)
-	if err := config.SaveDefault(a.cfg); err != nil {
+	a.cfg.Colors = config.ApplyPaletteOverrides(newBase, userOverrides)
+	reapplyTheme(a, a.cfg.Colors)
+
+	// Save only theme name + sparse overrides (not the full derived palette).
+	saveConfig := a.cfg
+	saveConfig.Colors = userOverrides
+	if err := config.SaveDefault(saveConfig); err != nil {
 		fmt.Fprintf(os.Stderr, "cloudtui: saving config: %v\n", err)
 	}
 }
