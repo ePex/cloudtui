@@ -5,7 +5,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -40,10 +42,12 @@ type App struct {
 	queuesV        *queuesView
 	messagesV      *messagesView
 	messageDetailV *messageDetailView
-	confirmFlex    *tview.Flex
-	confirmText    *tview.TextView
-	confirmList    *tview.List
-	confirmVisible bool
+	confirmFlex      *tview.Flex
+	confirmText      *tview.TextView
+	confirmList      *tview.List
+	confirmVisible   bool
+	movePickerList    *tview.List
+	movePickerVisible bool
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -157,11 +161,16 @@ func New(cfg config.Config) *App {
 	a.confirmFlex.SetBorder(true).SetTitle(" Confirm ")
 	confirmOverlay := centered(a.confirmFlex, 52, 8)
 
+	a.movePickerList = tview.NewList().ShowSecondaryText(false)
+	a.movePickerList.SetBorder(true).SetTitle(" Move to Queue ")
+	movePickerOverlay := centered(a.movePickerList, 52, 20)
+
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
 		AddPage("main", layout, true, true).
 		AddPage("help", helpOverlay, true, false).
-		AddPage("confirm", confirmOverlay, true, false)
+		AddPage("confirm", confirmOverlay, true, false).
+		AddPage("move-picker", movePickerOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
 
@@ -186,7 +195,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible {
+	if a.confirmVisible || a.movePickerVisible {
 		return event
 	}
 
@@ -302,6 +311,84 @@ func (a *App) closeConfirm() {
 	a.rootPages.HidePage("confirm")
 	a.tv.SetFocus(a.pages)
 	a.confirmVisible = false
+}
+
+// showMovePicker opens the queue-picker overlay for moving msg from sourceQueue.
+// It immediately shows a "Loading…" placeholder, then asynchronously loads
+// the queue list and replaces the placeholder with the real entries.
+func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
+	a.movePickerList.Clear()
+	a.movePickerList.AddItem("Loading…", "", 0, nil)
+
+	a.movePickerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Key() == tcell.KeyEscape:
+			a.closeMovePicker()
+			return nil
+		}
+		return event
+	})
+
+	a.rootPages.ShowPage("move-picker")
+	a.tv.SetFocus(a.movePickerList)
+	a.movePickerVisible = true
+	a.contextPanel.SetText(fmt.Sprintf("[%s]<Esc>[-] cancel", a.cfg.Colors.Accent))
+
+	go func() {
+		summaries, err := a.backend.List(context.Background())
+		a.tv.QueueUpdateDraw(func() {
+			a.movePickerList.Clear()
+			if err != nil {
+				slog.Error("move-picker: failed to list queues", "error", err)
+				a.movePickerList.AddItem("Error loading queues", "", 0, nil)
+				return
+			}
+			for _, s := range summaries {
+				if s.Name == sourceQueue {
+					continue
+				}
+				name := s.Name
+				a.movePickerList.AddItem(name, "", 0, func() {
+					a.closeMovePicker()
+					go func() {
+						err := a.backend.MoveMessage(context.Background(), sourceQueue, msg.ID, name)
+						a.tv.QueueUpdateDraw(func() {
+							if err != nil {
+								slog.Error("move: failed", "src", sourceQueue, "dst", name, "id", msg.ID, "error", err)
+								a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+								return
+							}
+							a.pages.SwitchToPage("messages")
+							a.tv.SetFocus(a.messagesV.table)
+							lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+							for _, sc := range a.messagesV.Shortcuts() {
+								lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+							}
+							a.contextPanel.SetText(strings.Join(lines, "\n"))
+							a.messagesV.load()
+						})
+					}()
+				})
+			}
+		})
+	}()
+}
+
+// closeMovePicker hides the queue-picker overlay and restores focus and the
+// context panel to the message detail view.
+func (a *App) closeMovePicker() {
+	a.rootPages.HidePage("move-picker")
+	a.tv.SetFocus(a.pages)
+	a.movePickerVisible = false
+	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
+	for _, sc := range a.messageDetailV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // openHelp shows the help overlay on top of the main layout.

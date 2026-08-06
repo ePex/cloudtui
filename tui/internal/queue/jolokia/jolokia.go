@@ -295,9 +295,23 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 }
 
 // extractMessageID converts whatever Jolokia returns for messageId into a
-// display string. ActiveMQ returns a CompositeData object whose fields can be
-// used to reconstruct the canonical "ID:..." string; if the field is already a
-// plain string it is returned as-is.
+// string matching ActiveMQ's MessageId.toString() format, which is what
+// removeMessage / moveMessageTo use to locate the message.
+//
+// The canonical JMS message ID format (from ActiveMQ's MessageId.toString()):
+//
+//	connectionId.value + ":" + sessionId + ":" + producerId.value + ":" + producerSequenceId
+//
+// Note: brokerSequenceId is an internal broker field and is NOT part of the
+// JMS message ID string, even though it appears in the CompositeData object.
+//
+// connectionId.value is already the full "ID:<host>-<port>-<ts>-<n>" string.
+// The Jolokia CompositeData structure therefore is:
+//
+//	messageId.producerId.connectionId.value  (string, includes "ID:" prefix)
+//	messageId.producerId.sessionId           (float64)
+//	messageId.producerId.value               (float64)
+//	messageId.producerSequenceId             (float64)
 func extractMessageID(raw interface{}) string {
 	if raw == nil {
 		return ""
@@ -306,28 +320,38 @@ func extractMessageID(raw interface{}) string {
 	if s, ok := raw.(string); ok {
 		return s
 	}
-	// CompositeData object: try to reconstruct the JMS message ID string from
-	// the known ActiveMQ MessageId fields.
+	// CompositeData object.
 	m, ok := raw.(map[string]interface{})
 	if !ok {
 		return fmt.Sprintf("%v", raw)
 	}
-	// ActiveMQ MessageId toString: "ID:<connectionId>:<producerSequenceId>:<brokerSequenceId>"
 	var connID string
+	var sessionID, producerVal int64
 	if prod, ok := m["producerId"].(map[string]interface{}); ok {
-		if sess, ok := prod["producerSessionId"].(map[string]interface{}); ok {
-			if conn, ok := sess["connectionId"].(map[string]interface{}); ok {
-				connID, _ = conn["value"].(string)
-			}
+		// connectionId may be serialized as a nested {"value":"..."} map or
+		// as a plain string (Jolokia simplifies single-field CompositeData).
+		switch v := prod["connectionId"].(type) {
+		case string:
+			connID = v
+		case map[string]interface{}:
+			connID, _ = v["value"].(string)
+		}
+		if s, ok := prod["sessionId"].(float64); ok {
+			sessionID = int64(s)
+		}
+		if v, ok := prod["value"].(float64); ok {
+			producerVal = int64(v)
 		}
 	}
 	prodSeq, _ := m["producerSequenceId"].(float64)
-	brokerSeq, _ := m["brokerSequenceId"].(float64)
 	if connID != "" {
-		return fmt.Sprintf("ID:%s:%d:%d", connID, int64(prodSeq), int64(brokerSeq))
+		// connID already carries the "ID:" prefix.
+		// Format matches ActiveMQ's MessageId.toString():
+		//   connectionId.value + ":" + sessionId + ":" + producerId.value + ":" + producerSequenceId
+		// Note: brokerSequenceId is an internal broker field and is NOT part of the JMS message ID.
+		return fmt.Sprintf("%s:%d:%d:%d", connID, sessionID, producerVal, int64(prodSeq))
 	}
-	// Fallback: just show the producer sequence numbers.
-	return fmt.Sprintf("ID:?:%d:%d", int64(prodSeq), int64(brokerSeq))
+	return fmt.Sprintf("ID:?:%d:%d", sessionID, int64(prodSeq))
 }
 
 // PurgeQueue removes all messages from queueName by browsing and removing
@@ -413,8 +437,9 @@ func (c *Client) RemoveMessage(ctx context.Context, queueName, messageID string)
 		return fmt.Errorf("removeMessage: %w", err)
 	}
 	var result struct {
-		Status int    `json:"status"`
-		Error  string `json:"error"`
+		Status int         `json:"status"`
+		Error  string      `json:"error"`
+		Value  interface{} `json:"value"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	resp.Body.Close()
@@ -423,6 +448,57 @@ func (c *Client) RemoveMessage(ctx context.Context, queueName, messageID string)
 	}
 	if result.Status != 200 {
 		return fmt.Errorf("removeMessage error (status %d): %s", result.Status, result.Error)
+	}
+	if removed, ok := result.Value.(bool); ok && !removed {
+		return fmt.Errorf("removeMessage returned false: message %q not found in queue %q", messageID, queueName)
+	}
+	return nil
+}
+
+// MoveMessage moves a single message from sourceQueue to targetQueue via the
+// moveMessageTo(java.lang.String,java.lang.String) Jolokia exec operation.
+func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, sourceQueue,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "moveMessageTo(java.lang.String,java.lang.String)",
+		"arguments": []string{messageID, targetQueue},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("moveMessage marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("moveMessage request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("moveMessage: %w", err)
+	}
+	var result struct {
+		Status int         `json:"status"`
+		Error  string      `json:"error"`
+		Value  interface{} `json:"value"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("moveMessage decode: %w", err)
+	}
+	if result.Status != 200 {
+		return fmt.Errorf("moveMessage error (status %d): %s", result.Status, result.Error)
+	}
+	if moved, ok := result.Value.(bool); ok && !moved {
+		return fmt.Errorf("moveMessageTo returned false: message %q not found in queue %q", messageID, sourceQueue)
 	}
 	return nil
 }

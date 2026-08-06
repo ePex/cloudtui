@@ -8,6 +8,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -404,5 +405,18 @@ func TestPromptQueuesCommandSwitchesToQueuesView(t *testing.T) {
 
 	if name, _ := a.pages.GetFrontPage(); name != "queues" {
 		t.Errorf("front page after ':queues' = %q, want %q", name, "queues")
+	}
+}
+
+func TestOpenMessageDetailSetsContextPanelShortcuts(t *testing.T) {
+	a := New(config.Default())
+
+	a.openMessageDetail("test-queue", queue.Message{ID: "id-1"})
+
+	text := a.contextPanel.GetText(true)
+	for _, want := range []string{"m", "move", "d", "delete", "Esc", "back"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("contextPanel after openMessageDetail = %q, want it to contain %q", text, want)
+		}
 	}
 }

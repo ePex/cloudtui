@@ -30,4 +30,5 @@ type Backend interface {
 	BrowseMessages(ctx context.Context, queueName string) ([]Message, error)
 	PurgeQueue(ctx context.Context, queueName string) error
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
+	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 }

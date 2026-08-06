@@ -28,7 +28,8 @@ type messageDetailView struct {
 
 func (dv *messageDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
-		{Key: "d", Description: "delete message"},
+		{Key: "m", Description: "move"},
+		{Key: "d", Description: "delete"},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -48,6 +49,9 @@ func newMessageDetailView(a *App) *messageDetailView {
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Rune() == 'm':
+			a.showMovePicker(dv.queueName, dv.msg)
+			return nil
 		case event.Rune() == 'd':
 			queueName := dv.queueName
 			msgID := dv.msg.ID

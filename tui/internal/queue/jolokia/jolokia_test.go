@@ -150,6 +150,45 @@ func TestBrowseMessagesHappyPath(t *testing.T) {
 	}
 }
 
+func TestBrowseMessagesCompositeDataMessageID(t *testing.T) {
+	// Verify that a CompositeData messageId (as returned by real ActiveMQ) is
+	// reconstructed to the canonical "ID:..." string that removeMessage /
+	// moveMessageTo use to locate messages.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value": []map[string]any{
+				{
+					"messageId": map[string]any{
+						"producerId": map[string]any{
+							"connectionId": map[string]any{
+								"value": "ID:myhost-1234-1700000000000-1",
+							},
+							"sessionId": float64(2),
+							"value":     float64(3),
+						},
+						"producerSequenceId": float64(1),
+						"brokerSequenceId":   float64(224369),
+					},
+					"timestamp": int64(1721000000000),
+					"text":      "hello",
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	want := "ID:myhost-1234-1700000000000-1:2:3:1"
+	if msgs[0].ID != want {
+		t.Errorf("msgs[0].ID = %q, want %q", msgs[0].ID, want)
+	}
+}
+
 func TestBrowseMessagesHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad", http.StatusInternalServerError)

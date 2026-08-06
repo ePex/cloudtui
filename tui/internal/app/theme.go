@@ -123,6 +123,14 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.messageDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	}
 
+	// Move-picker list
+	if a.movePickerList != nil {
+		styleList(a.movePickerList, p)
+		a.movePickerList.SetBackgroundColor(bg)
+		a.movePickerList.SetBorderColor(tcell.GetColor(p.Border))
+		a.movePickerList.SetTitleColor(tcell.GetColor(p.Border))
+	}
+
 	// Confirm dialog
 	if a.confirmFlex != nil {
 		a.confirmFlex.SetBackgroundColor(bg)
