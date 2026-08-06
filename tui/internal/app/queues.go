@@ -134,6 +134,14 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 				return nil
 			}
 			srcQueue := cell.Text
+			restoreQueues := func() {
+				qv.app.tv.SetFocus(qv.table)
+				lines := make([]string, 0, len(qv.Shortcuts()))
+				for _, sc := range qv.Shortcuts() {
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+				}
+				qv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+			}
 			qv.app.showMovePicker(srcQueue, func(target string) {
 				count, err := qv.backend.MoveAllMessages(context.Background(), srcQueue, target)
 				qv.app.tv.QueueUpdateDraw(func() {
@@ -145,7 +153,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 					qv.app.statusBar.SetText(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
 					qv.load()
 				})
-			})
+			}, restoreQueues)
 			return nil
 		}
 		return event

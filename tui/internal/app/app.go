@@ -53,6 +53,7 @@ type App struct {
 	movePickerQueues    []string
 	movePickerPreferred string
 	movePickerOnSelect  func(string)
+	movePickerOnClose   func()
 	movePickerVisible   bool
 	backend        queue.Backend
 	homeTable     *tview.Table
@@ -407,10 +408,11 @@ func sortPickerQueues(sourceQueue string, names []string) []string {
 
 // showMovePicker opens the queue-picker overlay. onSelect is called (in a new
 // goroutine) with the chosen target queue name when the user makes a selection.
-// It immediately shows a "Loading…" placeholder, then asynchronously loads
-// the queue list and replaces the placeholder with the real entries.
-func (a *App) showMovePicker(sourceQueue string, onSelect func(string)) {
+// onClose is called (on the UI goroutine) when the picker is dismissed — the
+// caller uses it to restore focus and the context panel.
+func (a *App) showMovePicker(sourceQueue string, onSelect func(string), onClose func()) {
 	a.movePickerOnSelect = onSelect
+	a.movePickerOnClose = onClose
 	a.movePickerList.Clear()
 	a.movePickerList.AddItem("Loading…", "", 0, nil)
 	a.movePickerSearch.SetText("")
@@ -501,17 +503,14 @@ func (a *App) fillPickerList(filter string) {
 	}
 }
 
-// closeMovePicker hides the queue-picker overlay and restores focus and the
-// context panel to the message detail view.
+// closeMovePicker hides the queue-picker overlay and calls movePickerOnClose
+// to let the caller restore focus and the context panel.
 func (a *App) closeMovePicker() {
 	a.rootPages.HidePage("move-picker")
-	a.tv.SetFocus(a.pages)
 	a.movePickerVisible = false
-	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
-	for _, sc := range a.messageDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	if a.movePickerOnClose != nil {
+		a.movePickerOnClose()
 	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // openHelp shows the help overlay on top of the main layout.

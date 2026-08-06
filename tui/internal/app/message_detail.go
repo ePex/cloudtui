@@ -52,6 +52,14 @@ func newMessageDetailView(a *App) *messageDetailView {
 		case event.Rune() == 'm':
 			srcQueue := dv.queueName
 			msgID := dv.msg.ID
+			restoreDetail := func() {
+				a.tv.SetFocus(a.pages)
+				lines := make([]string, 0, len(dv.Shortcuts()))
+				for _, sc := range dv.Shortcuts() {
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+				}
+				a.contextPanel.SetText(strings.Join(lines, "\n"))
+			}
 			a.showMovePicker(srcQueue, func(target string) {
 				err := a.backend.MoveMessage(context.Background(), srcQueue, msgID, target)
 				a.tv.QueueUpdateDraw(func() {
@@ -69,7 +77,7 @@ func newMessageDetailView(a *App) *messageDetailView {
 					a.contextPanel.SetText(strings.Join(lines, "\n"))
 					a.messagesV.load()
 				})
-			})
+			}, restoreDetail)
 			return nil
 		case event.Rune() == 'd':
 			queueName := dv.queueName
