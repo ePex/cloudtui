@@ -7,11 +7,11 @@ Date: 2026-08-06
 The move-picker (FE 14) lists target queues in alphabetical order. Two
 usability gaps exist in DLQ workflows:
 
-1. **DLQ priority ordering** — when moving a message out of a DLQ
-   (`dlq.*` queue), the most likely target is the corresponding
-   non-DLQ queue (e.g. `dlq.foo.bar` → `foo.bar`). That queue should
-   appear at the top of the list prefixed with `⭐` to distinguish it
-   visually; all other queues follow alphabetically.
+1. **Requeue priority ordering** — when moving from a `dlq.*` or `imq.*`
+   queue, the corresponding non-prefixed queue (e.g. `dlq.foo.bar` →
+   `foo.bar`, `imq.foo.bar` → `foo.bar`) is pinned first with `⭐`.
+   `dlq.*` and `imq.*` queues appearing as targets are marked with `➖`
+   and de-prioritized after regular queues.
 
 2. **Search filter** — with many queues the user must scroll to find a
    target. Pressing `/` in the picker should open an inline filter input;

@@ -50,7 +50,26 @@ func newMessageDetailView(a *App) *messageDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == 'm':
-			a.showMovePicker(dv.queueName, dv.msg)
+			srcQueue := dv.queueName
+			msgID := dv.msg.ID
+			a.showMovePicker(srcQueue, func(target string) {
+				err := a.backend.MoveMessage(context.Background(), srcQueue, msgID, target)
+				a.tv.QueueUpdateDraw(func() {
+					if err != nil {
+						slog.Error("move: failed", "src", srcQueue, "dst", target, "id", msgID, "error", err)
+						a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+						return
+					}
+					a.pages.SwitchToPage("messages")
+					a.tv.SetFocus(a.messagesV.table)
+					lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+					for _, sc := range a.messagesV.Shortcuts() {
+						lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+					}
+					a.contextPanel.SetText(strings.Join(lines, "\n"))
+					a.messagesV.load()
+				})
+			})
 			return nil
 		case event.Rune() == 'd':
 			queueName := dv.queueName

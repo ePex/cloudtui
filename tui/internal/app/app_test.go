@@ -469,6 +469,18 @@ func TestSortPickerQueues(t *testing.T) {
 			input:       []string{"activemq.advisory", "dlq.other", "my.queue", "regular.a", "statistics.foo"},
 			want:        []string{"my.queue", "regular.a", "dlq.other", "activemq.advisory", "statistics.foo"},
 		},
+		{
+			name:        "IMQ source pins corresponding queue first",
+			sourceQueue: "imq.foo.bar",
+			input:       []string{"foo.bar", "alpha"},
+			want:        []string{"foo.bar", "alpha"},
+		},
+		{
+			name:        "IMQ queues are de-prioritized alongside DLQ queues",
+			sourceQueue: "regular.queue",
+			input:       []string{"imq.other", "regular.a", "dlq.other"},
+			want:        []string{"regular.a", "dlq.other", "imq.other"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

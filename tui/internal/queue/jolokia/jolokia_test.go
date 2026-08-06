@@ -217,3 +217,47 @@ func TestBrowseMessagesJolokiaError(t *testing.T) {
 		t.Fatal("BrowseMessages() expected error for Jolokia status 500, got nil")
 	}
 }
+
+func TestMoveAllMessages(t *testing.T) {
+	var capturedBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedBody)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  float64(42),
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	count, err := c.MoveAllMessages(context.Background(), "srcQueue", "dstQueue")
+	if err != nil {
+		t.Fatalf("MoveAllMessages() error = %v", err)
+	}
+	if count != 42 {
+		t.Errorf("MoveAllMessages() count = %d, want 42", count)
+	}
+	if got := capturedBody["operation"]; got != "moveMatchingMessagesTo(java.lang.String,java.lang.String)" {
+		t.Errorf("operation = %q, want moveMatchingMessagesTo", got)
+	}
+	args, _ := capturedBody["arguments"].([]interface{})
+	if len(args) < 2 || args[0] != "TRUE" || args[1] != "dstQueue" {
+		t.Errorf("arguments = %v, want [TRUE dstQueue]", args)
+	}
+}
+
+func TestMoveAllMessagesJolokiaError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 500,
+			"error":  "operation failed",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	_, err := c.MoveAllMessages(context.Background(), "srcQueue", "dstQueue")
+	if err == nil {
+		t.Fatal("MoveAllMessages() expected error for Jolokia status 500, got nil")
+	}
+}

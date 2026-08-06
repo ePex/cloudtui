@@ -41,6 +41,7 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
+		{Key: "M", Description: "move queue"},
 		{Key: "/", Description: "filter"},
 		{Key: "o/O", Description: "sort col/dir"},
 	}
@@ -124,6 +125,26 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 						qv.load()
 					})
 				}()
+			})
+			return nil
+		case 'M':
+			row, _ := qv.table.GetSelection()
+			cell := qv.table.GetCell(row, 0)
+			if cell == nil || cell.Text == "" || row == 0 {
+				return nil
+			}
+			srcQueue := cell.Text
+			qv.app.showMovePicker(srcQueue, func(target string) {
+				count, err := qv.backend.MoveAllMessages(context.Background(), srcQueue, target)
+				qv.app.tv.QueueUpdateDraw(func() {
+					if err != nil {
+						slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "error", err)
+						qv.showError(err)
+						return
+					}
+					qv.app.statusBar.SetText(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
+					qv.load()
+				})
 			})
 			return nil
 		}

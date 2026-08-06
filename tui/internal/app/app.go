@@ -52,6 +52,7 @@ type App struct {
 	movePickerSearch    *tview.InputField
 	movePickerQueues    []string
 	movePickerPreferred string
+	movePickerOnSelect  func(string)
 	movePickerVisible   bool
 	backend        queue.Backend
 	homeTable     *tview.Table
@@ -348,38 +349,50 @@ func isDLQQueue(name string) bool {
 	return strings.HasPrefix(strings.ToLower(name), "dlq.")
 }
 
+// isIMQQueue reports whether name is an in-memory / internal queue (imq.*).
+func isIMQQueue(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), "imq.")
+}
+
+// requeueQueueCandidate returns the non-prefixed counterpart of sourceQueue if
+// it has a requeue prefix (dlq. or imq.), otherwise "".
+// E.g. "dlq.foo.bar" → "foo.bar", "imq.foo.bar" → "foo.bar".
+func requeueQueueCandidate(sourceQueue string) string {
+	lower := strings.ToLower(sourceQueue)
+	if strings.HasPrefix(lower, "dlq.") || strings.HasPrefix(lower, "imq.") {
+		return sourceQueue[4:]
+	}
+	return ""
+}
+
 // sortPickerQueues orders names into four tiers:
-//  1. Preferred — the non-DLQ counterpart of sourceQueue when source is a DLQ
-//     (e.g. "dlq.foo" → "foo"). Pinned first.
+//  1. Preferred — the non-prefixed counterpart when source is a dlq.* or imq.*
+//     queue (e.g. "dlq.foo" → "foo", "imq.foo" → "foo"). Pinned first with ⭐.
 //  2. Regular — all other queues, alphabetical.
-//  3. DLQ — queues starting with "dlq.", alphabetical.
-//  4. System — queues starting with "activemq." or "statistics.", alphabetical.
+//  3. Requeue — dlq.* and imq.* queues, alphabetical (➖).
+//  4. System — activemq.* and statistics.* queues, alphabetical (❓).
 func sortPickerQueues(sourceQueue string, names []string) []string {
 	var preferred string
-	var regular, dlqs, system []string
+	var regular, requeue, system []string
 
-	isDLQSrc := isDLQQueue(sourceQueue)
-	var candidateLower string
-	if isDLQSrc {
-		candidateLower = strings.ToLower(sourceQueue[4:])
-	}
+	candidateLower := strings.ToLower(requeueQueueCandidate(sourceQueue))
 
 	for _, name := range names {
 		lower := strings.ToLower(name)
 		switch {
-		case isDLQSrc && lower == candidateLower:
+		case candidateLower != "" && lower == candidateLower:
 			preferred = name
 		case isSystemQueue(name):
 			system = append(system, name)
-		case isDLQQueue(name):
-			dlqs = append(dlqs, name)
+		case isDLQQueue(name) || isIMQQueue(name):
+			requeue = append(requeue, name)
 		default:
 			regular = append(regular, name)
 		}
 	}
 
 	sort.Strings(regular)
-	sort.Strings(dlqs)
+	sort.Strings(requeue)
 	sort.Strings(system)
 
 	result := make([]string, 0, len(names))
@@ -387,15 +400,17 @@ func sortPickerQueues(sourceQueue string, names []string) []string {
 		result = append(result, preferred)
 	}
 	result = append(result, regular...)
-	result = append(result, dlqs...)
+	result = append(result, requeue...)
 	result = append(result, system...)
 	return result
 }
 
-// showMovePicker opens the queue-picker overlay for moving msg from sourceQueue.
+// showMovePicker opens the queue-picker overlay. onSelect is called (in a new
+// goroutine) with the chosen target queue name when the user makes a selection.
 // It immediately shows a "Loading…" placeholder, then asynchronously loads
 // the queue list and replaces the placeholder with the real entries.
-func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
+func (a *App) showMovePicker(sourceQueue string, onSelect func(string)) {
+	a.movePickerOnSelect = onSelect
 	a.movePickerList.Clear()
 	a.movePickerList.AddItem("Loading…", "", 0, nil)
 	a.movePickerSearch.SetText("")
@@ -416,9 +431,8 @@ func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 		return event
 	})
 
-	// Register SetChangedFunc here so it closes over sourceQueue and msg.
 	a.movePickerSearch.SetChangedFunc(func(text string) {
-		a.fillPickerList(sourceQueue, msg, text)
+		a.fillPickerList(text)
 	})
 
 	a.rootPages.ShowPage("move-picker")
@@ -443,10 +457,9 @@ func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 				}
 			}
 			a.movePickerQueues = sortPickerQueues(sourceQueue, names)
-			// Determine the preferred (DLQ-corresponding) queue for star display.
+			// Determine the preferred (requeue-corresponding) queue for ⭐ display.
 			a.movePickerPreferred = ""
-			if strings.HasPrefix(strings.ToLower(sourceQueue), "dlq.") {
-				candidate := strings.ToLower(sourceQueue[4:])
+			if candidate := strings.ToLower(requeueQueueCandidate(sourceQueue)); candidate != "" {
 				for _, name := range names {
 					if strings.ToLower(name) == candidate {
 						a.movePickerPreferred = name
@@ -454,14 +467,15 @@ func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 					}
 				}
 			}
-			a.fillPickerList(sourceQueue, msg, "")
+			a.fillPickerList("")
 		})
 	}()
 }
 
 // fillPickerList repopulates movePickerList from movePickerQueues, keeping only
 // entries whose name contains filter (case-insensitive; empty = show all).
-func (a *App) fillPickerList(sourceQueue string, msg queue.Message, filter string) {
+// Each item's selected func invokes a.movePickerOnSelect in a new goroutine.
+func (a *App) fillPickerList(filter string) {
 	a.movePickerList.Clear()
 	lower := strings.ToLower(filter)
 	for _, name := range a.movePickerQueues {
@@ -473,7 +487,7 @@ func (a *App) fillPickerList(sourceQueue string, msg queue.Message, filter strin
 		switch {
 		case n == a.movePickerPreferred:
 			displayName = "⭐ " + n
-		case isDLQQueue(n):
+		case isDLQQueue(n) || isIMQQueue(n):
 			displayName = "➖ " + n
 		case isSystemQueue(n):
 			displayName = "❓ " + n
@@ -482,24 +496,7 @@ func (a *App) fillPickerList(sourceQueue string, msg queue.Message, filter strin
 		}
 		a.movePickerList.AddItem(displayName, "", 0, func() {
 			a.closeMovePicker()
-			go func() {
-				err := a.backend.MoveMessage(context.Background(), sourceQueue, msg.ID, n)
-				a.tv.QueueUpdateDraw(func() {
-					if err != nil {
-						slog.Error("move: failed", "src", sourceQueue, "dst", n, "id", msg.ID, "error", err)
-						a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
-						return
-					}
-					a.pages.SwitchToPage("messages")
-					a.tv.SetFocus(a.messagesV.table)
-					lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-					for _, sc := range a.messagesV.Shortcuts() {
-						lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-					}
-					a.contextPanel.SetText(strings.Join(lines, "\n"))
-					a.messagesV.load()
-				})
-			}()
+			go a.movePickerOnSelect(n)
 		})
 	}
 }

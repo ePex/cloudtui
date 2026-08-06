@@ -31,4 +31,5 @@ type Backend interface {
 	PurgeQueue(ctx context.Context, queueName string) error
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
+	MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 }

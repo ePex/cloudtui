@@ -503,6 +503,56 @@ func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, target
 	return nil
 }
 
+// MoveAllMessages moves all messages from sourceQueue to targetQueue via the
+// moveMatchingMessagesTo(java.lang.String,java.lang.String) Jolokia exec
+// operation with selector "TRUE". Returns the number of messages moved.
+func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, sourceQueue,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "moveMatchingMessagesTo(java.lang.String,java.lang.String)",
+		"arguments": []string{"TRUE", targetQueue},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return 0, fmt.Errorf("moveAllMessages marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("moveAllMessages request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("moveAllMessages: %w", err)
+	}
+	var result struct {
+		Status int         `json:"status"`
+		Error  string      `json:"error"`
+		Value  interface{} `json:"value"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return 0, fmt.Errorf("moveAllMessages decode: %w", err)
+	}
+	if result.Status != 200 {
+		return 0, fmt.Errorf("moveAllMessages error (status %d): %s", result.Status, result.Error)
+	}
+	count := 0
+	if f, ok := result.Value.(float64); ok {
+		count = int(f)
+	}
+	return count, nil
+}
+
 func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Origin", c.origin)
 	if c.cfg.Username != "" {

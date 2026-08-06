@@ -81,6 +81,9 @@ field text color) matching the `queuesV.filterInput` style.
 
 ## Key decisions
 
+- **IMQ treated identically to DLQ**: both `dlq.*` and `imq.*` are requeue
+  prefixes — `requeueQueueCandidate` strips either prefix to find the preferred
+  target; both get `➖` in the list and are de-prioritized to the third tier.
 - **Sorting is a pure function**: `sortPickerQueues` has no side effects and
   is trivially testable without a running TUI.
 - **Search input at the bottom**: consistent with `queuesView.filterInput`
