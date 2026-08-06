@@ -625,7 +625,7 @@ func (a *App) switchTo(name string) {
 	for _, v := range a.views {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
-			a.tv.SetFocus(a.pages)
+			a.tv.SetFocus(v.Primitive())
 			a.updateContextPanel(v)
 			if act, ok := v.(activatable); ok {
 				act.Activate()
