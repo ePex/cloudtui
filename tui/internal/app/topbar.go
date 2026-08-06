@@ -36,7 +36,7 @@ func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
 	logoPanel := newLogoPanel(cfg)
 	// Ensure the top bar is tall enough to display all view shortcuts.
 	// shortcutPanelRows is the maximum number of shortcut lines any view shows.
-	const shortcutPanelRows = 4
+	const shortcutPanelRows = 5
 	height := maxInt(shortcutPanelRows, len(cfg.Logo))
 	divider := newDivider(cfg, height)
 

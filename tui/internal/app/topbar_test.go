@@ -62,10 +62,10 @@ func TestNewTopBarHeightGrowsWithLogo(t *testing.T) {
 		t.Errorf("height with 5-line logo = %d, want 5", tall.height)
 	}
 
-	// A short logo: height is at least shortcutPanelRows (currently 4).
+	// A short logo: height is at least shortcutPanelRows (currently 5).
 	short := newTopBar(config.Config{Logo: []string{"1"}}, prompt)
-	if short.height != 4 {
-		t.Errorf("height with 1-line logo = %d, want 4 (shortcutPanelRows)", short.height)
+	if short.height != 5 {
+		t.Errorf("height with 1-line logo = %d, want 5 (shortcutPanelRows)", short.height)
 	}
 }
 
