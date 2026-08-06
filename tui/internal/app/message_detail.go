@@ -88,6 +88,7 @@ func newMessageDetailView(a *App) *messageDetailView {
 					a.tv.QueueUpdateDraw(func() {
 						if err != nil {
 							slog.Error("message detail: remove failed", "queue", queueName, "id", msgID, "error", err)
+							a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
 							return
 						}
 						// Return to messages list and reload.

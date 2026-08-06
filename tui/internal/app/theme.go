@@ -155,6 +155,22 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.confirmList.SetBackgroundColor(bg)
 	}
 
+	// Send-message overlay
+	if a.sendMessageFlex != nil {
+		a.sendMessageFlex.SetBackgroundColor(bg)
+		a.sendMessageFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.sendMessageFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.sendMessageArea != nil {
+		a.sendMessageArea.SetBackgroundColor(bg)
+		a.sendMessageArea.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(tcell.GetColor(p.Background)))
+		a.sendMessageArea.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
+	}
+	if a.sendMessageList != nil {
+		styleList(a.sendMessageList, p)
+		a.sendMessageList.SetBackgroundColor(bg)
+	}
+
 }
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after
 // every event handler returns when the event loop is running. An explicit

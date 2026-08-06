@@ -42,6 +42,7 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
 		{Key: "M", Description: "move queue"},
+		{Key: "c", Description: "create message"},
 		{Key: "/", Description: "filter"},
 		{Key: "o/O", Description: "sort col/dir"},
 	}
@@ -154,6 +155,22 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 					qv.load()
 				})
 			}, restoreQueues)
+			return nil
+		case 'c':
+			row, _ := qv.table.GetSelection()
+			cell := qv.table.GetCell(row, 0)
+			if cell == nil || cell.Text == "" || row == 0 {
+				return nil
+			}
+			name := cell.Text
+			qv.app.showSendMessage(name, func() {
+				qv.app.tv.SetFocus(qv.table)
+				lines := make([]string, 0, len(qv.Shortcuts()))
+				for _, sc := range qv.Shortcuts() {
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+				}
+				qv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+			})
 			return nil
 		}
 		return event

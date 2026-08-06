@@ -151,9 +151,6 @@ func TestBrowseMessagesHappyPath(t *testing.T) {
 }
 
 func TestBrowseMessagesCompositeDataMessageID(t *testing.T) {
-	// Verify that a CompositeData messageId (as returned by real ActiveMQ) is
-	// reconstructed to the canonical "ID:..." string that removeMessage /
-	// moveMessageTo use to locate messages.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"status": 200,
@@ -259,5 +256,268 @@ func TestMoveAllMessagesJolokiaError(t *testing.T) {
 	_, err := c.MoveAllMessages(context.Background(), "srcQueue", "dstQueue")
 	if err == nil {
 		t.Fatal("MoveAllMessages() expected error for Jolokia status 500, got nil")
+	}
+}
+
+func TestSendMessage(t *testing.T) {
+	var capturedBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedBody)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  nil,
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	if err := c.SendMessage(context.Background(), "myQueue", "hello world"); err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	wantOp := "sendTextMessage(java.util.Map,java.lang.String,java.lang.String,java.lang.String)"
+	if got := capturedBody["operation"]; got != wantOp {
+		t.Errorf("operation = %q, want %q", got, wantOp)
+	}
+	args, _ := capturedBody["arguments"].([]interface{})
+	// args: [{}, body, username, password]
+	if len(args) < 4 {
+		t.Fatalf("arguments len = %d, want 4", len(args))
+	}
+	if args[1] != "hello world" {
+		t.Errorf("arguments[1] (body) = %v, want \"hello world\"", args[1])
+	}
+	if args[2] != "admin" {
+		t.Errorf("arguments[2] (username) = %v, want \"admin\"", args[2])
+	}
+}
+
+func TestSendMessageJolokiaError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 500,
+			"error":  "operation failed",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	err := c.SendMessage(context.Background(), "myQueue", "hello")
+	if err == nil {
+		t.Fatal("SendMessage() expected error for Jolokia status 500, got nil")
+	}
+}
+
+func TestPurgeQueueDirectOperation(t *testing.T) {
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  true,
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	err := c.PurgeQueue(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if requestCount != 1 {
+		t.Errorf("requestCount = %d, want 1 (only purgeQueue())", requestCount)
+	}
+}
+
+func TestPurgeQueueRemoveMatchingFallback(t *testing.T) {
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": 500,
+				"error":  "No operation purgeQueue found",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  float64(3),
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	err := c.PurgeQueue(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if requestCount != 2 {
+		t.Errorf("requestCount = %d, want 2 (purgeQueue + removeMatchingMessages)", requestCount)
+	}
+}
+
+func TestBrowseMessagesBackfillsBytesMessageBody(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": 200,
+				"value": []map[string]any{
+					{
+						"messageId":  "ID:msg-1",
+						"timestamp":  float64(1721000000000),
+						"bodyLength": float64(11),
+					},
+				},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  []string{"hello world"},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+	}
+	if msgs[0].ID != "ID:msg-1" {
+		t.Errorf("msgs[0].ID = %q, want %q", msgs[0].ID, "ID:msg-1")
+	}
+	if msgs[0].Preview != "hello world" {
+		t.Errorf("msgs[0].Preview = %q, want %q — body not backfilled from browse()", msgs[0].Preview, "hello world")
+	}
+	if callCount != 2 {
+		t.Errorf("callCount = %d, want 2 (browseMessages + browse backfill)", callCount)
+	}
+}
+
+// TestBrowseMessagesFallbackFullObject verifies that when browseMessages()
+// fails and browse() returns full message objects (ActiveMQ 5.18+ format),
+// the fallback produces fully-populated messages: ID, body, headers, timestamp.
+func TestBrowseMessagesFallbackFullObject(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": 500,
+				"error":  "java.lang.IllegalStateException: Error while extracting clientID",
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":200,"value":[{` +
+			`"JMSMessageID":"ID:host-1234-100-1:1:1:1:1",` +
+			`"Text":"hello world",` +
+			`"JMSType":null,` +
+			`"JMSCorrelationID":null,` +
+			`"JMSTimestamp":"2026-08-06T14:59:07Z",` +
+			`"JMSDeliveryMode":"PERSISTENT",` +
+			`"JMSPriority":4,` +
+			`"JMSRedelivered":false,` +
+			`"JMSDestination":"queue://myQueue",` +
+			`"JMSExpiration":0,` +
+			`"JMSReplyTo":null,` +
+			`"JMSXGroupID":null,` +
+			`"JMSXGroupSeq":0,` +
+			`"JMSXUserID":null,` +
+			`"StringProperties":{},` +
+			`"IntProperties":{},` +
+			`"LongProperties":{},` +
+			`"ByteProperties":{},` +
+			`"ShortProperties":{},` +
+			`"FloatProperties":{},` +
+			`"DoubleProperties":{},` +
+			`"BooleanProperties":{}` +
+			`}]}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+	}
+	if msgs[0].ID != "ID:host-1234-100-1:1:1:1:1" {
+		t.Errorf("ID = %q, want full JMSMessageID", msgs[0].ID)
+	}
+	if msgs[0].Preview != "hello world" {
+		t.Errorf("Preview = %q, want %q", msgs[0].Preview, "hello world")
+	}
+	if got, _ := msgs[0].RawFields["text"].(string); got != "hello world" {
+		t.Errorf("RawFields[text] = %q, want %q", got, "hello world")
+	}
+	if got, _ := msgs[0].RawFields["jMSDeliveryMode"].(interface{}); got == nil {
+		t.Error("RawFields[jMSDeliveryMode] is nil")
+	}
+	if msgs[0].Timestamp.IsZero() {
+		t.Error("Timestamp is zero")
+	}
+}
+
+func TestBrowseMessagesFallback(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": 500,
+				"error":  "java.lang.IllegalStateException: Error while extracting clientID",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  []string{"hello world"},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+	}
+	if msgs[0].ID != "" {
+		t.Errorf("msgs[0].ID = %q, want empty string (fallback has no ID)", msgs[0].ID)
+	}
+	if msgs[0].Preview != "hello world" {
+		t.Errorf("msgs[0].Preview = %q, want %q", msgs[0].Preview, "hello world")
+	}
+	if callCount != 2 {
+		t.Errorf("callCount = %d, want 2 (browseMessages + browse fallback)", callCount)
+	}
+}
+
+func TestBrowseMessagesFallbackBothFail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 500,
+			"error":  "operation failed",
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	if err == nil {
+		t.Fatal("BrowseMessages() expected error when both operations fail, got nil")
+	}
+	if got := err.Error(); got == "" {
+		t.Error("error message is empty")
 	}
 }

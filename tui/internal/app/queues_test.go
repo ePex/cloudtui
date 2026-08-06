@@ -39,6 +39,10 @@ func (f *fakeQueueBackend) MoveAllMessages(_ context.Context, _, _ string) (int,
 	return 0, nil
 }
 
+func (f *fakeQueueBackend) SendMessage(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func newTestQueuesView(t *testing.T) *queuesView {
 	t.Helper()
 	a := New(config.Default())

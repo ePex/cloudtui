@@ -47,7 +47,7 @@ colors:
     settings: "#c0caf5"
     queues: "#c0caf5"
 
-# queue: connection settings for the ActiveMQ Jolokia endpoint.
+# queue: connection settings for the ActiveMQ broker.
 # Password can also be supplied via the MQPROXY_CLIENT_PASSWORD env var
 # (the env var is only used when the password field is absent or empty).
 queue:

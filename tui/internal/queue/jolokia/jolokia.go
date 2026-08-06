@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -203,9 +204,32 @@ func splitComma(s string) []string {
 	return parts
 }
 
-// BrowseMessages fetches the messages currently in queueName via the Jolokia
-// browseMessages() exec operation.
+// BrowseMessages fetches messages from queueName. It tries browseMessages()
+// first (full CompositeData including IDs and timestamps). If that fails (e.g.
+// due to JMX-originated messages whose internal connection ID cannot be
+// serialized), it falls back to browse() which returns plain body strings.
+// Fallback messages have empty IDs — individual move/delete will not work for
+// them. If both operations fail, the original browseMessages error is returned.
 func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.Message, error) {
+	msgs, err := c.browseMessagesFull(ctx, queueName)
+	if err != nil {
+		slog.Debug("browseMessages failed, trying browse() fallback", "queue", queueName, "err", err)
+		fallback, fallbackErr := c.browseMessagesFallback(ctx, queueName)
+		if fallbackErr != nil {
+			slog.Debug("browse() fallback also failed", "queue", queueName, "err", fallbackErr)
+			return nil, err
+		}
+		return fallback, nil
+	}
+	return msgs, nil
+}
+
+// browseMessagesFull calls the browseMessages() Jolokia exec operation and
+// returns fully-populated queue.Message values including IDs and timestamps.
+// For messages that carry no "text" field (e.g. BytesMessages created by the
+// STOMP adapter), a secondary browse() call backfills the body text so that
+// the preview and detail view always show the message content.
+func (c *Client) browseMessagesFull(ctx context.Context, queueName string) ([]queue.Message, error) {
 	mbean := fmt.Sprintf(
 		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
 		c.cfg.BrokerName, queueName,
@@ -251,6 +275,26 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 		return nil, fmt.Errorf("jolokia browseMessages error (status %d): %s", result.Status, result.Error)
 	}
 
+	// Backfill body text for messages that have no "text" field (BytesMessages
+	// stored by the STOMP adapter). browse() returns bodies as strings — for
+	// BytesMessages it decodes the bytes as UTF-8, giving us the original text.
+	needsBackfill := false
+	for _, m := range result.Value {
+		if t, _ := m["text"].(string); t == "" {
+			needsBackfill = true
+			break
+		}
+	}
+	if needsBackfill {
+		if bodies, err := c.browseBodies(ctx, queueName); err == nil && len(bodies) == len(result.Value) {
+			for i, bodyText := range bodies {
+				if t, _ := result.Value[i]["text"].(string); t == "" && bodyText != "" {
+					result.Value[i]["text"] = bodyText
+				}
+			}
+		}
+	}
+
 	messages := make([]queue.Message, 0, len(result.Value))
 	for _, m := range result.Value {
 		id := extractMessageID(m["messageId"])
@@ -292,6 +336,207 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 		})
 	}
 	return messages, nil
+}
+
+// browseBodies calls the browse() Jolokia exec operation and returns message
+// bodies as strings. For TextMessages this is the text content; for
+// BytesMessages ActiveMQ decodes the bytes as UTF-8 and returns the result.
+func (c *Client) browseBodies(ctx context.Context, queueName string) ([]string, error) {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "browse()",
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse: %w", err)
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Status int               `json:"status"`
+		Error  string            `json:"error"`
+		Value  []json.RawMessage `json:"value"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("jolokia browse decode: %w", err)
+	}
+	if result.Status != 200 {
+		return nil, fmt.Errorf("jolokia browse error (status %d): %s", result.Status, result.Error)
+	}
+	bodies := make([]string, 0, len(result.Value))
+	for _, raw := range result.Value {
+		bodies = append(bodies, extractBrowseBody(raw))
+	}
+	return bodies, nil
+}
+
+// browseMessagesFallback calls browse() and parses the full message objects
+// that ActiveMQ 5.18+ returns. Each object contains JMSMessageID, Text, and
+// all JMS headers — so the fallback produces fully-populated messages
+// including IDs (enabling delete/move) and headers (visible in detail view).
+func (c *Client) browseMessagesFallback(ctx context.Context, queueName string) ([]queue.Message, error) {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "browse()",
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jolokia browse: %w", err)
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Status int               `json:"status"`
+		Error  string            `json:"error"`
+		Value  []json.RawMessage `json:"value"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("jolokia browse decode: %w", err)
+	}
+	if result.Status != 200 {
+		return nil, fmt.Errorf("jolokia browse error (status %d): %s", result.Status, result.Error)
+	}
+	messages := make([]queue.Message, 0, len(result.Value))
+	for _, raw := range result.Value {
+		messages = append(messages, parseBrowseItem(raw))
+	}
+	return messages, nil
+}
+
+// parseBrowseItem converts one element from browse()'s value array into a
+// queue.Message. ActiveMQ 5.18+ returns full message objects (JMSMessageID,
+// Text, all headers); older versions return plain body strings.
+func parseBrowseItem(raw json.RawMessage) queue.Message {
+	// Try plain string (legacy browse behavior — body only).
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		preview := s
+		if len(preview) > 80 {
+			preview = preview[:80]
+		}
+		return queue.Message{
+			JMSType:   "text",
+			Preview:   preview,
+			RawFields: map[string]interface{}{"text": s},
+		}
+	}
+
+	// Full message object (ActiveMQ 5.18+ browse() format).
+	var obj map[string]interface{}
+	if json.Unmarshal(raw, &obj) != nil {
+		return queue.Message{Preview: "(binary)"}
+	}
+
+	id, _ := obj["JMSMessageID"].(string)
+	bodyText, _ := obj["Text"].(string)
+	jmsType, _ := obj["JMSType"].(string)
+	correlationID, _ := obj["JMSCorrelationID"].(string)
+
+	if jmsType == "" {
+		if bodyText != "" {
+			jmsType = "text"
+		} else {
+			jmsType = "other"
+		}
+	}
+
+	var ts time.Time
+	if tsStr, ok := obj["JMSTimestamp"].(string); ok && tsStr != "" {
+		ts, _ = time.Parse(time.RFC3339, tsStr)
+	}
+
+	preview := bodyText
+	if preview == "" {
+		preview = "(binary)"
+	} else if len(preview) > 80 {
+		preview = preview[:80]
+	}
+
+	// Merge all typed property maps into one map for the detail view.
+	props := map[string]interface{}{}
+	for _, key := range []string{
+		"StringProperties", "IntProperties", "LongProperties",
+		"ByteProperties", "ShortProperties", "FloatProperties",
+		"DoubleProperties", "BooleanProperties",
+	} {
+		if m, ok := obj[key].(map[string]interface{}); ok {
+			for k, v := range m {
+				props[k] = v
+			}
+		}
+	}
+
+	// Build RawFields with the key names message_detail.go expects.
+	rawFields := map[string]interface{}{
+		"text":             bodyText,
+		"jMSCorrelationID": obj["JMSCorrelationID"],
+		"jMSDeliveryMode":  obj["JMSDeliveryMode"],
+		"jMSDestination":   obj["JMSDestination"],
+		"jMSExpiration":    obj["JMSExpiration"],
+		"jMSRedelivered":   obj["JMSRedelivered"],
+		"jMSReplyTo":       obj["JMSReplyTo"],
+		"jMSPriority":      obj["JMSPriority"],
+		"groupID":          obj["JMSXGroupID"],
+		"groupSequence":    obj["JMSXGroupSeq"],
+		"userID":           obj["JMSXUserID"],
+		"properties":       props,
+	}
+
+	return queue.Message{
+		ID:            id,
+		JMSType:       jmsType,
+		CorrelationID: correlationID,
+		Timestamp:     ts,
+		Preview:       preview,
+		RawFields:     rawFields,
+	}
+}
+
+// extractBrowseBody returns the body text from a single browse() value element.
+// Used by browseBodies for the body-backfill path in browseMessagesFull.
+func extractBrowseBody(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var obj map[string]interface{}
+	if json.Unmarshal(raw, &obj) == nil {
+		// ActiveMQ 5.18+ returns "Text" (capital T) for the message body.
+		for _, key := range []string{"Text", "text"} {
+			if v, ok := obj[key].(string); ok {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // extractMessageID converts whatever Jolokia returns for messageId into a
@@ -354,19 +599,32 @@ func extractMessageID(raw interface{}) string {
 	return fmt.Sprintf("ID:?:%d:%d", sessionID, int64(prodSeq))
 }
 
-// PurgeQueue removes all messages from queueName by browsing and removing
-// each message individually via removeMessage(java.lang.String).
-// purgeQueue() is not used because it is unavailable on some ActiveMQ deployments.
+// PurgeQueue removes all messages from queueName using a three-tier strategy:
+//  1. purgeQueue() — removes directly from the store, no message iteration.
+//  2. removeMatchingMessages("TRUE") — store-removal path via JMS selector;
+//     avoids the getClientID() call that fails for JMX-originated messages.
+//  3. browse-and-remove — falls back to iterating messages individually.
 func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
-	msgs, err := c.BrowseMessages(ctx, queueName)
-	if err != nil {
-		return fmt.Errorf("purge queue %s: browse: %w", queueName, err)
-	}
-
 	mbean := fmt.Sprintf(
 		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
 		c.cfg.BrokerName, queueName,
 	)
+
+	// Tier 1: purgeQueue() — simplest, not available on all deployments.
+	if err := c.execSimple(ctx, mbean, "purgeQueue()"); err == nil {
+		return nil
+	}
+
+	// Tier 2: removeMatchingMessages("TRUE") — store path, avoids browse failure.
+	if err := c.removeMatchingMessages(ctx, mbean, "TRUE"); err == nil {
+		return nil
+	}
+
+	// Tier 3: browse-and-remove.
+	msgs, err := c.BrowseMessages(ctx, queueName)
+	if err != nil {
+		return fmt.Errorf("purge queue %s: browse: %w", queueName, err)
+	}
 
 	for _, msg := range msgs {
 		reqBody := map[string]any{
@@ -403,6 +661,81 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
 		if result.Status != 200 {
 			return fmt.Errorf("purge queue %s: removeMessage error (status %d): %s", queueName, result.Status, result.Error)
 		}
+	}
+	return nil
+}
+
+// execSimple calls a no-argument Jolokia exec operation and returns nil on
+// Jolokia status 200. Used for purgeQueue().
+func (c *Client) execSimple(ctx context.Context, mbean, operation string) error {
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": operation,
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("%s marshal: %w", operation, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("%s request: %w", operation, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	var result struct {
+		Status int    `json:"status"`
+		Error  string `json:"error"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("%s decode: %w", operation, err)
+	}
+	if result.Status != 200 {
+		return fmt.Errorf("%s error (status %d): %s", operation, result.Status, result.Error)
+	}
+	return nil
+}
+
+// removeMatchingMessages calls removeMatchingMessages(java.lang.String) with
+// the given JMS selector. Returns nil on Jolokia status 200.
+func (c *Client) removeMatchingMessages(ctx context.Context, mbean, selector string) error {
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "removeMatchingMessages(java.lang.String)",
+		"arguments": []string{selector},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("removeMatchingMessages marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("removeMatchingMessages request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("removeMatchingMessages: %w", err)
+	}
+	var result struct {
+		Status int    `json:"status"`
+		Error  string `json:"error"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("removeMatchingMessages decode: %w", err)
+	}
+	if result.Status != 200 {
+		return fmt.Errorf("removeMatchingMessages error (status %d): %s", result.Status, result.Error)
 	}
 	return nil
 }
@@ -551,6 +884,56 @@ func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue s
 		count = int(f)
 	}
 	return count, nil
+}
+
+// SendMessage sends body as a JMS TextMessage to queueName via the Jolokia
+// JMX sendTextMessage operation.
+//
+// Side-effect: the JMX path creates a short-lived VM-transport connection that
+// is stored as a closed reference inside the message's producer info. This
+// causes browseMessages() to fail with "Error while extracting clientID" for
+// the affected queue. BrowseMessages() handles this transparently by falling
+// back to browse() which returns the message bodies without IDs, so the body
+// is still readable and individual move/delete is replaced by the
+// "limited info" mode indicated in the status bar.
+func (c *Client) SendMessage(ctx context.Context, queueName, body string) error {
+	mbean := fmt.Sprintf(
+		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
+		c.cfg.BrokerName, queueName,
+	)
+	reqBody := map[string]any{
+		"type":      "exec",
+		"mbean":     mbean,
+		"operation": "sendTextMessage(java.util.Map,java.lang.String,java.lang.String,java.lang.String)",
+		"arguments": []any{map[string]string{}, body, c.cfg.Username, c.cfg.Password},
+	}
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("sendTextMessage marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("sendTextMessage request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("sendTextMessage: %w", err)
+	}
+	var result struct {
+		Status int    `json:"status"`
+		Error  string `json:"error"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("sendTextMessage decode: %w", err)
+	}
+	if result.Status != 200 {
+		return fmt.Errorf("sendTextMessage error (status %d): %s", result.Status, result.Error)
+	}
+	return nil
 }
 
 func (c *Client) setHeaders(req *http.Request) {

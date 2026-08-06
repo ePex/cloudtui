@@ -55,6 +55,11 @@ type App struct {
 	movePickerOnSelect  func(string)
 	movePickerOnClose   func()
 	movePickerVisible   bool
+	sendMessageFlex     *tview.Flex
+	sendMessageArea     *tview.TextArea
+	sendMessageList     *tview.List
+	sendMessageOnClose  func()
+	sendMessageVisible  bool
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -190,12 +195,48 @@ func New(cfg config.Config) *App {
 
 	movePickerOverlay := centered(a.movePickerFlex, 52, 22)
 
+	a.sendMessageArea = tview.NewTextArea()
+	a.sendMessageList = tview.NewList().ShowSecondaryText(false)
+	a.sendMessageList.AddItem("Submit", "", 0, nil)
+	a.sendMessageList.AddItem("Cancel", "", 0, nil)
+	a.sendMessageFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.sendMessageArea, 0, 1, true).
+		AddItem(a.sendMessageList, 2, 0, false)
+	a.sendMessageFlex.SetBorder(true).SetTitle(" Send Message ")
+
+	a.sendMessageArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			a.tv.SetFocus(a.sendMessageList)
+			return nil
+		}
+		if event.Key() == tcell.KeyEscape {
+			a.closeSendMessage()
+			return nil
+		}
+		return event
+	})
+	a.sendMessageList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Key() == tcell.KeyEscape:
+			a.tv.SetFocus(a.sendMessageArea)
+			return nil
+		}
+		return event
+	})
+
+	sendMessageOverlay := centered(a.sendMessageFlex, 70, 14)
+
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
 		AddPage("main", layout, true, true).
 		AddPage("help", helpOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false).
-		AddPage("move-picker", movePickerOverlay, true, false)
+		AddPage("move-picker", movePickerOverlay, true, false).
+		AddPage("send-message", sendMessageOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
 
@@ -220,7 +261,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible {
 		return event
 	}
 
@@ -510,6 +551,59 @@ func (a *App) closeMovePicker() {
 	a.movePickerVisible = false
 	if a.movePickerOnClose != nil {
 		a.movePickerOnClose()
+	}
+}
+
+// showSendMessage opens the send-message overlay for the given queue.
+// onClose is called on the UI goroutine when the overlay is dismissed.
+func (a *App) showSendMessage(queueName string, onClose func()) {
+	a.sendMessageOnClose = onClose
+	a.sendMessageArea.SetText("", true)
+	a.sendMessageFlex.SetTitle(fmt.Sprintf(" Send Message — %s ", queueName))
+
+	// Wire Submit and Cancel with the correct closure each time.
+	a.sendMessageList.Clear()
+	a.sendMessageList.AddItem("Submit", "", 0, func() { a.doSend(queueName) })
+	a.sendMessageList.AddItem("Cancel", "", 0, a.closeSendMessage)
+
+	a.rootPages.ShowPage("send-message")
+	a.tv.SetFocus(a.sendMessageArea)
+	a.sendMessageVisible = true
+	ac := a.cfg.Colors.Accent
+	a.contextPanel.SetText(fmt.Sprintf("[%s]<Tab>[-] actions  [%s]<Esc>[-] cancel", ac, ac))
+}
+
+// doSend reads the body from sendMessageArea, closes the overlay, and sends
+// the message asynchronously, reporting the result in the status bar.
+func (a *App) doSend(queueName string) {
+	body := a.sendMessageArea.GetText()
+	a.closeSendMessage()
+	go func() {
+		err := a.backend.SendMessage(context.Background(), queueName, body)
+		a.tv.QueueUpdateDraw(func() {
+			if err != nil {
+				slog.Error("send message: failed", "queue", queueName, "error", err)
+				a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+				return
+			}
+			a.statusBar.SetText(fmt.Sprintf("Message sent to %q", queueName))
+			if a.queuesV != nil {
+				a.queuesV.load()
+			}
+			if a.messagesV != nil && a.messagesV.queueName == queueName {
+				a.messagesV.load()
+			}
+		})
+	}()
+}
+
+// closeSendMessage hides the send-message overlay and calls sendMessageOnClose
+// to let the caller restore focus and the context panel.
+func (a *App) closeSendMessage() {
+	a.rootPages.HidePage("send-message")
+	a.sendMessageVisible = false
+	if a.sendMessageOnClose != nil {
+		a.sendMessageOnClose()
 	}
 }
 

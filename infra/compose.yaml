@@ -4,6 +4,9 @@ services:
     ports:
       - "8161:8161"    # web console + Jolokia HTTP API
       - "61616:61616"  # OpenWire broker port
+      - "61613:61613"  # STOMP (used by TUI "create message")
     environment:
       ACTIVEMQ_CONNECTION_USER: admin
       ACTIVEMQ_CONNECTION_PASSWORD: admin
+    volumes:
+      - ./activemq.xml:/opt/activemq/conf/activemq.xml:ro

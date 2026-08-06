@@ -32,4 +32,5 @@ type Backend interface {
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 	MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error)
+	SendMessage(ctx context.Context, queueName, body string) error
 }

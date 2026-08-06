@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -27,6 +28,7 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
+		{Key: "c", Description: "create message"},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -46,6 +48,17 @@ func newMessagesView(a *App) *messagesView {
 		switch {
 		case event.Rune() == 'r':
 			mv.load()
+			return nil
+		case event.Rune() == 'c':
+			name := mv.queueName
+			a.showSendMessage(name, func() {
+				a.tv.SetFocus(mv.table)
+				lines := make([]string, 0, len(mv.Shortcuts()))
+				for _, sc := range mv.Shortcuts() {
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+				}
+				a.contextPanel.SetText(strings.Join(lines, "\n"))
+			})
 			return nil
 		case event.Rune() == 'p':
 			name := mv.queueName
@@ -104,6 +117,9 @@ func (mv *messagesView) load() {
 				return
 			}
 			mv.repaint(msgs)
+			if len(msgs) > 0 && msgs[0].ID == "" {
+				mv.app.statusBar.SetText("[yellow]Note: limited message info — individual move/delete unavailable[-]")
+			}
 		})
 	}()
 }
