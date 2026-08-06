@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -46,8 +47,12 @@ type App struct {
 	confirmText      *tview.TextView
 	confirmList      *tview.List
 	confirmVisible   bool
-	movePickerList    *tview.List
-	movePickerVisible bool
+	movePickerFlex      *tview.Flex
+	movePickerList      *tview.List
+	movePickerSearch    *tview.InputField
+	movePickerQueues    []string
+	movePickerPreferred string
+	movePickerVisible   bool
 	backend        queue.Backend
 	homeTable     *tview.Table
 	homeSections  []views.SectionInfo
@@ -162,8 +167,26 @@ func New(cfg config.Config) *App {
 	confirmOverlay := centered(a.confirmFlex, 52, 8)
 
 	a.movePickerList = tview.NewList().ShowSecondaryText(false)
-	a.movePickerList.SetBorder(true).SetTitle(" Move to Queue ")
-	movePickerOverlay := centered(a.movePickerList, 52, 20)
+	a.movePickerSearch = tview.NewInputField().SetLabel(" / filter: ")
+	a.movePickerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.movePickerList, 0, 1, true).
+		AddItem(a.movePickerSearch, 1, 0, false)
+	a.movePickerFlex.SetBorder(true).SetTitle(" Move to Queue ")
+
+	// SetChangedFunc is registered in showMovePicker (needs sourceQueue/msg closure).
+	a.movePickerSearch.SetDoneFunc(func(_ tcell.Key) {
+		a.tv.SetFocus(a.movePickerList)
+	})
+	a.movePickerSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.movePickerSearch.SetText("")
+			a.tv.SetFocus(a.movePickerList)
+			return nil
+		}
+		return event
+	})
+
+	movePickerOverlay := centered(a.movePickerFlex, 52, 22)
 
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
@@ -313,12 +336,69 @@ func (a *App) closeConfirm() {
 	a.confirmVisible = false
 }
 
+// isSystemQueue reports whether name belongs to a built-in AMQ system
+// destination (activemq.*, statistics.*).
+func isSystemQueue(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasPrefix(lower, "activemq.") || strings.HasPrefix(lower, "statistics.")
+}
+
+// isDLQQueue reports whether name is a dead-letter queue (dlq.*).
+func isDLQQueue(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), "dlq.")
+}
+
+// sortPickerQueues orders names into four tiers:
+//  1. Preferred — the non-DLQ counterpart of sourceQueue when source is a DLQ
+//     (e.g. "dlq.foo" → "foo"). Pinned first.
+//  2. Regular — all other queues, alphabetical.
+//  3. DLQ — queues starting with "dlq.", alphabetical.
+//  4. System — queues starting with "activemq." or "statistics.", alphabetical.
+func sortPickerQueues(sourceQueue string, names []string) []string {
+	var preferred string
+	var regular, dlqs, system []string
+
+	isDLQSrc := isDLQQueue(sourceQueue)
+	var candidateLower string
+	if isDLQSrc {
+		candidateLower = strings.ToLower(sourceQueue[4:])
+	}
+
+	for _, name := range names {
+		lower := strings.ToLower(name)
+		switch {
+		case isDLQSrc && lower == candidateLower:
+			preferred = name
+		case isSystemQueue(name):
+			system = append(system, name)
+		case isDLQQueue(name):
+			dlqs = append(dlqs, name)
+		default:
+			regular = append(regular, name)
+		}
+	}
+
+	sort.Strings(regular)
+	sort.Strings(dlqs)
+	sort.Strings(system)
+
+	result := make([]string, 0, len(names))
+	if preferred != "" {
+		result = append(result, preferred)
+	}
+	result = append(result, regular...)
+	result = append(result, dlqs...)
+	result = append(result, system...)
+	return result
+}
+
 // showMovePicker opens the queue-picker overlay for moving msg from sourceQueue.
 // It immediately shows a "Loading…" placeholder, then asynchronously loads
 // the queue list and replaces the placeholder with the real entries.
 func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 	a.movePickerList.Clear()
 	a.movePickerList.AddItem("Loading…", "", 0, nil)
+	a.movePickerSearch.SetText("")
 
 	a.movePickerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -326,6 +406,9 @@ func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Rune() == '/':
+			a.tv.SetFocus(a.movePickerSearch)
+			return nil
 		case event.Key() == tcell.KeyEscape:
 			a.closeMovePicker()
 			return nil
@@ -333,49 +416,92 @@ func (a *App) showMovePicker(sourceQueue string, msg queue.Message) {
 		return event
 	})
 
+	// Register SetChangedFunc here so it closes over sourceQueue and msg.
+	a.movePickerSearch.SetChangedFunc(func(text string) {
+		a.fillPickerList(sourceQueue, msg, text)
+	})
+
 	a.rootPages.ShowPage("move-picker")
 	a.tv.SetFocus(a.movePickerList)
 	a.movePickerVisible = true
-	a.contextPanel.SetText(fmt.Sprintf("[%s]<Esc>[-] cancel", a.cfg.Colors.Accent))
+	ac := a.cfg.Colors.Accent
+	a.contextPanel.SetText(fmt.Sprintf("[%s]<Esc>[-] cancel  [%s]</>[-] search", ac, ac))
 
 	go func() {
 		summaries, err := a.backend.List(context.Background())
 		a.tv.QueueUpdateDraw(func() {
-			a.movePickerList.Clear()
 			if err != nil {
 				slog.Error("move-picker: failed to list queues", "error", err)
+				a.movePickerList.Clear()
 				a.movePickerList.AddItem("Error loading queues", "", 0, nil)
 				return
 			}
+			names := make([]string, 0, len(summaries))
 			for _, s := range summaries {
-				if s.Name == sourceQueue {
-					continue
+				if s.Name != sourceQueue {
+					names = append(names, s.Name)
 				}
-				name := s.Name
-				a.movePickerList.AddItem(name, "", 0, func() {
-					a.closeMovePicker()
-					go func() {
-						err := a.backend.MoveMessage(context.Background(), sourceQueue, msg.ID, name)
-						a.tv.QueueUpdateDraw(func() {
-							if err != nil {
-								slog.Error("move: failed", "src", sourceQueue, "dst", name, "id", msg.ID, "error", err)
-								a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
-								return
-							}
-							a.pages.SwitchToPage("messages")
-							a.tv.SetFocus(a.messagesV.table)
-							lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-							for _, sc := range a.messagesV.Shortcuts() {
-								lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-							}
-							a.contextPanel.SetText(strings.Join(lines, "\n"))
-							a.messagesV.load()
-						})
-					}()
-				})
 			}
+			a.movePickerQueues = sortPickerQueues(sourceQueue, names)
+			// Determine the preferred (DLQ-corresponding) queue for star display.
+			a.movePickerPreferred = ""
+			if strings.HasPrefix(strings.ToLower(sourceQueue), "dlq.") {
+				candidate := strings.ToLower(sourceQueue[4:])
+				for _, name := range names {
+					if strings.ToLower(name) == candidate {
+						a.movePickerPreferred = name
+						break
+					}
+				}
+			}
+			a.fillPickerList(sourceQueue, msg, "")
 		})
 	}()
+}
+
+// fillPickerList repopulates movePickerList from movePickerQueues, keeping only
+// entries whose name contains filter (case-insensitive; empty = show all).
+func (a *App) fillPickerList(sourceQueue string, msg queue.Message, filter string) {
+	a.movePickerList.Clear()
+	lower := strings.ToLower(filter)
+	for _, name := range a.movePickerQueues {
+		if lower != "" && !strings.Contains(strings.ToLower(name), lower) {
+			continue
+		}
+		n := name
+		var displayName string
+		switch {
+		case n == a.movePickerPreferred:
+			displayName = "⭐ " + n
+		case isDLQQueue(n):
+			displayName = "➖ " + n
+		case isSystemQueue(n):
+			displayName = "❓ " + n
+		default:
+			displayName = n
+		}
+		a.movePickerList.AddItem(displayName, "", 0, func() {
+			a.closeMovePicker()
+			go func() {
+				err := a.backend.MoveMessage(context.Background(), sourceQueue, msg.ID, n)
+				a.tv.QueueUpdateDraw(func() {
+					if err != nil {
+						slog.Error("move: failed", "src", sourceQueue, "dst", n, "id", msg.ID, "error", err)
+						a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+						return
+					}
+					a.pages.SwitchToPage("messages")
+					a.tv.SetFocus(a.messagesV.table)
+					lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+					for _, sc := range a.messagesV.Shortcuts() {
+						lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+					}
+					a.contextPanel.SetText(strings.Join(lines, "\n"))
+					a.messagesV.load()
+				})
+			}()
+		})
+	}
 }
 
 // closeMovePicker hides the queue-picker overlay and restores focus and the

@@ -123,12 +123,21 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.messageDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	}
 
-	// Move-picker list
+	// Move-picker
+	if a.movePickerFlex != nil {
+		a.movePickerFlex.SetBackgroundColor(bg)
+		a.movePickerFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.movePickerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
 	if a.movePickerList != nil {
 		styleList(a.movePickerList, p)
 		a.movePickerList.SetBackgroundColor(bg)
-		a.movePickerList.SetBorderColor(tcell.GetColor(p.Border))
-		a.movePickerList.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.movePickerSearch != nil {
+		a.movePickerSearch.SetBackgroundColor(bg)
+		a.movePickerSearch.SetLabelColor(tcell.GetColor(p.Label))
+		a.movePickerSearch.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.movePickerSearch.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 	}
 
 	// Confirm dialog
