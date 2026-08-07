@@ -17,15 +17,27 @@ import (
 // messagesView shows the messages currently in a specific queue. It is not a
 // registered ui.View (no switchTo / home dashboard entry); it is opened
 // exclusively via App.openMessages and returns to "queues" on Esc/Backspace.
+//
+// Messages can be multi-selected ("marked", tracked in marked by message ID)
+// independently of the table's cursor: space toggles the mark on the row
+// under the cursor, 'a' marks all, 'n' clears all marks, and 'd'/'m' act on
+// the marked set (delete / move). Marks are cleared on every reload (load),
+// since a refreshed list may reorder or drop messages.
 type messagesView struct {
 	table     *tview.Table
 	app       *App
 	queueName string
 	msgs      []queue.Message // sorted snapshot, index 0 = row 1
+	marked    map[string]bool // message IDs currently marked
 }
 
 func (mv *messagesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
+		{Key: "space", Description: "mark"},
+		{Key: "a", Description: "mark all"},
+		{Key: "n", Description: "clear marks"},
+		{Key: "d", Description: "delete marked"},
+		{Key: "m", Description: "move marked"},
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
 		{Key: "c", Description: "create message"},
@@ -46,6 +58,21 @@ func newMessagesView(a *App) *messagesView {
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
+		case event.Rune() == ' ':
+			mv.toggleMark()
+			return nil
+		case event.Rune() == 'a':
+			mv.markAll()
+			return nil
+		case event.Rune() == 'n':
+			mv.clearMarks()
+			return nil
+		case event.Rune() == 'd':
+			mv.deleteMarked()
+			return nil
+		case event.Rune() == 'm':
+			mv.moveMarked()
+			return nil
 		case event.Rune() == 'r':
 			mv.load()
 			return nil
@@ -95,7 +122,7 @@ func (mv *messagesView) setHeader() {
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 
-	for i, label := range []string{"ID", "TYPE", "CORR.ID", "TIMESTAMP", "PREVIEW"} {
+	for i, label := range []string{"", "ID", "TYPE", "CORR.ID", "TIMESTAMP", "PREVIEW"} {
 		mv.table.SetCell(0, i,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
@@ -130,6 +157,7 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 		return msgs[i].Timestamp.After(msgs[j].Timestamp)
 	})
 	mv.msgs = msgs
+	mv.marked = map[string]bool{} // a reload may reorder/drop messages; marks don't survive it
 
 	for mv.table.GetRowCount() > 1 {
 		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
@@ -142,12 +170,178 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 
 	for i, m := range msgs {
 		row := i + 1
-		mv.table.SetCell(row, 0, tview.NewTableCell(m.ID).SetTextColor(idColor).SetExpansion(2))
-		mv.table.SetCell(row, 1, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).SetExpansion(1))
-		mv.table.SetCell(row, 2, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).SetExpansion(2))
-		mv.table.SetCell(row, 3, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		mv.table.SetCell(row, 4, tview.NewTableCell(m.Preview).SetTextColor(textColor).SetExpansion(3))
+		mv.table.SetCell(row, 0, mv.markerCell(false))
+		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).SetExpansion(2))
+		mv.table.SetCell(row, 2, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).SetExpansion(1))
+		mv.table.SetCell(row, 3, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).SetExpansion(2))
+		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
+		mv.table.SetCell(row, 5, tview.NewTableCell(m.Preview).SetTextColor(textColor).SetExpansion(3))
 	}
+}
+
+// markerCell builds the checkbox cell shown in the marker column. Plain "[x]"
+// text doesn't work here: tview.Table always interprets "[...]" in cell text
+// as a color/region tag, so it gets silently swallowed instead of displayed.
+func (mv *messagesView) markerCell(marked bool) *tview.TableCell {
+	p := mv.app.cfg.Colors
+	text, color := " ", tcell.GetColor(p.Text)
+	if marked {
+		text, color = "✓", tcell.GetColor(p.Accent)
+	}
+	return tview.NewTableCell(text).SetTextColor(color).SetAlign(tview.AlignCenter)
+}
+
+// refreshMarkerColumn redraws column 0 to reflect the current marked set,
+// without re-fetching or resorting messages.
+func (mv *messagesView) refreshMarkerColumn() {
+	for i, m := range mv.msgs {
+		mv.table.SetCell(i+1, 0, mv.markerCell(mv.marked[m.ID]))
+	}
+}
+
+// markedIDs returns the IDs of currently marked messages, in the table's
+// current display order.
+func (mv *messagesView) markedIDs() []string {
+	ids := make([]string, 0, len(mv.marked))
+	for _, m := range mv.msgs {
+		if mv.marked[m.ID] {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids
+}
+
+// toggleMark flips the mark on the row under the cursor and advances the
+// cursor, so repeated space presses mark a run of messages quickly. Messages
+// without an ID (limited-info mode) can't be marked, matching the existing
+// restriction on individual move/delete.
+func (mv *messagesView) toggleMark() {
+	row, _ := mv.table.GetSelection()
+	idx := row - 1
+	if idx < 0 || idx >= len(mv.msgs) {
+		return
+	}
+	m := mv.msgs[idx]
+	if m.ID == "" {
+		mv.app.statusBar.SetText("[yellow]Cannot mark: message ID unavailable[-]")
+		return
+	}
+	if mv.marked == nil {
+		mv.marked = map[string]bool{}
+	}
+	if mv.marked[m.ID] {
+		delete(mv.marked, m.ID)
+	} else {
+		mv.marked[m.ID] = true
+	}
+	mv.refreshMarkerColumn()
+	if row < mv.table.GetRowCount()-1 {
+		mv.table.Select(row+1, 0)
+	}
+}
+
+// markAll marks every message that has an ID.
+func (mv *messagesView) markAll() {
+	if mv.marked == nil {
+		mv.marked = map[string]bool{}
+	}
+	skipped := 0
+	for _, m := range mv.msgs {
+		if m.ID == "" {
+			skipped++
+			continue
+		}
+		mv.marked[m.ID] = true
+	}
+	mv.refreshMarkerColumn()
+	if skipped > 0 {
+		mv.app.statusBar.SetText(fmt.Sprintf("Marked %d message(s); %d skipped (no ID)", len(mv.marked), skipped))
+	} else {
+		mv.app.statusBar.SetText(fmt.Sprintf("Marked %d message(s)", len(mv.marked)))
+	}
+}
+
+// clearMarks deselects every marked message.
+func (mv *messagesView) clearMarks() {
+	if len(mv.marked) == 0 {
+		return
+	}
+	mv.marked = map[string]bool{}
+	mv.refreshMarkerColumn()
+	mv.app.statusBar.SetText("Cleared marks")
+}
+
+// deleteMarked confirms and deletes every marked message. Each deletion is
+// independent, so one failure doesn't stop the rest; the status bar reports
+// how many of the batch actually succeeded.
+func (mv *messagesView) deleteMarked() {
+	ids := mv.markedIDs()
+	if len(ids) == 0 {
+		mv.app.statusBar.SetText("[yellow]No messages marked (press space to mark)[-]")
+		return
+	}
+	a := mv.app
+	queueName := mv.queueName
+	a.showConfirm(fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName), func() {
+		go func() {
+			failed := 0
+			for _, id := range ids {
+				if err := a.backend.RemoveMessage(context.Background(), queueName, id); err != nil {
+					slog.Error("messages: bulk delete failed", "queue", queueName, "id", id, "error", err)
+					failed++
+				}
+			}
+			a.tv.QueueUpdateDraw(func() {
+				if failed > 0 {
+					a.statusBar.SetText(fmt.Sprintf("[red]Deleted %d/%d marked message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
+				} else {
+					a.statusBar.SetText(fmt.Sprintf("Deleted %d message(s)", len(ids)))
+				}
+				mv.load()
+			})
+		}()
+	})
+}
+
+// moveMarked opens the move picker once and, on target selection, moves
+// every marked message there. As with deleteMarked, one failure doesn't stop
+// the rest.
+func (mv *messagesView) moveMarked() {
+	ids := mv.markedIDs()
+	if len(ids) == 0 {
+		mv.app.statusBar.SetText("[yellow]No messages marked (press space to mark)[-]")
+		return
+	}
+	a := mv.app
+	srcQueue := mv.queueName
+	restore := func() {
+		a.tv.SetFocus(mv.table)
+		lines := make([]string, 0, len(mv.Shortcuts()))
+		for _, sc := range mv.Shortcuts() {
+			lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+		}
+		a.contextPanel.SetText(strings.Join(lines, "\n"))
+	}
+	a.showMovePicker(srcQueue, func(target string) {
+		go func() {
+			failed := 0
+			for _, id := range ids {
+				if err := a.backend.MoveMessage(context.Background(), srcQueue, id, target); err != nil {
+					slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
+					failed++
+				}
+			}
+			a.tv.QueueUpdateDraw(func() {
+				if failed > 0 {
+					a.statusBar.SetText(fmt.Sprintf("[red]Moved %d/%d marked message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
+				} else {
+					a.statusBar.SetText(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
+				}
+				restore()
+				mv.load()
+			})
+		}()
+	}, restore)
 }
 
 func (mv *messagesView) showError(err error) {
