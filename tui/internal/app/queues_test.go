@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -164,6 +165,38 @@ func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 	}
 }
 
+// TestQueuesViewRepaintScrollsToTopWithManyRows guards against a regression
+// where tview.Table's "track end" auto-scroll (meant for tailing logs)
+// latches on during the first draw of the still-empty table — before the
+// async load completes — and stays latched through the repaint that follows,
+// leaving a long list scrolled to the bottom instead of the top.
+func TestQueuesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
+	qv := newTestQueuesView(t)
+	qv.table.SetRect(0, 0, 60, 15) // fewer visible rows than summaries below
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(60, 15)
+
+	// First draw while the table is still empty (header only), mirroring the
+	// real sequence: switchTo("queues") draws before the async load returns.
+	qv.table.Draw(screen)
+
+	summaries := make([]queue.Summary, 50)
+	for i := range summaries {
+		summaries[i] = queue.Summary{Name: fmt.Sprintf("queue-%02d", i)}
+	}
+	qv.repaint(summaries)
+
+	// The redraw that follows repaint via QueueUpdateDraw.
+	qv.table.Draw(screen)
+
+	if row, _ := qv.table.GetOffset(); row != 0 {
+		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
+	}
+}
 
 func TestQueuesViewSortShortcutsPresent(t *testing.T) {
 	qv := newTestQueuesView(t)

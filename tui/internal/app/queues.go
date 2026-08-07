@@ -313,6 +313,12 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 
 	if qv.table.GetRowCount() > 1 {
 		qv.table.Select(1, 0)
+		// Select alone isn't enough: tview.Table's "track end" auto-scroll
+		// (meant for tailing logs) latches on during the first draw of the
+		// still-empty table (before this load completes) and stays latched
+		// through this repaint, scrolling a long list to the bottom instead
+		// of the top. SetOffset resets that internal flag.
+		qv.table.SetOffset(0, 0)
 	}
 }
 
