@@ -6,7 +6,7 @@ that do not expose Jolokia (e.g. AWS Amazon MQ).
 
 ## Prerequisites
 
-- Java 17+
+- Java 21+
 - An ActiveMQ broker (local or AWS AMQ) accessible via OpenWire (default port
   `61616`)
 
