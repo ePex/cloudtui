@@ -307,7 +307,9 @@ func New(cfg config.Config) *App {
 	if dd, ok := a.connEditorForm.GetFormItem(2).(*tview.DropDown); ok {
 		styleDropDown(dd, cfg.Colors)
 	}
-	connEditorOverlay := centered(a.connEditorForm, 64, 18)
+	// Height must cover border+padding (4 rows) + 7 items * (field + item
+	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
+	connEditorOverlay := centered(a.connEditorForm, 64, 20)
 
 	// Theme picker overlay
 	a.themePickerList = tview.NewList().ShowSecondaryText(false)
