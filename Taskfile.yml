@@ -23,6 +23,12 @@ tasks:
     cmds:
       - go run ./cmd/tui
 
+  seed:queue:
+    desc: 'Send sample JSON messages to a queue via Jolokia. Usage: task seed:queue -- <queue> <count>'
+    dir: tui
+    cmds:
+      - go run ./cmd/seedqueue {{.CLI_ARGS}}
+
   test:
     desc: Run all tests.
     deps: [test:tui, test:proxy]

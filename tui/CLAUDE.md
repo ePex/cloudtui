@@ -17,11 +17,14 @@ this module.
 ## Package layout
 
 - `cmd/tui/` — entrypoint only (`main.go`); no logic beyond wiring.
+- `cmd/seedqueue/` — entrypoint only; dev tool that sends sample JSON
+  messages to a queue (`task seed:queue -- <queue> <count>`).
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
 - `internal/ui/` — the `View` interface shared across resource views.
 - `internal/ui/views/` — individual resource view implementations.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
 - `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
+- `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
 
 ## Testing
 
