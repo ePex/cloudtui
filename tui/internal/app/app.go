@@ -331,15 +331,18 @@ func New(cfg config.Config) *App {
 	themePickerOverlay := centered(a.themePickerFlex, 40, 14)
 
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
+	// "confirm" is added last so it always draws on top of any other overlay
+	// (e.g. conn-manager) that may still be visible underneath it — tview.Pages
+	// draws pages in AddPage order, later pages on top.
 	a.rootPages = tview.NewPages().
 		AddPage("main", layout, true, true).
 		AddPage("help", helpOverlay, true, false).
-		AddPage("confirm", confirmOverlay, true, false).
 		AddPage("move-picker", movePickerOverlay, true, false).
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
-		AddPage("theme-picker", themePickerOverlay, true, false)
+		AddPage("theme-picker", themePickerOverlay, true, false).
+		AddPage("confirm", confirmOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
 
