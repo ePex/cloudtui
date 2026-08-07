@@ -42,7 +42,7 @@ func newLogView(a *App) *logView {
 func newLogViewWithPath(a *App, path string) *logView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log ")
-	tv.SetScrollable(true).SetDynamicColors(false).SetWrap(false)
+	tv.SetScrollable(true).SetDynamicColors(false).SetWrap(true).SetWordWrap(true)
 
 	lv := &logView{textView: tv, app: a, path: path}
 
