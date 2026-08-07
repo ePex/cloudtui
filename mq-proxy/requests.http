@@ -1,0 +1,51 @@
+### mq-proxy REST request examples
+### Compatible with JetBrains HTTP Client and VS Code REST Client
+
+@baseUrl = http://localhost:8080
+@username = cloudtui
+@password = changeme
+@queue = orders
+@messageId = ID:replace-with-actual-id
+
+# ─── Queues ───────────────────────────────────────────────────────────────────
+
+### List all queues with stats
+GET {{baseUrl}}/api/queues
+Authorization: Basic {{username}} {{password}}
+
+### ─── Messages ────────────────────────────────────────────────────────────────
+
+### Browse all messages in a queue
+GET {{baseUrl}}/api/queues/{{queue}}/messages
+Authorization: Basic {{username}} {{password}}
+
+### Get message detail by ID
+GET {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}
+Authorization: Basic {{username}} {{password}}
+
+### Send a new message (body is any JSON value — object, array, or string)
+POST {{baseUrl}}/api/queues/{{queue}}/messages
+Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
+
+{
+  "orderId": "12345",
+  "status": "NEW",
+  "amount": 99.95
+}
+
+### Delete a message by ID
+DELETE {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}
+Authorization: Basic {{username}} {{password}}
+
+### Move a single message to another queue
+POST {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}/move?to=dlq
+Authorization: Basic {{username}} {{password}}
+
+### Move all messages from one queue to another
+POST {{baseUrl}}/api/queues/{{queue}}/move?to=archive
+Authorization: Basic {{username}} {{password}}
+
+### Purge all messages from a queue
+DELETE {{baseUrl}}/api/queues/{{queue}}/messages
+Authorization: Basic {{username}} {{password}}

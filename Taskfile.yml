@@ -25,10 +25,29 @@ tasks:
 
   test:
     desc: Run all tests.
-    deps: [test:tui]
+    deps: [test:tui, test:proxy]
 
   test:tui:
     desc: Run tui unit tests.
     dir: tui
     cmds:
       - go test ./...
+
+  build:proxy:
+    desc: Build the mq-proxy JAR and container image.
+    dir: mq-proxy
+    cmds:
+      - ./gradlew bootJar
+      - podman build -t mq-proxy .
+
+  run:proxy:
+    desc: Run the mq-proxy application from source.
+    dir: mq-proxy
+    cmds:
+      - ./gradlew bootRun
+
+  test:proxy:
+    desc: Run mq-proxy unit tests.
+    dir: mq-proxy
+    cmds:
+      - ./gradlew test

@@ -1,0 +1,18 @@
+broker:
+  url: ${BROKER_URL:tcp://localhost:61616}
+  username: ${BROKER_USERNAME:admin}
+  password: ${BROKER_PASSWORD:admin}
+
+spring:
+  activemq:
+    broker-url: ${broker.url}
+    user: ${broker.username}
+    password: ${broker.password}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+proxy:
+  auth:
+    username: ${PROXY_AUTH_USERNAME:cloudtui}
+    password: ${PROXY_AUTH_PASSWORD:changeme}

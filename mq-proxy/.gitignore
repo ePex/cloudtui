@@ -1,0 +1,11 @@
+# Gradle cache and daemon state
+.gradle/
+
+# Re-include the wrapper JAR excluded by the root *.jar rule
+!gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin incremental compilation cache
+.kotlin/
+
+# Spring Boot DevTools restart trigger
+.reloadtrigger
