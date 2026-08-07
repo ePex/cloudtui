@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/rivo/tview"
@@ -9,34 +10,52 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-func TestSettingsFormHasBorderAndTitle(t *testing.T) {
+func TestSettingsListHasBorderAndTitle(t *testing.T) {
 	a := New(config.Default())
 
-	prim, ok := a.pages.GetPage("settings").(*tview.Form)
+	prim, ok := a.pages.GetPage("settings").(*tview.List)
 	if !ok {
-		t.Fatalf("settings page = %T, want *tview.Form", a.pages.GetPage("settings"))
+		t.Fatalf("settings page = %T, want *tview.List", a.pages.GetPage("settings"))
 	}
 	if got, want := prim.GetTitle(), " Settings "; got != want {
 		t.Errorf("GetTitle() = %q, want %q", got, want)
 	}
 }
 
-func TestSettingsFormHasThemeDropDown(t *testing.T) {
+func TestSettingsListHasTwoItems(t *testing.T) {
 	a := New(config.Default())
 
-	if a.settingsForm == nil {
-		t.Fatal("a.settingsForm is nil")
+	if a.settingsList == nil {
+		t.Fatal("a.settingsList is nil")
 	}
-	if got := a.settingsForm.GetFormItemCount(); got < 1 {
-		t.Errorf("form item count = %d, want >= 1", got)
+	if got := a.settingsList.GetItemCount(); got != 2 {
+		t.Errorf("settings list item count = %d, want 2", got)
 	}
+}
 
-	dd, ok := a.settingsForm.GetFormItem(0).(*tview.DropDown)
-	if !ok {
-		t.Fatalf("form item 0 = %T, want *tview.DropDown", a.settingsForm.GetFormItem(0))
+func TestSettingsListItemsShowCurrentThemeAndConnection(t *testing.T) {
+	a := New(config.Default())
+
+	main0, _ := a.settingsList.GetItemText(0)
+	if !strings.Contains(main0, "Theme") || !strings.Contains(main0, "dark") {
+		t.Errorf("item 0 = %q, want it to contain 'Theme' and 'dark'", main0)
 	}
-	if got, want := dd.GetLabel(), "Theme"; got != want {
-		t.Errorf("dropdown label = %q, want %q", got, want)
+	main1, _ := a.settingsList.GetItemText(1)
+	if !strings.Contains(main1, "Connection") || !strings.Contains(main1, "def") {
+		t.Errorf("item 1 = %q, want it to contain 'Connection' and 'def'", main1)
+	}
+}
+
+func TestRefreshSettingsListUpdatesTheme(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+
+	a.switchTheme("cyberpunk")
+
+	main0, _ := a.settingsList.GetItemText(0)
+	if !strings.Contains(main0, "cyberpunk") {
+		t.Errorf("item 0 after switchTheme = %q, want it to contain 'cyberpunk'", main0)
 	}
 }
 

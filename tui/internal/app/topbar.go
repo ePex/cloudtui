@@ -68,10 +68,12 @@ func newDivider(cfg config.Config, height int) *tview.TextView {
 }
 
 // infoPanelText renders the connection-info panel's content from cfg.
-// The panel is a placeholder for now; an AWS profile feature will add a second
-// line. The active theme name is the sole connection-context item for now.
 func infoPanelText(cfg config.Config) string {
-	return fmt.Sprintf("[%s]Theme:[-] [%s]%s[-]", cfg.Colors.Label, cfg.Colors.Value, cfg.Theme)
+	return fmt.Sprintf(
+		"[%s]Theme:[-] [%s]%s[-]\n[%s]Connection:[-] [%s]%s[-]",
+		cfg.Colors.Label, cfg.Colors.Value, cfg.Theme,
+		cfg.Colors.Label, cfg.Colors.Value, cfg.ActiveConn().Alias,
+	)
 }
 
 func newInfoPanel(cfg config.Config) *tview.TextView {

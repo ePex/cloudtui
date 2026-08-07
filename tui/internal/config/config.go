@@ -17,12 +17,36 @@ import (
 //go:embed themes/*.yaml
 var themesFS embed.FS
 
-// Config holds everything about the shell's appearance a user can override.
+// Connection holds all settings for a single named broker connection.
+type Connection struct {
+	Name    string      `yaml:"name"`
+	Alias   string      `yaml:"alias"`   // short label shown in the top-left info panel
+	Backend string      `yaml:"backend"` // "jolokia" | "proxy"
+	Queue   QueueConfig `yaml:"queue"`
+	Proxy   ProxyConfig `yaml:"proxy"`
+}
+
+// Config holds everything about the shell's appearance and connections a user can override.
 type Config struct {
-	Theme  string      `yaml:"theme"`  // name of an embedded theme file (e.g. "dark", "cyberpunk")
-	Queue  QueueConfig `yaml:"queue"`
-	Logo   []string    `yaml:"logo"`
-	Colors Palette     `yaml:"colors"`
+	ActiveConnection string       `yaml:"activeConnection"`
+	Connections      []Connection `yaml:"connections"`
+	Theme            string       `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
+	Logo             []string     `yaml:"logo"`
+	Colors           Palette      `yaml:"colors"`
+}
+
+// ActiveConn returns the active Connection by name, falling back to the first
+// connection if the name is not found, or a zero Connection if the list is empty.
+func (c Config) ActiveConn() Connection {
+	for _, conn := range c.Connections {
+		if conn.Name == c.ActiveConnection {
+			return conn
+		}
+	}
+	if len(c.Connections) > 0 {
+		return c.Connections[0]
+	}
+	return Connection{}
 }
 
 // QueueConfig holds the connection settings for the ActiveMQ Jolokia backend.
@@ -33,6 +57,13 @@ type QueueConfig struct {
 	URL        string `yaml:"url"`        // Jolokia HTTP endpoint
 	Username   string `yaml:"username"`
 	Password   string `yaml:"password"`
+}
+
+// ProxyConfig holds the connection settings for the mq-proxy backend.
+type ProxyConfig struct {
+	URL      string `yaml:"url"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values are
@@ -63,7 +94,6 @@ func (p Palette) ViewColor(name string) string {
 	}
 	return p.Border
 }
-
 
 // ApplyPaletteOverrides returns a copy of base with any non-empty field in
 // overrides applied on top. For Views, individual keys are merged rather than
@@ -197,13 +227,21 @@ func AvailableThemes() []string {
 func Default() Config {
 	p, _ := PaletteForTheme("dark")
 	return Config{
-		Theme: "dark",
-		Queue: QueueConfig{
-			BrokerName: "localhost",
-			URL:        "http://localhost:8161/api/jolokia",
-			Username:   "admin",
-			Password:   "",
+		ActiveConnection: "default",
+		Connections: []Connection{
+			{
+				Name:    "default",
+				Alias:   "def",
+				Backend: "jolokia",
+				Queue: QueueConfig{
+					BrokerName: "localhost",
+					URL:        "http://localhost:8161/api/jolokia",
+					Username:   "admin",
+					Password:   "",
+				},
+			},
 		},
+		Theme: "dark",
 		Logo: []string{
 			"╔═══════════╗",
 			"║ CLOUDTUI  ║",
@@ -249,10 +287,48 @@ func Load(path string) (Config, error) {
 			base, _ = PaletteForTheme("dark")
 		}
 		cfg.Colors = ApplyPaletteOverrides(base, raw.Colors)
+
+		// Migration: if file has no connections key, synthesise from legacy
+		// top-level backend/queue/proxy fields (pre-FE22 format).
+		if len(raw.Connections) == 0 {
+			var legacy struct {
+				Backend string      `yaml:"backend"`
+				Queue   QueueConfig `yaml:"queue"`
+				Proxy   ProxyConfig `yaml:"proxy"`
+			}
+			_ = yaml.Unmarshal(data, &legacy)
+			// Only migrate if the file actually had legacy content.
+			if legacy.Queue.URL != "" || legacy.Backend != "" || legacy.Proxy.URL != "" {
+				if legacy.Backend == "" {
+					legacy.Backend = "jolokia"
+				}
+				cfg.Connections = []Connection{{
+					Name:    "default",
+					Alias:   "def",
+					Backend: legacy.Backend,
+					Queue:   legacy.Queue,
+					Proxy:   legacy.Proxy,
+				}}
+				cfg.ActiveConnection = "default"
+			}
+		}
 	}
 
-	if p := os.Getenv("MQPROXY_CLIENT_PASSWORD"); p != "" && cfg.Queue.Password == "" {
-		cfg.Queue.Password = p
+	// Env-var password injection: applies to all connections so switching
+	// connections in the manager also picks up the env var.
+	if p := os.Getenv("MQPROXY_CLIENT_PASSWORD"); p != "" {
+		for i := range cfg.Connections {
+			switch cfg.Connections[i].Backend {
+			case "proxy":
+				if cfg.Connections[i].Proxy.Password == "" {
+					cfg.Connections[i].Proxy.Password = p
+				}
+			default:
+				if cfg.Connections[i].Queue.Password == "" {
+					cfg.Connections[i].Queue.Password = p
+				}
+			}
+		}
 	}
 
 	return cfg, nil

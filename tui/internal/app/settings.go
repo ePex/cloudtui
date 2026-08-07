@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
@@ -8,16 +10,17 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// settingsView is the Settings screen: an editable tview.Form where each
-// config field is a row. Lives in internal/app (not internal/ui/views) because
-// it needs live config read/write and runtime overlay control.
+// settingsView is the Settings screen: a tview.List where each row is a
+// configurable setting. Pressing Enter on a row opens the relevant picker
+// overlay. Lives in internal/app (not internal/ui/views) because it needs
+// live config read/write and runtime overlay control.
 type settingsView struct {
-	form *tview.Form
+	list *tview.List
 }
 
 func (s *settingsView) Name() string               { return "settings" }
 func (s *settingsView) Title() string              { return "Settings" }
-func (s *settingsView) Primitive() tview.Primitive { return s.form }
+func (s *settingsView) Primitive() tview.Primitive { return s.list }
 
 // styleDropDown applies palette colors to the dropdown's popup list so
 // unselected items are readable against the theme background.
@@ -32,35 +35,81 @@ func styleDropDown(dd *tview.DropDown, p config.Palette) {
 	)
 }
 
-// newSettingsView builds the Settings view. The Theme dropdown immediately
-// applies and persists the selected palette at runtime via a.switchTheme.
+// newSettingsView builds the Settings view as a tview.List. Each item opens
+// a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
+// connection manager.
 func newSettingsView(a *App) ui.View {
-	form := tview.NewForm()
-	form.SetBorder(true).SetTitle(" Settings ")
+	l := tview.NewList().ShowSecondaryText(false)
+	l.SetBorder(true).SetTitle(" Settings ")
 
+	// Items are populated by refreshSettingsList; add placeholders here so
+	// indices are stable.
+	l.AddItem("", "", 0, func() { a.showThemePicker() })
+	l.AddItem("", "", 0, func() { a.showConnectionManager() })
+
+	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	styleList(l, a.cfg.Colors)
+	a.settingsList = l
+	a.refreshSettingsList()
+	return &settingsView{list: l}
+}
+
+// refreshSettingsList rebuilds the displayed text of all settings-list items
+// to reflect the current config values (theme name, active connection alias).
+func (a *App) refreshSettingsList() {
+	if a.settingsList == nil {
+		return
+	}
+	cur := a.settingsList.GetCurrentItem()
+	conn := a.cfg.ActiveConn()
+	a.settingsList.Clear()
+	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
+	a.settingsList.AddItem(fmt.Sprintf("Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
+	if cur >= 0 && cur < a.settingsList.GetItemCount() {
+		a.settingsList.SetCurrentItem(cur)
+	}
+}
+
+// showThemePicker opens the theme-picker overlay, pre-selecting the current theme.
+func (a *App) showThemePicker() {
 	themes := config.AvailableThemes()
-	currentIdx := 0
-	for i, t := range themes {
-		if t == a.cfg.Theme {
-			currentIdx = i
+	a.themePickerList.Clear()
+	for i, name := range themes {
+		n := name
+		prefix := "   "
+		if n == a.cfg.Theme {
+			prefix = "⭐ "
+			a.themePickerList.SetCurrentItem(i)
+		}
+		a.themePickerList.AddItem(prefix+n, "", 0, func() {
+			a.closeThemePicker()
+			a.switchTheme(n)
+		})
+	}
+	// SetCurrentItem must be called after all items are added.
+	for i, name := range themes {
+		if name == a.cfg.Theme {
+			a.themePickerList.SetCurrentItem(i)
 			break
 		}
 	}
+	a.rootPages.ShowPage("theme-picker")
+	a.tv.SetFocus(a.themePickerList)
+	a.themePickerVisible = true
+}
 
-	form.AddDropDown("Theme", themes, currentIdx, func(option string, _ int) {
-		if a.switchingTheme {
-			return
-		}
-		a.switchTheme(option)
-	})
-
-	// Style the popup list so unselected items are readable against the theme
-	// background. Without this, tview uses terminal defaults which may be
-	// invisible against the palette background color.
-	if dd, ok := form.GetFormItem(0).(*tview.DropDown); ok {
-		styleDropDown(dd, a.cfg.Colors)
-	}
-
-	a.settingsForm = form
-	return &settingsView{form: form}
+// closeThemePicker hides the theme-picker overlay and restores focus.
+func (a *App) closeThemePicker() {
+	a.rootPages.HidePage("theme-picker")
+	a.themePickerVisible = false
+	a.tv.SetFocus(a.pages)
 }

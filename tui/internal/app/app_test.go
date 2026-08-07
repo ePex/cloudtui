@@ -12,7 +12,6 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
@@ -283,15 +282,12 @@ func TestOnGlobalKeyHelpEscapeCloses(t *testing.T) {
 	}
 }
 
-
-
-
 func TestViewBorderColorMatchesConfiguredPerViewColor(t *testing.T) {
 	a := New(config.Default())
 
-	prim, ok := a.pages.GetPage("settings").(*tview.Form)
+	prim, ok := a.pages.GetPage("settings").(*tview.List)
 	if !ok {
-		t.Fatalf("settings page is %T, want *tview.Form", a.pages.GetPage("settings"))
+		t.Fatalf("settings page is %T, want *tview.List", a.pages.GetPage("settings"))
 	}
 
 	want := tcell.GetColor(a.cfg.Colors.ViewColor("settings"))

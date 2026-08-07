@@ -18,6 +18,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
+	"github.com/ePex/cloudtui/tui/internal/queue/proxy"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
@@ -25,28 +26,28 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv             *tview.Application
-	rootPages      *tview.Pages
-	pages          *tview.Pages
-	topLeft        *tview.Pages
-	prompt         *tview.InputField
-	helpVisible    bool
-	views          []ui.View
-	cfg            config.Config
-	infoPanel      *tview.TextView
-	divider        *tview.TextView
-	contextPanel   *tview.TextView
-	logoPanel      *tview.TextView
-	statusBar      *tview.TextView
-	settingsForm   *tview.Form
-	logV           *logView
-	queuesV        *queuesView
-	messagesV      *messagesView
-	messageDetailV *messageDetailView
-	confirmFlex      *tview.Flex
-	confirmText      *tview.TextView
-	confirmList      *tview.List
-	confirmVisible   bool
+	tv                  *tview.Application
+	rootPages           *tview.Pages
+	pages               *tview.Pages
+	topLeft             *tview.Pages
+	prompt              *tview.InputField
+	helpVisible         bool
+	views               []ui.View
+	cfg                 config.Config
+	infoPanel           *tview.TextView
+	divider             *tview.TextView
+	contextPanel        *tview.TextView
+	logoPanel           *tview.TextView
+	statusBar           *tview.TextView
+	settingsList        *tview.List
+	logV                *logView
+	queuesV             *queuesView
+	messagesV           *messagesView
+	messageDetailV      *messageDetailView
+	confirmFlex         *tview.Flex
+	confirmText         *tview.TextView
+	confirmList         *tview.List
+	confirmVisible      bool
 	movePickerFlex      *tview.Flex
 	movePickerList      *tview.List
 	movePickerSearch    *tview.InputField
@@ -60,11 +61,21 @@ type App struct {
 	sendMessageList     *tview.List
 	sendMessageOnClose  func()
 	sendMessageVisible  bool
-	backend        queue.Backend
-	homeTable     *tview.Table
-	homeSections  []views.SectionInfo
-	topBarHeight  int
-	switchingTheme bool
+	connManagerFlex     *tview.Flex
+	connManagerList     *tview.List
+	connManagerHints    *tview.TextView
+	connManagerVisible  bool
+	connEditorForm      *tview.Form
+	connEditorVisible   bool
+	connEditorIsNew     bool
+	connEditorOrigName  string
+	themePickerFlex     *tview.Flex
+	themePickerList     *tview.List
+	themePickerVisible  bool
+	backend             queue.Backend
+	homeTable           *tview.Table
+	homeSections        []views.SectionInfo
+	topBarHeight        int
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -77,7 +88,7 @@ func New(cfg config.Config) *App {
 		{
 			Title: "Apps",
 			Entries: []views.ViewInfo{
-				{Name: "queues", Description: "List ActiveMQ queues via Jolokia"},
+				{Name: "queues", Description: "List ActiveMQ queues"},
 			},
 		},
 		{
@@ -90,10 +101,10 @@ func New(cfg config.Config) *App {
 	}
 
 	a := &App{
-		tv:            tview.NewApplication(),
-		pages:         tview.NewPages(),
-		cfg:           cfg,
-		homeSections:  homeSections,
+		tv:           tview.NewApplication(),
+		pages:        tview.NewPages(),
+		cfg:          cfg,
+		homeSections: homeSections,
 	}
 
 	homeView := views.NewHome(homeSections, a.switchTo, cfg.Colors.Label, cfg.Colors.Text, cfg.Colors.Border, cfg.Colors.SelectionBg, cfg.Colors.SelectionText)
@@ -103,7 +114,6 @@ func New(cfg config.Config) *App {
 		SetLabel(" :").
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
-
 
 	tb := newTopBar(cfg, a.prompt)
 	a.topLeft = tb.left
@@ -116,16 +126,11 @@ func New(cfg config.Config) *App {
 	a.statusBar = newStatusBar(cfg)
 
 	// All shell primitives are constructed; now create the settings view.
-	// Its dropdown callback calls switchTheme, which calls reapplyTheme —
-	// that is safe at this point because all live primitives are set.
-	// switchingTheme is set during construction to suppress any spurious
-	// initial callback that tview may fire when AddDropDown sets the initial
-	// selection.
-	a.switchingTheme = true
+	// Its list callbacks call showThemePicker / showConnectionManager, which
+	// are safe at this point because all live primitives are set.
 	settingsView := newSettingsView(a)
-	a.switchingTheme = false
 	a.logV = newLogView(a)
-	a.backend = jolokia.NewClient(cfg.Queue)
+	a.backend = newBackendForConn(cfg.ActiveConn())
 	a.queuesV = newQueuesView(a, a.backend)
 	a.messagesV = newMessagesView(a)
 	a.messageDetailV = newMessageDetailView(a)
@@ -230,13 +235,109 @@ func New(cfg config.Config) *App {
 
 	sendMessageOverlay := centered(a.sendMessageFlex, 70, 14)
 
+	// Connection manager overlay
+	a.connManagerList = tview.NewList().ShowSecondaryText(false)
+	a.connManagerHints = tview.NewTextView().SetDynamicColors(true)
+	a.connManagerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.connManagerList, 0, 1, true).
+		AddItem(a.connManagerHints, 2, 0, false)
+	a.connManagerFlex.SetBorder(true).SetTitle(" Connections ")
+	connManagerOverlay := centered(a.connManagerFlex, 64, 20)
+
+	a.connManagerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			a.closeConnManager()
+			return nil
+		case event.Rune() == 'n':
+			a.showConnEditor(config.Connection{}, true, "")
+			return nil
+		case event.Rune() == 'e':
+			idx := a.connManagerList.GetCurrentItem()
+			if idx >= 0 && idx < len(a.cfg.Connections) {
+				c := a.cfg.Connections[idx]
+				a.showConnEditor(c, false, c.Name)
+			}
+			return nil
+		case event.Rune() == 'd':
+			idx := a.connManagerList.GetCurrentItem()
+			if idx >= 0 && idx < len(a.cfg.Connections) {
+				dup := a.cfg.Connections[idx]
+				dup.Name = dup.Name + "-copy"
+				al := dup.Alias + "2"
+				if len([]rune(al)) > 8 {
+					al = string([]rune(al)[:8])
+				}
+				dup.Alias = al
+				a.showConnEditor(dup, true, "")
+			}
+			return nil
+		case event.Key() == tcell.KeyDelete || event.Rune() == 'x':
+			a.deleteConnFromManager()
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	a.connManagerList.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
+		if idx >= 0 && idx < len(a.cfg.Connections) {
+			name := a.cfg.Connections[idx].Name
+			a.closeConnManager()
+			a.switchConnection(name)
+		}
+	})
+
+	// Connection editor overlay
+	a.connEditorForm = tview.NewForm()
+	a.connEditorForm.SetBorder(true).SetTitle(" Connection ")
+	a.connEditorForm.
+		AddInputField("Name", "", 30, nil, nil).
+		AddInputField("Alias", "", 10, nil, nil).
+		AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil).
+		AddInputField("Broker Name", "", 30, nil, nil).
+		AddInputField("URL", "", 40, nil, nil).
+		AddInputField("Username", "", 20, nil, nil).
+		AddPasswordField("Password", "", 20, '*', nil).
+		AddButton("Save", func() { a.saveConnEditor() }).
+		AddButton("Cancel", func() { a.closeConnEditor() })
+	if dd, ok := a.connEditorForm.GetFormItem(2).(*tview.DropDown); ok {
+		styleDropDown(dd, cfg.Colors)
+	}
+	connEditorOverlay := centered(a.connEditorForm, 64, 18)
+
+	// Theme picker overlay
+	a.themePickerList = tview.NewList().ShowSecondaryText(false)
+	a.themePickerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.themePickerList, 0, 1, true)
+	a.themePickerFlex.SetBorder(true).SetTitle(" Theme ")
+	a.themePickerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			a.closeThemePicker()
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+	themePickerOverlay := centered(a.themePickerFlex, 40, 14)
+
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	a.rootPages = tview.NewPages().
 		AddPage("main", layout, true, true).
 		AddPage("help", helpOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false).
 		AddPage("move-picker", movePickerOverlay, true, false).
-		AddPage("send-message", sendMessageOverlay, true, false)
+		AddPage("send-message", sendMessageOverlay, true, false).
+		AddPage("conn-manager", connManagerOverlay, true, false).
+		AddPage("conn-editor", connEditorOverlay, true, false).
+		AddPage("theme-picker", themePickerOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
 
@@ -261,7 +362,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.themePickerVisible {
 		return event
 	}
 
@@ -335,8 +436,6 @@ func (a *App) switchTheme(name string) {
 	if !ok {
 		return
 	}
-	a.switchingTheme = true
-	defer func() { a.switchingTheme = false }()
 
 	// Preserve any color overrides the user had relative to the old theme.
 	oldBase, ok := config.PaletteForTheme(a.cfg.Theme)
@@ -348,6 +447,7 @@ func (a *App) switchTheme(name string) {
 	a.cfg.Theme = name
 	a.cfg.Colors = config.ApplyPaletteOverrides(newBase, userOverrides)
 	reapplyTheme(a, a.cfg.Colors)
+	a.refreshSettingsList()
 
 	// Save only theme name + sparse overrides (not the full derived palette).
 	saveConfig := a.cfg
@@ -356,8 +456,6 @@ func (a *App) switchTheme(name string) {
 		fmt.Fprintf(os.Stderr, "cloudtui: saving config: %v\n", err)
 	}
 }
-
-
 
 // showConfirm presents a confirmation dialog with the given question.
 // onConfirm is called when the user selects "Yes". "No" is item 0 (default
@@ -632,6 +730,40 @@ func (a *App) openHelp() {
 func (a *App) closeHelp() {
 	a.rootPages.HidePage("help")
 	a.helpVisible = false
+}
+
+// newBackendForConn constructs the appropriate queue.Backend for conn.
+func newBackendForConn(conn config.Connection) queue.Backend {
+	if conn.Backend == "proxy" {
+		return proxy.NewClient(conn.Proxy)
+	}
+	return jolokia.NewClient(conn.Queue)
+}
+
+// switchConnection activates the named connection: reinitialises the backend,
+// updates the info panel, navigates to the queues view, and persists the config.
+func (a *App) switchConnection(name string) {
+	var conn config.Connection
+	found := false
+	for _, c := range a.cfg.Connections {
+		if c.Name == name {
+			conn = c
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	a.cfg.ActiveConnection = name
+	a.backend = newBackendForConn(conn)
+	a.queuesV.backend = a.backend
+	a.infoPanel.SetText(infoPanelText(a.cfg))
+	a.refreshSettingsList()
+	a.switchTo("queues")
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("switchConnection: save failed", "error", err)
+	}
 }
 
 // switchTo activates the named view if it is registered, updates the top

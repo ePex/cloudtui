@@ -42,14 +42,36 @@ logo:
 # colors:
 #   accent: "#ff0000"
 
-# queue: connection settings for the ActiveMQ broker.
-# Password can also be supplied via the MQPROXY_CLIENT_PASSWORD env var
-# (the env var is only used when the password field is absent or empty).
-queue:
-  brokerName: localhost
-  url: http://localhost:8161/api/jolokia
-  username: admin
-  # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
+# activeConnection: the name of the connection that is active on startup.
+activeConnection: default
+
+# connections: named broker connections. Each connection has:
+#   name    — unique identifier (also the activeConnection key)
+#   alias   — short label (3–8 chars) shown in the top-left info panel
+#   backend — "jolokia" or "proxy"
+#   queue   — Jolokia backend settings (used when backend: jolokia)
+#   proxy   — mq-proxy backend settings (used when backend: proxy)
+#
+# Password fields can also be supplied via the MQPROXY_CLIENT_PASSWORD env var;
+# the env var is only applied when the password field is absent or empty.
+connections:
+  - name: default
+    alias: def
+    backend: jolokia
+    queue:
+      brokerName: localhost
+      url: http://localhost:8161/api/jolokia
+      username: admin
+      # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
+
+  # Example proxy connection (uncomment and fill in to use):
+  # - name: aws-staging
+  #   alias: stg
+  #   backend: proxy
+  #   proxy:
+  #     url: http://localhost:8080
+  #     username: cloudtui
+  #     password: changeme
 
 # ─── Switching themes ─────────────────────────────────────────────────────────
 # Change the theme: field above to any available theme name.

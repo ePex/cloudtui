@@ -240,8 +240,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Errorf("Colors = %#v, want cyberpunk palette with Accent=red", got.Colors)
 	}
 	// Non-color fields should match defaults.
-	if !reflect.DeepEqual(got.Queue, Default().Queue) {
-		t.Errorf("Queue = %#v, want default", got.Queue)
+	if !reflect.DeepEqual(got.ActiveConn(), Default().ActiveConn()) {
+		t.Errorf("ActiveConn = %#v, want default", got.ActiveConn())
 	}
 }
 
@@ -255,16 +255,126 @@ func TestLoadDefaultFallsBackWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestDefaultActiveConnection(t *testing.T) {
+	if got := Default().ActiveConnection; got != "default" {
+		t.Errorf("Default().ActiveConnection = %q, want %q", got, "default")
+	}
+}
+
+func TestDefaultConnectionCount(t *testing.T) {
+	if got := len(Default().Connections); got != 1 {
+		t.Errorf("len(Default().Connections) = %d, want 1", got)
+	}
+}
+
+func TestDefaultConnectionAlias(t *testing.T) {
+	if got := Default().ActiveConn().Alias; got != "def" {
+		t.Errorf("Default().ActiveConn().Alias = %q, want %q", got, "def")
+	}
+}
+
+func TestActiveConnFallsBackToFirst(t *testing.T) {
+	cfg := Default()
+	cfg.ActiveConnection = "nonexistent"
+	got := cfg.ActiveConn()
+	if got.Name != Default().Connections[0].Name {
+		t.Errorf("ActiveConn() fallback = %q, want first connection %q", got.Name, Default().Connections[0].Name)
+	}
+}
+
+func TestActiveConnEmptyConnections(t *testing.T) {
+	cfg := Config{}
+	got := cfg.ActiveConn()
+	if got.Name != "" {
+		t.Errorf("ActiveConn() with empty list = %+v, want zero Connection", got)
+	}
+}
+
+func TestLoadConnectionsNewFormat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "activeConnection: aws\nconnections:\n  - name: aws\n    alias: stg\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.ActiveConnection != "aws" {
+		t.Errorf("ActiveConnection = %q, want %q", got.ActiveConnection, "aws")
+	}
+	conn := got.ActiveConn()
+	if conn.Backend != "proxy" {
+		t.Errorf("Backend = %q, want %q", conn.Backend, "proxy")
+	}
+	if conn.Alias != "stg" {
+		t.Errorf("Alias = %q, want %q", conn.Alias, "stg")
+	}
+	if conn.Proxy.URL != "http://localhost:8080" {
+		t.Errorf("Proxy.URL = %q, want %q", conn.Proxy.URL, "http://localhost:8080")
+	}
+}
+
+func TestLoadMigrationFromLegacyFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "backend: proxy\nproxy:\n  url: http://localhost:8080\n  username: cloudtui\n  password: changeme\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(got.Connections) != 1 {
+		t.Fatalf("len(Connections) = %d, want 1", len(got.Connections))
+	}
+	conn := got.ActiveConn()
+	if conn.Name != "default" {
+		t.Errorf("migrated Name = %q, want %q", conn.Name, "default")
+	}
+	if conn.Backend != "proxy" {
+		t.Errorf("migrated Backend = %q, want %q", conn.Backend, "proxy")
+	}
+	if conn.Proxy.URL != "http://localhost:8080" {
+		t.Errorf("migrated Proxy.URL = %q, want %q", conn.Proxy.URL, "http://localhost:8080")
+	}
+}
+
+func TestLoadMigrationFromLegacyQueueFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "queue:\n  brokerName: mybroker\n  url: http://mybroker:8161/api/jolokia\n  username: admin\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	conn := got.ActiveConn()
+	if conn.Backend != "jolokia" {
+		t.Errorf("migrated Backend = %q, want jolokia", conn.Backend)
+	}
+	if conn.Queue.URL != "http://mybroker:8161/api/jolokia" {
+		t.Errorf("migrated Queue.URL = %q, want http://mybroker:8161/api/jolokia", conn.Queue.URL)
+	}
+	if conn.Queue.BrokerName != "mybroker" {
+		t.Errorf("migrated Queue.BrokerName = %q, want mybroker", conn.Queue.BrokerName)
+	}
+}
+
 func TestDefaultQueueConfigPopulated(t *testing.T) {
-	q := Default().Queue
+	q := Default().ActiveConn().Queue
 	if q.BrokerName == "" {
-		t.Error("Default().Queue.BrokerName is empty")
+		t.Error("Default().ActiveConn().Queue.BrokerName is empty")
 	}
 	if q.URL == "" {
-		t.Error("Default().Queue.URL is empty")
+		t.Error("Default().ActiveConn().Queue.URL is empty")
 	}
 	if q.Username == "" {
-		t.Error("Default().Queue.Username is empty")
+		t.Error("Default().ActiveConn().Queue.Username is empty")
 	}
 }
 
@@ -276,15 +386,15 @@ func TestLoadPasswordEnvInjectsWhenEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.Queue.Password != "secret" {
-		t.Errorf("Queue.Password = %q, want %q", got.Queue.Password, "secret")
+	if got.ActiveConn().Queue.Password != "secret" {
+		t.Errorf("ActiveConn().Queue.Password = %q, want %q", got.ActiveConn().Queue.Password, "secret")
 	}
 }
 
 func TestLoadPasswordEnvDoesNotOverrideExplicit(t *testing.T) {
 	t.Setenv("MQPROXY_CLIENT_PASSWORD", "should-not-win")
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	content := "queue:\n  password: explicit\n"
+	content := "queue:\n  url: http://localhost:8161/api/jolokia\n  password: explicit\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -293,8 +403,8 @@ func TestLoadPasswordEnvDoesNotOverrideExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.Queue.Password != "explicit" {
-		t.Errorf("Queue.Password = %q, want %q (explicit value should win)", got.Queue.Password, "explicit")
+	if got.ActiveConn().Queue.Password != "explicit" {
+		t.Errorf("ActiveConn().Queue.Password = %q, want %q (explicit value should win)", got.ActiveConn().Queue.Password, "explicit")
 	}
 }
 
@@ -392,12 +502,12 @@ func TestLoadThemeWithColorOverride(t *testing.T) {
 	}
 }
 
-func TestSaveLoadRoundTripWithQueue(t *testing.T) {
+func TestSaveLoadRoundTripWithConnection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 
 	cfg := Default()
-	cfg.Queue.URL = "http://mybroker:8161/api/jolokia"
-	cfg.Queue.Password = "secret"
+	cfg.Connections[0].Queue.URL = "http://mybroker:8161/api/jolokia"
+	cfg.Connections[0].Queue.Password = "secret"
 
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -407,10 +517,10 @@ func TestSaveLoadRoundTripWithQueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.Queue.URL != cfg.Queue.URL {
-		t.Errorf("Queue.URL = %q, want %q", got.Queue.URL, cfg.Queue.URL)
+	if got.ActiveConn().Queue.URL != cfg.ActiveConn().Queue.URL {
+		t.Errorf("ActiveConn().Queue.URL = %q, want %q", got.ActiveConn().Queue.URL, cfg.ActiveConn().Queue.URL)
 	}
-	if got.Queue.Password != cfg.Queue.Password {
-		t.Errorf("Queue.Password = %q, want %q", got.Queue.Password, cfg.Queue.Password)
+	if got.ActiveConn().Queue.Password != cfg.ActiveConn().Queue.Password {
+		t.Errorf("ActiveConn().Queue.Password = %q, want %q", got.ActiveConn().Queue.Password, cfg.ActiveConn().Queue.Password)
 	}
 }

@@ -85,12 +85,46 @@ func reapplyTheme(a *App, p config.Palette) {
 	a.homeTable.SetBorderColor(tcell.GetColor(p.ViewColor("home")))
 	a.homeTable.SetTitleColor(tcell.GetColor(p.ViewColor("home")))
 
-	// Settings form
-	if a.settingsForm != nil {
-		a.settingsForm.SetBackgroundColor(bg)
-		a.settingsForm.SetBorderColor(tcell.GetColor(p.ViewColor("settings")))
-		a.settingsForm.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
-		if dd, ok := a.settingsForm.GetFormItem(0).(*tview.DropDown); ok {
+	// Settings list
+	if a.settingsList != nil {
+		a.settingsList.SetBackgroundColor(bg)
+		a.settingsList.SetBorderColor(tcell.GetColor(p.ViewColor("settings")))
+		a.settingsList.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
+		styleList(a.settingsList, p)
+	}
+
+	// Theme picker overlay
+	if a.themePickerFlex != nil {
+		a.themePickerFlex.SetBackgroundColor(bg)
+		a.themePickerFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.themePickerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.themePickerList != nil {
+		styleList(a.themePickerList, p)
+		a.themePickerList.SetBackgroundColor(bg)
+	}
+
+	// Connection manager overlay
+	if a.connManagerFlex != nil {
+		a.connManagerFlex.SetBackgroundColor(bg)
+		a.connManagerFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.connManagerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.connManagerList != nil {
+		styleList(a.connManagerList, p)
+		a.connManagerList.SetBackgroundColor(bg)
+	}
+	if a.connManagerHints != nil {
+		a.connManagerHints.SetBackgroundColor(bg)
+		a.connManagerHints.SetTextColor(tcell.GetColor(p.Text))
+	}
+
+	// Connection editor overlay
+	if a.connEditorForm != nil {
+		a.connEditorForm.SetBackgroundColor(bg)
+		a.connEditorForm.SetBorderColor(tcell.GetColor(p.Border))
+		a.connEditorForm.SetTitleColor(tcell.GetColor(p.Border))
+		if dd, ok := a.connEditorForm.GetFormItem(2).(*tview.DropDown); ok {
 			styleDropDown(dd, p)
 		}
 	}
@@ -175,6 +209,7 @@ func reapplyTheme(a *App, p config.Palette) {
 	}
 
 }
+
 // Note: no explicit a.tv.Draw() call — tview redraws automatically after
 // every event handler returns when the event loop is running. An explicit
 // Draw() here would block in test environments where no loop is started.

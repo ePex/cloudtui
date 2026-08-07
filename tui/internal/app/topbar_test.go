@@ -20,6 +20,28 @@ func TestInfoPanelContainsTheme(t *testing.T) {
 	}
 }
 
+func TestInfoPanelContainsConnectionAlias(t *testing.T) {
+	cfg := config.Default() // alias = "def"
+	text := newInfoPanel(cfg).GetText(true)
+
+	for _, want := range []string{"Connection:", "def"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("info panel text = %q, want it to contain %q", text, want)
+		}
+	}
+}
+
+func TestInfoPanelTextShowsConnectionAlias(t *testing.T) {
+	cfg := config.Default()
+	cfg.Connections[0].Alias = "stg"
+
+	text := infoPanelText(cfg)
+
+	if !strings.Contains(text, "stg") {
+		t.Errorf("infoPanelText() = %q, want it to contain alias %q", text, "stg")
+	}
+}
+
 func TestInfoPanelTextShowsThemeName(t *testing.T) {
 	cfg := config.Default()
 	cfg.Theme = "cyberpunk"
@@ -76,7 +98,6 @@ func TestNewTopBarLeftPagesDefaultsToInfo(t *testing.T) {
 		t.Errorf("front page = %q, want %q", name, "info")
 	}
 }
-
 
 func TestNewTopBarExposesInfoPanel(t *testing.T) {
 	cfg := config.Default()
