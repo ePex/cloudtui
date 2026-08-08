@@ -16,6 +16,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
+	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
@@ -86,6 +87,11 @@ type App struct {
 	homeSections           []views.SectionInfo
 	topBarHeight           int
 	listAWSProfiles        func(context.Context) ([]awsprofile.Profile, error)
+	ssmParamsV             *ssmParamsView
+	paramDetailV           *paramDetailView
+	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter        func(ctx context.Context, profile, name string) (string, error)
+	screen                 tcell.Screen
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -99,6 +105,7 @@ func New(cfg config.Config) *App {
 			Title: "Apps",
 			Entries: []views.ViewInfo{
 				{Name: "queues", Description: "List ActiveMQ queues"},
+				{Name: "ssm-parameters", Description: "Browse AWS SSM parameters"},
 			},
 		},
 		{
@@ -135,6 +142,17 @@ func New(cfg config.Config) *App {
 
 	a.statusBar = newStatusBar(cfg)
 	a.listAWSProfiles = awsprofile.List
+	a.listParameters = awsssm.List
+	a.revealParameter = awsssm.Reveal
+
+	// tview.Application never exposes its tcell.Screen directly (no
+	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
+	// so capture it once here for copyToClipboard's use. Reserved for this
+	// purpose — if another feature ever needs an after-draw hook too, chain
+	// it from here rather than overwriting.
+	a.tv.SetAfterDrawFunc(func(screen tcell.Screen) {
+		a.screen = screen
+	})
 
 	// All shell primitives are constructed; now create the settings view.
 	// Its list callbacks call showThemePicker / showConnectionManager, which
@@ -145,6 +163,18 @@ func New(cfg config.Config) *App {
 	a.queuesV = newQueuesView(a, a.backend)
 	a.messagesV = newMessagesView(a)
 	a.messageDetailV = newMessageDetailView(a)
+	a.ssmParamsV = newSSMParamsView(a)
+	a.paramDetailV = newParamDetailView(a)
+
+	// Wire Enter in the SSM parameters table to open the detail view for
+	// the selected parameter. Done here because paramDetailV must exist first.
+	a.ssmParamsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
+			return
+		}
+		a.openParamDetail(a.ssmParamsV.filtered[idx])
+	})
 
 	// Wire Enter in the queues table to open the messages view for the
 	// selected queue. Done here because messagesV must exist first.
@@ -166,15 +196,17 @@ func New(cfg config.Config) *App {
 		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
 		a.pages.AddPage(v.Name(), prim, true, false)
 	}
-	// messages and message-detail pages: not in a.views (no home entry / switchTo).
+	// messages, message-detail, and param-detail pages: not in a.views (no
+	// home entry / switchTo — opened directly via their own open* helper).
 	a.pages.AddPage("messages", a.messagesV.table, true, false)
 	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
+	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.root, tb.height, 0, false).
@@ -446,6 +478,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.queuesV != nil && a.tv.GetFocus() == a.queuesV.filterInput {
+		return event
+	}
+	if a.ssmParamsV != nil && a.tv.GetFocus() == a.ssmParamsV.filterInput {
 		return event
 	}
 
@@ -909,6 +944,29 @@ func (a *App) openMessageDetail(queueName string, msg queue.Message) {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
 	}
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
+}
+
+// openParamDetail renders the full detail for param and switches to the
+// ssm-param-detail page. paramDetailView.render sets the context panel
+// itself (its shortcuts change once a SecureString is revealed).
+func (a *App) openParamDetail(param awsssm.Parameter) {
+	a.paramDetailV.render(param)
+	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
+	a.pages.SwitchToPage("ssm-param-detail")
+	a.tv.SetFocus(a.pages)
+}
+
+// copyToClipboard writes data to the system clipboard via the terminal's
+// OSC 52 escape sequence (tcell.Screen.SetClipboard) rather than shelling
+// out to pbcopy/xclip/clip.exe: no new dependency, and it works the same
+// over SSH as it does locally. a.screen is nil until the first draw (see
+// New()'s SetAfterDrawFunc), which in practice means before Run() starts —
+// a no-op then is correct since there's nothing on screen to have copied.
+func (a *App) copyToClipboard(data string) {
+	if a.screen == nil {
+		return
+	}
+	a.screen.SetClipboard([]byte(data))
 }
 
 // updateContextPanel renders v's shortcuts into the context panel, or clears

@@ -131,8 +131,13 @@ func TestApplyAWSProfilesFilterNarrowsRowsByName(t *testing.T) {
 	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2 matches
 		t.Fatalf("row count after filter = %d, want 3 (header + 2 matches)", got)
 	}
-	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles [work] " {
-		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles [work] ")
+	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles (work) " {
+		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles (work) ")
+	}
+
+	rendered := renderedScreenText(t, a.awsProfilesTable, 60, 10)
+	if !strings.Contains(rendered, "work") {
+		t.Errorf("rendered screen = %q, want it to contain the filter text %q", rendered, "work")
 	}
 }
 

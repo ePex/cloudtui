@@ -17,7 +17,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log", "queues"}
+	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -82,6 +82,24 @@ func TestOnGlobalKeyPassesThroughWhenPromptFocused(t *testing.T) {
 	event := tcell.NewEventKey(tcell.KeyRune, ':', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
 		t.Errorf("onGlobalKey(':') while prompt focused = %v, want event passed through unchanged", got)
+	}
+}
+
+// TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused guards against a
+// real bug found live: typing a filter string into ssmParamsV's filter
+// input that happened to contain a global-hotkey letter (e.g. "l" in
+// "broker-url") navigated away to the Log view mid-keystroke instead of
+// being typed into the field, because — unlike an overlay (which gets a
+// blanket exemption via its own *Visible flag) — a regular top-level
+// view's filter input needs its own explicit exemption here, and this one
+// was missing (queuesV.filterInput has always had it).
+func TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.ssmParamsV.filterInput)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('l') while ssmParamsV filter focused = %v, want event passed through unchanged", got)
 	}
 }
 
@@ -600,4 +618,26 @@ func TestOpenMessageDetailSetsContextPanelShortcuts(t *testing.T) {
 			t.Errorf("contextPanel after openMessageDetail = %q, want it to contain %q", text, want)
 		}
 	}
+}
+
+func TestCopyToClipboardWritesViaScreen(t *testing.T) {
+	a := New(config.Default())
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	a.screen = screen
+
+	a.copyToClipboard("some-value")
+
+	if got := string(screen.GetClipboardData()); got != "some-value" {
+		t.Errorf("clipboard = %q, want %q", got, "some-value")
+	}
+}
+
+func TestCopyToClipboardNoOpWithoutScreen(t *testing.T) {
+	a := New(config.Default())
+	a.screen = nil
+
+	a.copyToClipboard("some-value") // must not panic
 }

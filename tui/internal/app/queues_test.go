@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -155,7 +156,7 @@ func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 	qv := newQueuesView(a, &fakeQueueBackend{})
 
 	qv.applyFilter("foo")
-	if got, want := qv.table.GetTitle(), " Queues [foo] "; got != want {
+	if got, want := qv.table.GetTitle(), " Queues (foo) "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 
@@ -195,6 +196,52 @@ func TestQueuesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 
 	if row, _ := qv.table.GetOffset(); row != 0 {
 		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
+	}
+}
+
+// renderedScreenText draws prim to a same-size SimulationScreen and
+// concatenates every cell's rune into one string, so a test can check what
+// actually gets drawn — as opposed to GetTitle()/GetText(), which only
+// return the stored value and would not have caught the bug this guards
+// against (tview.Box titles run their text through the same tag-parsing
+// Print() that Table cells do, so "[text]" is silently swallowed as an
+// invalid color tag; GetTitle() still faithfully returns the literal
+// "[text]" string, making the bug invisible to a test that doesn't
+// actually render).
+func renderedScreenText(t *testing.T, prim tview.Primitive, width, height int) string {
+	t.Helper()
+	prim.SetRect(0, 0, width, height)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(width, height)
+	prim.Draw(screen)
+	screen.Show() // flushes the back buffer into front; GetContents reads front
+
+	cells, w, h := screen.GetContents()
+	var b strings.Builder
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			cell := cells[y*w+x]
+			if len(cell.Runes) > 0 {
+				b.WriteRune(cell.Runes[0])
+			}
+		}
+	}
+	return b.String()
+}
+
+// TestQueuesViewFilteredTitleActuallyRenders is the render-based companion
+// to the title-format fix: GetTitle() alone wouldn't have caught the bug
+// (see renderedScreenText's doc comment).
+func TestQueuesViewFilteredTitleActuallyRenders(t *testing.T) {
+	qv := newTestQueuesView(t)
+	qv.applyFilter("foo")
+
+	rendered := renderedScreenText(t, qv.table, 60, 10)
+	if !strings.Contains(rendered, "foo") {
+		t.Errorf("rendered screen = %q, want it to contain the filter text %q", rendered, "foo")
 	}
 }
 

@@ -124,8 +124,9 @@ func (a *App) repaintAWSProfiles() {
 		t.SetCell(row, 2, tview.NewTableCell(string(prof.AuthType)).SetTextColor(textColor).SetExpansion(1))
 	}
 
+	// "(text)", not "[text]" — see queues.go's updateTitle for why.
 	if a.awsProfilesFilter != "" {
-		t.SetTitle(fmt.Sprintf(" AWS Profiles [%s] ", a.awsProfilesFilter))
+		t.SetTitle(fmt.Sprintf(" AWS Profiles (%s) ", a.awsProfilesFilter))
 	} else {
 		t.SetTitle(fmt.Sprintf(" AWS Profiles (%d) ", len(a.awsProfilesAll)))
 	}
