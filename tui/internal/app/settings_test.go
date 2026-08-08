@@ -33,12 +33,24 @@ func TestSettingsListHasThreeItems(t *testing.T) {
 	}
 }
 
-func TestSettingsListItemTwoIsAWSProfiles(t *testing.T) {
+func TestSettingsListItemTwoIsAWSProfile(t *testing.T) {
 	a := New(config.Default())
 
 	main2, _ := a.settingsList.GetItemText(2)
-	if !strings.Contains(main2, "AWS Profiles") {
-		t.Errorf("item 2 = %q, want it to contain 'AWS Profiles'", main2)
+	if !strings.Contains(main2, "AWS Profile") || !strings.Contains(main2, "(none)") {
+		t.Errorf("item 2 = %q, want it to contain 'AWS Profile' and '(none)'", main2)
+	}
+}
+
+func TestSettingsListItemTwoShowsActiveAWSProfile(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.ActiveAWSProfile = "work"
+
+	a.refreshSettingsList()
+
+	main2, _ := a.settingsList.GetItemText(2)
+	if !strings.Contains(main2, "work") {
+		t.Errorf("item 2 = %q, want it to contain %q", main2, "work")
 	}
 }
 

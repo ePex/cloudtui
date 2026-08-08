@@ -22,3 +22,7 @@ Plan: [plan.md](plan.md)
 10. [x] Updated `spec/28-fe-aws-profile-discovery/spec.md`'s "out of
     scope" section to point at this spec (it explicitly ruled out
     exactly what this spec does).
+11. [x] Addendum: Settings list item wasn't showing the active profile
+    (only info panel + overlay were). Fixed `refreshSettingsList` +
+    `activateAWSProfile` (see spec.md addendum); verified live against
+    the user's own already-activated profile on this machine.

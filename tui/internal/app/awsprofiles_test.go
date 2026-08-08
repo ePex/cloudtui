@@ -119,20 +119,20 @@ func TestApplyAWSProfilesFilterNarrowsRowsByName(t *testing.T) {
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
 		return []awsprofile.Profile{
-			{Name: "mlf-dev", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
-			{Name: "mlf-prod", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
+			{Name: "work-dev", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
+			{Name: "work-prod", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
 			{Name: "personal", Region: "us-east-1", AuthType: awsprofile.AuthStaticKeys},
 		}, nil
 	}
 	a.showAWSProfiles()
 
-	a.applyAWSProfilesFilter("mlf")
+	a.applyAWSProfilesFilter("work")
 
 	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2 matches
 		t.Fatalf("row count after filter = %d, want 3 (header + 2 matches)", got)
 	}
-	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles [mlf] " {
-		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles [mlf] ")
+	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles [work] " {
+		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles [work] ")
 	}
 }
 
@@ -187,6 +187,9 @@ func TestActivateAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	if got := a.infoPanel.GetText(true); !strings.Contains(got, "work") {
 		t.Errorf("info panel = %q, want it to contain %q", got, "work")
 	}
+	if main2, _ := a.settingsList.GetItemText(2); !strings.Contains(main2, "work") {
+		t.Errorf("settings list item 2 = %q, want it to contain %q", main2, "work")
+	}
 	if a.awsProfilesVisible {
 		t.Error("overlay should close after activating a profile")
 	}
@@ -217,7 +220,7 @@ func TestAWSProfilesEnterActivatesRowRespectingFilter(t *testing.T) {
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
 		return []awsprofile.Profile{
-			{Name: "mlf-dev"},
+			{Name: "work-dev"},
 			{Name: "personal"},
 		}, nil
 	}
