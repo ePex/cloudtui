@@ -13,6 +13,16 @@ that scrolled to the bottom instead of the top on first load; a confirm
 dialog rendering invisibly under another overlay). Use this skill instead of
 declaring a queue/message/connection change done from tests alone.
 
+**Already-covered golden path?** `task smoke:test` (`tui/scripts/smoke-test.sh`)
+automates exactly this kind of driving for the core path — list queues,
+seed/browse/mark/delete/move messages, switch to the proxy backend and
+confirm it sees the same broker state — against disposable, uniquely-named
+queues it creates and removes itself, with `config.yaml` backed up and
+restored around it. Run it as a quick regression sanity check, or read it as
+a worked example of the patterns below. It does **not** replace verifying a
+*new* feature's specific behavior by hand — a script's assertions only
+catch regressions of things its author already knew to check for.
+
 ## Before you start: know what's on the broker
 
 The default local broker (`localhost:8161`, Jolokia, `admin`/`admin`) may

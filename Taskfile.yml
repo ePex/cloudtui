@@ -53,6 +53,15 @@ tasks:
     cmds:
       - go run ./cmd/devtool stop-proxy
 
+  smoke:test:
+    desc: >-
+      Drive the real TUI against a real broker through the golden path
+      (list/browse/mark/delete/move messages, switch to the proxy backend).
+      Requires tmux and a JDK 21+ JAVA_HOME. POSIX/macOS/Linux only.
+    dir: tui
+    cmds:
+      - ./scripts/smoke-test.sh
+
   test:
     desc: Run all tests.
     deps: [test:tui, test:proxy]
