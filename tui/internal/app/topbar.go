@@ -69,10 +69,15 @@ func newDivider(cfg config.Config, height int) *tview.TextView {
 
 // infoPanelText renders the connection-info panel's content from cfg.
 func infoPanelText(cfg config.Config) string {
+	awsProfile := cfg.ActiveAWSProfile
+	if awsProfile == "" {
+		awsProfile = "(none)"
+	}
 	return fmt.Sprintf(
-		"[%s]Theme:[-] [%s]%s[-]\n[%s]Connection:[-] [%s]%s[-]",
+		"[%s]Theme:[-] [%s]%s[-]\n[%s]Connection:[-] [%s]%s[-]\n[%s]AWS Profile:[-] [%s]%s[-]",
 		cfg.Colors.Label, cfg.Colors.Value, cfg.Theme,
 		cfg.Colors.Label, cfg.Colors.Value, cfg.ActiveConn().Alias,
+		cfg.Colors.Label, cfg.Colors.Value, awsProfile,
 	)
 }
 

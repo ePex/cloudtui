@@ -30,9 +30,14 @@ type Connection struct {
 type Config struct {
 	ActiveConnection string       `yaml:"activeConnection"`
 	Connections      []Connection `yaml:"connections"`
-	Theme            string       `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
-	Logo             []string     `yaml:"logo"`
-	Colors           Palette      `yaml:"colors"`
+	// ActiveAWSProfile is the AWS CLI profile currently selected in the
+	// Settings -> AWS Profiles picker. Independent of Connections/backends —
+	// this slice of AWS support is discovery/selection only, not yet wired
+	// to any broker connection. Empty means none selected.
+	ActiveAWSProfile string   `yaml:"activeAWSProfile"`
+	Theme            string   `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
+	Logo             []string `yaml:"logo"`
+	Colors           Palette  `yaml:"colors"`
 }
 
 // ActiveConn returns the active Connection by name, falling back to the first

@@ -524,3 +524,27 @@ func TestSaveLoadRoundTripWithConnection(t *testing.T) {
 		t.Errorf("ActiveConn().Queue.Password = %q, want %q", got.ActiveConn().Queue.Password, cfg.ActiveConn().Queue.Password)
 	}
 }
+
+func TestSaveLoadRoundTripWithActiveAWSProfile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.ActiveAWSProfile = "work"
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.ActiveAWSProfile != "work" {
+		t.Errorf("ActiveAWSProfile = %q, want %q", got.ActiveAWSProfile, "work")
+	}
+}
+
+func TestDefaultActiveAWSProfileEmpty(t *testing.T) {
+	if got := Default().ActiveAWSProfile; got != "" {
+		t.Errorf("Default().ActiveAWSProfile = %q, want empty", got)
+	}
+}
