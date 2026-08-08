@@ -17,7 +17,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters"}
+	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -100,6 +100,21 @@ func TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused(t *testing.T) {
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
 		t.Errorf("onGlobalKey('l') while ssmParamsV filter focused = %v, want event passed through unchanged", got)
+	}
+}
+
+// TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused is
+// secretsV.filterInput's counterpart to
+// TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused — same
+// exemption, needed for the same reason (a plain top-level view's filter
+// input isn't covered by the overlay *Visible-flag blanket exemption).
+func TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.secretsV.filterInput)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('l') while secretsV filter focused = %v, want event passed through unchanged", got)
 	}
 }
 
