@@ -38,10 +38,14 @@ changelog:
   sort: asc
   groups:
     - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      # [[:word:]] excludes "-", so a hyphenated scope like "mq-proxy"
+      # (this repo has commits like "feat(mq-proxy): ...") wouldn't
+      # match — confirmed missing from v0.1.0's changelog. [\w-] covers
+      # both plain and hyphenated scopes.
+      regexp: '^.*?feat(\([\w-]+\))??!?:.+$'
       order: 0
     - title: Bug fixes
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      regexp: '^.*?fix(\([\w-]+\))??!?:.+$'
       order: 1
     - title: Other changes
       order: 999
