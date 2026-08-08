@@ -31,10 +31,33 @@ type HomeView struct {
 }
 
 var _ ui.View = (*HomeView)(nil)
+var _ ui.Shortcuttable = (*HomeView)(nil)
 
 func (h *HomeView) Name() string               { return "home" }
 func (h *HomeView) Title() string              { return "Home" }
 func (h *HomeView) Primitive() tview.Primitive { return h.table }
+
+// Shortcuts lists the app's global hotkeys. Home has no view-specific
+// bindings of its own, so this fills what would otherwise be an empty
+// context panel with the reference other views don't need repeated —
+// the bottom status bar shows the same legend at idle, but a transient
+// message (an error, a confirmation) can overwrite it indefinitely with
+// nothing to restore it, unlike this panel, which is view-driven.
+//
+// These are duplicated from app.onGlobalKey/statusbar.go's
+// readyStatusText by necessity (different package, different rendering:
+// plain data here vs. a pre-colored string there) — if a global hotkey is
+// ever added or changed, update both.
+func (h *HomeView) Shortcuts() []ui.Shortcut {
+	return []ui.Shortcut{
+		{Key: "?", Description: "help"},
+		{Key: "h", Description: "home"},
+		{Key: "l", Description: "log"},
+		{Key: "s", Description: "settings"},
+		{Key: "q", Description: "quit"},
+		{Key: ":", Description: "command"},
+	}
+}
 
 // NewHome constructs the home dashboard. onSelect is called with the view name
 // when the user presses Enter on an entry. Color parameters are tview/tcell

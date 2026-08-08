@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 var testSections = []SectionInfo{
@@ -23,9 +25,9 @@ var testSections = []SectionInfo{
 }
 
 const (
-	testLabel      = "#ffffff"
-	testText       = "#cccccc"
-	testHeader     = "#aaaaaa"
+	testLabel         = "#ffffff"
+	testText          = "#cccccc"
+	testHeader        = "#aaaaaa"
 	testSelectionBg   = "#2ac3de"
 	testSelectionText = "#1a1b26"
 )
@@ -45,6 +47,30 @@ func TestHomeViewNameAndTitle(t *testing.T) {
 	}
 	if got := h.Title(); got != "Home" {
 		t.Errorf("Title() = %q, want %q", got, "Home")
+	}
+}
+
+func TestHomeViewImplementsShortcuttable(t *testing.T) {
+	var v ui.View = newTestHome(nil)
+	if _, ok := v.(ui.Shortcuttable); !ok {
+		t.Error("HomeView does not implement ui.Shortcuttable")
+	}
+}
+
+func TestHomeViewShortcutsIncludeAllGlobalHotkeys(t *testing.T) {
+	h := newTestHome(nil)
+	want := map[string]string{
+		"?": "help", "h": "home", "l": "log",
+		"s": "settings", "q": "quit", ":": "command",
+	}
+	got := h.Shortcuts()
+	if len(got) != len(want) {
+		t.Fatalf("Shortcuts() has %d entries, want %d: %+v", len(got), len(want), got)
+	}
+	for _, sc := range got {
+		if want[sc.Key] != sc.Description {
+			t.Errorf("Shortcuts() key %q = %q, want %q", sc.Key, sc.Description, want[sc.Key])
+		}
 	}
 }
 
