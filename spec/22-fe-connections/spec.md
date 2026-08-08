@@ -82,6 +82,9 @@ round-tripped through `Save()` will always use the new `connections` shape.
 - **Connection editor overlay**: a form with Name, Alias, Backend (dropdown),
   and the relevant backend fields (jolokia: BrokerName, URL, Username,
   Password; proxy: URL, Username, Password). Shared by Add and Edit.
+  `Esc` cancels (same as the Cancel button) without saving — added
+  2026-08-08 after the initial implementation shipped without it, the only
+  way to cancel was tabbing all the way to the Cancel button.
 - Duplicate creates a copy named `"<original>-copy"` / alias `"<alias>2"` and
   opens the editor on it.
 - Changes are persisted to `config.yaml` immediately.
