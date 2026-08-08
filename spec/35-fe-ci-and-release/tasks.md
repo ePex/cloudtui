@@ -5,13 +5,19 @@ Plan: [plan.md](plan.md)
 Each task needs separate approval before it's implemented — see
 `CLAUDE.md`.
 
-1. [x] `Taskfile.yml`: fix `test:proxy`/`run:proxy` to pick
-   `gradlew.bat` on Windows (`{{if eq OS "windows"}}...{{end}}`); split
-   `build:proxy` into `build:proxy` (unchanged behavior: jar + podman
-   image) and a new podman-free `build:proxy:jar`. Verify locally on
-   this machine: `task test:proxy` and `task build:proxy:jar` still
-   succeed. Confirmed both pass locally on macOS (`./gradlew` branch
-   taken); `task --list` still parses cleanly.
+1. [x] `Taskfile.yml`: fix `test:proxy`/`run:proxy` to pick a
+   Windows-appropriate gradlew invocation; split `build:proxy` into
+   `build:proxy` (unchanged behavior: jar + podman image) and a new
+   podman-free `build:proxy:jar`. Verified locally on this machine
+   (macOS, `./gradlew` branch): `task test:proxy` and `task
+   build:proxy:jar` succeed, `task --list` parses cleanly. **The
+   Windows branch itself took three real CI runs to actually get
+   right** — see task 8's writeup; the final form is `cmd /c
+   gradlew.bat`, not the `gradlew.bat`/`.\gradlew.bat`/`./gradlew.bat`
+   variants tried first. Local macOS testing could never have caught
+   this — it's exactly the class of bug cross-platform CI exists to
+   catch, and finding it live is itself proof the CI matrix is doing
+   its job.
 2. [x] `.github/workflows/ci.yml`: `tui` and `mq-proxy` jobs, each
    matrixed over `ubuntu-latest`/`macos-latest`/`windows-latest`
    (`fail-fast: false`); `tui` runs `task test:tui` + `task build:tui`
@@ -59,9 +65,49 @@ Each task needs separate approval before it's implemented — see
 7. [x] `task test`, `task build` (both still pass locally after the
    `Taskfile.yml` changes), `go build ./...`/`go vet ./...`/`go test
    ./...` in `tui/` — all pass, `gofmt` clean.
-8. [ ] Push this work (branch/PR, per your go-ahead) and verify the CI
-   workflow actually goes green on all 6 real matrix jobs on GitHub —
-   this is the live-verification step for this feature, since a CI
-   config that only "looks right" isn't proven until it's actually run
-   by GitHub Actions. **Does not** include pushing a `v0.1.0` tag —
-   that stays a separate, explicit step per spec.md decision 6.
+8. [x] Push this work (per explicit go-ahead) and verify the CI
+   workflow actually goes green on all 6 real matrix jobs on GitHub.
+   This absolutely was not a rubber-stamp verification — it caught a
+   real, three-round bug that no amount of local (macOS) testing or
+   config review would have surfaced:
+
+   - **Push 1** (`68f2925`, the feature itself): 5/6 jobs passed
+     immediately. `mq-proxy (windows-latest)` failed in ~1s on `task
+     test:proxy` — too fast to be Gradle actually starting, so
+     something failed before exec even began.
+   - **Push 2** (`1e3a1fc`): tried `./gradlew.bat` (matching the Unix
+     branch's `./gradlew` pattern). Failed with a literal Windows
+     `cmd.exe` error: `'.' is not recognized as an internal or
+     external command, operable program or batch file.` — `gh auth
+     login` was set up at this point specifically to pull this log
+     (the public unauthenticated API only exposes job/step status, not
+     log content).
+   - **Push 3** (`4aa955a`): tried `.\gradlew.bat` (backslash, the
+     native Windows relative-path form) reasoning the forward slash
+     was the problem. Failed differently: `".gradlew.bat": executable
+     file not found in $PATH` — Task's embedded shell (`mvdan.cc/sh`)
+     treats `\` as a POSIX escape character, so `.\g` collapsed to
+     `.g`, silently eating the path separator entirely before exec
+     ever ran.
+   - **Push 4** (`80673d0`, the actual fix): `cmd /c gradlew.bat` —
+     sidesteps the ambiguity entirely. `mvdan.cc/sh` execs `cmd` via a
+     normal unambiguous `PATH` lookup and passes `gradlew.bat` as a
+     bare argument, which `cmd.exe` resolves via its own
+     current-directory search (no slash needed or wanted). **All 6
+     matrix jobs green**: `tui` and `mq-proxy` × `ubuntu-latest`/
+     `macos-latest`/`windows-latest`.
+
+   Confirmed via `gh run view --log-failed` for the real failure text
+   at each step (not guessed from symptoms) and `gh run watch
+   --exit-status` for the final green run. Not exercised: pushing a
+   `v0.1.0` tag — stays a separate, explicit step per spec.md
+   decision 6.
+
+   **Noted, not fixed** (cosmetic, non-blocking): `actions/setup-go`'s
+   dependency cache warns `Restore cache failed: Dependencies file is
+   not found ... Supported file pattern: go.mod` on every OS, because
+   `go.mod` lives at `tui/go.mod`, not the repo root the cache action
+   scans by default. Doesn't fail the build — just means Go module
+   downloads aren't cached between CI runs yet. Also noted:
+   `actions/setup-java@v4` is deprecated in favor of `v5`. Both are
+   minor follow-ups, not required for this feature to be done.
