@@ -22,14 +22,23 @@ func TestSettingsListHasBorderAndTitle(t *testing.T) {
 	}
 }
 
-func TestSettingsListHasTwoItems(t *testing.T) {
+func TestSettingsListHasThreeItems(t *testing.T) {
 	a := New(config.Default())
 
 	if a.settingsList == nil {
 		t.Fatal("a.settingsList is nil")
 	}
-	if got := a.settingsList.GetItemCount(); got != 2 {
-		t.Errorf("settings list item count = %d, want 2", got)
+	if got := a.settingsList.GetItemCount(); got != 3 {
+		t.Errorf("settings list item count = %d, want 3", got)
+	}
+}
+
+func TestSettingsListItemTwoIsAWSProfiles(t *testing.T) {
+	a := New(config.Default())
+
+	main2, _ := a.settingsList.GetItemText(2)
+	if !strings.Contains(main2, "AWS Profiles") {
+		t.Errorf("item 2 = %q, want it to contain 'AWS Profiles'", main2)
 	}
 }
 

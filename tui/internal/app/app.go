@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
@@ -72,10 +73,15 @@ type App struct {
 	themePickerFlex     *tview.Flex
 	themePickerList     *tview.List
 	themePickerVisible  bool
+	awsProfilesFlex     *tview.Flex
+	awsProfilesTable    *tview.Table
+	awsProfilesHints    *tview.TextView
+	awsProfilesVisible  bool
 	backend             queue.Backend
 	homeTable           *tview.Table
 	homeSections        []views.SectionInfo
 	topBarHeight        int
+	listAWSProfiles     func(context.Context) ([]awsprofile.Profile, error)
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -124,6 +130,7 @@ func New(cfg config.Config) *App {
 	a.topBarHeight = tb.height
 
 	a.statusBar = newStatusBar(cfg)
+	a.listAWSProfiles = awsprofile.List
 
 	// All shell primitives are constructed; now create the settings view.
 	// Its list callbacks call showThemePicker / showConnectionManager, which
@@ -337,6 +344,34 @@ func New(cfg config.Config) *App {
 	})
 	themePickerOverlay := centered(a.themePickerFlex, 40, 14)
 
+	// AWS Profiles overlay — read-only; no select/activate action in this slice.
+	a.awsProfilesTable = tview.NewTable()
+	a.awsProfilesTable.SetBorder(true).SetTitle(" AWS Profiles ")
+	a.awsProfilesTable.SetSelectable(true, false)
+	a.awsProfilesTable.SetFixed(1, 0)
+	a.awsProfilesHints = tview.NewTextView().SetDynamicColors(true)
+	a.awsProfilesHints.SetText(fmt.Sprintf("[%s]<r>[-] refresh  [%s]<Esc>[-] close", cfg.Colors.Accent, cfg.Colors.Accent))
+	a.awsProfilesFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.awsProfilesTable, 0, 1, true).
+		AddItem(a.awsProfilesHints, 1, 0, false)
+	a.setAWSProfilesHeader()
+	a.awsProfilesTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			a.closeAWSProfiles()
+			return nil
+		case event.Rune() == 'r':
+			a.populateAWSProfilesTable()
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+	awsProfilesOverlay := centered(a.awsProfilesFlex, 64, 20)
+
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	// "confirm" is added last so it always draws on top of any other overlay
 	// (e.g. conn-manager) that may still be visible underneath it — tview.Pages
@@ -349,6 +384,7 @@ func New(cfg config.Config) *App {
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
+		AddPage("aws-profiles", awsProfilesOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false)
 
 	a.switchTo(a.views[0].Name())
@@ -374,7 +410,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.themePickerVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
 		return event
 	}
 
@@ -421,7 +457,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
 		if !a.connManagerVisible && !a.connEditorVisible && !a.themePickerVisible &&
-			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible {
+			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible && !a.awsProfilesVisible {
 			a.tv.SetFocus(a.pages)
 		}
 	}()

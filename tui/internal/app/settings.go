@@ -37,7 +37,7 @@ func styleDropDown(dd *tview.DropDown, p config.Palette) {
 
 // newSettingsView builds the Settings view as a tview.List. Each item opens
 // a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
-// connection manager.
+// connection manager, item 2 → AWS profiles (read-only).
 func newSettingsView(a *App) ui.View {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetBorder(true).SetTitle(" Settings ")
@@ -46,6 +46,7 @@ func newSettingsView(a *App) ui.View {
 	// indices are stable.
 	l.AddItem("", "", 0, func() { a.showThemePicker() })
 	l.AddItem("", "", 0, func() { a.showConnectionManager() })
+	l.AddItem("", "", 0, func() { a.showAWSProfiles() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -74,6 +75,7 @@ func (a *App) refreshSettingsList() {
 	a.settingsList.Clear()
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
 	a.settingsList.AddItem(fmt.Sprintf("Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
+	a.settingsList.AddItem("AWS Profiles", "", 0, func() { a.showAWSProfiles() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}
