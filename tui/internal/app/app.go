@@ -11,10 +11,12 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
@@ -92,10 +94,15 @@ type App struct {
 	secretsV               *secretsView
 	paramDetailV           *paramDetailView
 	secretDetailV          *secretDetailView
+	logsV                  *logsView
+	logSearchV             *logSearchView
+	logDetailV             *logDetailView
 	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
 	revealParameter        func(ctx context.Context, profile, name string) (string, error)
 	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
 	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
 	screen                 tcell.Screen
 }
 
@@ -112,6 +119,7 @@ func New(cfg config.Config) *App {
 				{Name: "queues", Description: "List ActiveMQ queues"},
 				{Name: "ssm-parameters", Description: "Browse AWS SSM parameters"},
 				{Name: "secrets-manager", Description: "Browse AWS Secrets Manager secrets"},
+				{Name: "cloudwatch-logs", Description: "Search CloudWatch Logs"},
 			},
 		},
 		{
@@ -152,6 +160,8 @@ func New(cfg config.Config) *App {
 	a.revealParameter = awsssm.Reveal
 	a.listSecrets = awssecrets.List
 	a.revealSecret = awssecrets.Reveal
+	a.listLogGroups = awslogs.ListLogGroups
+	a.filterLogEvents = awslogs.FilterEvents
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -174,6 +184,29 @@ func New(cfg config.Config) *App {
 	a.ssmParamsV = newSSMParamsView(a)
 	a.paramDetailV = newParamDetailView(a)
 	a.secretsV = newSecretsView(a)
+	a.logsV = newLogsView(a)
+	a.logSearchV = newLogSearchView(a)
+	a.logDetailV = newLogDetailView(a)
+
+	// Wire Enter in the log groups table to open the search view for
+	// the selected log group. Done here because logSearchV must exist first.
+	a.logsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.logsV.filtered) {
+			return
+		}
+		a.openLogSearch(a.logsV.filtered[idx].Name)
+	})
+
+	// Wire Enter in the log search results table to open the detail view
+	// for the selected event. Done here because logDetailV must exist first.
+	a.logSearchV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.logSearchV.results) {
+			return
+		}
+		a.openLogEventDetail(a.logSearchV.results[idx])
+	})
 	a.secretDetailV = newSecretDetailView(a)
 
 	// Wire Enter in the SSM parameters table to open the detail view for
@@ -216,7 +249,7 @@ func New(cfg config.Config) *App {
 		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -227,6 +260,8 @@ func New(cfg config.Config) *App {
 	a.pages.AddPage("messages", a.messagesV.table, true, false)
 	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
 	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
+	a.pages.AddPage("log-search", a.logSearchV.flex, true, false)
+	a.pages.AddPage("log-event-detail", a.logDetailV.textView, true, false)
 	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -505,6 +540,12 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.secretsV != nil && a.tv.GetFocus() == a.secretsV.filterInput {
+		return event
+	}
+	if a.logsV != nil && a.tv.GetFocus() == a.logsV.filterInput {
+		return event
+	}
+	if a.logSearchV != nil && a.tv.GetFocus() == a.logSearchV.patternInput {
 		return event
 	}
 
@@ -984,6 +1025,29 @@ func (a *App) openSecretDetail(secret awssecrets.Secret) {
 	a.secretDetailV.render(secret)
 	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
 	a.pages.SwitchToPage("secret-detail")
+	a.tv.SetFocus(a.pages)
+}
+
+// openLogSearch opens the search view for logGroupName and runs the
+// first search immediately (see logSearchView.open). logSearchView isn't
+// a registered ui.View, so its context panel is populated manually here
+// — same pattern as openMessages.
+func (a *App) openLogSearch(logGroupName string) {
+	a.logSearchV.open(logGroupName)
+	a.pages.SwitchToPage("log-search")
+	a.tv.SetFocus(a.pages)
+	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
+	for _, sc := range a.logSearchV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
+}
+
+// openLogEventDetail renders the full detail for event and switches to
+// the log-event-detail page.
+func (a *App) openLogEventDetail(event awslogs.LogEvent) {
+	a.logDetailV.render(event)
+	a.pages.SwitchToPage("log-event-detail")
 	a.tv.SetFocus(a.pages)
 }
 

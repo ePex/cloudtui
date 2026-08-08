@@ -17,7 +17,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager"}
+	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager", "cloudwatch-logs"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -115,6 +115,35 @@ func TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused(t *testing.T) {
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
 		t.Errorf("onGlobalKey('l') while secretsV filter focused = %v, want event passed through unchanged", got)
+	}
+}
+
+// TestOnGlobalKeyPassesThroughWhenLogsFilterFocused is
+// logsV.filterInput's counterpart to
+// TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused — same
+// exemption, needed for the same reason.
+func TestOnGlobalKeyPassesThroughWhenLogsFilterFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.logsV.filterInput)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('l') while logsV filter focused = %v, want event passed through unchanged", got)
+	}
+}
+
+// TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused is
+// logSearchV.patternInput's counterpart to the other per-view filter/
+// pattern-input exemptions — same reasoning, needed even though this
+// input doesn't live-filter (typing "l" here must still not navigate
+// away mid-keystroke).
+func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.logSearchV.patternInput)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('l') while logSearchV pattern input focused = %v, want event passed through unchanged", got)
 	}
 }
 
