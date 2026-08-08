@@ -137,6 +137,43 @@ func TestOnPromptDoneShortAliasS(t *testing.T) {
 	}
 }
 
+func TestOnPromptDoneAqOpensConnectionManager(t *testing.T) {
+	a := New(config.Default())
+	a.prompt.SetText("aq")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.connManagerVisible {
+		t.Error("connManagerVisible = false after ':aq', want true")
+	}
+	if got := a.tv.GetFocus(); got != a.connManagerList {
+		t.Errorf("focus after ':aq' = %v, want the connection manager list", got)
+	}
+}
+
+func TestOnPromptDoneConnectionsOpensConnectionManager(t *testing.T) {
+	a := New(config.Default())
+	a.prompt.SetText("connections")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.connManagerVisible {
+		t.Error("connManagerVisible = false after ':connections', want true")
+	}
+}
+
+func TestOnPromptDoneAqWorksFromAnyView(t *testing.T) {
+	a := New(config.Default())
+	a.switchTo("log") // not settings — proves ':aq' isn't tied to any specific starting view
+	a.prompt.SetText("aq")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.connManagerVisible {
+		t.Error("':aq' from the log view did not open the connection manager")
+	}
+}
+
 func TestOnPromptDoneShortAliasQ(t *testing.T) {
 	a := New(config.Default())
 	a.prompt.SetText("q")

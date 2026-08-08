@@ -416,7 +416,14 @@ func (a *App) onPromptDone(key tcell.Key) {
 	defer func() {
 		a.prompt.SetText("")
 		a.topLeft.SwitchToPage("info")
-		a.tv.SetFocus(a.pages)
+		// Commands that open a rootPages overlay (e.g. "aq") already set
+		// focus on that overlay's primitive; a.pages is the underlying main
+		// view, so focusing it here would steal focus out from under the
+		// overlay even though it's still the frontmost visible page.
+		if !a.connManagerVisible && !a.connEditorVisible && !a.themePickerVisible &&
+			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible {
+			a.tv.SetFocus(a.pages)
+		}
 	}()
 
 	if key != tcell.KeyEnter {
@@ -431,6 +438,8 @@ func (a *App) onPromptDone(key tcell.Key) {
 		a.switchTo("home")
 	case cmd == "s" || cmd == "settings":
 		a.switchTo("settings")
+	case cmd == "aq" || cmd == "connections":
+		a.showConnectionManager()
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:
