@@ -74,19 +74,25 @@ tasks:
 
   build:proxy:
     desc: Build the mq-proxy JAR and container image.
+    deps: [build:proxy:jar]
     dir: mq-proxy
     cmds:
-      - ./gradlew bootJar
       - podman build -t mq-proxy .
+
+  build:proxy:jar:
+    desc: Build the mq-proxy JAR (no container image).
+    dir: mq-proxy
+    cmds:
+      - '{{if eq OS "windows"}}gradlew.bat{{else}}./gradlew{{end}} bootJar'
 
   run:proxy:
     desc: Run the mq-proxy application from source.
     dir: mq-proxy
     cmds:
-      - ./gradlew bootRun
+      - '{{if eq OS "windows"}}gradlew.bat{{else}}./gradlew{{end}} bootRun'
 
   test:proxy:
     desc: Run mq-proxy unit tests.
     dir: mq-proxy
     cmds:
-      - ./gradlew test
+      - '{{if eq OS "windows"}}gradlew.bat{{else}}./gradlew{{end}} test'
