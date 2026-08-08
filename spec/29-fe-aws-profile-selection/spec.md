@@ -61,3 +61,17 @@ machine this was built against) list filterable.
    matches; activating one updated the info panel, status bar, and
    showed ⭐ on reopen. `config.yaml` was backed up before this and
    restored byte-for-byte after.
+
+## Addendum: Settings list didn't show the selection (2026-08-08)
+
+Shipped this spec with the Settings row still reading a static "AWS
+Profile" — only the info panel and the overlay itself reflected
+`ActiveAWSProfile`. Reported immediately: real usage (the user tried the
+feature and activated one of their own profiles) surfaced it faster than
+review would have. Fixed: `refreshSettingsList` now renders
+`fmt.Sprintf("AWS Profile: %s", ...)` from `cfg.ActiveAWSProfile` (no disk
+read — the value's already in memory), and `activateAWSProfile` calls
+`refreshSettingsList()`, matching `switchTheme`/`switchConnection`'s
+existing pattern. Verified live against the real, already-activated
+profile already on this machine — no synthetic test data needed since the
+user's own prior usage demonstrated the fix directly.

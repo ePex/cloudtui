@@ -65,17 +65,24 @@ func newSettingsView(a *App) ui.View {
 }
 
 // refreshSettingsList rebuilds the displayed text of all settings-list items
-// to reflect the current config values (theme name, active connection alias).
+// to reflect the current config values (theme name, active connection
+// alias, active AWS profile). The AWS profile name comes straight from
+// cfg.ActiveAWSProfile — no need to re-read ~/.aws here, unlike opening the
+// overlay itself, which lists every discoverable profile.
 func (a *App) refreshSettingsList() {
 	if a.settingsList == nil {
 		return
 	}
 	cur := a.settingsList.GetCurrentItem()
 	conn := a.cfg.ActiveConn()
+	awsProfile := a.cfg.ActiveAWSProfile
+	if awsProfile == "" {
+		awsProfile = "(none)"
+	}
 	a.settingsList.Clear()
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
 	a.settingsList.AddItem(fmt.Sprintf("Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
-	a.settingsList.AddItem("AWS Profiles", "", 0, func() { a.showAWSProfiles() })
+	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}

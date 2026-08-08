@@ -138,6 +138,7 @@ func (a *App) repaintAWSProfiles() {
 func (a *App) activateAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
 	a.infoPanel.SetText(infoPanelText(a.cfg))
+	a.refreshSettingsList()
 	a.closeAWSProfiles()
 	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))
 	if err := config.SaveDefault(a.cfg); err != nil {
