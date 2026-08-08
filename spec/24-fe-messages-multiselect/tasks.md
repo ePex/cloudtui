@@ -18,3 +18,8 @@ Plan: [plan.md](plan.md)
 9. [x] Manual verification against a live broker: bulk delete (14
    messages) and bulk move (3 messages, to a disposable queue created and
    removed for the test) both confirmed working end-to-end.
+10. [x] Changed `d`/`m` to fall back to the cursor row when nothing is
+    marked (per follow-up direction), via a new `targetIDs()` helper.
+    Updated confirm-dialog wording to be singular for the fallback case.
+    Updated/added tests; re-verified live (single delete removed exactly
+    one message; single move opened the picker with nothing marked).

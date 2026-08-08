@@ -180,32 +180,98 @@ func TestMessagesViewRepaintClearsMarks(t *testing.T) {
 	}
 }
 
-func TestMessagesViewDeleteMarkedNoopWithoutMarks(t *testing.T) {
+func TestMessagesViewDeleteMarkedNoopOnEmptyList(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
 	mv := newMessagesView(a)
 	mv.queueName = "orders"
-	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
+	mv.repaint(nil)
 
 	mv.deleteMarked()
 
 	if a.confirmVisible {
-		t.Error("deleteMarked() with no marks should not open the confirm dialog")
+		t.Error("deleteMarked() on an empty list should not open the confirm dialog")
 	}
 }
 
-func TestMessagesViewMoveMarkedNoopWithoutMarks(t *testing.T) {
+func TestMessagesViewMoveMarkedNoopOnEmptyList(t *testing.T) {
+	a := New(config.Default())
+	backend := &fakeQueueBackend{}
+	a.backend = backend
+	mv := newMessagesView(a)
+	mv.queueName = "orders"
+	mv.repaint(nil)
+
+	mv.moveMarked()
+
+	if a.movePickerVisible {
+		t.Error("moveMarked() on an empty list should not open the move picker")
+	}
+}
+
+func TestMessagesViewDeleteFallsBackToCursorWhenNothingMarked(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
 	mv := newMessagesView(a)
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
+	mv.table.Select(1, 0) // cursor on the only row; nothing marked
+
+	mv.deleteMarked()
+
+	if !a.confirmVisible {
+		t.Fatal("deleteMarked() with a cursor row but no marks should open the confirm dialog")
+	}
+	want := `Delete message from "orders"?`
+	if got := a.confirmText.GetText(true); got != want {
+		t.Errorf("confirm text = %q, want %q", got, want)
+	}
+}
+
+func TestMessagesViewMoveFallsBackToCursorWhenNothingMarked(t *testing.T) {
+	a := New(config.Default())
+	backend := &fakeQueueBackend{}
+	a.backend = backend
+	mv := newMessagesView(a)
+	mv.queueName = "orders"
+	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
+	mv.table.Select(1, 0) // cursor on the only row; nothing marked
 
 	mv.moveMarked()
 
-	if a.movePickerVisible {
-		t.Error("moveMarked() with no marks should not open the move picker")
+	if !a.movePickerVisible {
+		t.Error("moveMarked() with a cursor row but no marks should open the move picker")
+	}
+}
+
+func TestMessagesViewTargetIDsPrefersMarkedOverCursor(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "new", Timestamp: time.Unix(2, 0)},
+		{ID: "old", Timestamp: time.Unix(1, 0)},
+	})
+	mv.table.Select(1, 0) // cursor on "new"
+	mv.marked = map[string]bool{"old": true}
+
+	ids := mv.targetIDs()
+	if len(ids) != 1 || ids[0] != "old" {
+		t.Errorf("targetIDs() = %v, want [\"old\"] (the marked set, not the cursor row)", ids)
+	}
+}
+
+func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
+	a := New(config.Default())
+	backend := &fakeQueueBackend{}
+	a.backend = backend
+	mv := newMessagesView(a)
+	mv.queueName = "orders"
+	mv.repaint([]queue.Message{{ID: "", Timestamp: time.Unix(1, 0)}})
+	mv.table.Select(1, 0)
+
+	mv.deleteMarked()
+
+	if a.confirmVisible {
+		t.Error("deleteMarked() should not fall back to a cursor row with no ID")
 	}
 }

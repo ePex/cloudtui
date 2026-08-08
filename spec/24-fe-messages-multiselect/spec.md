@@ -64,12 +64,15 @@ otherwise.
   tag (no per-cell opt-out), so `"[x]"` was silently swallowed and never
   rendered — a real display bug, not a cosmetic choice. Switched to `"✓"`
   (marked) / `" "` (unmarked), which have no tag syntax to collide with.
-- **No-marks behavior for `d`/`m`**: no-op with a status bar hint
-  ("No messages marked (press space to mark)"), not a fallback to acting
-  on the cursor row. The user's own wording ("marks the message, then 'd'
-  deletes the selected message(s)") ties `d`/`m` to the marked set, and a
-  silent fallback to the cursor row on a destructive action risks
-  deleting/moving something the user didn't intend to touch.
+- **No-marks behavior for `d`/`m`**: falls back to the single message under
+  the cursor (per explicit follow-up direction), so `d`/`m` double as a
+  single-item shortcut without requiring an explicit mark first. Only a
+  genuinely empty target (empty list, or a cursor row with no ID) is a
+  no-op. The confirm dialog wording reflects which case it is — plural
+  "Delete N marked message(s)..." when marks exist, singular "Delete
+  message from ...?" (matching the existing single-delete phrasing in
+  `message_detail.go`) for the cursor-fallback case — so it's always
+  clear from the dialog itself what's about to happen.
 - **Bulk delete/move run in a goroutine**: single-item delete/move
   elsewhere in the app (`message_detail.go`) call the backend synchronously
   on the UI goroutine; that's fine for one HTTP call but would visibly

@@ -21,8 +21,10 @@ import (
 // Messages can be multi-selected ("marked", tracked in marked by message ID)
 // independently of the table's cursor: space toggles the mark on the row
 // under the cursor, 'a' marks all, 'n' clears all marks, and 'd'/'m' act on
-// the marked set (delete / move). Marks are cleared on every reload (load),
-// since a refreshed list may reorder or drop messages.
+// the marked set (delete / move). If nothing is marked, 'd'/'m' fall back to
+// the single message under the cursor, so they also work as a single-item
+// shortcut without requiring an explicit mark first. Marks are cleared on
+// every reload (load), since a refreshed list may reorder or drop messages.
 type messagesView struct {
 	table     *tview.Table
 	app       *App
@@ -36,8 +38,8 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 		{Key: "space", Description: "mark"},
 		{Key: "a", Description: "mark all"},
 		{Key: "n", Description: "clear marks"},
-		{Key: "d", Description: "delete marked"},
-		{Key: "m", Description: "move marked"},
+		{Key: "d", Description: "delete marked/current"},
+		{Key: "m", Description: "move marked/current"},
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
 		{Key: "c", Description: "create message"},
@@ -211,6 +213,21 @@ func (mv *messagesView) markedIDs() []string {
 	return ids
 }
 
+// targetIDs returns the marked message IDs, or — if nothing is marked — the
+// single message under the cursor (if it has an ID), so 'd'/'m' also work as
+// a single-item shortcut without requiring an explicit mark first.
+func (mv *messagesView) targetIDs() []string {
+	if ids := mv.markedIDs(); len(ids) > 0 {
+		return ids
+	}
+	row, _ := mv.table.GetSelection()
+	idx := row - 1
+	if idx < 0 || idx >= len(mv.msgs) || mv.msgs[idx].ID == "" {
+		return nil
+	}
+	return []string{mv.msgs[idx].ID}
+}
+
 // toggleMark flips the mark on the row under the cursor and advances the
 // cursor, so repeated space presses mark a run of messages quickly. Messages
 // without an ID (limited-info mode) can't be marked, matching the existing
@@ -271,18 +288,23 @@ func (mv *messagesView) clearMarks() {
 	mv.app.statusBar.SetText("Cleared marks")
 }
 
-// deleteMarked confirms and deletes every marked message. Each deletion is
+// deleteMarked confirms and deletes every marked message, or — if nothing is
+// marked — the single message under the cursor. Each deletion is
 // independent, so one failure doesn't stop the rest; the status bar reports
 // how many of the batch actually succeeded.
 func (mv *messagesView) deleteMarked() {
-	ids := mv.markedIDs()
+	ids := mv.targetIDs()
 	if len(ids) == 0 {
-		mv.app.statusBar.SetText("[yellow]No messages marked (press space to mark)[-]")
+		mv.app.statusBar.SetText("[yellow]No message marked or selected[-]")
 		return
 	}
 	a := mv.app
 	queueName := mv.queueName
-	a.showConfirm(fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName), func() {
+	question := fmt.Sprintf("Delete message from %q?", queueName)
+	if len(mv.markedIDs()) > 0 {
+		question = fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName)
+	}
+	a.showConfirm(question, func() {
 		go func() {
 			failed := 0
 			for _, id := range ids {
@@ -292,9 +314,12 @@ func (mv *messagesView) deleteMarked() {
 				}
 			}
 			a.tv.QueueUpdateDraw(func() {
-				if failed > 0 {
-					a.statusBar.SetText(fmt.Sprintf("[red]Deleted %d/%d marked message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
-				} else {
+				switch {
+				case failed > 0:
+					a.statusBar.SetText(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
+				case len(ids) == 1:
+					a.statusBar.SetText("Deleted message")
+				default:
 					a.statusBar.SetText(fmt.Sprintf("Deleted %d message(s)", len(ids)))
 				}
 				mv.load()
@@ -304,12 +329,13 @@ func (mv *messagesView) deleteMarked() {
 }
 
 // moveMarked opens the move picker once and, on target selection, moves
-// every marked message there. As with deleteMarked, one failure doesn't stop
+// every marked message there, or — if nothing is marked — the single
+// message under the cursor. As with deleteMarked, one failure doesn't stop
 // the rest.
 func (mv *messagesView) moveMarked() {
-	ids := mv.markedIDs()
+	ids := mv.targetIDs()
 	if len(ids) == 0 {
-		mv.app.statusBar.SetText("[yellow]No messages marked (press space to mark)[-]")
+		mv.app.statusBar.SetText("[yellow]No message marked or selected[-]")
 		return
 	}
 	a := mv.app
@@ -332,9 +358,12 @@ func (mv *messagesView) moveMarked() {
 				}
 			}
 			a.tv.QueueUpdateDraw(func() {
-				if failed > 0 {
-					a.statusBar.SetText(fmt.Sprintf("[red]Moved %d/%d marked message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
-				} else {
+				switch {
+				case failed > 0:
+					a.statusBar.SetText(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
+				case len(ids) == 1:
+					a.statusBar.SetText(fmt.Sprintf("Moved message to %q", target))
+				default:
 					a.statusBar.SetText(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
 				}
 				restore()
