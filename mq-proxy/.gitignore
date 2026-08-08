@@ -9,3 +9,7 @@
 
 # Spring Boot DevTools restart trigger
 .reloadtrigger
+
+# devtool start-proxy/stop-proxy bookkeeping (see tui/cmd/devtool)
+devtool.pid
+devtool.log

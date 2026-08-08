@@ -19,12 +19,17 @@ this module.
 - `cmd/tui/` — entrypoint only (`main.go`); no logic beyond wiring.
 - `cmd/seedqueue/` — entrypoint only; dev tool that sends sample JSON
   messages to a queue (`task seed:queue -- <queue> <count>`).
+- `cmd/devtool/` — entrypoint only; dev tool for live-testing setup: create/
+  remove disposable queues via JMX, start/stop a local mq-proxy instance
+  (`task test:queue:add`/`remove`, `task dev:proxy:start`/`stop`).
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
 - `internal/ui/` — the `View` interface shared across resource views.
 - `internal/ui/views/` — individual resource view implementations.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
 - `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
 - `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
+- `internal/devtool/` — JMX queue admin and mq-proxy process management,
+  used by `cmd/devtool`.
 
 ## Testing
 
@@ -35,6 +40,12 @@ this module.
   package), colocated in the same directory.
 - If something is genuinely untestable, say so explicitly in the test file
   or the relevant spec's `plan.md`, and verify manually instead.
+- For changes touching queue/message/connection behavior, "verify manually"
+  means driving the real TUI against a real broker, not just reading the
+  code — use the `verify-live` skill (`.claude/skills/verify-live/`), which
+  also covers `task seed:queue`, `task test:queue:add`/`remove`, and
+  `task dev:proxy:start`/`stop`. Record what you checked in the feature's
+  `tasks.md`.
 
 ## Dependencies
 
