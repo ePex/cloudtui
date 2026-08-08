@@ -52,10 +52,11 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	bg := tcell.GetColor(p.Background)
 
-	// Status bar
+	// Status bar — recolor only; don't touch its text. It's either blank
+	// (idle) or showing a transient message, and there's no longer a
+	// default legend to restore (see newStatusBar's doc comment).
 	a.statusBar.SetBackgroundColor(tcell.GetColor(p.StatusBarBg))
 	a.statusBar.SetTextColor(tcell.GetColor(p.StatusBarText))
-	a.statusBar.SetText(readyStatusText(a.cfg))
 
 	// Info panel — rebuildtext to show the new theme name
 	a.infoPanel.SetBackgroundColor(bg)
