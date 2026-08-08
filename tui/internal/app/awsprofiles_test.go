@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -239,5 +240,43 @@ func TestAWSProfilesEnterActivatesRowRespectingFilter(t *testing.T) {
 
 	if got := a.cfg.ActiveAWSProfile; got != "personal" {
 		t.Errorf("cfg.ActiveAWSProfile = %q, want %q (the filtered row, not the unfiltered index)", got, "personal")
+	}
+}
+
+// TestRepaintAWSProfilesScrollsToTopWithManyRows guards against the same
+// bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top):
+// tview.Table's "track end" auto-scroll latches on during the table's
+// first, still-empty draw and stays latched through repaint, scrolling a
+// long list to the bottom instead of the top.
+func TestRepaintAWSProfilesScrollsToTopWithManyRows(t *testing.T) {
+	a := New(config.Default())
+	profiles := make([]awsprofile.Profile, 50)
+	for i := range profiles {
+		profiles[i] = awsprofile.Profile{Name: fmt.Sprintf("profile-%02d", i)}
+	}
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return profiles, nil
+	}
+
+	table := a.awsProfilesTable
+	table.SetRect(0, 0, 60, 15) // fewer visible rows than profiles above
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(60, 15)
+
+	// First draw while the table is still empty, mirroring the real
+	// sequence: showAWSProfiles draws the overlay before populating it.
+	table.Draw(screen)
+
+	a.showAWSProfiles()
+
+	// The redraw that follows population.
+	table.Draw(screen)
+
+	if row, _ := table.GetOffset(); row != 0 {
+		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
 	}
 }

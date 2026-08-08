@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/gdamore/tcell/v2"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -273,5 +276,38 @@ func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
 
 	if a.confirmVisible {
 		t.Error("deleteMarked() should not fall back to a cursor row with no ID")
+	}
+}
+
+// TestMessagesViewRepaintScrollsToTopWithManyRows guards against the same
+// bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top):
+// tview.Table's "track end" auto-scroll latches on during the table's
+// first, still-empty draw and stays latched through repaint, scrolling a
+// long list to the bottom instead of the top.
+func TestMessagesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.table.SetRect(0, 0, 60, 15) // fewer visible rows than messages below
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(60, 15)
+
+	// First draw while the table is still empty (header only), mirroring
+	// the real sequence: openMessages draws before the async load returns.
+	mv.table.Draw(screen)
+
+	msgs := make([]queue.Message, 50)
+	for i := range msgs {
+		msgs[i] = queue.Message{ID: fmt.Sprintf("id-%02d", i), Timestamp: time.Unix(int64(i), 0)}
+	}
+	mv.repaint(msgs)
+
+	// The redraw that follows repaint via QueueUpdateDraw.
+	mv.table.Draw(screen)
+
+	if row, _ := mv.table.GetOffset(); row != 0 {
+		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
 	}
 }

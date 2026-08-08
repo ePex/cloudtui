@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -49,9 +50,10 @@ func TestParamDetailViewShortcutsIncludeRevealOnlyBeforeReveal(t *testing.T) {
 	}
 
 	a.paramDetailV.param.Value = "revealed-value"
+	a.paramDetailV.displayed = true
 	for _, sc := range a.paramDetailV.Shortcuts() {
 		if sc.Key == "r" {
-			t.Error("Shortcuts() still lists \"r\" (reveal) after the value was revealed")
+			t.Error("Shortcuts() still lists \"r\" (reveal) after the value was displayed")
 		}
 	}
 }
@@ -80,17 +82,14 @@ func TestOpenParamDetailSwitchesPageAndSetsTitle(t *testing.T) {
 	}
 }
 
-func TestParamDetailViewShortcutsIncludeCopyOnlyWhenValuePresent(t *testing.T) {
+// TestParamDetailViewShortcutsIncludeCopyImmediately locks in the
+// behavior the user asked for: 'c' must be available the moment the
+// detail view opens, before any reveal — copying a SecureString
+// shouldn't require displaying it first.
+func TestParamDetailViewShortcutsIncludeCopyImmediately(t *testing.T) {
 	a := New(config.Default())
 	a.paramDetailV.param = awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""}
 
-	for _, sc := range a.paramDetailV.Shortcuts() {
-		if sc.Key == "c" {
-			t.Error("Shortcuts() lists \"c\" (copy) for an unrevealed SecureString with no value to copy")
-		}
-	}
-
-	a.paramDetailV.param.Value = "revealed-value"
 	found := false
 	for _, sc := range a.paramDetailV.Shortcuts() {
 		if sc.Key == "c" {
@@ -98,7 +97,7 @@ func TestParamDetailViewShortcutsIncludeCopyOnlyWhenValuePresent(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("Shortcuts() missing \"c\" (copy) once a value is present")
+		t.Error("Shortcuts() missing \"c\" (copy) before any reveal has happened")
 	}
 }
 
@@ -125,21 +124,79 @@ func TestParamDetailViewCopyWritesValueToClipboard(t *testing.T) {
 	}
 }
 
-func TestParamDetailViewCopyNoOpWithoutValue(t *testing.T) {
-	a := New(config.Default())
-	screen := tcell.NewSimulationScreen("")
-	if err := screen.Init(); err != nil {
-		t.Fatalf("screen.Init: %v", err)
-	}
-	a.screen = screen
-	a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+// TestHandleFetchResult exercises the fetch outcome logic directly,
+// bypassing the goroutine + QueueUpdateDraw in fetchThen (which would
+// otherwise block forever without a running tview event loop — see
+// ssmParamsView/queuesView's tests for the same established constraint).
+// This is what actually proves the "'c' before reveal fetches, then
+// copies, without displaying" behavior end to end for a SecureString.
+func TestParamDetailViewHandleFetchResult(t *testing.T) {
+	t.Run("success copies without displaying", func(t *testing.T) {
+		a := New(config.Default())
+		screen := tcell.NewSimulationScreen("")
+		if err := screen.Init(); err != nil {
+			t.Fatalf("screen.Init: %v", err)
+		}
+		a.screen = screen
+		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
 
-	capture := a.paramDetailV.textView.GetInputCapture()
-	capture(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
+		a.paramDetailV.handleFetchResult("hello", nil, a.paramDetailV.copyFetchedValue)
 
-	if got := screen.GetClipboardData(); got != nil {
-		t.Errorf("clipboard = %q, want untouched (nil) for an unrevealed SecureString", got)
-	}
+		if got := string(screen.GetClipboardData()); got != "hello" {
+			t.Errorf("clipboard = %q, want %q", got, "hello")
+		}
+		if a.paramDetailV.displayed {
+			t.Error("displayed = true, want false: copying must not display the value on screen")
+		}
+		text := a.paramDetailV.textView.GetText(true)
+		if strings.Contains(text, "hello") {
+			t.Error("detail text must not contain the value after a copy-only fetch")
+		}
+		if !strings.Contains(text, "reveal") {
+			t.Error("detail text should still show the masked prompt after a copy-only fetch")
+		}
+	})
+
+	t.Run("success then reveal uses the cached value, no re-fetch", func(t *testing.T) {
+		a := New(config.Default())
+		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+		a.paramDetailV.handleFetchResult("hello", nil, a.paramDetailV.copyFetchedValue)
+
+		calls := 0
+		a.revealParameter = func(context.Context, string, string) (string, error) {
+			calls++
+			return "", nil
+		}
+		a.paramDetailV.reveal()
+
+		if calls != 0 {
+			t.Error("reveal() re-fetched despite the value already being cached from a prior copy")
+		}
+		if !a.paramDetailV.displayed {
+			t.Error("displayed = false, want true after reveal() on an already-fetched parameter")
+		}
+		if got := a.paramDetailV.textView.GetText(true); !strings.Contains(got, "hello") {
+			t.Errorf("detail text = %q, want it to show the cached value", got)
+		}
+	})
+
+	t.Run("error logs and shows status, does not call onSuccess", func(t *testing.T) {
+		a := New(config.Default())
+		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+
+		called := false
+		a.paramDetailV.handleFetchResult("", context.DeadlineExceeded, func() { called = true })
+
+		if called {
+			t.Error("onSuccess was invoked despite an error")
+		}
+		if a.paramDetailV.param.Value != "" {
+			t.Error("param.Value set despite an error")
+		}
+		if got := a.statusBar.GetText(true); !strings.Contains(got, "deadline exceeded") {
+			t.Errorf("status bar = %q, want it to contain the error", got)
+		}
+	})
 }
 
 func TestParamDetailViewEscReturnsToSSMParameters(t *testing.T) {

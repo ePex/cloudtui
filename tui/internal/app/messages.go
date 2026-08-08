@@ -179,6 +179,14 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
 		mv.table.SetCell(row, 5, tview.NewTableCell(m.Preview).SetTextColor(textColor).SetExpansion(3))
 	}
+
+	if mv.table.GetRowCount() > 1 {
+		mv.table.Select(1, 0)
+		// Select alone isn't enough — see queues.go's repaint for why
+		// SetOffset is also needed (tview.Table's "track end" auto-scroll
+		// latches on during the table's first, still-empty draw).
+		mv.table.SetOffset(0, 0)
+	}
 }
 
 // markerCell builds the checkbox cell shown in the marker column. Plain "[x]"

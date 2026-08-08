@@ -124,6 +124,14 @@ func (a *App) repaintAWSProfiles() {
 		t.SetCell(row, 2, tview.NewTableCell(string(prof.AuthType)).SetTextColor(textColor).SetExpansion(1))
 	}
 
+	if t.GetRowCount() > 1 {
+		t.Select(1, 0)
+		// Select alone isn't enough — see queues.go's repaint for why
+		// SetOffset is also needed (tview.Table's "track end" auto-scroll
+		// latches on during the table's first, still-empty draw).
+		t.SetOffset(0, 0)
+	}
+
 	// "(text)", not "[text]" — see queues.go's updateTitle for why.
 	if a.awsProfilesFilter != "" {
 		t.SetTitle(fmt.Sprintf(" AWS Profiles (%s) ", a.awsProfilesFilter))
