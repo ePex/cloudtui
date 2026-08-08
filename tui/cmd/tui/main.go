@@ -12,7 +12,16 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
+// version is overridden via -ldflags at release build time (see
+// .goreleaser.yaml); a locally-built binary reports "dev".
+var version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println("cloudtui " + version)
+		return
+	}
+
 	var logWriter io.Writer = io.Discard
 	if f := openLogFile(); f != nil {
 		defer f.Close()
