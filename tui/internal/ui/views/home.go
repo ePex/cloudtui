@@ -37,21 +37,17 @@ func (h *HomeView) Name() string               { return "home" }
 func (h *HomeView) Title() string              { return "Home" }
 func (h *HomeView) Primitive() tview.Primitive { return h.table }
 
-// Shortcuts lists the app's global hotkeys. Home has no view-specific
-// bindings of its own, so this fills what would otherwise be an empty
-// context panel with the reference other views don't need repeated —
-// the bottom status bar shows the same legend at idle, but a transient
-// message (an error, a confirmation) can overwrite it indefinitely with
-// nothing to restore it, unlike this panel, which is view-driven.
+// Shortcuts lists the app's global hotkeys, minus "h" (home) — you're
+// already on Home whenever this panel is visible, so that entry would be a
+// no-op reminder to do the thing you're already doing. Home has no
+// view-specific bindings of its own, so this fills what would otherwise be
+// an empty context panel with a reference no other view needs to repeat.
 //
-// These are duplicated from app.onGlobalKey/statusbar.go's
-// readyStatusText by necessity (different package, different rendering:
-// plain data here vs. a pre-colored string there) — if a global hotkey is
-// ever added or changed, update both.
+// These are duplicated from app.onGlobalKey by necessity (different
+// package) — if a global hotkey is ever added or changed, update both.
 func (h *HomeView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "?", Description: "help"},
-		{Key: "h", Description: "home"},
 		{Key: "l", Description: "log"},
 		{Key: "s", Description: "settings"},
 		{Key: "q", Description: "quit"},

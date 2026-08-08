@@ -57,10 +57,10 @@ func TestHomeViewImplementsShortcuttable(t *testing.T) {
 	}
 }
 
-func TestHomeViewShortcutsIncludeAllGlobalHotkeys(t *testing.T) {
+func TestHomeViewShortcutsIncludeGlobalHotkeysExceptHome(t *testing.T) {
 	h := newTestHome(nil)
 	want := map[string]string{
-		"?": "help", "h": "home", "l": "log",
+		"?": "help", "l": "log",
 		"s": "settings", "q": "quit", ":": "command",
 	}
 	got := h.Shortcuts()
@@ -70,6 +70,15 @@ func TestHomeViewShortcutsIncludeAllGlobalHotkeys(t *testing.T) {
 	for _, sc := range got {
 		if want[sc.Key] != sc.Description {
 			t.Errorf("Shortcuts() key %q = %q, want %q", sc.Key, sc.Description, want[sc.Key])
+		}
+	}
+}
+
+func TestHomeViewShortcutsExcludeHomeItself(t *testing.T) {
+	h := newTestHome(nil)
+	for _, sc := range h.Shortcuts() {
+		if sc.Key == "h" {
+			t.Error("Shortcuts() includes \"h\" (home) — a no-op reminder while already on Home")
 		}
 	}
 }

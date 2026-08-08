@@ -409,10 +409,13 @@ func TestSwitchToHomeShowsGlobalHotkeysInContextPanel(t *testing.T) {
 	a.switchTo("home")
 
 	text := a.contextPanel.GetText(true)
-	for _, want := range []string{"?", "help", "h", "home", "l", "log", "s", "settings", "q", "quit", ":", "command"} {
+	for _, want := range []string{"?", "help", "l", "log", "s", "settings", "q", "quit", ":", "command"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("contextPanel after switchTo(home) = %q, want it to contain %q", text, want)
 		}
+	}
+	if strings.Contains(text, "home") {
+		t.Errorf("contextPanel after switchTo(home) = %q, want it to omit the redundant \"home\" entry", text)
 	}
 }
 
