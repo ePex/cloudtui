@@ -29,6 +29,30 @@ tasks:
     cmds:
       - go run ./cmd/seedqueue {{.CLI_ARGS}}
 
+  test:queue:add:
+    desc: 'Create a disposable ActiveMQ queue for manual testing. Usage: task test:queue:add -- <name>'
+    dir: tui
+    cmds:
+      - go run ./cmd/devtool add-queue {{.CLI_ARGS}}
+
+  test:queue:remove:
+    desc: 'Remove a disposable ActiveMQ queue created for manual testing. Usage: task test:queue:remove -- <name>'
+    dir: tui
+    cmds:
+      - go run ./cmd/devtool remove-queue {{.CLI_ARGS}}
+
+  dev:proxy:start:
+    desc: Build and start mq-proxy in the background, for live-testing the proxy backend.
+    dir: tui
+    cmds:
+      - go run ./cmd/devtool start-proxy
+
+  dev:proxy:stop:
+    desc: Stop the mq-proxy instance started by dev:proxy:start.
+    dir: tui
+    cmds:
+      - go run ./cmd/devtool stop-proxy
+
   test:
     desc: Run all tests.
     deps: [test:tui, test:proxy]
