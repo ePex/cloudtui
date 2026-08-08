@@ -83,16 +83,16 @@ tasks:
     desc: Build the mq-proxy JAR (no container image).
     dir: mq-proxy
     cmds:
-      - '{{if eq OS "windows"}}./gradlew.bat{{else}}./gradlew{{end}} bootJar'
+      - '{{if eq OS "windows"}}.\gradlew.bat{{else}}./gradlew{{end}} bootJar'
 
   run:proxy:
     desc: Run the mq-proxy application from source.
     dir: mq-proxy
     cmds:
-      - '{{if eq OS "windows"}}./gradlew.bat{{else}}./gradlew{{end}} bootRun'
+      - '{{if eq OS "windows"}}.\gradlew.bat{{else}}./gradlew{{end}} bootRun'
 
   test:proxy:
     desc: Run mq-proxy unit tests.
     dir: mq-proxy
     cmds:
-      - '{{if eq OS "windows"}}./gradlew.bat{{else}}./gradlew{{end}} test'
+      - '{{if eq OS "windows"}}.\gradlew.bat{{else}}./gradlew{{end}} test'
