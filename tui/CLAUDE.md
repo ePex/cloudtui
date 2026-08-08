@@ -46,6 +46,11 @@ this module.
   also covers `task seed:queue`, `task test:queue:add`/`remove`, and
   `task dev:proxy:start`/`stop`. Record what you checked in the feature's
   `tasks.md`.
+- `task smoke:test` (`tui/scripts/smoke-test.sh`) automates the golden path
+  (list/browse/mark/delete/move messages, switch to the proxy backend) as a
+  quick regression check — run it after changes likely to affect that path,
+  but it doesn't replace verifying a *new* feature's specific behavior by
+  hand (see the `verify-live` skill for why).
 
 ## Dependencies
 
