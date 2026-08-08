@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -135,6 +136,7 @@ func (pv *ssmParamsView) load() {
 		params, err := pv.app.listParameters(context.Background(), profile, "/")
 		pv.app.tv.QueueUpdateDraw(func() {
 			if err != nil {
+				slog.Error("ssm parameters: failed to list parameters", "error", err)
 				pv.showError(err)
 				return
 			}
@@ -179,6 +181,14 @@ func (pv *ssmParamsView) repaint(params []awsssm.Parameter) {
 			lm = prm.LastModified.Local().Format("2006-01-02 15:04:05")
 		}
 		pv.table.SetCell(row, 2, tview.NewTableCell(lm).SetTextColor(textColor).SetExpansion(2))
+	}
+
+	if pv.table.GetRowCount() > 1 {
+		pv.table.Select(1, 0)
+		// Select alone isn't enough — see queues.go's repaint for why
+		// SetOffset is also needed (tview.Table's "track end" auto-scroll
+		// latches on during the table's first, still-empty draw).
+		pv.table.SetOffset(0, 0)
 	}
 
 	// "(text)", not "[text]" — see queues.go's updateTitle for why.

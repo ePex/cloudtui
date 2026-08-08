@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gdamore/tcell/v2"
 
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
@@ -170,5 +173,40 @@ func TestSSMParamsViewShowErrorRendersMessage(t *testing.T) {
 
 	if got := a.ssmParamsV.table.GetCell(1, 0).Text; !strings.Contains(got, "deadline exceeded") {
 		t.Errorf("error cell = %q, want it to contain the error", got)
+	}
+}
+
+// TestSSMParamsViewRepaintScrollsToTopWithManyRows guards against the same
+// bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top):
+// tview.Table's "track end" auto-scroll latches on during the table's
+// first, still-empty draw and stays latched through repaint, scrolling a
+// long list to the bottom instead of the top.
+func TestSSMParamsViewRepaintScrollsToTopWithManyRows(t *testing.T) {
+	a := New(config.Default())
+	table := a.ssmParamsV.table
+	table.SetRect(0, 0, 60, 15) // fewer visible rows than params below
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(60, 15)
+
+	// First draw while the table is still empty (header only), mirroring
+	// the real sequence: switchTo("ssm-parameters") draws before the async
+	// load returns.
+	table.Draw(screen)
+
+	params := make([]awsssm.Parameter, 50)
+	for i := range params {
+		params[i] = awsssm.Parameter{Name: fmt.Sprintf("/app/param-%02d", i), Type: awsssm.TypeString, Value: "x"}
+	}
+	a.ssmParamsV.repaint(params)
+
+	// The redraw that follows repaint via QueueUpdateDraw.
+	table.Draw(screen)
+
+	if row, _ := table.GetOffset(); row != 0 {
+		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
 	}
 }

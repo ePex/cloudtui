@@ -92,3 +92,33 @@ display, `r` to reveal, async fetch + redraw) is verified by
 against a real encrypted value. This is consistent with the plan's
 testing note that AWS-calling functions themselves aren't exercised by
 live traffic in tests.
+
+## Follow-up bugfix (found while live-verifying FE 33)
+
+`ssmparams.go`'s `load()` and `paramdetail.go`'s `reveal()` showed
+errors in the status bar but never logged them via `slog.Error`, unlike
+every other error path in `internal/app`. Fixed alongside the identical
+gap in FE 33's `secrets.go`/`secretdetail.go` — see
+`spec/33-fe-aws-secrets-manager/tasks.md`'s "Bugfix found during live
+verification" section for the full writeup.
+
+## Follow-up UX change (requested while building FE 33)
+
+`paramdetail.go`'s `c` (copy) shortcut required a `SecureString` to
+already be revealed via `r` first. Changed so `c` is available
+immediately and, if needed, fetches the value silently (via the same
+`GetParameter` call `r` would trigger) without ever displaying it —
+matching the identical change made to FE 33's `secretdetail.go`. See
+`spec/33-fe-aws-secrets-manager/tasks.md`'s "Follow-up UX change:
+copy shouldn't require reveal first" section for the full writeup;
+`paramdetail_test.go` gained `TestParamDetailViewHandleFetchResult`
+covering the same silent-fetch-then-copy path.
+
+## Follow-up bugfix (found while using FE 33)
+
+`ssmparams.go`'s `repaint` never picked up the scroll-to-top fix from
+`spec/11-bugfix-queues-scroll-to-top` — a long enough parameter list
+(396 real parameters) opened scrolled to the bottom instead of the top.
+Fixed alongside the identical gap in FE 33's `secrets.go` — see
+`spec/33-fe-aws-secrets-manager/tasks.md`'s "Follow-up bugfix: list
+didn't scroll to top on load" section for the full writeup.
