@@ -231,11 +231,20 @@ func (qv *queuesView) applyFilter(s string) {
 	qv.repaint(qv.allSummaries)
 }
 
+// updateTitle sets the table's border title. The filtered case uses
+// "(text)", not "[text]" — tview.Box titles run through the same
+// tag-parsing Print() that Table cells do (see messages.go's markerCell
+// for the same issue with "[x]"), so a filter string wrapped in square
+// brackets is silently swallowed as an invalid color tag instead of
+// displayed. Found live: GetTitle() still returns the literal "[text]"
+// string (it's just the stored value), so this was invisible to any test
+// that doesn't actually Draw() to a screen and read back the rendered
+// output — see TestQueuesViewFilteredTitleActuallyRenders.
 func (qv *queuesView) updateTitle() {
 	if qv.filter == "" {
 		qv.table.SetTitle(" Queues ")
 	} else {
-		qv.table.SetTitle(fmt.Sprintf(" Queues [%s] ", qv.filter))
+		qv.table.SetTitle(fmt.Sprintf(" Queues (%s) ", qv.filter))
 	}
 }
 

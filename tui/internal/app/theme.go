@@ -177,6 +177,23 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.messageDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	}
 
+	// SSM Parameters table + filter input
+	if a.ssmParamsV != nil {
+		a.ssmParamsV.table.SetBackgroundColor(bg)
+		a.ssmParamsV.table.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+		a.ssmParamsV.table.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+		a.ssmParamsV.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+		a.ssmParamsV.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.ssmParamsV.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	}
+
+	// Parameter detail text view
+	if a.paramDetailV != nil {
+		a.paramDetailV.textView.SetBackgroundColor(bg)
+		a.paramDetailV.textView.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+		a.paramDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+	}
+
 	// Move-picker
 	if a.movePickerFlex != nil {
 		a.movePickerFlex.SetBackgroundColor(bg)
