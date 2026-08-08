@@ -395,10 +395,24 @@ func (f *fakeShortcuttableView) Shortcuts() []ui.Shortcut {
 
 func TestSwitchToClearsContextPanelForNonShortcuttableView(t *testing.T) {
 	a := New(config.Default())
-	// home and settings don't implement Shortcuttable
-	a.switchTo("home")
+	// settings doesn't implement Shortcuttable (home does, deliberately —
+	// see TestSwitchToHomeShowsGlobalHotkeysInContextPanel).
+	a.switchTo("settings")
 	if got := a.contextPanel.GetText(true); got != "" {
-		t.Errorf("contextPanel after switchTo(home) = %q, want empty", got)
+		t.Errorf("contextPanel after switchTo(settings) = %q, want empty", got)
+	}
+}
+
+func TestSwitchToHomeShowsGlobalHotkeysInContextPanel(t *testing.T) {
+	a := New(config.Default())
+
+	a.switchTo("home")
+
+	text := a.contextPanel.GetText(true)
+	for _, want := range []string{"?", "help", "h", "home", "l", "log", "s", "settings", "q", "quit", ":", "command"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("contextPanel after switchTo(home) = %q, want it to contain %q", text, want)
+		}
 	}
 }
 
