@@ -194,6 +194,23 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.paramDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 	}
 
+	// Secrets Manager table + filter input
+	if a.secretsV != nil {
+		a.secretsV.table.SetBackgroundColor(bg)
+		a.secretsV.table.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+		a.secretsV.table.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+		a.secretsV.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+		a.secretsV.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.secretsV.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	}
+
+	// Secret detail text view
+	if a.secretDetailV != nil {
+		a.secretDetailV.textView.SetBackgroundColor(bg)
+		a.secretDetailV.textView.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+		a.secretDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+	}
+
 	// Move-picker
 	if a.movePickerFlex != nil {
 		a.movePickerFlex.SetBackgroundColor(bg)

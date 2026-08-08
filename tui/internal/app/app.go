@@ -16,6 +16,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
+	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -88,9 +89,13 @@ type App struct {
 	topBarHeight           int
 	listAWSProfiles        func(context.Context) ([]awsprofile.Profile, error)
 	ssmParamsV             *ssmParamsView
+	secretsV               *secretsView
 	paramDetailV           *paramDetailView
+	secretDetailV          *secretDetailView
 	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
 	revealParameter        func(ctx context.Context, profile, name string) (string, error)
+	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
 	screen                 tcell.Screen
 }
 
@@ -106,6 +111,7 @@ func New(cfg config.Config) *App {
 			Entries: []views.ViewInfo{
 				{Name: "queues", Description: "List ActiveMQ queues"},
 				{Name: "ssm-parameters", Description: "Browse AWS SSM parameters"},
+				{Name: "secrets-manager", Description: "Browse AWS Secrets Manager secrets"},
 			},
 		},
 		{
@@ -144,6 +150,8 @@ func New(cfg config.Config) *App {
 	a.listAWSProfiles = awsprofile.List
 	a.listParameters = awsssm.List
 	a.revealParameter = awsssm.Reveal
+	a.listSecrets = awssecrets.List
+	a.revealSecret = awssecrets.Reveal
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -165,6 +173,8 @@ func New(cfg config.Config) *App {
 	a.messageDetailV = newMessageDetailView(a)
 	a.ssmParamsV = newSSMParamsView(a)
 	a.paramDetailV = newParamDetailView(a)
+	a.secretsV = newSecretsView(a)
+	a.secretDetailV = newSecretDetailView(a)
 
 	// Wire Enter in the SSM parameters table to open the detail view for
 	// the selected parameter. Done here because paramDetailV must exist first.
@@ -174,6 +184,16 @@ func New(cfg config.Config) *App {
 			return
 		}
 		a.openParamDetail(a.ssmParamsV.filtered[idx])
+	})
+
+	// Wire Enter in the secrets table to open the detail view for the
+	// selected secret. Done here because secretDetailV must exist first.
+	a.secretsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.secretsV.filtered) {
+			return
+		}
+		a.openSecretDetail(a.secretsV.filtered[idx])
 	})
 
 	// Wire Enter in the queues table to open the messages view for the
@@ -196,7 +216,7 @@ func New(cfg config.Config) *App {
 		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -206,6 +226,7 @@ func New(cfg config.Config) *App {
 	// home entry / switchTo — opened directly via their own open* helper).
 	a.pages.AddPage("messages", a.messagesV.table, true, false)
 	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
+	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
 	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -481,6 +502,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.ssmParamsV != nil && a.tv.GetFocus() == a.ssmParamsV.filterInput {
+		return event
+	}
+	if a.secretsV != nil && a.tv.GetFocus() == a.secretsV.filterInput {
 		return event
 	}
 
@@ -953,6 +977,13 @@ func (a *App) openParamDetail(param awsssm.Parameter) {
 	a.paramDetailV.render(param)
 	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
 	a.pages.SwitchToPage("ssm-param-detail")
+	a.tv.SetFocus(a.pages)
+}
+
+func (a *App) openSecretDetail(secret awssecrets.Secret) {
+	a.secretDetailV.render(secret)
+	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
+	a.pages.SwitchToPage("secret-detail")
 	a.tv.SetFocus(a.pages)
 }
 
