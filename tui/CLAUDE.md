@@ -30,6 +30,9 @@ this module.
 - `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
 - `internal/devtool/` — JMX queue admin and mq-proxy process management,
   used by `cmd/devtool`.
+- `internal/awsprofile/` — read-only discovery of AWS CLI profiles from
+  `~/.aws/config`/`~/.aws/credentials` (via `aws-sdk-go-v2/config`), shown
+  in Settings → AWS Profiles. No credential resolution, no AWS API calls.
 
 ## Testing
 
@@ -54,6 +57,8 @@ this module.
 
 ## Dependencies
 
-- Currently: `tview`/`tcell` (UI).
+- Currently: `tview`/`tcell` (UI), `aws-sdk-go-v2/config` (AWS shared
+  config/credentials file parsing — justification in
+  `spec/28-fe-aws-profile-discovery/plan.md`).
 - Justify any new dependency in the relevant spec's `plan.md` before
   adding it to `go.mod`.

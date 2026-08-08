@@ -72,6 +72,8 @@ round-tripped through `Save()` will always use the new `connections` shape.
   "Connection: &lt;alias&gt;" (opens the connection manager overlay). Both items
   reflect the current live values and refresh automatically after changes.
   The theme picker lists all available themes with the active one marked ⭐.
+  (A third, unrelated item — "AWS Profiles" — was added later; see
+  `spec/28-fe-aws-profile-discovery/`.)
 - **Connection manager overlay**:
   - Lists all connections as `<alias>  <name>  (<backend>)`; active one marked ⭐.
   - Keyboard: `Enter` = activate, `n` = new, `e` = edit, `d` = duplicate,

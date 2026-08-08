@@ -129,6 +129,22 @@ func reapplyTheme(a *App, p config.Palette) {
 		}
 	}
 
+	// AWS Profiles overlay
+	if a.awsProfilesFlex != nil {
+		a.awsProfilesFlex.SetBackgroundColor(bg)
+		a.awsProfilesFlex.SetBorderColor(tcell.GetColor(p.Border))
+		a.awsProfilesFlex.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.awsProfilesTable != nil {
+		a.awsProfilesTable.SetBackgroundColor(bg)
+		a.awsProfilesTable.SetBorderColor(tcell.GetColor(p.Border))
+		a.awsProfilesTable.SetTitleColor(tcell.GetColor(p.Border))
+	}
+	if a.awsProfilesHints != nil {
+		a.awsProfilesHints.SetBackgroundColor(bg)
+		a.awsProfilesHints.SetTextColor(tcell.GetColor(p.Text))
+	}
+
 	// Log text view
 	if a.logV != nil {
 		a.logV.textView.SetBackgroundColor(bg)
