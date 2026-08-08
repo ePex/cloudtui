@@ -73,6 +73,13 @@ connections:
   #     username: cloudtui
   #     password: changeme
 
+# activeAWSProfile: the AWS CLI profile selected in Settings -> AWS Profiles
+# (read from ~/.aws/config / ~/.aws/credentials, or their AWS_CONFIG_FILE /
+# AWS_SHARED_CREDENTIALS_FILE overrides). Independent of `connections` above —
+# this is discovery/selection only; it isn't wired to any broker connection
+# yet. Leave unset if you don't use AWS CLI profiles.
+# activeAWSProfile: my-profile
+
 # ─── Switching themes ─────────────────────────────────────────────────────────
 # Change the theme: field above to any available theme name.
 # Only the theme name is saved — the full palette is never written to this file.

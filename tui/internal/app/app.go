@@ -27,61 +27,65 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv                  *tview.Application
-	rootPages           *tview.Pages
-	pages               *tview.Pages
-	topLeft             *tview.Pages
-	prompt              *tview.InputField
-	helpVisible         bool
-	views               []ui.View
-	cfg                 config.Config
-	infoPanel           *tview.TextView
-	divider             *tview.TextView
-	contextPanel        *tview.TextView
-	logoPanel           *tview.TextView
-	statusBar           *tview.TextView
-	settingsList        *tview.List
-	logV                *logView
-	queuesV             *queuesView
-	messagesV           *messagesView
-	messageDetailV      *messageDetailView
-	confirmFlex         *tview.Flex
-	confirmText         *tview.TextView
-	confirmList         *tview.List
-	confirmVisible      bool
-	movePickerFlex      *tview.Flex
-	movePickerList      *tview.List
-	movePickerSearch    *tview.InputField
-	movePickerQueues    []string
-	movePickerPreferred string
-	movePickerOnSelect  func(string)
-	movePickerOnClose   func()
-	movePickerVisible   bool
-	sendMessageFlex     *tview.Flex
-	sendMessageArea     *tview.TextArea
-	sendMessageList     *tview.List
-	sendMessageOnClose  func()
-	sendMessageVisible  bool
-	connManagerFlex     *tview.Flex
-	connManagerList     *tview.List
-	connManagerHints    *tview.TextView
-	connManagerVisible  bool
-	connEditorForm      *tview.Form
-	connEditorVisible   bool
-	connEditorIsNew     bool
-	connEditorOrigName  string
-	themePickerFlex     *tview.Flex
-	themePickerList     *tview.List
-	themePickerVisible  bool
-	awsProfilesFlex     *tview.Flex
-	awsProfilesTable    *tview.Table
-	awsProfilesHints    *tview.TextView
-	awsProfilesVisible  bool
-	backend             queue.Backend
-	homeTable           *tview.Table
-	homeSections        []views.SectionInfo
-	topBarHeight        int
-	listAWSProfiles     func(context.Context) ([]awsprofile.Profile, error)
+	tv                     *tview.Application
+	rootPages              *tview.Pages
+	pages                  *tview.Pages
+	topLeft                *tview.Pages
+	prompt                 *tview.InputField
+	helpVisible            bool
+	views                  []ui.View
+	cfg                    config.Config
+	infoPanel              *tview.TextView
+	divider                *tview.TextView
+	contextPanel           *tview.TextView
+	logoPanel              *tview.TextView
+	statusBar              *tview.TextView
+	settingsList           *tview.List
+	logV                   *logView
+	queuesV                *queuesView
+	messagesV              *messagesView
+	messageDetailV         *messageDetailView
+	confirmFlex            *tview.Flex
+	confirmText            *tview.TextView
+	confirmList            *tview.List
+	confirmVisible         bool
+	movePickerFlex         *tview.Flex
+	movePickerList         *tview.List
+	movePickerSearch       *tview.InputField
+	movePickerQueues       []string
+	movePickerPreferred    string
+	movePickerOnSelect     func(string)
+	movePickerOnClose      func()
+	movePickerVisible      bool
+	sendMessageFlex        *tview.Flex
+	sendMessageArea        *tview.TextArea
+	sendMessageList        *tview.List
+	sendMessageOnClose     func()
+	sendMessageVisible     bool
+	connManagerFlex        *tview.Flex
+	connManagerList        *tview.List
+	connManagerHints       *tview.TextView
+	connManagerVisible     bool
+	connEditorForm         *tview.Form
+	connEditorVisible      bool
+	connEditorIsNew        bool
+	connEditorOrigName     string
+	themePickerFlex        *tview.Flex
+	themePickerList        *tview.List
+	themePickerVisible     bool
+	awsProfilesFlex        *tview.Flex
+	awsProfilesTable       *tview.Table
+	awsProfilesFilterInput *tview.InputField
+	awsProfilesHints       *tview.TextView
+	awsProfilesVisible     bool
+	awsProfilesFilter      string
+	awsProfilesAll         []awsprofile.Profile
+	awsProfilesFiltered    []awsprofile.Profile
+	backend                queue.Backend
+	homeTable              *tview.Table
+	homeSections           []views.SectionInfo
+	topBarHeight           int
+	listAWSProfiles        func(context.Context) ([]awsprofile.Profile, error)
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -344,17 +348,32 @@ func New(cfg config.Config) *App {
 	})
 	themePickerOverlay := centered(a.themePickerFlex, 40, 14)
 
-	// AWS Profiles overlay — read-only; no select/activate action in this slice.
+	// AWS Profiles overlay — filterable; Enter activates the selected profile.
 	a.awsProfilesTable = tview.NewTable()
 	a.awsProfilesTable.SetBorder(true).SetTitle(" AWS Profiles ")
 	a.awsProfilesTable.SetSelectable(true, false)
 	a.awsProfilesTable.SetFixed(1, 0)
+	a.awsProfilesFilterInput = tview.NewInputField()
+	a.awsProfilesFilterInput.SetLabel(" / filter: ")
+	a.awsProfilesFilterInput.SetLabelColor(tcell.GetColor(cfg.Colors.Label))
+	a.awsProfilesFilterInput.SetFieldBackgroundColor(tcell.GetColor(cfg.Colors.SelectionBg))
+	a.awsProfilesFilterInput.SetFieldTextColor(tcell.GetColor(cfg.Colors.SelectionText))
 	a.awsProfilesHints = tview.NewTextView().SetDynamicColors(true)
-	a.awsProfilesHints.SetText(fmt.Sprintf("[%s]<r>[-] refresh  [%s]<Esc>[-] close", cfg.Colors.Accent, cfg.Colors.Accent))
+	a.awsProfilesHints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
+		cfg.Colors.Accent, cfg.Colors.Accent, cfg.Colors.Accent, cfg.Colors.Accent))
 	a.awsProfilesFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(a.awsProfilesTable, 0, 1, true).
+		AddItem(a.awsProfilesFilterInput, 1, 0, false).
 		AddItem(a.awsProfilesHints, 1, 0, false)
 	a.setAWSProfilesHeader()
+
+	a.awsProfilesTable.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1
+		if idx < 0 || idx >= len(a.awsProfilesFiltered) {
+			return
+		}
+		a.activateAWSProfile(a.awsProfilesFiltered[idx].Name)
+	})
 	a.awsProfilesTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case event.Key() == tcell.KeyEscape:
@@ -363,10 +382,30 @@ func New(cfg config.Config) *App {
 		case event.Rune() == 'r':
 			a.populateAWSProfilesTable()
 			return nil
+		case event.Rune() == '/':
+			a.awsProfilesFilterInput.SetText(a.awsProfilesFilter)
+			a.tv.SetFocus(a.awsProfilesFilterInput)
+			return nil
 		case event.Rune() == 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+	a.awsProfilesFilterInput.SetChangedFunc(func(text string) {
+		a.applyAWSProfilesFilter(text)
+	})
+	a.awsProfilesFilterInput.SetDoneFunc(func(_ tcell.Key) {
+		a.applyAWSProfilesFilter(a.awsProfilesFilterInput.GetText())
+		a.tv.SetFocus(a.awsProfilesTable)
+	})
+	a.awsProfilesFilterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
+			a.applyAWSProfilesFilter(a.awsProfilesFilterInput.GetText())
+			a.tv.SetFocus(a.awsProfilesTable)
+			a.awsProfilesTable.InputHandler()(event, func(tview.Primitive) {})
+			return nil
 		}
 		return event
 	})
@@ -476,6 +515,8 @@ func (a *App) onPromptDone(key tcell.Key) {
 		a.switchTo("settings")
 	case cmd == "aq" || cmd == "connections":
 		a.showConnectionManager()
+	case cmd == "ap" || cmd == "awsprofiles":
+		a.showAWSProfiles()
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:

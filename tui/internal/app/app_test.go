@@ -1,12 +1,14 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -171,6 +173,46 @@ func TestOnPromptDoneAqWorksFromAnyView(t *testing.T) {
 
 	if !a.connManagerVisible {
 		t.Error("':aq' from the log view did not open the connection manager")
+	}
+}
+
+func TestOnPromptDoneApOpensAWSProfiles(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	a.prompt.SetText("ap")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.awsProfilesVisible {
+		t.Error("awsProfilesVisible = false after ':ap', want true")
+	}
+	if got := a.tv.GetFocus(); got != a.awsProfilesTable {
+		t.Errorf("focus after ':ap' = %v, want the AWS profiles table", got)
+	}
+}
+
+func TestOnPromptDoneAwsprofilesOpensAWSProfiles(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	a.prompt.SetText("awsprofiles")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.awsProfilesVisible {
+		t.Error("awsProfilesVisible = false after ':awsprofiles', want true")
+	}
+}
+
+func TestOnPromptDoneApWorksFromAnyView(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	a.switchTo("log") // not settings — proves ':ap' isn't tied to any specific starting view
+	a.prompt.SetText("ap")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if !a.awsProfilesVisible {
+		t.Error("':ap' from the log view did not open the AWS profiles overlay")
 	}
 }
 

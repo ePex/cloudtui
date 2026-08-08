@@ -42,6 +42,27 @@ func TestInfoPanelTextShowsConnectionAlias(t *testing.T) {
 	}
 }
 
+func TestInfoPanelTextShowsNoneWhenNoAWSProfileSelected(t *testing.T) {
+	cfg := config.Default()
+
+	text := infoPanelText(cfg)
+
+	if !strings.Contains(text, "AWS Profile:") || !strings.Contains(text, "(none)") {
+		t.Errorf("infoPanelText() = %q, want it to contain \"AWS Profile:\" and \"(none)\"", text)
+	}
+}
+
+func TestInfoPanelTextShowsActiveAWSProfile(t *testing.T) {
+	cfg := config.Default()
+	cfg.ActiveAWSProfile = "work"
+
+	text := infoPanelText(cfg)
+
+	if !strings.Contains(text, "AWS Profile:") || !strings.Contains(text, "work") {
+		t.Errorf("infoPanelText() = %q, want it to contain \"AWS Profile:\" and \"work\"", text)
+	}
+}
+
 func TestInfoPanelTextShowsThemeName(t *testing.T) {
 	cfg := config.Default()
 	cfg.Theme = "cyberpunk"

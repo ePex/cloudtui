@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
@@ -97,5 +99,137 @@ func TestAWSProfilesEscCloses(t *testing.T) {
 	}
 	if a.awsProfilesVisible {
 		t.Error("Esc did not close the AWS Profiles overlay")
+	}
+}
+
+func TestAWSProfilesSlashFocusesFilterInput(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	a.showAWSProfiles()
+
+	capture := a.awsProfilesTable.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
+
+	if got := a.tv.GetFocus(); got != a.awsProfilesFilterInput {
+		t.Errorf("focus after '/' = %v, want the filter input", got)
+	}
+}
+
+func TestApplyAWSProfilesFilterNarrowsRowsByName(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{
+			{Name: "mlf-dev", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
+			{Name: "mlf-prod", Region: "eu-central-1", AuthType: awsprofile.AuthSSO},
+			{Name: "personal", Region: "us-east-1", AuthType: awsprofile.AuthStaticKeys},
+		}, nil
+	}
+	a.showAWSProfiles()
+
+	a.applyAWSProfilesFilter("mlf")
+
+	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2 matches
+		t.Fatalf("row count after filter = %d, want 3 (header + 2 matches)", got)
+	}
+	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles [mlf] " {
+		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles [mlf] ")
+	}
+}
+
+func TestApplyAWSProfilesFilterClearRestoresAll(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{
+			{Name: "one", AuthType: awsprofile.AuthUnknown},
+			{Name: "two", AuthType: awsprofile.AuthUnknown},
+		}, nil
+	}
+	a.showAWSProfiles()
+	a.applyAWSProfilesFilter("one")
+
+	a.applyAWSProfilesFilter("")
+
+	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2
+		t.Errorf("row count after clearing filter = %d, want 3", got)
+	}
+}
+
+func TestShowAWSProfilesResetsFilterFromPreviousVisit(t *testing.T) {
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{{Name: "one"}, {Name: "two"}}, nil
+	}
+	a.showAWSProfiles()
+	a.applyAWSProfilesFilter("one")
+	a.closeAWSProfiles()
+
+	a.showAWSProfiles() // reopen
+
+	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + both, filter reset
+		t.Errorf("row count on reopen = %d, want 3 (filter should reset)", got)
+	}
+	if got := a.awsProfilesFilterInput.GetText(); got != "" {
+		t.Errorf("filter input text on reopen = %q, want empty", got)
+	}
+}
+
+func TestActivateAWSProfilePersistsAndUpdatesUI(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	a.showAWSProfiles()
+
+	a.activateAWSProfile("work")
+
+	if got := a.cfg.ActiveAWSProfile; got != "work" {
+		t.Errorf("cfg.ActiveAWSProfile = %q, want %q", got, "work")
+	}
+	if got := a.infoPanel.GetText(true); !strings.Contains(got, "work") {
+		t.Errorf("info panel = %q, want it to contain %q", got, "work")
+	}
+	if a.awsProfilesVisible {
+		t.Error("overlay should close after activating a profile")
+	}
+	if _, err := os.Stat("config.yaml"); err != nil {
+		t.Errorf("config.yaml not written after activateAWSProfile: %v", err)
+	}
+}
+
+func TestAWSProfilesActiveProfileMarkedWithStar(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.ActiveAWSProfile = "work"
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{{Name: "work"}, {Name: "other"}}, nil
+	}
+
+	a.showAWSProfiles()
+
+	if got := a.awsProfilesTable.GetCell(1, 0).Text; !strings.Contains(got, "⭐") {
+		t.Errorf("active profile row = %q, want it marked with ⭐", got)
+	}
+	if got := a.awsProfilesTable.GetCell(2, 0).Text; strings.Contains(got, "⭐") {
+		t.Errorf("inactive profile row = %q, want no ⭐", got)
+	}
+}
+
+func TestAWSProfilesEnterActivatesRowRespectingFilter(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{
+			{Name: "mlf-dev"},
+			{Name: "personal"},
+		}, nil
+	}
+	a.showAWSProfiles()
+	a.applyAWSProfilesFilter("personal") // only "personal" remains, at row 1
+
+	a.awsProfilesTable.Select(1, 0)
+	// Invoke the table's registered SetSelectedFunc handler directly.
+	handler := a.awsProfilesTable.InputHandler()
+	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := a.cfg.ActiveAWSProfile; got != "personal" {
+		t.Errorf("cfg.ActiveAWSProfile = %q, want %q (the filtered row, not the unfiltered index)", got, "personal")
 	}
 }

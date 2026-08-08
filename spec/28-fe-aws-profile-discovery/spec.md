@@ -90,7 +90,12 @@ resolving now.
   listing brokers, anything network-touching.
 - Any change to `config.Connection` or the connection editor.
 - Using a selected profile for anything (no "activate", no pre-filling a
-  new connection from it).
+  new connection from it). **Superseded almost immediately**: activation,
+  filtering, and a `:ap` command shortcut were added right after this
+  shipped — see `spec/29-fe-aws-profile-selection/`. The
+  no-`config.Connection`-change and no-AWS-API-calls scoping still holds;
+  only the "no activate" line didn't survive contact with the next
+  request.
 - SSO token cache reading/refresh.
 - Windows path handling beyond what the AWS SDK already does (it resolves
   home-directory paths correctly cross-platform on its own).
