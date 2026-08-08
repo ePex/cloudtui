@@ -211,6 +211,33 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.secretDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 	}
 
+	// CloudWatch Logs table + filter input
+	if a.logsV != nil {
+		a.logsV.table.SetBackgroundColor(bg)
+		a.logsV.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+		a.logsV.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+		a.logsV.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+		a.logsV.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.logsV.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	}
+
+	// CloudWatch Logs search table + pattern input
+	if a.logSearchV != nil {
+		a.logSearchV.table.SetBackgroundColor(bg)
+		a.logSearchV.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+		a.logSearchV.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+		a.logSearchV.patternInput.SetLabelColor(tcell.GetColor(p.Label))
+		a.logSearchV.patternInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.logSearchV.patternInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	}
+
+	// CloudWatch Logs event detail text view
+	if a.logDetailV != nil {
+		a.logDetailV.textView.SetBackgroundColor(bg)
+		a.logDetailV.textView.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+		a.logDetailV.textView.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	}
+
 	// Move-picker
 	if a.movePickerFlex != nil {
 		a.movePickerFlex.SetBackgroundColor(bg)
