@@ -37,7 +37,8 @@ func styleDropDown(dd *tview.DropDown, p config.Palette) {
 
 // newSettingsView builds the Settings view as a tview.List. Each item opens
 // a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
-// connection manager, item 2 → AWS profiles (read-only).
+// connection manager, item 2 → AWS profiles (read-only), item 3 → Datadog
+// editor.
 func newSettingsView(a *App) ui.View {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetBorder(true).SetTitle(" Settings ")
@@ -47,6 +48,7 @@ func newSettingsView(a *App) ui.View {
 	l.AddItem("", "", 0, func() { a.showThemePicker() })
 	l.AddItem("", "", 0, func() { a.showConnectionManager() })
 	l.AddItem("", "", 0, func() { a.showAWSProfiles() })
+	l.AddItem("", "", 0, func() { a.showDatadogEditor() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -66,9 +68,10 @@ func newSettingsView(a *App) ui.View {
 
 // refreshSettingsList rebuilds the displayed text of all settings-list items
 // to reflect the current config values (theme name, active connection
-// alias, active AWS profile). The AWS profile name comes straight from
-// cfg.ActiveAWSProfile — no need to re-read ~/.aws here, unlike opening the
-// overlay itself, which lists every discoverable profile.
+// alias, active AWS profile, Datadog site). The AWS profile name comes
+// straight from cfg.ActiveAWSProfile — no need to re-read ~/.aws here,
+// unlike opening the overlay itself, which lists every discoverable
+// profile.
 func (a *App) refreshSettingsList() {
 	if a.settingsList == nil {
 		return
@@ -83,9 +86,24 @@ func (a *App) refreshSettingsList() {
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
 	a.settingsList.AddItem(fmt.Sprintf("Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
 	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
+	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.showDatadogEditor() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}
+}
+
+// datadogSettingsLabel summarizes cfg for the settings list row — "(none)"
+// when no access token is configured (the Site alone doesn't mean
+// anything's usable yet), otherwise the site that will actually be used
+// (falling back to the same default internal/datadoglogs.Search applies).
+func datadogSettingsLabel(cfg config.DatadogConfig) string {
+	if cfg.AccessToken == "" {
+		return "(none)"
+	}
+	if cfg.Site == "" {
+		return "datadoghq.com"
+	}
+	return cfg.Site
 }
 
 // showThemePicker opens the theme-picker overlay, pre-selecting the current theme.

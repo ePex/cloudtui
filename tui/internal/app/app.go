@@ -22,6 +22,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
 	"github.com/ePex/cloudtui/tui/internal/queue/proxy"
@@ -75,6 +76,8 @@ type App struct {
 	connEditorVisible      bool
 	connEditorIsNew        bool
 	connEditorOrigName     string
+	datadogEditorForm      *tview.Form
+	datadogEditorVisible   bool
 	themePickerFlex        *tview.Flex
 	themePickerList        *tview.List
 	themePickerVisible     bool
@@ -100,12 +103,15 @@ type App struct {
 	logsV                  *logsView
 	logSearchV             *logSearchView
 	logDetailV             *logDetailView
+	datadogLogsV           *datadogLogsView
+	datadogLogDetailV      *datadogLogDetailView
 	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
 	revealParameter        func(ctx context.Context, profile, name string) (string, error)
 	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
 	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
 	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
 	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
 	screen                 tcell.Screen
 }
 
@@ -123,6 +129,7 @@ func New(cfg config.Config) *App {
 				{Name: "ssm-parameters", Description: "Browse AWS SSM parameters"},
 				{Name: "secrets-manager", Description: "Browse AWS Secrets Manager secrets"},
 				{Name: "cloudwatch-logs", Description: "Search CloudWatch Logs"},
+				{Name: "datadog-logs", Description: "Search Datadog Logs"},
 			},
 		},
 		{
@@ -167,6 +174,7 @@ func New(cfg config.Config) *App {
 	a.revealSecret = awssecrets.Reveal
 	a.listLogGroups = awslogs.ListLogGroups
 	a.filterLogEvents = awslogs.FilterEvents
+	a.searchDatadogLogs = datadoglogs.Search
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -192,6 +200,8 @@ func New(cfg config.Config) *App {
 	a.logsV = newLogsView(a)
 	a.logSearchV = newLogSearchView(a)
 	a.logDetailV = newLogDetailView(a)
+	a.datadogLogsV = newDatadogLogsView(a)
+	a.datadogLogDetailV = newDatadogLogDetailView(a)
 
 	// Wire Enter in the log groups table to open the search view for
 	// the selected log group. Done here because logSearchV must exist first.
@@ -211,6 +221,17 @@ func New(cfg config.Config) *App {
 			return
 		}
 		a.openLogEventDetail(a.logSearchV.results[idx])
+	})
+
+	// Wire Enter in the Datadog Logs results table to open the detail
+	// view for the selected event. Done here because datadogLogDetailV
+	// must exist first.
+	a.datadogLogsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.datadogLogsV.results) {
+			return
+		}
+		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
 	})
 	a.secretDetailV = newSecretDetailView(a)
 
@@ -254,7 +275,7 @@ func New(cfg config.Config) *App {
 		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -267,6 +288,7 @@ func New(cfg config.Config) *App {
 	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
 	a.pages.AddPage("log-search", a.logSearchV.flex, true, false)
 	a.pages.AddPage("log-event-detail", a.logDetailV.textView, true, false)
+	a.pages.AddPage("datadog-log-detail", a.datadogLogDetailV.textView, true, false)
 	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -422,6 +444,29 @@ func New(cfg config.Config) *App {
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := centered(a.connEditorForm, 64, 20)
 
+	// Datadog editor overlay (spec/39-fe-datadog-logs) — same shape as
+	// the connection editor, just two fields: Site (plain, not a
+	// secret) and Access Token (a Personal Access Token, masked — see
+	// config.DatadogConfig's doc comment for why this isn't the classic
+	// API Key + Application Key pair).
+	a.datadogEditorForm = tview.NewForm()
+	a.datadogEditorForm.SetBorder(true).SetTitle(" Datadog ")
+	a.datadogEditorForm.
+		AddInputField("Site", "", 30, nil, nil).
+		AddPasswordField("Access Token", "", 40, '*', nil).
+		AddButton("Save", func() { a.saveDatadogEditor() }).
+		AddButton("Cancel", func() { a.closeDatadogEditor() })
+	a.datadogEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.closeDatadogEditor()
+			return nil
+		}
+		return event
+	})
+	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
+	// row (1) + one spare row = 10.
+	datadogEditorOverlay := centered(a.datadogEditorForm, 56, 10)
+
 	// Theme picker overlay
 	a.themePickerList = tview.NewList().ShowSecondaryText(false)
 	a.themePickerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -515,6 +560,7 @@ func New(cfg config.Config) *App {
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
+		AddPage("datadog-editor", datadogEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false)
@@ -551,6 +597,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.logSearchV != nil && a.tv.GetFocus() == a.logSearchV.patternInput {
+		return event
+	}
+	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.queryInput {
 		return event
 	}
 
@@ -1053,6 +1102,14 @@ func (a *App) openLogSearch(logGroupName string) {
 func (a *App) openLogEventDetail(event awslogs.LogEvent) {
 	a.logDetailV.render(event)
 	a.pages.SwitchToPage("log-event-detail")
+	a.tv.SetFocus(a.pages)
+}
+
+// openDatadogLogDetail renders the full detail for event and switches
+// to the datadog-log-detail page.
+func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
+	a.datadogLogDetailV.render(event)
+	a.pages.SwitchToPage("datadog-log-detail")
 	a.tv.SetFocus(a.pages)
 }
 

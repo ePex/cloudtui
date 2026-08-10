@@ -548,3 +548,60 @@ func TestDefaultActiveAWSProfileEmpty(t *testing.T) {
 		t.Errorf("Default().ActiveAWSProfile = %q, want empty", got)
 	}
 }
+
+func TestDefaultDatadogConfigEmpty(t *testing.T) {
+	if got := Default().Datadog; got != (DatadogConfig{}) {
+		t.Errorf("Default().Datadog = %+v, want zero value", got)
+	}
+}
+
+func TestLoadDatadogAccessTokenEnvInjectsWhenEmpty(t *testing.T) {
+	t.Setenv("DD_ACCESS_TOKEN", "secret-token")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	got, err := Load(path) // missing file → defaults + env override
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Datadog.AccessToken != "secret-token" {
+		t.Errorf("Datadog.AccessToken = %q, want %q", got.Datadog.AccessToken, "secret-token")
+	}
+}
+
+func TestLoadDatadogAccessTokenEnvDoesNotOverrideExplicit(t *testing.T) {
+	t.Setenv("DD_ACCESS_TOKEN", "should-not-win")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "datadog:\n  site: datadoghq.eu\n  accessToken: explicit-token\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Datadog.AccessToken != "explicit-token" {
+		t.Errorf("Datadog.AccessToken = %q, want %q (explicit value should win)", got.Datadog.AccessToken, "explicit-token")
+	}
+	if got.Datadog.Site != "datadoghq.eu" {
+		t.Errorf("Datadog.Site = %q, want %q", got.Datadog.Site, "datadoghq.eu")
+	}
+}
+
+func TestSaveLoadRoundTripWithDatadogConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.Datadog = DatadogConfig{Site: "datadoghq.eu", AccessToken: "secret"}
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Datadog != cfg.Datadog {
+		t.Errorf("Datadog = %+v, want %+v", got.Datadog, cfg.Datadog)
+	}
+}

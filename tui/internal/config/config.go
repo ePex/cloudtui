@@ -34,10 +34,23 @@ type Config struct {
 	// Settings -> AWS Profiles picker. Independent of Connections/backends —
 	// this slice of AWS support is discovery/selection only, not yet wired
 	// to any broker connection. Empty means none selected.
-	ActiveAWSProfile string   `yaml:"activeAWSProfile"`
-	Theme            string   `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
-	Logo             []string `yaml:"logo"`
-	Colors           Palette  `yaml:"colors"`
+	ActiveAWSProfile string        `yaml:"activeAWSProfile"`
+	Datadog          DatadogConfig `yaml:"datadog"`
+	Theme            string        `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
+	Logo             []string      `yaml:"logo"`
+	Colors           Palette       `yaml:"colors"`
+}
+
+// DatadogConfig holds the settings for the Datadog Logs view (see
+// spec/39-fe-datadog-logs). AccessToken is a Personal Access Token
+// (Personal Settings -> Access Tokens in Datadog, scope
+// "logs_read_data") — not the classic API Key + Application Key pair;
+// a PAT authenticates alone via "Authorization: Bearer <token>". Can
+// also be supplied via DD_ACCESS_TOKEN instead of stored here, same
+// pattern as MQPROXY_CLIENT_PASSWORD for Connection passwords.
+type DatadogConfig struct {
+	Site        string `yaml:"site"` // e.g. "datadoghq.com", "datadoghq.eu"; API host is api.<site>
+	AccessToken string `yaml:"accessToken"`
 }
 
 // ActiveConn returns the active Connection by name, falling back to the first
@@ -334,6 +347,13 @@ func Load(path string) (Config, error) {
 				}
 			}
 		}
+	}
+
+	// Env-var access-token injection: only applied when the config file
+	// didn't already set one explicitly (same rule as the password
+	// injection above).
+	if t := os.Getenv("DD_ACCESS_TOKEN"); t != "" && cfg.Datadog.AccessToken == "" {
+		cfg.Datadog.AccessToken = t
 	}
 
 	return cfg, nil
