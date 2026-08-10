@@ -82,19 +82,25 @@ func loadProfile(ctx context.Context, configFile, credentialsFile, name string) 
 }
 
 // classify picks the auth method a profile actually uses. Fields for more
-// than one method can be present at once (e.g. a profile with both
-// sso_start_url and credential_process, seen in the wild where an internal
-// tool wraps SSO login behind a credential_process script) — the order
-// here follows the AWS SDK's own credential-provider precedence rather
-// than inventing a different one.
+// than one method can be present at once — e.g. aws-sso-util's
+// "populate profiles" mode writes both native sso_* fields and a
+// credential_process fallback line on the same profile, for
+// compatibility with tools that predate native SSO config support — so
+// the order here follows aws-sdk-go-v2/config's actual runtime
+// precedence (resolveCredsFromProfile in resolve_credentials.go: SSO is
+// checked before credential_process) rather than inventing a different
+// one. Getting this backwards previously misclassified exactly that
+// aws-sso-util shape as credential-process when the SDK genuinely
+// authenticates it via native SSO — see
+// spec/37-bugfix-awsprofile-sso-vs-credential-process-precedence.
 func classify(sc config.SharedConfig) AuthType {
 	switch {
-	case sc.CredentialProcess != "":
-		return AuthCredentialProcess
 	case sc.RoleARN != "":
 		return AuthAssumeRole
 	case sc.SSOSessionName != "" || sc.SSOStartURL != "":
 		return AuthSSO
+	case sc.CredentialProcess != "":
+		return AuthCredentialProcess
 	case sc.Credentials.AccessKeyID != "":
 		return AuthStaticKeys
 	default:
