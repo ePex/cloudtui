@@ -165,6 +165,24 @@ func TestSecretsViewShowErrorRendersMessage(t *testing.T) {
 	}
 }
 
+// TestSecretsViewShowStatusRendersMessage covers the in-progress status
+// message load() shows while awsauth.WithReauth is running an SSO
+// re-auth (spec/36-fe-aws-sso-reauth) — see ssmparams_test.go's
+// equivalent test for why load() itself isn't exercised here.
+func TestSecretsViewShowStatusRendersMessage(t *testing.T) {
+	a := New(config.Default())
+
+	a.secretsV.showStatus("AWS SSO session expired — opening browser to log in...")
+
+	if got := a.secretsV.table.GetCell(1, 0).Text; !strings.Contains(got, "opening browser") {
+		t.Errorf("status cell = %q, want it to contain the status message", got)
+	}
+	fg, _, _ := a.secretsV.table.GetCell(1, 0).Style.Decompose()
+	if want := tcell.GetColor(a.cfg.Colors.Accent); fg != want {
+		t.Errorf("status cell color = %v, want accent color %v", fg, want)
+	}
+}
+
 // TestSecretsViewRepaintScrollsToTopWithManyRows guards against the same
 // bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top):
 // tview.Table's "track end" auto-scroll latches on during the table's

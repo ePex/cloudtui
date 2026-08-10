@@ -42,12 +42,7 @@ func List(ctx context.Context) ([]Profile, error) {
 
 	profiles := make([]Profile, 0, len(names))
 	for _, name := range names {
-		sc, err := config.LoadSharedConfigProfile(ctx, name,
-			func(o *config.LoadSharedConfigOptions) {
-				o.ConfigFiles = []string{configFile}
-				o.CredentialsFiles = []string{credentialsFile}
-			},
-		)
+		sc, err := loadProfile(ctx, configFile, credentialsFile, name)
 		if err != nil {
 			slog.Warn("awsprofile: skipping unparseable profile", "profile", name, "error", err)
 			continue
@@ -59,6 +54,31 @@ func List(ctx context.Context) ([]Profile, error) {
 		})
 	}
 	return profiles, nil
+}
+
+// AuthTypeFor classifies a single named profile's authentication method,
+// without scanning or loading every other profile the way List does —
+// used where only one profile's auth type is needed (e.g. deciding
+// whether an AWS error is SSO-reauth-eligible for the active profile).
+func AuthTypeFor(ctx context.Context, name string) (AuthType, error) {
+	configFile, credentialsFile := configFiles()
+	sc, err := loadProfile(ctx, configFile, credentialsFile, name)
+	if err != nil {
+		return AuthUnknown, err
+	}
+	return classify(sc), nil
+}
+
+// loadProfile loads and parses a single profile from the given config/
+// credentials files, shared by List (which loads every profile) and
+// AuthTypeFor (which loads just one).
+func loadProfile(ctx context.Context, configFile, credentialsFile, name string) (config.SharedConfig, error) {
+	return config.LoadSharedConfigProfile(ctx, name,
+		func(o *config.LoadSharedConfigOptions) {
+			o.ConfigFiles = []string{configFile}
+			o.CredentialsFiles = []string{credentialsFile}
+		},
+	)
 }
 
 // classify picks the auth method a profile actually uses. Fields for more

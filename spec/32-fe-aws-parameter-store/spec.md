@@ -54,9 +54,10 @@ the app or reaching for the AWS CLI/console.
   `config.LoadDefaultConfig` + `WithSharedConfigProfile` — same pattern as
   `awsprofile`'s `LoadSharedConfigProfile`, but this one actually needs to
   *authenticate*, not just read config fields, so SSO/credential_process
-  resolution genuinely executes (may prompt for SSO login in a browser if
-  the cached token has expired — this is real AWS SDK behavior, not
-  something cloudtui controls).
+  resolution genuinely executes. Correction (see FE 36): a cached SSO
+  token being expired does *not* trigger a browser login by itself — the
+  AWS SDK just errors, and cloudtui drives `aws sso login` in response
+  (see spec/36-fe-aws-sso-reauth).
 - New view (table, same shape as `queuesView`): lists parameters
   (name/type/last-modified) fetched recursively from a root path
   (`/`, via `GetParametersByPath`), filterable by substring on name (same
