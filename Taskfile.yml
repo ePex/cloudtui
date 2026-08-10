@@ -96,3 +96,9 @@ tasks:
     dir: mq-proxy
     cmds:
       - '{{if eq OS "windows"}}cmd /c gradlew.bat{{else}}./gradlew{{end}} test'
+
+  openapi:proxy:
+    desc: Regenerate mq-proxy/openapi.yaml from the running app's live spec.
+    dir: mq-proxy
+    cmds:
+      - '{{if eq OS "windows"}}cmd /c gradlew.bat{{else}}./gradlew{{end}} generateOpenApiDocs'

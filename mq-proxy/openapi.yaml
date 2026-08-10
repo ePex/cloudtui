@@ -1,0 +1,386 @@
+openapi: 3.1.0
+info:
+  title: mq-proxy API
+  description: ActiveMQ broker proxy
+  version: "1.0"
+servers:
+- url: http://localhost:8080
+  description: Generated server url
+security:
+- basicAuth: []
+paths:
+  /api/queues/{name}/move:
+    post:
+      tags:
+      - queue-controller
+      operationId: moveAll
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: int32
+  /api/queues/{name}/messages:
+    get:
+      tags:
+      - queue-controller
+      operationId: browseMessages
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessageSummary"
+    post:
+      tags:
+      - queue-controller
+      operationId: sendMessage
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JsonNode"
+        required: true
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "201":
+          description: Created
+    delete:
+      tags:
+      - queue-controller
+      operationId: purgeQueue
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: int32
+  /api/queues/{name}/messages/{id}/move:
+    post:
+      tags:
+      - queue-controller
+      operationId: moveMessage
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "204":
+          description: No Content
+  /api/queues:
+    get:
+      tags:
+      - queue-controller
+      operationId: listQueues
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QueueSummary"
+  /api/queues/{name}/messages/{id}:
+    get:
+      tags:
+      - queue-controller
+      operationId: getMessage
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MessageDetail"
+    delete:
+      tags:
+      - queue-controller
+      operationId: deleteMessage
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "204":
+          description: No Content
+components:
+  schemas:
+    JsonNode: {}
+    QueueSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        pendingCount:
+          type: integer
+          format: int64
+        consumerCount:
+          type: integer
+          format: int64
+        enqueueCount:
+          type: integer
+          format: int64
+        dequeueCount:
+          type: integer
+          format: int64
+      required:
+      - consumerCount
+      - dequeueCount
+      - enqueueCount
+      - name
+      - pendingCount
+    MessageSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+        body:
+          type: string
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - id
+      - properties
+      - timestamp
+    MessageDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+        body:
+          type: string
+        deliveryMode:
+          type: integer
+          format: int32
+        priority:
+          type: integer
+          format: int32
+        correlationId:
+          type: string
+        replyTo:
+          type: string
+        destination:
+          type: string
+        redelivered:
+          type: boolean
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - deliveryMode
+      - destination
+      - id
+      - priority
+      - properties
+      - redelivered
+      - timestamp
+  securitySchemes:
+    basicAuth:
+      type: http
+      description: Proxy credentials (proxy.auth.username / proxy.auth.password)
+      scheme: basic
