@@ -146,11 +146,14 @@ func (sv *logSearchView) setHeader() {
 }
 
 // open resets the view for a freshly-selected log group and runs the
-// first search with the default time range and an empty pattern.
-func (sv *logSearchView) open(logGroupName string) {
+// first search with the default time range. initialPattern pre-fills
+// the filter pattern (used when arriving via FE 41's CorrelationID
+// jump from a Datadog log); pass "" for the normal empty-pattern
+// default.
+func (sv *logSearchView) open(logGroupName, initialPattern string) {
 	sv.logGroupName = logGroupName
-	sv.pattern = ""
-	sv.patternInput.SetText("")
+	sv.pattern = initialPattern
+	sv.patternInput.SetText(initialPattern)
 	sv.presetIdx = defaultPresetIdx
 	sv.results = nil
 	sv.hasMore = false

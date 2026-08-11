@@ -46,6 +46,68 @@ func TestSwitchTo(t *testing.T) {
 	}
 }
 
+// TestSwitchToClearsAbandonedPendingCloudWatchPattern covers FE 41's
+// one-shot CorrelationID queue: navigating anywhere other than
+// "cloudwatch-logs" must drop a pending value rather than let it
+// silently pre-fill some later, unrelated log group's search.
+func TestSwitchToClearsAbandonedPendingCloudWatchPattern(t *testing.T) {
+	a := New(config.Default())
+	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+
+	a.switchTo("home")
+
+	if a.pendingCloudWatchPattern != "" {
+		t.Errorf("pendingCloudWatchPattern = %q, want cleared after switching away", a.pendingCloudWatchPattern)
+	}
+}
+
+// TestSwitchToCloudWatchLogsPreservesPendingPattern confirms the jump
+// itself (switchTo("cloudwatch-logs")) doesn't clear the value it was
+// just asked to carry — only navigating elsewhere does.
+func TestSwitchToCloudWatchLogsPreservesPendingPattern(t *testing.T) {
+	a := New(config.Default())
+	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+
+	a.switchTo("cloudwatch-logs")
+
+	if a.pendingCloudWatchPattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("pendingCloudWatchPattern = %q, want it preserved by the jump itself", a.pendingCloudWatchPattern)
+	}
+}
+
+// TestOpenLogSearchConsumesPendingCloudWatchPattern covers FE 41's
+// consume-and-clear step: picking a log group after the jump must pass
+// the queued CorrelationID through as the initial search pattern, and
+// must not leave it queued for a later, unrelated group.
+func TestOpenLogSearchConsumesPendingCloudWatchPattern(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.ActiveAWSProfile = "" // openLogSearch's open() -> search() hits the guard, no goroutine
+	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+
+	a.openLogSearch("/aws/lambda/foo")
+
+	if a.logSearchV.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("logSearchV.pattern = %q, want the queued CorrelationID", a.logSearchV.pattern)
+	}
+	if a.pendingCloudWatchPattern != "" {
+		t.Errorf("pendingCloudWatchPattern = %q, want cleared after being consumed", a.pendingCloudWatchPattern)
+	}
+}
+
+// TestOpenLogSearchWithoutPendingPatternIsUnaffected guards against a
+// regression where every ordinary (non-correlation-jump) log group open
+// would need to keep behaving exactly as before FE 41.
+func TestOpenLogSearchWithoutPendingPatternIsUnaffected(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.ActiveAWSProfile = ""
+
+	a.openLogSearch("/aws/lambda/foo")
+
+	if a.logSearchV.pattern != "" {
+		t.Errorf("logSearchV.pattern = %q, want empty when no CorrelationID was queued", a.logSearchV.pattern)
+	}
+}
+
 func TestOnGlobalKeyFocusesPromptOnColon(t *testing.T) {
 	a := New(config.Default())
 	a.tv.SetFocus(a.pages)

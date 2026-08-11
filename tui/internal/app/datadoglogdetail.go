@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -26,8 +27,26 @@ type datadogLogDetailView struct {
 func (dv *datadogLogDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "c", Description: "copy message"},
+		{Key: "g", Description: "go to CloudWatch"},
 		{Key: "Esc", Description: "back"},
 	}
+}
+
+// correlationIDPattern matches the confirmed real Datadog log shape
+// "CorrelationID: <uuid>" (label case-insensitive, UUID shape strict so
+// trailing punctuation/words in the message aren't swept in) — see
+// spec/41-fe-datadog-cloudwatch-correlation-jump.
+var correlationIDPattern = regexp.MustCompile(`(?i)correlationid:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
+
+// extractCorrelationID pulls a "CorrelationID: <uuid>" value out of a
+// Datadog log message. Returns ("", false) if the message doesn't
+// contain one.
+func extractCorrelationID(message string) (string, bool) {
+	m := correlationIDPattern.FindStringSubmatch(message)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
 
 func newDatadogLogDetailView(a *App) *datadogLogDetailView {
@@ -48,6 +67,15 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 		case event.Rune() == 'c':
 			dv.app.copyToClipboard(dv.event.Message)
 			dv.app.statusBar.SetText("Copied log message to clipboard")
+			return nil
+		case event.Rune() == 'g':
+			id, ok := extractCorrelationID(dv.event.Message)
+			if !ok {
+				dv.app.statusBar.SetText("[yellow]No CorrelationID found in this log message[-]")
+				return nil
+			}
+			dv.app.pendingCloudWatchPattern = id
+			dv.app.switchTo("cloudwatch-logs")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.SwitchToPage("datadog-logs")

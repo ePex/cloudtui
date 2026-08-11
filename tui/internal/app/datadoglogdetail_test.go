@@ -87,3 +87,92 @@ func TestDatadogLogDetailViewEscReturnsToDatadogLogs(t *testing.T) {
 		t.Errorf("front page after Esc = %q, want %q", name, "datadog-logs")
 	}
 }
+
+func TestDatadogLogDetailViewShortcutsIncludeGoToCloudWatch(t *testing.T) {
+	a := New(config.Default())
+
+	found := false
+	for _, sc := range a.datadogLogDetailV.Shortcuts() {
+		if sc.Key == "g" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Shortcuts() missing \"g\" (go to CloudWatch)")
+	}
+}
+
+func TestExtractCorrelationID(t *testing.T) {
+	cases := []struct {
+		name    string
+		message string
+		want    string
+		wantOk  bool
+	}{
+		{
+			name:    "confirmed real format",
+			message: "some log line CorrelationID: 1745d042-94e8-49f0-b223-8900ed9e951e trailing text",
+			want:    "1745d042-94e8-49f0-b223-8900ed9e951e",
+			wantOk:  true,
+		},
+		{
+			name:    "case-insensitive label",
+			message: "correlationid: 1745d042-94e8-49f0-b223-8900ed9e951e",
+			want:    "1745d042-94e8-49f0-b223-8900ed9e951e",
+			wantOk:  true,
+		},
+		{
+			name:    "no correlation id present",
+			message: "just a plain log message",
+			wantOk:  false,
+		},
+		{
+			name:    "malformed uuid does not match",
+			message: "CorrelationID: not-a-real-uuid",
+			wantOk:  false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := extractCorrelationID(c.message)
+			if ok != c.wantOk {
+				t.Fatalf("extractCorrelationID(%q) ok = %v, want %v", c.message, ok, c.wantOk)
+			}
+			if ok && got != c.want {
+				t.Errorf("extractCorrelationID(%q) = %q, want %q", c.message, got, c.want)
+			}
+		})
+	}
+}
+
+func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
+	a := New(config.Default())
+	a.openDatadogLogDetail(datadoglogs.LogEvent{
+		Message: "something happened CorrelationID: 1745d042-94e8-49f0-b223-8900ed9e951e",
+	})
+
+	capture := a.datadogLogDetailV.textView.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+
+	if a.pendingCloudWatchPattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("pendingCloudWatchPattern = %q, want the CorrelationID", a.pendingCloudWatchPattern)
+	}
+	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
+		t.Errorf("front page after 'g' = %q, want %q", name, "cloudwatch-logs")
+	}
+}
+
+func TestDatadogLogDetailViewGoToCloudWatchWithoutCorrelationID(t *testing.T) {
+	a := New(config.Default())
+	a.openDatadogLogDetail(datadoglogs.LogEvent{Message: "no correlation id here"})
+
+	capture := a.datadogLogDetailV.textView.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+
+	if a.pendingCloudWatchPattern != "" {
+		t.Errorf("pendingCloudWatchPattern = %q, want empty", a.pendingCloudWatchPattern)
+	}
+	if name, _ := a.pages.GetFrontPage(); name != "datadog-log-detail" {
+		t.Errorf("front page after 'g' with no CorrelationID = %q, want unchanged %q", name, "datadog-log-detail")
+	}
+}
