@@ -17,12 +17,23 @@
    filter; confirm the combined query works for a host value containing
    a hyphen.
 
-   **Found during verification**: unselected items in both dropdowns'
-   popup lists were unreadable — the same `tview.DropDown` gotcha
-   already hit for the theme/connection-editor dropdowns (needs
+   **Found during verification (1)**: unselected items in both
+   dropdowns' popup lists were unreadable — the same `tview.DropDown`
+   gotcha already hit for the theme/connection-editor dropdowns (needs
    `SetListStyles`, wired via this codebase's existing `styleDropDown`
    helper). Neither new dropdown had it applied. Fixed by calling
    `styleDropDown(dd, p)` right after constructing each. Genuinely
    untestable — `tview.DropDown` exposes no getter for list styles, and
    no such test exists for the original settings dropdowns either;
    confirmed by inspection and will be re-verified live.
+
+   **Found during verification (2)**: after picking a Service (e.g.
+   "activemq"), every other option became unselectable until first
+   resetting to "(any)". Cause: `rebuildFilterOptions` rebuilt the
+   dropdown purely from the latest (now filter-narrowed) result set, so
+   the option list shrank to just the current selection on every
+   search. Fixed by accumulating distinct values across searches
+   (`knownServices`/`knownHosts`) instead of replacing them each time —
+   see the updated decision in spec.md and the doc comment on
+   `rebuildFilterOptions`. Covered by
+   `TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches`.

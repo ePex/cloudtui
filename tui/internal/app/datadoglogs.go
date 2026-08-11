@@ -36,9 +36,14 @@ type datadogLogsView struct {
 	query           string
 	serviceFilter   string
 	hostFilter      string
-	presetIdx       int
-	results         []datadoglogs.LogEvent
-	hasMore         bool
+	// knownServices/knownHosts accumulate every distinct value ever seen
+	// across searches (not just the latest result set) — see
+	// rebuildFilterOptions's doc comment for why.
+	knownServices map[string]bool
+	knownHosts    map[string]bool
+	presetIdx     int
+	results       []datadoglogs.LogEvent
+	hasMore       bool
 }
 
 var _ ui.View = (*datadogLogsView)(nil)
@@ -106,6 +111,8 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		flex:            flex,
 		app:             a,
 		presetIdx:       defaultPresetIdx,
+		knownServices:   map[string]bool{},
+		knownHosts:      map[string]bool{},
 	}
 	dv.setHeader()
 	// Seeded with just "(any)" until the first search discovers real
@@ -260,24 +267,31 @@ func (dv *datadogLogsView) applyFilterOptions(dd *tview.DropDown, values []strin
 	})
 }
 
-// rebuildFilterOptions refreshes both filter dropdowns from the
-// distinct Service/Host values actually present in dv.results, so the
-// options offered always match what's on screen.
+// rebuildFilterOptions merges the distinct Service/Host values from the
+// latest dv.results into the running knownServices/knownHosts sets, then
+// refreshes both dropdowns from those accumulated sets — not from
+// dv.results alone. Found live: once a Service/Host filter is active,
+// every subsequent search response only ever contains events matching
+// that filter, so rebuilding purely from the latest results shrank the
+// option list down to just the current selection + "(any)" on every
+// search, making every other previously-seen value effectively
+// unselectable without resetting to "(any)" first. Accumulating instead
+// means a value discovered once stays offered regardless of how later
+// searches narrow the actual results.
 func (dv *datadogLogsView) rebuildFilterOptions() {
-	serviceSet, hostSet := map[string]bool{}, map[string]bool{}
 	for _, e := range dv.results {
 		if e.Service != "" {
-			serviceSet[e.Service] = true
+			dv.knownServices[e.Service] = true
 		}
 		if e.Host != "" {
-			hostSet[e.Host] = true
+			dv.knownHosts[e.Host] = true
 		}
 	}
-	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(serviceSet), &dv.serviceFilter, func(v string) {
+	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
 	})
-	dv.applyFilterOptions(dv.hostFilterDD, sortedKeys(hostSet), &dv.hostFilter, func(v string) {
+	dv.applyFilterOptions(dv.hostFilterDD, sortedKeys(dv.knownHosts), &dv.hostFilter, func(v string) {
 		dv.hostFilter = v
 		dv.search()
 	})

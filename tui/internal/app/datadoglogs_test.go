@@ -87,6 +87,44 @@ func TestApplyFilterOptionsOptionCountIncludesAnySentinel(t *testing.T) {
 	}
 }
 
+// TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches guards
+// against a real bug found live: once a Service/Host filter is active,
+// every subsequent search response only contains events matching that
+// filter, so rebuilding the dropdown purely from the latest results
+// shrank the option list down to just the current selection + "(any)"
+// on every search — every other previously-seen value became
+// unselectable without resetting to "(any)" first. Values must
+// accumulate across searches instead of being replaced each time.
+func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+
+	// First (unfiltered) search discovers two services.
+	dv.results = []datadoglogs.LogEvent{
+		{Service: "activemq", Host: "host-1"},
+		{Service: "bar-proxy", Host: "host-2"},
+	}
+	dv.rebuildFilterOptions()
+	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + 2
+		t.Fatalf("after first search: option count = %d, want 3", got)
+	}
+
+	// Second search, now filtered to just "activemq" — Datadog would
+	// only return matching events, so dv.results narrows accordingly.
+	dv.serviceFilter = "activemq"
+	dv.results = []datadoglogs.LogEvent{
+		{Service: "activemq", Host: "host-1"},
+	}
+	dv.rebuildFilterOptions()
+
+	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + 2, unchanged
+		t.Errorf("after filtered search: option count = %d, want 3 (bar-proxy must still be offered)", got)
+	}
+	if got := dv.hostFilterDD.GetOptionCount(); got != 3 { // "(any)" + host-1 + host-2
+		t.Errorf("after filtered search: host option count = %d, want 3 (host-2 must still be offered)", got)
+	}
+}
+
 // TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation guards
 // against the recursion risk documented in spec/42's plan.md:
 // tview.DropDown.SetCurrentOption invokes the selected callback if one
