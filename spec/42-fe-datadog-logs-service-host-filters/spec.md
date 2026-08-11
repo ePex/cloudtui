@@ -18,12 +18,18 @@ and host.
    narrowing of already-fetched rows — keeps searching the full
    selected time range rather than being limited to whatever's already
    on screen (capped at 1000 events per FE 39 decision 2).
-2. **Dropdowns populated from the current results**, not free text —
-   after every search, both dropdowns are rebuilt from the distinct
-   `Service`/`Host` values actually present in `dv.results`, prefixed
-   with an `(any)` option that clears that facet. This means the first
-   search (before any filter is picked) has to run unfiltered to
-   discover what values exist — expected and fine, matches "browse then
+2. **Dropdowns populated from results seen so far**, not free text —
+   both dropdowns offer every distinct `Service`/`Host` value seen
+   across searches, prefixed with an `(any)` option that clears that
+   facet. **Accumulated, not replaced per-search** (found live): once a
+   facet filter is active, every subsequent search response only
+   contains events matching it, so rebuilding purely from the latest
+   result set shrank the option list to just the current selection —
+   every other previously-seen value became unselectable without
+   resetting to `(any)` first. Values are merged into a running set
+   (`knownServices`/`knownHosts`) instead. First search (before any
+   filter is picked) still has to run unfiltered to discover what
+   values exist at all — expected and fine, matches "browse then
    narrow."
 3. **Selecting a value re-searches immediately** — no separate confirm
    step, consistent with this app's other immediate-apply pickers (e.g.
