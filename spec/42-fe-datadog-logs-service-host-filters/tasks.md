@@ -10,12 +10,21 @@
 2. [x] `internal/app/app.go`: `onGlobalKey` exemptions for both new
    dropdowns. Unit tests mirroring the existing `queryInput` exemption
    test.
-3. [ ] Manual verification (per `tui/CLAUDE.md`): run a broad search,
-   confirm both dropdowns populate with real distinct services/hosts;
-   pick a Service, confirm results narrow and the Host dropdown
-   re-populates to just that service's hosts; pick `(any)` to clear a
-   filter; confirm the combined query works for a host value containing
-   a hyphen.
+3. [x] Pivot: replace the Host filter with an Env filter (requested
+   after tasks 1-2 shipped, before manual verification completed) — see
+   spec.md's "Pivoted mid-implementation" note. `internal/datadoglogs`:
+   `LogEvent.Env` + `extractEnv` (env is a tag, not a top-level
+   attribute, unlike service/status/host). `internal/app/datadoglogs.go`:
+   `hostFilterDD`/`hostFilter`/`knownHosts` → `envFilterDD`/`envFilter`/
+   `knownEnvs`, label "Host:"→"Env:", shortcut `H`→`E`, query key
+   `host:`→`env:`. `internal/app/datadoglogdetail.go`: detail view
+   gains an Env line (Host stays — still real, informational data, just
+   no longer filterable). All affected tests renamed/updated to match.
+4. [ ] Manual verification (per `tui/CLAUDE.md`): run a broad search,
+   confirm both dropdowns populate with real distinct services/envs;
+   pick a Service, confirm results narrow and the Env dropdown
+   re-populates to just that service's envs; pick `(any)` to clear a
+   filter; confirm the combined query works correctly.
 
    **Found during verification (1)**: unselected items in both
    dropdowns' popup lists were unreadable — the same `tview.DropDown`

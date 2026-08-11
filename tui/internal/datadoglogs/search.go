@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
@@ -127,11 +128,23 @@ func buildLogEvents(resp searchResponse) []LogEvent {
 			Service:   d.Attributes.Service,
 			Status:    d.Attributes.Status,
 			Host:      d.Attributes.Host,
+			Env:       extractEnv(d.Attributes.Tags),
 			Message:   d.Attributes.Message,
 			Tags:      d.Attributes.Tags,
 		})
 	}
 	return out
+}
+
+// extractEnv finds the first "env:<value>" tag and returns <value>, or
+// "" if tags has no env tag.
+func extractEnv(tags []string) string {
+	for _, t := range tags {
+		if v, ok := strings.CutPrefix(t, "env:"); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // truncate caps b at n bytes for inclusion in an error message, so a

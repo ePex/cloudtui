@@ -15,7 +15,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// filterAnyOption is the sentinel option in the Service/Host filter
+// filterAnyOption is the sentinel option in the Service/Env filter
 // dropdowns that means "no filter on this facet" — see
 // spec/42-fe-datadog-logs-service-host-filters.
 const filterAnyOption = "(any)"
@@ -29,18 +29,18 @@ const filterAnyOption = "(any)"
 type datadogLogsView struct {
 	table           *tview.Table
 	serviceFilterDD *tview.DropDown
-	hostFilterDD    *tview.DropDown
+	envFilterDD     *tview.DropDown
 	queryInput      *tview.InputField
 	flex            *tview.Flex
 	app             *App
 	query           string
 	serviceFilter   string
-	hostFilter      string
-	// knownServices/knownHosts accumulate every distinct value ever seen
+	envFilter       string
+	// knownServices/knownEnvs accumulate every distinct value ever seen
 	// across searches (not just the latest result set) — see
 	// rebuildFilterOptions's doc comment for why.
 	knownServices map[string]bool
-	knownHosts    map[string]bool
+	knownEnvs     map[string]bool
 	presetIdx     int
 	results       []datadoglogs.LogEvent
 	hasMore       bool
@@ -59,7 +59,7 @@ func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "query"},
 		{Key: "S", Description: "filter service"},
-		{Key: "H", Description: "filter host"},
+		{Key: "E", Description: "filter env"},
 	}
 }
 
@@ -87,16 +87,16 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	// connection-editor Backend dropdowns.
 	styleDropDown(serviceFilterDD, p)
 
-	hostFilterDD := tview.NewDropDown()
-	hostFilterDD.SetLabel(" Host: ")
-	hostFilterDD.SetLabelColor(tcell.GetColor(p.Label))
-	hostFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	hostFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	styleDropDown(hostFilterDD, p)
+	envFilterDD := tview.NewDropDown()
+	envFilterDD.SetLabel(" Env: ")
+	envFilterDD.SetLabelColor(tcell.GetColor(p.Label))
+	envFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	envFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	styleDropDown(envFilterDD, p)
 
 	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(serviceFilterDD, 0, 1, false).
-		AddItem(hostFilterDD, 0, 1, false)
+		AddItem(envFilterDD, 0, 1, false)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).
@@ -106,13 +106,13 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	dv := &datadogLogsView{
 		table:           table,
 		serviceFilterDD: serviceFilterDD,
-		hostFilterDD:    hostFilterDD,
+		envFilterDD:     envFilterDD,
 		queryInput:      queryInput,
 		flex:            flex,
 		app:             a,
 		presetIdx:       defaultPresetIdx,
 		knownServices:   map[string]bool{},
-		knownHosts:      map[string]bool{},
+		knownEnvs:       map[string]bool{},
 	}
 	dv.setHeader()
 	// Seeded with just "(any)" until the first search discovers real
@@ -120,8 +120,8 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	// there (see handleSearchResult).
 	serviceFilterDD.SetOptions([]string{filterAnyOption}, nil)
 	serviceFilterDD.SetCurrentOption(0)
-	hostFilterDD.SetOptions([]string{filterAnyOption}, nil)
-	hostFilterDD.SetCurrentOption(0)
+	envFilterDD.SetOptions([]string{filterAnyOption}, nil)
+	envFilterDD.SetCurrentOption(0)
 
 	// Unlike every filter input elsewhere in the app, typing here must
 	// not trigger anything — each keystroke would otherwise be a real
@@ -154,7 +154,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		return event
 	}
 	serviceFilterDD.SetInputCapture(backToTable)
-	hostFilterDD.SetInputCapture(backToTable)
+	envFilterDD.SetInputCapture(backToTable)
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -171,8 +171,8 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		case 'S':
 			dv.app.tv.SetFocus(dv.serviceFilterDD)
 			return nil
-		case 'H':
-			dv.app.tv.SetFocus(dv.hostFilterDD)
+		case 'E':
+			dv.app.tv.SetFocus(dv.envFilterDD)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -214,18 +214,17 @@ func (dv *datadogLogsView) cycleTimeRange() {
 	dv.search()
 }
 
-// effectiveQuery combines the Service/Host filters with the free-text
+// effectiveQuery combines the Service/Env filters with the free-text
 // query into the actual Datadog query string. Values are quoted for the
 // same reason FE 41's CorrelationID fix quotes its value — Datadog's
-// query tokenizer can split an unquoted term on internal punctuation
-// (e.g. a hostname like "ip-10-0-1-23").
+// query tokenizer can split an unquoted term on internal punctuation.
 func (dv *datadogLogsView) effectiveQuery() string {
 	var parts []string
 	if dv.serviceFilter != "" {
 		parts = append(parts, fmt.Sprintf("service:%q", dv.serviceFilter))
 	}
-	if dv.hostFilter != "" {
-		parts = append(parts, fmt.Sprintf("host:%q", dv.hostFilter))
+	if dv.envFilter != "" {
+		parts = append(parts, fmt.Sprintf("env:%q", dv.envFilter))
 	}
 	if dv.query != "" {
 		parts = append(parts, dv.query)
@@ -267,10 +266,10 @@ func (dv *datadogLogsView) applyFilterOptions(dd *tview.DropDown, values []strin
 	})
 }
 
-// rebuildFilterOptions merges the distinct Service/Host values from the
-// latest dv.results into the running knownServices/knownHosts sets, then
+// rebuildFilterOptions merges the distinct Service/Env values from the
+// latest dv.results into the running knownServices/knownEnvs sets, then
 // refreshes both dropdowns from those accumulated sets — not from
-// dv.results alone. Found live: once a Service/Host filter is active,
+// dv.results alone. Found live: once a Service/Env filter is active,
 // every subsequent search response only ever contains events matching
 // that filter, so rebuilding purely from the latest results shrank the
 // option list down to just the current selection + "(any)" on every
@@ -283,16 +282,16 @@ func (dv *datadogLogsView) rebuildFilterOptions() {
 		if e.Service != "" {
 			dv.knownServices[e.Service] = true
 		}
-		if e.Host != "" {
-			dv.knownHosts[e.Host] = true
+		if e.Env != "" {
+			dv.knownEnvs[e.Env] = true
 		}
 	}
 	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
 	})
-	dv.applyFilterOptions(dv.hostFilterDD, sortedKeys(dv.knownHosts), &dv.hostFilter, func(v string) {
-		dv.hostFilter = v
+	dv.applyFilterOptions(dv.envFilterDD, sortedKeys(dv.knownEnvs), &dv.envFilter, func(v string) {
+		dv.envFilter = v
 		dv.search()
 	})
 }

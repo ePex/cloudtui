@@ -18,14 +18,14 @@ func TestEffectiveQuery(t *testing.T) {
 	cases := []struct {
 		name          string
 		serviceFilter string
-		hostFilter    string
+		envFilter     string
 		query         string
 		want          string
 	}{
 		{"no filters, just free text", "", "", "error", "error"},
 		{"service only", "bar-proxy", "", "", `service:"bar-proxy"`},
-		{"host only", "", "ip-10-0-1-23", "", `host:"ip-10-0-1-23"`},
-		{"service and host and free text", "bar-proxy", "ip-10-0-1-23", "error", `service:"bar-proxy" host:"ip-10-0-1-23" error`},
+		{"env only", "", "prod", "", `env:"prod"`},
+		{"service and env and free text", "bar-proxy", "prod", "error", `service:"bar-proxy" env:"prod" error`},
 		{"nothing set", "", "", "", ""},
 	}
 	for _, c := range cases {
@@ -33,7 +33,7 @@ func TestEffectiveQuery(t *testing.T) {
 			a := New(config.Default())
 			dv := a.datadogLogsV
 			dv.serviceFilter = c.serviceFilter
-			dv.hostFilter = c.hostFilter
+			dv.envFilter = c.envFilter
 			dv.query = c.query
 
 			if got := dv.effectiveQuery(); got != c.want {
@@ -88,7 +88,7 @@ func TestApplyFilterOptionsOptionCountIncludesAnySentinel(t *testing.T) {
 }
 
 // TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches guards
-// against a real bug found live: once a Service/Host filter is active,
+// against a real bug found live: once a Service/Env filter is active,
 // every subsequent search response only contains events matching that
 // filter, so rebuilding the dropdown purely from the latest results
 // shrank the option list down to just the current selection + "(any)"
@@ -101,8 +101,8 @@ func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
 
 	// First (unfiltered) search discovers two services.
 	dv.results = []datadoglogs.LogEvent{
-		{Service: "activemq", Host: "host-1"},
-		{Service: "bar-proxy", Host: "host-2"},
+		{Service: "activemq", Env: "prod"},
+		{Service: "bar-proxy", Env: "testt"},
 	}
 	dv.rebuildFilterOptions()
 	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + 2
@@ -113,15 +113,15 @@ func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
 	// only return matching events, so dv.results narrows accordingly.
 	dv.serviceFilter = "activemq"
 	dv.results = []datadoglogs.LogEvent{
-		{Service: "activemq", Host: "host-1"},
+		{Service: "activemq", Env: "prod"},
 	}
 	dv.rebuildFilterOptions()
 
 	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + 2, unchanged
 		t.Errorf("after filtered search: option count = %d, want 3 (bar-proxy must still be offered)", got)
 	}
-	if got := dv.hostFilterDD.GetOptionCount(); got != 3 { // "(any)" + host-1 + host-2
-		t.Errorf("after filtered search: host option count = %d, want 3 (host-2 must still be offered)", got)
+	if got := dv.envFilterDD.GetOptionCount(); got != 3 { // "(any)" + prod + testt
+		t.Errorf("after filtered search: env option count = %d, want 3 (testt must still be offered)", got)
 	}
 }
 
@@ -180,19 +180,19 @@ func TestApplyFilterOptionsCallbackFiresOnSubsequentSelection(t *testing.T) {
 	}
 }
 
-func TestDatadogLogsViewShortcutsIncludeServiceAndHostFilters(t *testing.T) {
+func TestDatadogLogsViewShortcutsIncludeServiceAndEnvFilters(t *testing.T) {
 	a := New(config.Default())
-	var haveS, haveH bool
+	var haveS, haveE bool
 	for _, sc := range a.datadogLogsV.Shortcuts() {
 		if sc.Key == "S" {
 			haveS = true
 		}
-		if sc.Key == "H" {
-			haveH = true
+		if sc.Key == "E" {
+			haveE = true
 		}
 	}
-	if !haveS || !haveH {
-		t.Errorf("Shortcuts() missing S/H filter shortcuts (haveS=%v, haveH=%v)", haveS, haveH)
+	if !haveS || !haveE {
+		t.Errorf("Shortcuts() missing S/E filter shortcuts (haveS=%v, haveE=%v)", haveS, haveE)
 	}
 }
 

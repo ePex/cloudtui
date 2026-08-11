@@ -1,5 +1,13 @@
 # Plan — FE 42
 
+> **Note**: written for the original Host filter; the mechanism
+> described below (dropdowns, accumulation, the SetCurrentOption
+> recursion guard) is unchanged by the later Host→Env pivot (see
+> spec.md) — only field/label/key names differ in the actual code
+> (`hostFilterDD`/`hostFilter`/`knownHosts`/`H` →
+> `envFilterDD`/`envFilter`/`knownEnvs`/`E`, `host:%q` → `env:%q`). Not
+> rewritten line-by-line below; read "Host" as "Env" throughout.
+
 ## Key implementation detail found while designing
 
 `tview.DropDown.SetCurrentOption(idx)` **invokes the `selected`

@@ -107,6 +107,7 @@ func (dv *datadogLogDetailView) render(event datadoglogs.LogEvent) {
 	}
 	line("Timestamp", event.Timestamp.Local().Format("2006-01-02 15:04:05"))
 	line("Service", event.Service)
+	line("Env", event.Env)
 	line("Status", event.Status)
 	line("Host", event.Host)
 	line("Tags", strings.Join(event.Tags, ", "))

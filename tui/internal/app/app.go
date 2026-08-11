@@ -609,7 +609,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.serviceFilterDD {
 		return event
 	}
-	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.hostFilterDD {
+	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.envFilterDD {
 		return event
 	}
 

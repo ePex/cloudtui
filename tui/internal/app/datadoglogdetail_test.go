@@ -18,6 +18,7 @@ func TestDatadogLogDetailViewRenderShowsMessage(t *testing.T) {
 	a.datadogLogDetailV.render(datadoglogs.LogEvent{
 		Timestamp: ts,
 		Service:   "bar-proxy",
+		Env:       "testt",
 		Status:    "error",
 		Host:      "host-1",
 		Tags:      []string{"env:testt"},
@@ -25,7 +26,7 @@ func TestDatadogLogDetailViewRenderShowsMessage(t *testing.T) {
 	})
 
 	text := a.datadogLogDetailV.textView.GetText(true)
-	for _, want := range []string{"bar-proxy", "error", "host-1", "env:testt", "boom: something failed"} {
+	for _, want := range []string{"bar-proxy", "testt", "error", "host-1", "env:testt", "boom: something failed"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("detail text = %q, want it to contain %q", text, want)
 		}
