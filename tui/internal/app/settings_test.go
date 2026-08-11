@@ -22,14 +22,35 @@ func TestSettingsListHasBorderAndTitle(t *testing.T) {
 	}
 }
 
-func TestSettingsListHasThreeItems(t *testing.T) {
+func TestSettingsListHasFourItems(t *testing.T) {
 	a := New(config.Default())
 
 	if a.settingsList == nil {
 		t.Fatal("a.settingsList is nil")
 	}
-	if got := a.settingsList.GetItemCount(); got != 3 {
-		t.Errorf("settings list item count = %d, want 3", got)
+	if got := a.settingsList.GetItemCount(); got != 4 {
+		t.Errorf("settings list item count = %d, want 4", got)
+	}
+}
+
+func TestSettingsListItemThreeIsDatadog(t *testing.T) {
+	a := New(config.Default())
+
+	main3, _ := a.settingsList.GetItemText(3)
+	if !strings.Contains(main3, "Datadog") || !strings.Contains(main3, "(none)") {
+		t.Errorf("item 3 = %q, want it to contain 'Datadog' and '(none)'", main3)
+	}
+}
+
+func TestSettingsListItemThreeShowsConfiguredDatadogSite(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.Datadog = config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok"}
+
+	a.refreshSettingsList()
+
+	main3, _ := a.settingsList.GetItemText(3)
+	if !strings.Contains(main3, "datadoghq.eu") {
+		t.Errorf("item 3 = %q, want it to contain %q", main3, "datadoghq.eu")
 	}
 }
 
