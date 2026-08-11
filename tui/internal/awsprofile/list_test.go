@@ -138,10 +138,15 @@ region = eu-west-1
 	}
 }
 
-// TestListMixedSSOAndCredentialProcessPrefersCredentialProcess matches a
-// real-world pattern (seen live) where an internal tool wraps SSO login
-// behind a credential_process script, leaving both sets of fields present.
-func TestListMixedSSOAndCredentialProcessPrefersCredentialProcess(t *testing.T) {
+// TestListMixedSSOAndCredentialProcessPrefersSSO matches a real-world
+// pattern (seen live, aws-sso-util's "populate profiles" mode) where a
+// profile has both native sso_* fields and a credential_process fallback
+// line, for compatibility with tools that predate native SSO config
+// support. aws-sdk-go-v2/config's actual runtime resolution checks SSO
+// before credential_process, so classify() must match that — see
+// spec/37-bugfix-awsprofile-sso-vs-credential-process-precedence for how
+// getting this backwards broke FE 36's re-auth detection.
+func TestListMixedSSOAndCredentialProcessPrefersSSO(t *testing.T) {
 	setupFixture(t, `
 [profile mixed-profile]
 sso_start_url = https://example.awsapps.com/start
@@ -157,8 +162,8 @@ region = us-east-1
 		t.Fatalf("List() error = %v", err)
 	}
 	p := findProfile(t, profiles, "mixed-profile")
-	if p.AuthType != AuthCredentialProcess {
-		t.Errorf("AuthType = %q, want %q (credential_process should take precedence)", p.AuthType, AuthCredentialProcess)
+	if p.AuthType != AuthSSO {
+		t.Errorf("AuthType = %q, want %q (SSO should take precedence, matching the real SDK's resolution order)", p.AuthType, AuthSSO)
 	}
 }
 
