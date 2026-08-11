@@ -20,11 +20,21 @@
    `host:`→`env:`. `internal/app/datadoglogdetail.go`: detail view
    gains an Env line (Host stays — still real, informational data, just
    no longer filterable). All affected tests renamed/updated to match.
-4. [ ] Manual verification (per `tui/CLAUDE.md`): run a broad search,
+4. [x] Manual verification (per `tui/CLAUDE.md`): run a broad search,
    confirm both dropdowns populate with real distinct services/envs;
    pick a Service, confirm results narrow and the Env dropdown
    re-populates to just that service's envs; pick `(any)` to clear a
-   filter; confirm the combined query works correctly.
+   filter; confirm the combined query works correctly. Confirmed
+   working.
+
+   **Follow-up requested**: after picking a filter value, focus stayed
+   on the dropdown rather than returning to the results table. Fixed by
+   having the `onSelect` closures (wired in `rebuildFilterOptions`) call
+   `dv.app.tv.SetFocus(dv.table)` after `search()` — safe since these
+   closures only ever fire for a genuine user-driven selection, never
+   during the reconciliation rebuild (see `applyFilterOptions`'s
+   nil-callback guard). Covered by
+   `TestRebuildFilterOptionsSelectingAnOptionRefocusesTable`.
 
    **Found during verification (1)**: unselected items in both
    dropdowns' popup lists were unreadable — the same `tview.DropDown`

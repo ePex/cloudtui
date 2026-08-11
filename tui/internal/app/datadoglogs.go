@@ -289,10 +289,12 @@ func (dv *datadogLogsView) rebuildFilterOptions() {
 	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
+		dv.app.tv.SetFocus(dv.table)
 	})
 	dv.applyFilterOptions(dv.envFilterDD, sortedKeys(dv.knownEnvs), &dv.envFilter, func(v string) {
 		dv.envFilter = v
 		dv.search()
+		dv.app.tv.SetFocus(dv.table)
 	})
 }
 
