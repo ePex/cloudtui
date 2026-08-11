@@ -77,12 +77,17 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	serviceFilterDD.SetLabelColor(tcell.GetColor(p.Label))
 	serviceFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	serviceFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	// Without this, unselected popup-list items are unreadable — same
+	// gotcha already hit (and fixed via styleDropDown) for the theme and
+	// connection-editor Backend dropdowns.
+	styleDropDown(serviceFilterDD, p)
 
 	hostFilterDD := tview.NewDropDown()
 	hostFilterDD.SetLabel(" Host: ")
 	hostFilterDD.SetLabelColor(tcell.GetColor(p.Label))
 	hostFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	hostFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	styleDropDown(hostFilterDD, p)
 
 	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(serviceFilterDD, 0, 1, false).

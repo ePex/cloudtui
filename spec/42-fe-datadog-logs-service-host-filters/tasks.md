@@ -16,3 +16,13 @@
    re-populates to just that service's hosts; pick `(any)` to clear a
    filter; confirm the combined query works for a host value containing
    a hyphen.
+
+   **Found during verification**: unselected items in both dropdowns'
+   popup lists were unreadable — the same `tview.DropDown` gotcha
+   already hit for the theme/connection-editor dropdowns (needs
+   `SetListStyles`, wired via this codebase's existing `styleDropDown`
+   helper). Neither new dropdown had it applied. Fixed by calling
+   `styleDropDown(dd, p)` right after constructing each. Genuinely
+   untestable — `tview.DropDown` exposes no getter for list styles, and
+   no such test exists for the original settings dropdowns either;
+   confirmed by inspection and will be re-verified live.
