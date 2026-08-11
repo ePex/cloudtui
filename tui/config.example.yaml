@@ -80,6 +80,19 @@ connections:
 # yet. Leave unset if you don't use AWS CLI profiles.
 # activeAWSProfile: my-profile
 
+# datadog: settings for the Datadog Logs view, editable via Settings -> Datadog.
+#   site        — e.g. "datadoghq.com", "datadoghq.eu"; defaults to
+#                 "datadoghq.com" if unset. The API host is api.<site>.
+#   accessToken — a Datadog Personal Access Token (Personal Settings ->
+#                 Access Tokens, scope "logs_read_data"). NOT the classic
+#                 API Key + Application Key pair — a PAT authenticates
+#                 alone. Can also be supplied via the DD_ACCESS_TOKEN env
+#                 var instead of stored here (only applied when this field
+#                 is empty).
+# datadog:
+#   site: datadoghq.eu
+#   accessToken: ""   # set here or via DD_ACCESS_TOKEN
+
 # ─── Switching themes ─────────────────────────────────────────────────────────
 # Change the theme: field above to any available theme name.
 # Only the theme name is saved — the full palette is never written to this file.
