@@ -125,6 +125,28 @@ func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
 	}
 }
 
+// TestRebuildFilterOptionsSelectingAnOptionRefocusesTable confirms
+// picking a value from either filter dropdown returns focus to the
+// results table, not left sitting on the dropdown — the onSelect
+// closures wired in rebuildFilterOptions call search() then
+// SetFocus(dv.table) synchronously, so this is safe to assert on
+// immediately (same reasoning as this file's other tests that only
+// check state set before search()'s goroutine is spawned).
+func TestRebuildFilterOptionsSelectingAnOptionRefocusesTable(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
+	dv.rebuildFilterOptions()
+	a.tv.SetFocus(dv.serviceFilterDD)
+
+	// Simulate picking "activemq" (options: 0="(any)", 1="activemq").
+	dv.serviceFilterDD.SetCurrentOption(1)
+
+	if got := a.tv.GetFocus(); got != dv.table {
+		t.Errorf("focus after selecting a Service option = %v, want the results table", got)
+	}
+}
+
 // TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation guards
 // against the recursion risk documented in spec/42's plan.md:
 // tview.DropDown.SetCurrentOption invokes the selected callback if one
