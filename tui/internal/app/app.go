@@ -603,7 +603,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
 		return event
 	}
 
@@ -649,7 +649,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManagerVisible && !a.connEditorVisible && !a.themePickerVisible &&
+		if !a.connManagerVisible && !a.connEditorVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
 			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible && !a.awsProfilesVisible {
 			a.tv.SetFocus(a.pages)
 		}
