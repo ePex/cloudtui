@@ -54,7 +54,7 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	sv.results = []awslogs.LogEvent{{Message: "stale"}}
 	sv.hasMore = true
 
-	sv.open("/aws/lambda/foo")
+	sv.open("/aws/lambda/foo", "")
 
 	if sv.pattern != "" {
 		t.Errorf("pattern = %q, want empty after open()", sv.pattern)
@@ -72,6 +72,25 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	// stale results) should be what's visible.
 	if got := sv.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
 		t.Errorf("error cell = %q, want it to mention no profile selected", got)
+	}
+}
+
+// TestLogSearchViewOpenWithInitialPatternPreFillsIt covers FE 41's
+// CorrelationID jump: open() with a non-empty initialPattern must set
+// both sv.pattern and the visible patternInput text, not just reset to
+// empty like the normal (no-argument-equivalent) case.
+func TestLogSearchViewOpenWithInitialPatternPreFillsIt(t *testing.T) {
+	a := New(config.Default())
+	a.cfg.ActiveAWSProfile = "" // open()'s internal search() hits the guard, no goroutine
+	sv := a.logSearchV
+
+	sv.open("/aws/lambda/foo", "1745d042-94e8-49f0-b223-8900ed9e951e")
+
+	if sv.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("pattern = %q, want the pre-filled CorrelationID", sv.pattern)
+	}
+	if got := sv.patternInput.GetText(); got != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("patternInput text = %q, want the pre-filled CorrelationID", got)
 	}
 }
 

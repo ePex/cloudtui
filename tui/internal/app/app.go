@@ -33,86 +33,90 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv                     *tview.Application
-	rootPages              *tview.Pages
-	pages                  *tview.Pages
-	topLeft                *tview.Pages
-	prompt                 *tview.InputField
-	helpVisible            bool
-	views                  []ui.View
-	cfg                    config.Config
-	infoPanel              *tview.TextView
-	divider                *tview.TextView
-	contextPanel           *tview.TextView
-	logoPanel              *tview.TextView
-	statusBar              *tview.TextView
-	settingsList           *tview.List
-	logV                   *logView
-	queuesV                *queuesView
-	messagesV              *messagesView
-	messageDetailV         *messageDetailView
-	confirmFlex            *tview.Flex
-	confirmText            *tview.TextView
-	confirmList            *tview.List
-	confirmVisible         bool
-	movePickerFlex         *tview.Flex
-	movePickerList         *tview.List
-	movePickerSearch       *tview.InputField
-	movePickerQueues       []string
-	movePickerPreferred    string
-	movePickerOnSelect     func(string)
-	movePickerOnClose      func()
-	movePickerVisible      bool
-	sendMessageFlex        *tview.Flex
-	sendMessageArea        *tview.TextArea
-	sendMessageList        *tview.List
-	sendMessageOnClose     func()
-	sendMessageVisible     bool
-	connManagerFlex        *tview.Flex
-	connManagerList        *tview.List
-	connManagerHints       *tview.TextView
-	connManagerVisible     bool
-	connEditorForm         *tview.Form
-	connEditorVisible      bool
-	connEditorIsNew        bool
-	connEditorOrigName     string
-	datadogEditorForm      *tview.Form
-	datadogEditorVisible   bool
-	themePickerFlex        *tview.Flex
-	themePickerList        *tview.List
-	themePickerVisible     bool
-	awsProfilesFlex        *tview.Flex
-	awsProfilesTable       *tview.Table
-	awsProfilesFilterInput *tview.InputField
-	awsProfilesHints       *tview.TextView
-	awsProfilesVisible     bool
-	awsProfilesFilter      string
-	awsProfilesAll         []awsprofile.Profile
-	awsProfilesFiltered    []awsprofile.Profile
-	backend                queue.Backend
-	homeTable              *tview.Table
-	homeSections           []views.SectionInfo
-	topBarHeight           int
-	listAWSProfiles        func(context.Context) ([]awsprofile.Profile, error)
-	awsAuthTypeFor         func(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	awsSSOLogin            func(ctx context.Context, profile string) error
-	ssmParamsV             *ssmParamsView
-	secretsV               *secretsView
-	paramDetailV           *paramDetailView
-	secretDetailV          *secretDetailView
-	logsV                  *logsView
-	logSearchV             *logSearchView
-	logDetailV             *logDetailView
-	datadogLogsV           *datadogLogsView
-	datadogLogDetailV      *datadogLogDetailView
-	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter        func(ctx context.Context, profile, name string) (string, error)
-	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
-	searchDatadogLogs      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	screen                 tcell.Screen
+	tv                   *tview.Application
+	rootPages            *tview.Pages
+	pages                *tview.Pages
+	topLeft              *tview.Pages
+	prompt               *tview.InputField
+	helpVisible          bool
+	views                []ui.View
+	cfg                  config.Config
+	infoPanel            *tview.TextView
+	divider              *tview.TextView
+	contextPanel         *tview.TextView
+	logoPanel            *tview.TextView
+	statusBar            *tview.TextView
+	settingsList         *tview.List
+	logV                 *logView
+	queuesV              *queuesView
+	messagesV            *messagesView
+	messageDetailV       *messageDetailView
+	confirmFlex          *tview.Flex
+	confirmText          *tview.TextView
+	confirmList          *tview.List
+	confirmVisible       bool
+	movePickerFlex       *tview.Flex
+	movePickerList       *tview.List
+	movePickerSearch     *tview.InputField
+	movePickerQueues     []string
+	movePickerPreferred  string
+	movePickerOnSelect   func(string)
+	movePickerOnClose    func()
+	movePickerVisible    bool
+	sendMessageFlex      *tview.Flex
+	sendMessageArea      *tview.TextArea
+	sendMessageList      *tview.List
+	sendMessageOnClose   func()
+	sendMessageVisible   bool
+	connManagerFlex      *tview.Flex
+	connManagerList      *tview.List
+	connManagerHints     *tview.TextView
+	connManagerVisible   bool
+	connEditorForm       *tview.Form
+	connEditorVisible    bool
+	connEditorIsNew      bool
+	connEditorOrigName   string
+	datadogEditorForm    *tview.Form
+	datadogEditorVisible bool
+	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
+	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
+	// dropped by switchTo if abandoned — see spec/41.
+	pendingCloudWatchPattern string
+	themePickerFlex          *tview.Flex
+	themePickerList          *tview.List
+	themePickerVisible       bool
+	awsProfilesFlex          *tview.Flex
+	awsProfilesTable         *tview.Table
+	awsProfilesFilterInput   *tview.InputField
+	awsProfilesHints         *tview.TextView
+	awsProfilesVisible       bool
+	awsProfilesFilter        string
+	awsProfilesAll           []awsprofile.Profile
+	awsProfilesFiltered      []awsprofile.Profile
+	backend                  queue.Backend
+	homeTable                *tview.Table
+	homeSections             []views.SectionInfo
+	topBarHeight             int
+	listAWSProfiles          func(context.Context) ([]awsprofile.Profile, error)
+	awsAuthTypeFor           func(ctx context.Context, profile string) (awsprofile.AuthType, error)
+	awsSSOLogin              func(ctx context.Context, profile string) error
+	ssmParamsV               *ssmParamsView
+	secretsV                 *secretsView
+	paramDetailV             *paramDetailView
+	secretDetailV            *secretDetailView
+	logsV                    *logsView
+	logSearchV               *logSearchView
+	logDetailV               *logDetailView
+	datadogLogsV             *datadogLogsView
+	datadogLogDetailV        *datadogLogDetailView
+	listParameters           func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter          func(ctx context.Context, profile, name string) (string, error)
+	listSecrets              func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret             func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	screen                   tcell.Screen
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -1021,6 +1025,15 @@ func (a *App) switchConnection(name string) {
 // switchTo activates the named view if it is registered, updates the top
 // bar's context panel, and calls Activate() if the view implements activatable.
 func (a *App) switchTo(name string) {
+	// A CorrelationID queued by FE 41's Datadog->CloudWatch jump is
+	// one-shot: if the user lands on the group list but then navigates
+	// anywhere else without picking a group, drop it — otherwise it'd
+	// silently pre-fill some later, unrelated log group's search.
+	// switchTo("cloudwatch-logs") itself (the jump) never hits this,
+	// since name == "cloudwatch-logs" there.
+	if name != "cloudwatch-logs" {
+		a.pendingCloudWatchPattern = ""
+	}
 	for _, v := range a.views {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
@@ -1087,7 +1100,9 @@ func (a *App) openSecretDetail(secret awssecrets.Secret) {
 // a registered ui.View, so its context panel is populated manually here
 // — same pattern as openMessages.
 func (a *App) openLogSearch(logGroupName string) {
-	a.logSearchV.open(logGroupName)
+	pattern := a.pendingCloudWatchPattern
+	a.pendingCloudWatchPattern = ""
+	a.logSearchV.open(logGroupName, pattern)
 	a.pages.SwitchToPage("log-search")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
