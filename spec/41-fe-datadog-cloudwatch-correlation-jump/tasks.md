@@ -10,7 +10,7 @@
 3. [x] `internal/app/app.go`: `pendingCloudWatchPattern` field,
    `switchTo`'s clear-on-navigate-away guard, `openLogSearch`'s
    consume-and-clear. Unit tests for both.
-4. [ ] Manual verification (per `tui/CLAUDE.md`): with a real Datadog
+4. [x] Manual verification (per `tui/CLAUDE.md`): with a real Datadog
    log containing a CorrelationID and a CloudWatch log group known to
    contain the matching line, press `g` from the Datadog detail view,
    pick the log group, confirm the CloudWatch search runs with the
@@ -18,3 +18,8 @@
    abandon case: press `g`, then press `h` (Home) instead of picking a
    group, then open some other unrelated log group later and confirm
    its search does *not* get the stale CorrelationID.
+
+   **Found during verification**: the initial unquoted pattern didn't
+   match — CloudWatch's filter-pattern syntax tokenizes on the UUID's
+   internal hyphens. Fixed by double-quoting the queued pattern (see
+   updated decision 1); re-verified working after the fix.

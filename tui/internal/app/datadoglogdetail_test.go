@@ -154,8 +154,10 @@ func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 	capture := a.datadogLogDetailV.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 
-	if a.pendingCloudWatchPattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
-		t.Errorf("pendingCloudWatchPattern = %q, want the CorrelationID", a.pendingCloudWatchPattern)
+	// Quoted (see the 'g' handler's comment): CloudWatch's filter-pattern
+	// syntax otherwise tokenizes on the UUID's internal hyphens.
+	if want := `"1745d042-94e8-49f0-b223-8900ed9e951e"`; a.pendingCloudWatchPattern != want {
+		t.Errorf("pendingCloudWatchPattern = %q, want %q", a.pendingCloudWatchPattern, want)
 	}
 	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
 		t.Errorf("front page after 'g' = %q, want %q", name, "cloudwatch-logs")

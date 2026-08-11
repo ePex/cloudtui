@@ -19,7 +19,14 @@ CloudWatch."
    standard 36-char UUID). Extraction is a regex against
    `datadogLogDetailView.event.Message`, case-insensitive on the label,
    strict on the UUID shape (`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-   so it doesn't over-match trailing punctuation/words.
+   so it doesn't over-match trailing punctuation/words. **Found live:**
+   the queued pattern must be double-quoted (`"<uuid>"`) before being
+   handed to CloudWatch — its filter-pattern syntax otherwise tokenizes
+   an unquoted term on the UUID's internal hyphens, so it never matches
+   as the literal phrase it is. Scoped to this one programmatically-
+   injected value; a user's own typed search pattern in the CloudWatch
+   Logs search view is still passed straight through unmodified (FE 34
+   decision 3 — no client-side reinterpretation of what the user types).
 2. **No cross-log-group search.** CloudWatch Logs Insights (which could
    search all log groups at once) is explicitly out of scope per FE 34
    decision 3 — not revisited here. Instead, jumping lands on the

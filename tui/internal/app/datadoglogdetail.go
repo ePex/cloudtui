@@ -74,7 +74,13 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 				dv.app.statusBar.SetText("[yellow]No CorrelationID found in this log message[-]")
 				return nil
 			}
-			dv.app.pendingCloudWatchPattern = id
+			// Quoted: CloudWatch's filter-pattern syntax tokenizes an
+			// unquoted term on internal punctuation (a UUID's hyphens),
+			// so an unquoted ID doesn't match as the literal phrase it
+			// is. Scoped to this programmatically-injected value only —
+			// a user's own typed search pattern is still passed straight
+			// through unmodified (spec/34-fe-cloudwatch-logs decision 3).
+			dv.app.pendingCloudWatchPattern = fmt.Sprintf("%q", id)
 			dv.app.switchTo("cloudwatch-logs")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
