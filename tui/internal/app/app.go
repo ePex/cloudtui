@@ -606,6 +606,12 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.queryInput {
 		return event
 	}
+	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.serviceFilterDD {
+		return event
+	}
+	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.hostFilterDD {
+		return event
+	}
 
 	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
 		return event

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -13,6 +15,11 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
+// filterAnyOption is the sentinel option in the Service/Host filter
+// dropdowns that means "no filter on this facet" — see
+// spec/42-fe-datadog-logs-service-host-filters.
+const filterAnyOption = "(any)"
+
 // datadogLogsView is the Datadog Logs search screen: a registered
 // top-level ui.View (unlike logSearchView, which is opened per
 // CloudWatch log group) — Datadog Logs is one flat, taggable/queryable
@@ -20,14 +27,18 @@ import (
 // there's no separate group-list step first (see
 // spec/39-fe-datadog-logs decision 1).
 type datadogLogsView struct {
-	table      *tview.Table
-	queryInput *tview.InputField
-	flex       *tview.Flex
-	app        *App
-	query      string
-	presetIdx  int
-	results    []datadoglogs.LogEvent
-	hasMore    bool
+	table           *tview.Table
+	serviceFilterDD *tview.DropDown
+	hostFilterDD    *tview.DropDown
+	queryInput      *tview.InputField
+	flex            *tview.Flex
+	app             *App
+	query           string
+	serviceFilter   string
+	hostFilter      string
+	presetIdx       int
+	results         []datadoglogs.LogEvent
+	hasMore         bool
 }
 
 var _ ui.View = (*datadogLogsView)(nil)
@@ -42,6 +53,8 @@ func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
 		{Key: "r", Description: "refresh"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "query"},
+		{Key: "S", Description: "filter service"},
+		{Key: "H", Description: "filter host"},
 	}
 }
 
@@ -59,12 +72,44 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 
+	serviceFilterDD := tview.NewDropDown()
+	serviceFilterDD.SetLabel(" Service: ")
+	serviceFilterDD.SetLabelColor(tcell.GetColor(p.Label))
+	serviceFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	serviceFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+
+	hostFilterDD := tview.NewDropDown()
+	hostFilterDD.SetLabel(" Host: ")
+	hostFilterDD.SetLabelColor(tcell.GetColor(p.Label))
+	hostFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	hostFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+
+	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(serviceFilterDD, 0, 1, false).
+		AddItem(hostFilterDD, 0, 1, false)
+
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).
+		AddItem(filterRow, 1, 0, false).
 		AddItem(queryInput, 1, 0, false)
 
-	dv := &datadogLogsView{table: table, queryInput: queryInput, flex: flex, app: a, presetIdx: defaultPresetIdx}
+	dv := &datadogLogsView{
+		table:           table,
+		serviceFilterDD: serviceFilterDD,
+		hostFilterDD:    hostFilterDD,
+		queryInput:      queryInput,
+		flex:            flex,
+		app:             a,
+		presetIdx:       defaultPresetIdx,
+	}
 	dv.setHeader()
+	// Seeded with just "(any)" until the first search discovers real
+	// values — applyFilterOptions/rebuildFilterOptions take over from
+	// there (see handleSearchResult).
+	serviceFilterDD.SetOptions([]string{filterAnyOption}, nil)
+	serviceFilterDD.SetCurrentOption(0)
+	hostFilterDD.SetOptions([]string{filterAnyOption}, nil)
+	hostFilterDD.SetCurrentOption(0)
 
 	// Unlike every filter input elsewhere in the app, typing here must
 	// not trigger anything — each keystroke would otherwise be a real
@@ -86,6 +131,19 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		return event
 	})
 
+	// Unlike queryInput, arrow keys here are the dropdown's own list
+	// navigation — only Esc is special-cased, to return focus to the
+	// table.
+	backToTable := func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			dv.app.tv.SetFocus(dv.table)
+			return nil
+		}
+		return event
+	}
+	serviceFilterDD.SetInputCapture(backToTable)
+	hostFilterDD.SetInputCapture(backToTable)
+
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'r':
@@ -97,6 +155,12 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		case '/':
 			dv.queryInput.SetText(dv.query)
 			dv.app.tv.SetFocus(dv.queryInput)
+			return nil
+		case 'S':
+			dv.app.tv.SetFocus(dv.serviceFilterDD)
+			return nil
+		case 'H':
+			dv.app.tv.SetFocus(dv.hostFilterDD)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -138,10 +202,96 @@ func (dv *datadogLogsView) cycleTimeRange() {
 	dv.search()
 }
 
+// effectiveQuery combines the Service/Host filters with the free-text
+// query into the actual Datadog query string. Values are quoted for the
+// same reason FE 41's CorrelationID fix quotes its value — Datadog's
+// query tokenizer can split an unquoted term on internal punctuation
+// (e.g. a hostname like "ip-10-0-1-23").
+func (dv *datadogLogsView) effectiveQuery() string {
+	var parts []string
+	if dv.serviceFilter != "" {
+		parts = append(parts, fmt.Sprintf("service:%q", dv.serviceFilter))
+	}
+	if dv.hostFilter != "" {
+		parts = append(parts, fmt.Sprintf("host:%q", dv.hostFilter))
+	}
+	if dv.query != "" {
+		parts = append(parts, dv.query)
+	}
+	return strings.Join(parts, " ")
+}
+
+// applyFilterOptions rebuilds dd's option list from values (plus the
+// leading "(any)" sentinel), preserving *current's selection if it's
+// still among values, resetting to "(any)" (clearing *current) if not.
+//
+// The callback is cleared via SetOptions(..., nil) before
+// SetCurrentOption: tview.DropDown.SetCurrentOption invokes the
+// selected callback if one is set, and this function runs after every
+// search to reconcile state — attaching onSelect first would make
+// restoring an unchanged selection recursively call search() again.
+// onSelect is only wired up (via SetSelectedFunc) once reconciliation
+// is done, so it only fires for genuine user-driven selections.
+func (dv *datadogLogsView) applyFilterOptions(dd *tview.DropDown, values []string, current *string, onSelect func(string)) {
+	options := append([]string{filterAnyOption}, values...)
+	idx := 0
+	for i, v := range options {
+		if v == *current {
+			idx = i
+			break
+		}
+	}
+	if idx == 0 {
+		*current = ""
+	}
+	dd.SetOptions(options, nil)
+	dd.SetCurrentOption(idx)
+	dd.SetSelectedFunc(func(text string, _ int) {
+		if text == filterAnyOption {
+			onSelect("")
+			return
+		}
+		onSelect(text)
+	})
+}
+
+// rebuildFilterOptions refreshes both filter dropdowns from the
+// distinct Service/Host values actually present in dv.results, so the
+// options offered always match what's on screen.
+func (dv *datadogLogsView) rebuildFilterOptions() {
+	serviceSet, hostSet := map[string]bool{}, map[string]bool{}
+	for _, e := range dv.results {
+		if e.Service != "" {
+			serviceSet[e.Service] = true
+		}
+		if e.Host != "" {
+			hostSet[e.Host] = true
+		}
+	}
+	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(serviceSet), &dv.serviceFilter, func(v string) {
+		dv.serviceFilter = v
+		dv.search()
+	})
+	dv.applyFilterOptions(dv.hostFilterDD, sortedKeys(hostSet), &dv.hostFilter, func(v string) {
+		dv.hostFilter = v
+		dv.search()
+	})
+}
+
+// sortedKeys returns set's keys sorted ascending.
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // search runs datadoglogs.Search in a goroutine (a real HTTP call) and
 // hands the outcome to handleSearchResult on the tview event loop.
 func (dv *datadogLogsView) search() {
-	query := dv.query
+	query := dv.effectiveQuery()
 	end := time.Now()
 	start := end.Add(-timeRangePresets[dv.presetIdx].duration)
 	cfg := dv.app.cfg.Datadog
@@ -166,6 +316,7 @@ func (dv *datadogLogsView) handleSearchResult(events []datadoglogs.LogEvent, has
 	}
 	dv.results = events
 	dv.hasMore = hasMore
+	dv.rebuildFilterOptions()
 	dv.repaint()
 }
 

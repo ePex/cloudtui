@@ -14,6 +14,150 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 )
 
+func TestEffectiveQuery(t *testing.T) {
+	cases := []struct {
+		name          string
+		serviceFilter string
+		hostFilter    string
+		query         string
+		want          string
+	}{
+		{"no filters, just free text", "", "", "error", "error"},
+		{"service only", "bar-proxy", "", "", `service:"bar-proxy"`},
+		{"host only", "", "ip-10-0-1-23", "", `host:"ip-10-0-1-23"`},
+		{"service and host and free text", "bar-proxy", "ip-10-0-1-23", "error", `service:"bar-proxy" host:"ip-10-0-1-23" error`},
+		{"nothing set", "", "", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a := New(config.Default())
+			dv := a.datadogLogsV
+			dv.serviceFilter = c.serviceFilter
+			dv.hostFilter = c.hostFilter
+			dv.query = c.query
+
+			if got := dv.effectiveQuery(); got != c.want {
+				t.Errorf("effectiveQuery() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestApplyFilterOptionsPreservesSelectionWhenStillPresent(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	current := "svc-a"
+
+	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
+
+	if current != "svc-a" {
+		t.Errorf("current = %q, want preserved %q", current, "svc-a")
+	}
+	idx, text := dv.serviceFilterDD.GetCurrentOption()
+	if idx != 1 || text != "svc-a" {
+		t.Errorf("selected option = (%d, %q), want (1, %q)", idx, text, "svc-a")
+	}
+}
+
+func TestApplyFilterOptionsResetsSelectionWhenNoLongerPresent(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	current := "svc-gone"
+
+	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
+
+	if current != "" {
+		t.Errorf("current = %q, want cleared", current)
+	}
+	idx, text := dv.serviceFilterDD.GetCurrentOption()
+	if idx != 0 || text != filterAnyOption {
+		t.Errorf("selected option = (%d, %q), want (0, %q)", idx, text, filterAnyOption)
+	}
+}
+
+func TestApplyFilterOptionsOptionCountIncludesAnySentinel(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	current := ""
+
+	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
+
+	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + 2 values
+		t.Errorf("option count = %d, want 3", got)
+	}
+}
+
+// TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation guards
+// against the recursion risk documented in spec/42's plan.md:
+// tview.DropDown.SetCurrentOption invokes the selected callback if one
+// is set, so restoring the current selection after a rebuild must not
+// itself fire onSelect (which would recursively call search()).
+// Deliberately doesn't go through the real search()/goroutine path —
+// this checks a synchronous side effect (a plain bool set by a test
+// callback passed directly to applyFilterOptions), avoiding the race
+// an async fake-and-counter approach would have against a background
+// goroutine (same discipline as this file's other tests that only
+// assert on state mutated before search() is ever called).
+func TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	current := "svc-a"
+	fired := false
+
+	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {
+		fired = true
+	})
+
+	if fired {
+		t.Error("onSelect fired during applyFilterOptions itself — SetCurrentOption must not invoke the callback while reconciling")
+	}
+}
+
+// TestApplyFilterOptionsCallbackFiresOnSubsequentSelection confirms the
+// other half of that same guard: a genuine selection made *after*
+// applyFilterOptions has returned (simulating the user picking an
+// option, the same way tview's internal list selection does) still
+// reaches onSelect — the recursion guard above must not have also
+// disabled real selection handling.
+func TestApplyFilterOptionsCallbackFiresOnSubsequentSelection(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	current := ""
+	var selected string
+	fireCount := 0
+
+	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(v string) {
+		selected = v
+		fireCount++
+	})
+
+	// Simulate picking "svc-b" (options: 0="(any)", 1="svc-a", 2="svc-b").
+	dv.serviceFilterDD.SetCurrentOption(2)
+
+	if fireCount != 1 {
+		t.Fatalf("onSelect fired %d times after a selection, want 1", fireCount)
+	}
+	if selected != "svc-b" {
+		t.Errorf("selected = %q, want %q", selected, "svc-b")
+	}
+}
+
+func TestDatadogLogsViewShortcutsIncludeServiceAndHostFilters(t *testing.T) {
+	a := New(config.Default())
+	var haveS, haveH bool
+	for _, sc := range a.datadogLogsV.Shortcuts() {
+		if sc.Key == "S" {
+			haveS = true
+		}
+		if sc.Key == "H" {
+			haveH = true
+		}
+	}
+	if !haveS || !haveH {
+		t.Errorf("Shortcuts() missing S/H filter shortcuts (haveS=%v, haveH=%v)", haveS, haveH)
+	}
+}
+
 func TestDatadogLogsViewNameAndTitle(t *testing.T) {
 	a := New(config.Default())
 	if got := a.datadogLogsV.Name(); got != "datadog-logs" {

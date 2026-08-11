@@ -209,6 +209,33 @@ func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
 	}
 }
 
+// TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused is
+// datadogLogsV.serviceFilterDD's counterpart to the other per-view
+// input exemptions (spec/42) — typing to jump to an option inside the
+// open dropdown (e.g. "h" for a service starting with "h") must not
+// navigate away mid-selection.
+func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.datadogLogsV.serviceFilterDD)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('h') while datadogLogsV service filter focused = %v, want event passed through unchanged", got)
+	}
+}
+
+// TestOnGlobalKeyPassesThroughWhenDatadogHostFilterFocused is
+// serviceFilterDD's test above's counterpart for hostFilterDD.
+func TestOnGlobalKeyPassesThroughWhenDatadogHostFilterFocused(t *testing.T) {
+	a := New(config.Default())
+	a.tv.SetFocus(a.datadogLogsV.hostFilterDD)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('s') while datadogLogsV host filter focused = %v, want event passed through unchanged", got)
+	}
+}
+
 // TestOnGlobalKeyPassesThroughWhenDatadogEditorVisible guards against a
 // real bug found live: unlike the other overlays, datadogEditorVisible
 // was missing from onGlobalKey's overlay-exemption block, so typing into
