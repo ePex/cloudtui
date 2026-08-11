@@ -29,6 +29,14 @@ standard registered view: home dashboard entry, reachable via `:log`, and
 manually refreshes. If the log file is absent a short message is shown instead
 of an error.
 
+Lines are colorized by slog level (`colorizeLog`/`logLevelColor`,
+2026-08-10): `level=ERROR` red, `level=WARN` yellow, `level=INFO` aqua/cyan
+(tcell has no separate "cyan" tag name — aqua is the same 0x00FFFF value).
+Unrecognized lines (e.g. `DEBUG`, or a continuation line) keep the default
+color. Each line is run through `tview.Escape` first, same as the other
+dynamic-color detail views, so a literal `[` in logged content (e.g. a Go
+slice's `%v` formatting) isn't misread as a color tag.
+
 ### `l` global hotkey
 
 Pressing `l` from anywhere (when the prompt/filter is not focused) switches to

@@ -1,8 +1,10 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -42,7 +44,7 @@ func newLogView(a *App) *logView {
 func newLogViewWithPath(a *App, path string) *logView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log ")
-	tv.SetScrollable(true).SetDynamicColors(false).SetWrap(true).SetWordWrap(true)
+	tv.SetScrollable(true).SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 
 	lv := &logView{textView: tv, app: a, path: path}
 
@@ -75,6 +77,40 @@ func (lv *logView) load() {
 		lv.textView.SetText("Error reading log: " + err.Error())
 		return
 	}
-	lv.textView.SetText(string(data))
+	lv.textView.SetText(colorizeLog(string(data)))
 	lv.textView.ScrollToEnd()
+}
+
+// colorizeLog wraps each line in a tview color tag matching its slog
+// level — error red, warn yellow, info aqua (tcell has no separate
+// "cyan" name; aqua is the same 0x00FFFF value, and is what "cyan" means
+// in tview color tags). Lines with no recognized level (e.g. a
+// multi-line value continuing the previous entry) are left in the
+// default color. Each line is escaped first so a literal "[" in logged
+// content (e.g. a Go slice's %v formatting) isn't misread as a color
+// tag — see queues.go's updateTitle for the same concern elsewhere.
+func colorizeLog(data string) string {
+	lines := strings.Split(data, "\n")
+	for i, line := range lines {
+		color := logLevelColor(line)
+		if color == "" {
+			lines[i] = tview.Escape(line)
+			continue
+		}
+		lines[i] = fmt.Sprintf("[%s]%s[-]", color, tview.Escape(line))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func logLevelColor(line string) string {
+	switch {
+	case strings.Contains(line, "level=ERROR"):
+		return "red"
+	case strings.Contains(line, "level=WARN"):
+		return "yellow"
+	case strings.Contains(line, "level=INFO"):
+		return "aqua"
+	default:
+		return ""
+	}
 }
