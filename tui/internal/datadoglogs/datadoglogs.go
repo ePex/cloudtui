@@ -23,8 +23,12 @@ type LogEvent struct {
 	Service   string
 	Status    string
 	Host      string
-	Message   string
-	Tags      []string
+	// Env is extracted from Tags (Datadog has no top-level "env"
+	// attribute the way it does service/status/host — env is
+	// conventionally an "env:<value>" tag) — see buildLogEvents.
+	Env     string
+	Message string
+	Tags    []string
 }
 
 // requestTimeout bounds a single Search call's HTTP round-trip.

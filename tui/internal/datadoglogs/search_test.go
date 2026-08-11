@@ -62,6 +62,29 @@ func TestBuildLogEventsPopulatesFields(t *testing.T) {
 	if len(e.Tags) != 1 || e.Tags[0] != "env:testt" {
 		t.Errorf("Tags = %v, want [env:testt]", e.Tags)
 	}
+	if e.Env != "testt" {
+		t.Errorf("Env = %q, want %q", e.Env, "testt")
+	}
+}
+
+func TestExtractEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		tags []string
+		want string
+	}{
+		{"env tag present", []string{"service:bar-proxy", "env:testt"}, "testt"},
+		{"env tag first", []string{"env:prod", "service:bar-proxy"}, "prod"},
+		{"no env tag", []string{"service:bar-proxy"}, ""},
+		{"no tags at all", nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := extractEnv(c.tags); got != c.want {
+				t.Errorf("extractEnv(%v) = %q, want %q", c.tags, got, c.want)
+			}
+		})
+	}
 }
 
 func TestBuildLogEventsEmptyInput(t *testing.T) {

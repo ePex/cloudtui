@@ -224,15 +224,15 @@ func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
 	}
 }
 
-// TestOnGlobalKeyPassesThroughWhenDatadogHostFilterFocused is
-// serviceFilterDD's test above's counterpart for hostFilterDD.
-func TestOnGlobalKeyPassesThroughWhenDatadogHostFilterFocused(t *testing.T) {
+// TestOnGlobalKeyPassesThroughWhenDatadogEnvFilterFocused is
+// serviceFilterDD's test above's counterpart for envFilterDD.
+func TestOnGlobalKeyPassesThroughWhenDatadogEnvFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.datadogLogsV.hostFilterDD)
+	a.tv.SetFocus(a.datadogLogsV.envFilterDD)
 
 	event := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
-		t.Errorf("onGlobalKey('s') while datadogLogsV host filter focused = %v, want event passed through unchanged", got)
+		t.Errorf("onGlobalKey('s') while datadogLogsV env filter focused = %v, want event passed through unchanged", got)
 	}
 }
 
