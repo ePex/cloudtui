@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -125,7 +126,10 @@ func (pv *ssmParamsView) setHeader() {
 // load fetches parameters from a.listParameters in a goroutine (a real AWS
 // API call, unlike awsprofile's local file read) and repaints via
 // QueueUpdateDraw. Requires an active AWS profile; errors clearly rather
-// than calling into awsssm with an empty one.
+// than calling into awsssm with an empty one. If the call fails because
+// the profile's cached SSO token is missing/expired, awsauth.WithReauth
+// opens the browser to log in and retries once before giving up — see
+// spec/36-fe-aws-sso-reauth.
 func (pv *ssmParamsView) load() {
 	profile := pv.app.cfg.ActiveAWSProfile
 	if profile == "" {
@@ -133,7 +137,18 @@ func (pv *ssmParamsView) load() {
 		return
 	}
 	go func() {
-		params, err := pv.app.listParameters(context.Background(), profile, "/")
+		ctx := context.Background()
+		authType, _ := pv.app.awsAuthTypeFor(ctx, profile)
+		params, err := awsauth.WithReauth(ctx, profile, authType, pv.app.awsSSOLogin,
+			func() {
+				pv.app.tv.QueueUpdateDraw(func() {
+					pv.showStatus("AWS SSO session expired — opening browser to log in...")
+				})
+			},
+			func(ctx context.Context) ([]awsssm.Parameter, error) {
+				return pv.app.listParameters(ctx, profile, "/")
+			},
+		)
 		pv.app.tv.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("ssm parameters: failed to list parameters", "error", err)
@@ -208,6 +223,23 @@ func (pv *ssmParamsView) showError(err error) {
 	pv.table.SetCell(1, 0,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
+			SetExpansion(3),
+	)
+	pv.table.SetTitle(" SSM Parameters ")
+}
+
+// showStatus displays an in-progress, non-error message (e.g. while an
+// SSO re-auth is running) — same shape as showError but accent-colored
+// so it doesn't read as a failure.
+func (pv *ssmParamsView) showStatus(msg string) {
+	pv.all = nil
+	pv.filtered = nil
+	for pv.table.GetRowCount() > 1 {
+		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
+	}
+	pv.table.SetCell(1, 0,
+		tview.NewTableCell(msg).
+			SetTextColor(tcell.GetColor(pv.app.cfg.Colors.Accent)).
 			SetExpansion(3),
 	)
 	pv.table.SetTitle(" SSM Parameters ")

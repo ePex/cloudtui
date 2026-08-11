@@ -241,6 +241,66 @@ region = us-east-1
 	}
 }
 
+func TestAuthTypeForEachAuthType(t *testing.T) {
+	setupFixture(t, `
+[profile sso-profile]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = ReadOnly
+
+[profile assume-role-profile]
+role_arn = arn:aws:iam::123456789012:role/Example
+source_profile = base
+
+[profile base]
+region = us-east-1
+
+[profile cred-process-profile]
+credential_process = /bin/echo fake-credentials
+`, `
+[static-keys-profile]
+aws_access_key_id = AKIAEXAMPLE
+aws_secret_access_key = secretexample
+
+[base]
+aws_access_key_id = AKIAEXAMPLE
+aws_secret_access_key = secretexample
+`)
+
+	cases := []struct {
+		name string
+		want AuthType
+	}{
+		{"sso-profile", AuthSSO},
+		{"assume-role-profile", AuthAssumeRole},
+		{"cred-process-profile", AuthCredentialProcess},
+		{"static-keys-profile", AuthStaticKeys},
+	}
+	for _, c := range cases {
+		got, err := AuthTypeFor(context.Background(), c.name)
+		if err != nil {
+			t.Errorf("AuthTypeFor(%q) error = %v", c.name, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("AuthTypeFor(%q) = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestAuthTypeForProfileNotFound(t *testing.T) {
+	setupFixture(t, `
+[profile only-profile]
+region = us-east-1
+`, "")
+
+	_, err := AuthTypeFor(context.Background(), "does-not-exist")
+	if err == nil {
+		t.Fatal("AuthTypeFor(missing profile) error = nil, want non-nil")
+	}
+}
+
 func profileNames(profiles []Profile) []string {
 	names := make([]string, len(profiles))
 	for i, p := range profiles {

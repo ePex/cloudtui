@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -127,7 +128,9 @@ func (lv *logsView) setHeader() {
 // load fetches log groups from a.listLogGroups in a goroutine (a real
 // AWS API call) and repaints via QueueUpdateDraw. Requires an active AWS
 // profile; errors clearly rather than calling into awslogs with an
-// empty one.
+// empty one. If the call fails because the profile's cached SSO token is
+// missing/expired, awsauth.WithReauth opens the browser to log in and
+// retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (lv *logsView) load() {
 	profile := lv.app.cfg.ActiveAWSProfile
 	if profile == "" {
@@ -135,7 +138,18 @@ func (lv *logsView) load() {
 		return
 	}
 	go func() {
-		groups, err := lv.app.listLogGroups(context.Background(), profile)
+		ctx := context.Background()
+		authType, _ := lv.app.awsAuthTypeFor(ctx, profile)
+		groups, err := awsauth.WithReauth(ctx, profile, authType, lv.app.awsSSOLogin,
+			func() {
+				lv.app.tv.QueueUpdateDraw(func() {
+					lv.showStatus("AWS SSO session expired — opening browser to log in...")
+				})
+			},
+			func(ctx context.Context) ([]awslogs.LogGroup, error) {
+				return lv.app.listLogGroups(ctx, profile)
+			},
+		)
 		lv.app.tv.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("cloudwatch logs: failed to list log groups", "error", err)
@@ -214,6 +228,23 @@ func (lv *logsView) showError(err error) {
 	lv.table.SetCell(1, 0,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
+			SetExpansion(3),
+	)
+	lv.table.SetTitle(" CloudWatch Logs ")
+}
+
+// showStatus displays an in-progress, non-error message (e.g. while an
+// SSO re-auth is running) — same shape as showError but accent-colored
+// so it doesn't read as a failure.
+func (lv *logsView) showStatus(msg string) {
+	lv.all = nil
+	lv.filtered = nil
+	for lv.table.GetRowCount() > 1 {
+		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
+	}
+	lv.table.SetCell(1, 0,
+		tview.NewTableCell(msg).
+			SetTextColor(tcell.GetColor(lv.app.cfg.Colors.Accent)).
 			SetExpansion(3),
 	)
 	lv.table.SetTitle(" CloudWatch Logs ")

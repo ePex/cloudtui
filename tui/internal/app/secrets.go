@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -124,6 +125,9 @@ func (sv *secretsView) setHeader() {
 // load fetches secrets from a.listSecrets in a goroutine (a real AWS API
 // call) and repaints via QueueUpdateDraw. Requires an active AWS profile;
 // errors clearly rather than calling into awssecrets with an empty one.
+// If the call fails because the profile's cached SSO token is
+// missing/expired, awsauth.WithReauth opens the browser to log in and
+// retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (sv *secretsView) load() {
 	profile := sv.app.cfg.ActiveAWSProfile
 	if profile == "" {
@@ -131,7 +135,18 @@ func (sv *secretsView) load() {
 		return
 	}
 	go func() {
-		secrets, err := sv.app.listSecrets(context.Background(), profile)
+		ctx := context.Background()
+		authType, _ := sv.app.awsAuthTypeFor(ctx, profile)
+		secrets, err := awsauth.WithReauth(ctx, profile, authType, sv.app.awsSSOLogin,
+			func() {
+				sv.app.tv.QueueUpdateDraw(func() {
+					sv.showStatus("AWS SSO session expired — opening browser to log in...")
+				})
+			},
+			func(ctx context.Context) ([]awssecrets.Secret, error) {
+				return sv.app.listSecrets(ctx, profile)
+			},
+		)
 		sv.app.tv.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("secrets manager: failed to list secrets", "error", err)
@@ -210,6 +225,23 @@ func (sv *secretsView) showError(err error) {
 	sv.table.SetCell(1, 0,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
+			SetExpansion(3),
+	)
+	sv.table.SetTitle(" Secrets Manager ")
+}
+
+// showStatus displays an in-progress, non-error message (e.g. while an
+// SSO re-auth is running) — same shape as showError but accent-colored
+// so it doesn't read as a failure.
+func (sv *secretsView) showStatus(msg string) {
+	sv.all = nil
+	sv.filtered = nil
+	for sv.table.GetRowCount() > 1 {
+		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
+	}
+	sv.table.SetCell(1, 0,
+		tview.NewTableCell(msg).
+			SetTextColor(tcell.GetColor(sv.app.cfg.Colors.Accent)).
 			SetExpansion(3),
 	)
 	sv.table.SetTitle(" Secrets Manager ")

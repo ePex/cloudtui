@@ -16,6 +16,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
@@ -90,6 +91,8 @@ type App struct {
 	homeSections           []views.SectionInfo
 	topBarHeight           int
 	listAWSProfiles        func(context.Context) ([]awsprofile.Profile, error)
+	awsAuthTypeFor         func(ctx context.Context, profile string) (awsprofile.AuthType, error)
+	awsSSOLogin            func(ctx context.Context, profile string) error
 	ssmParamsV             *ssmParamsView
 	secretsV               *secretsView
 	paramDetailV           *paramDetailView
@@ -156,6 +159,8 @@ func New(cfg config.Config) *App {
 
 	a.statusBar = newStatusBar(cfg)
 	a.listAWSProfiles = awsprofile.List
+	a.awsAuthTypeFor = awsprofile.AuthTypeFor
+	a.awsSSOLogin = awsauth.Login
 	a.listParameters = awsssm.List
 	a.revealParameter = awsssm.Reveal
 	a.listSecrets = awssecrets.List

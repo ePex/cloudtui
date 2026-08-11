@@ -176,6 +176,27 @@ func TestSSMParamsViewShowErrorRendersMessage(t *testing.T) {
 	}
 }
 
+// TestSSMParamsViewShowStatusRendersMessage covers the in-progress
+// status message load() shows while awsauth.WithReauth is running an SSO
+// re-auth (spec/36-fe-aws-sso-reauth) — load() itself isn't tested here
+// since its goroutine+QueueUpdateDraw path needs a running tview event
+// loop to ever complete (see TestSSMParamsViewLoadErrorsWithoutActiveProfile's
+// doc comment); the retry control flow is covered independently by
+// internal/awsauth's own tests.
+func TestSSMParamsViewShowStatusRendersMessage(t *testing.T) {
+	a := New(config.Default())
+
+	a.ssmParamsV.showStatus("AWS SSO session expired — opening browser to log in...")
+
+	if got := a.ssmParamsV.table.GetCell(1, 0).Text; !strings.Contains(got, "opening browser") {
+		t.Errorf("status cell = %q, want it to contain the status message", got)
+	}
+	fg, _, _ := a.ssmParamsV.table.GetCell(1, 0).Style.Decompose()
+	if want := tcell.GetColor(a.cfg.Colors.Accent); fg != want {
+		t.Errorf("status cell color = %v, want accent color %v", fg, want)
+	}
+}
+
 // TestSSMParamsViewRepaintScrollsToTopWithManyRows guards against the same
 // bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top):
 // tview.Table's "track end" auto-scroll latches on during the table's
