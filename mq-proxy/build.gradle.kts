@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.spring") version "2.1.21"
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.7"
+    id("org.springdoc.openapi-gradle-plugin") version "1.9.0"
 }
 
 group = "com.github.epex"
@@ -47,4 +48,13 @@ tasks.withType<Test> {
 
 tasks.bootJar {
     archiveFileName = "mq-proxy.jar"
+}
+
+// Exports the live springdoc-generated API doc to a committed file — see
+// spec/38-fe-proxy-openapi-export. Run via `task openapi:proxy`
+// (generateOpenApiDocs); not part of the regular build/CI.
+openApi {
+    apiDocsUrl.set("http://localhost:8080/v3/api-docs.yaml")
+    outputDir.set(projectDir)
+    outputFileName.set("openapi.yaml")
 }

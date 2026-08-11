@@ -105,6 +105,20 @@ http://localhost:8080/swagger-ui.html
 No login required for Swagger UI itself — credentials are entered per-request
 in the Authorize dialog.
 
+### OpenAPI spec file
+
+[`openapi.yaml`](openapi.yaml) is a committed, static export of the same
+spec Swagger UI serves live — useful for client codegen or reviewing API
+changes in a diff without starting the proxy. It's generated, not
+hand-written; after changing a controller, regenerate it with:
+
+```sh
+task openapi:proxy
+```
+
+(or `./gradlew generateOpenApiDocs` from `mq-proxy/`) and commit the
+result.
+
 ### List queues
 
 ```sh
