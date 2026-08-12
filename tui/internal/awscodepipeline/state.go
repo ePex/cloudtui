@@ -38,13 +38,15 @@ func GetPipelineState(ctx context.Context, profile, pipelineName string) ([]Stag
 func buildStageStatuses(raw []types.StageState) []StageStatus {
 	out := make([]StageStatus, 0, len(raw))
 	for _, s := range raw {
-		var status string
+		var status, executionID string
 		if s.LatestExecution != nil {
 			status = string(s.LatestExecution.Status)
+			executionID = aws.ToString(s.LatestExecution.PipelineExecutionId)
 		}
 		out = append(out, StageStatus{
-			Name:   aws.ToString(s.StageName),
-			Status: status,
+			Name:                aws.ToString(s.StageName),
+			Status:              status,
+			PipelineExecutionID: executionID,
 		})
 	}
 	return out

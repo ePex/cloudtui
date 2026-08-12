@@ -23,3 +23,8 @@
 7. [ ] Manual verification (per `tui/CLAUDE.md`) — see plan.md's
    Testing section for the checklist. Record what was checked here once
    done.
+   - 2026-08-12: watched a real pipeline mid-run; got a premature
+     "Pipeline finished" notification while it was still actively
+     running. Root cause + fix recorded in `plan.md` ("Bugfix" note under
+     `pipelineFinished`). Re-verify against a real in-progress pipeline
+     with the fix before checking this task done.

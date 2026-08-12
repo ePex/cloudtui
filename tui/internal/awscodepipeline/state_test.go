@@ -30,6 +30,9 @@ func TestBuildStageStatusesPopulatesFields(t *testing.T) {
 	if s.Status != "InProgress" {
 		t.Errorf("Status = %q, want %q", s.Status, "InProgress")
 	}
+	if s.PipelineExecutionID != "exec-1" {
+		t.Errorf("PipelineExecutionID = %q, want %q", s.PipelineExecutionID, "exec-1")
+	}
 }
 
 func TestBuildStageStatusesHandlesNilLatestExecution(t *testing.T) {
@@ -41,6 +44,9 @@ func TestBuildStageStatusesHandlesNilLatestExecution(t *testing.T) {
 
 	if got[0].Status != "" {
 		t.Errorf("Status = %q, want empty when the stage has never run", got[0].Status)
+	}
+	if got[0].PipelineExecutionID != "" {
+		t.Errorf("PipelineExecutionID = %q, want empty when the stage has never run", got[0].PipelineExecutionID)
 	}
 }
 

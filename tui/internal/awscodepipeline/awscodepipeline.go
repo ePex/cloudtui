@@ -27,10 +27,18 @@ type Pipeline struct {
 // latest execution. Status is one of CodePipeline's
 // types.StageExecutionStatus values (Cancelled, InProgress, Failed,
 // Stopped, Stopping, Succeeded, Skipped), or "" if the stage has never
-// run.
+// run. PipelineExecutionID identifies which pipeline execution Status
+// belongs to — GetPipelineState reports each stage's *last* execution
+// independently, so a stage the current execution hasn't reached yet
+// still shows a status (possibly Succeeded or Failed) left over from an
+// earlier execution. Callers that need to know whether the pipeline is
+// still actively running must compare this against the other stages'
+// IDs, not just read Status at face value (see
+// internal/app/codepipelinewatch.go's pipelineFinished).
 type StageStatus struct {
-	Name   string
-	Status string
+	Name                string
+	Status              string
+	PipelineExecutionID string
 }
 
 // newClient builds a codepipeline.Client authenticated as profile. An

@@ -10,8 +10,9 @@ type Pipeline struct {
 }
 
 type StageStatus struct {
-    Name   string
-    Status string // "InProgress", "Succeeded", "Failed", "Stopped", "Stopping", or "" if the stage has never run
+    Name                string
+    Status              string // "InProgress", "Succeeded", "Failed", "Stopped", "Stopping", or "" if the stage has never run
+    PipelineExecutionID string // which execution Status belongs to — see bugfix note below
 }
 
 func ListPipelines(ctx context.Context, profile string) ([]Pipeline, error)
@@ -153,10 +154,25 @@ func stageTransitions(prev map[string]string, stages []awscodepipeline.StageStat
 func snapshotStages(stages []awscodepipeline.StageStatus) map[string]string
 
 // pipelineFinished reports whether the pipeline execution has reached a
-// terminal state: any stage is Failed/Stopped, or the last stage in the
-// list is Succeeded.
+// terminal state: any stage (belonging to the current execution) is
+// Failed/Stopped, or the last stage in the list (also belonging to the
+// current execution) is Succeeded.
 func pipelineFinished(stages []awscodepipeline.StageStatus) bool
 ```
+
+**Bugfix (found live, post-ship)**: `GetPipelineState` reports each
+stage's *last* execution independently — a stage the current run hasn't
+reached yet still carries whatever status it had from a *previous*
+execution (e.g. Deploy still shows `Succeeded` from last time while
+Source is `InProgress` this time). The original `pipelineFinished` read
+`Status` across all stages at face value, so it reported "Pipeline
+finished" the moment any downstream stage happened to have a stale
+terminal status — a false positive while the pipeline was still actively
+running. Fixed by adding `PipelineExecutionID` to `StageStatus`
+(`LatestExecution.PipelineExecutionId`) and having `pipelineFinished`
+only consider stages whose `PipelineExecutionID` matches the first
+stage's (a new execution always starts at the first stage, so that
+stage's ID is always the current run's).
 
 ## Notification helper (`internal/app/notify.go`)
 

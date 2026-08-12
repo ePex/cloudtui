@@ -155,14 +155,33 @@ func snapshotStages(stages []awscodepipeline.StageStatus) map[string]string {
 // terminal state: any stage Failed or Stopped (the pipeline won't
 // progress further on its own), or the last stage in the list
 // Succeeded (the pipeline completed).
+//
+// GetPipelineState reports each stage's *last* execution independently
+// (see StageStatus's doc comment) — a stage the current run hasn't
+// reached yet still carries whatever status (possibly Succeeded or
+// Failed) it had from a previous execution. Naively reading Status
+// across all stages would then report an actively-running pipeline as
+// finished the moment any downstream stage happens to have a stale
+// terminal status left over from its last run. A new execution always
+// starts at the first stage, so that stage's PipelineExecutionID is
+// always the current run's ID — stages from any other execution are
+// ignored here as "not yet reached by this run".
 func pipelineFinished(stages []awscodepipeline.StageStatus) bool {
 	if len(stages) == 0 {
 		return false
 	}
+	currentExecution := stages[0].PipelineExecutionID
+	if currentExecution == "" {
+		return false
+	}
 	for _, s := range stages {
+		if s.PipelineExecutionID != currentExecution {
+			continue
+		}
 		if s.Status == "Failed" || s.Status == "Stopped" {
 			return true
 		}
 	}
-	return stages[len(stages)-1].Status == "Succeeded"
+	last := stages[len(stages)-1]
+	return last.PipelineExecutionID == currentExecution && last.Status == "Succeeded"
 }
