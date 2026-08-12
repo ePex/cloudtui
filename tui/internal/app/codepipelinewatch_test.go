@@ -69,11 +69,79 @@ func TestPipelineFinished(t *testing.T) {
 		want   bool
 	}{
 		{"empty", nil, false},
-		{"all in progress", []awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}, {Name: "Build", Status: "InProgress"}}, false},
-		{"last stage succeeded", []awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}, {Name: "Deploy", Status: "Succeeded"}}, true},
-		{"a middle stage failed", []awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}, {Name: "Build", Status: "Failed"}, {Name: "Deploy", Status: ""}}, true},
-		{"a stage stopped", []awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}, {Name: "Build", Status: "Stopped"}}, true},
-		{"last stage still in progress", []awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}, {Name: "Deploy", Status: "InProgress"}}, false},
+		{"never executed — no execution id at all", []awscodepipeline.StageStatus{{Name: "Source", Status: ""}}, false},
+		{
+			"all in progress",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+				{Name: "Build", Status: "InProgress", PipelineExecutionID: "exec-1"},
+			},
+			false,
+		},
+		{
+			"last stage succeeded",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+				{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+			},
+			true,
+		},
+		{
+			"a middle stage failed",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+				{Name: "Build", Status: "Failed", PipelineExecutionID: "exec-1"},
+				{Name: "Deploy", Status: "", PipelineExecutionID: "exec-1"},
+			},
+			true,
+		},
+		{
+			"a stage stopped",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+				{Name: "Build", Status: "Stopped", PipelineExecutionID: "exec-1"},
+			},
+			true,
+		},
+		{
+			"last stage still in progress",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+				{Name: "Deploy", Status: "InProgress", PipelineExecutionID: "exec-1"},
+			},
+			false,
+		},
+		// Regression coverage for the reported bug: GetPipelineState
+		// reports each stage's *last* execution independently, so a
+		// stage the current run hasn't reached yet still carries a
+		// terminal status left over from a previous, different
+		// execution. That must not read as "pipeline finished".
+		{
+			"downstream stage has a stale Succeeded from a previous execution",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "InProgress", PipelineExecutionID: "exec-2"},
+				{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+			},
+			false,
+		},
+		{
+			"downstream stage has a stale Failed from a previous execution",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "InProgress", PipelineExecutionID: "exec-2"},
+				{Name: "Build", Status: "Failed", PipelineExecutionID: "exec-1"},
+				{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
+			},
+			false,
+		},
+		{
+			"current execution's own last stage succeeded despite an older stale Failed",
+			[]awscodepipeline.StageStatus{
+				{Name: "Source", Status: "Succeeded", PipelineExecutionID: "exec-2"},
+				{Name: "Build", Status: "Succeeded", PipelineExecutionID: "exec-2"},
+				{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-2"},
+			},
+			true,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -162,7 +230,7 @@ func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
 	a.watchedPipelines["my-pipeline"] = make(chan struct{})
 
 	a.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
-		{Name: "Deploy", Status: "Succeeded"},
+		{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
 	}, nil)
 
 	if a.isWatchingPipeline("my-pipeline") {
