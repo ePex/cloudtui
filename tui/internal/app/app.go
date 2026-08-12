@@ -17,6 +17,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
+	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
@@ -116,6 +117,9 @@ type App struct {
 	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
 	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
 	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listPipelines            func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState         func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify                   func(title, message string)
 	screen                   tcell.Screen
 }
 
@@ -179,6 +183,9 @@ func New(cfg config.Config) *App {
 	a.listLogGroups = awslogs.ListLogGroups
 	a.filterLogEvents = awslogs.FilterEvents
 	a.searchDatadogLogs = datadoglogs.Search
+	a.listPipelines = awscodepipeline.ListPipelines
+	a.getPipelineState = awscodepipeline.GetPipelineState
+	a.notify = desktopNotify
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
