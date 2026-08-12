@@ -23,18 +23,20 @@
    `QueueControllerTest.kt` for the new DTOs/routes/envelope; delete the
    test cases for removed operations. `./gradlew test` and `bootJar`
    both green.
-6. [ ] `tui`: `queue.Backend` — add `MessageFilter`, `Summary.ProducerCount`,
+6. [x] `tui`: `queue.Backend` — add `MessageFilter`, `Summary.ProducerCount`,
    `DeleteMessages`/`MoveMessages` methods (existing methods' signatures
    unchanged); update `fakeQueueBackend` in
    `internal/app/queues_test.go` to satisfy the grown interface.
-7. [ ] `tui`: rewrite `internal/queue/proxy` against the new `mq-proxy`
+7. [x] `tui`: rewrite `internal/queue/proxy` against the new `mq-proxy`
    shape — envelope unwrapping, renamed DTOs, existing `Backend` methods
    reimplemented as thin wrappers over the new filtered endpoints, new
    `DeleteMessages`/`MoveMessages`. Update `proxy_test.go`.
-8. [ ] `tui`: `internal/queue/jolokia` — add the pure `filterMessages`
-   helper and `DeleteMessages`/`MoveMessages` (client-side filtering over
-   existing `BrowseMessages`/`RemoveMessage`/`MoveMessage`). Update
-   `jolokia_test.go`.
+8. [x] `tui`: `internal/queue/jolokia` — add the pure `filterMessages`
+   helper (in a new `filter.go`, tested via `filter_test.go`) and
+   `DeleteMessages`/`MoveMessages` (client-side filtering over existing
+   `BrowseMessages`/`RemoveMessage`/`MoveMessage`).
+   `go build ./...`, `go vet ./...`, and `go test ./... -count=1` all
+   green across every package.
 9. [ ] Manual verification (per `plan.md`'s Testing section) — start
    `mq-proxy` from source, confirm existing TUI operations (list/browse/
    send/single delete/single move/purge) still work against both
