@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
 // newTestClient starts an httptest server with handler h and returns a Client
@@ -45,11 +46,14 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 func TestList(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.URL.Path != "/api/queues" || r.Method != http.MethodGet {
+		if r.URL.Path != "/api/management/command/list-queues" || r.Method != http.MethodGet {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		writeJSON(w, http.StatusOK, []map[string]interface{}{
-			{"name": "orders", "pendingCount": 5, "consumerCount": 1, "enqueueCount": 10, "dequeueCount": 5},
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"name": "orders", "messageCount": 5, "consumerCount": 1, "enqueuedCount": 10, "dequeuedCount": 5, "producerCount": 2},
+			},
+			"errors": []any{},
 		})
 	}))
 	defer stop()
@@ -77,6 +81,9 @@ func TestList(t *testing.T) {
 	if s.DequeueCount != 5 {
 		t.Errorf("DequeueCount = %d, want 5", s.DequeueCount)
 	}
+	if s.ProducerCount != 2 {
+		t.Errorf("ProducerCount = %d, want 2", s.ProducerCount)
+	}
 }
 
 func TestListError(t *testing.T) {
@@ -91,6 +98,21 @@ func TestListError(t *testing.T) {
 	}
 }
 
+func TestListEnvelopeError(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []any{},
+			"errors": []map[string]string{{"code": "BROKER_ERROR", "message": "connection lost"}},
+		})
+	}))
+	defer stop()
+
+	_, err := c.List(context.Background())
+	if err == nil {
+		t.Fatal("List() error = nil, want non-nil for a populated errors array")
+	}
+}
+
 // ── BrowseMessages ────────────────────────────────────────────────────────────
 
 func TestBrowseMessages(t *testing.T) {
@@ -98,11 +120,17 @@ func TestBrowseMessages(t *testing.T) {
 	ts := "2024-01-01T00:00:00Z"
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.URL.Path != "/api/queues/orders/messages" {
+		if !strings.HasPrefix(r.URL.Path, "/api/management/command/list-messages") {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
-		writeJSON(w, http.StatusOK, []map[string]interface{}{
-			{"id": "ID:m1", "timestamp": ts, "body": body, "properties": map[string]string{"foo": "bar"}},
+		if r.URL.Query().Get("sourceQueue") != "orders" {
+			t.Errorf("sourceQueue = %q, want %q", r.URL.Query().Get("sourceQueue"), "orders")
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"sourceQueue": "orders", "messageId": "ID:m1", "jmsType": "order-created", "timestamp": ts, "body": body, "headers": map[string]string{"foo": "bar"}},
+			},
+			"errors": []any{},
 		})
 	}))
 	defer stop()
@@ -118,8 +146,8 @@ func TestBrowseMessages(t *testing.T) {
 	if m.ID != "ID:m1" {
 		t.Errorf("ID = %q, want %q", m.ID, "ID:m1")
 	}
-	if m.JMSType != "text" {
-		t.Errorf("JMSType = %q, want %q", m.JMSType, "text")
+	if m.JMSType != "order-created" {
+		t.Errorf("JMSType = %q, want %q", m.JMSType, "order-created")
 	}
 	if m.Preview != "hello world" {
 		t.Errorf("Preview = %q, want %q", m.Preview, "hello world")
@@ -140,10 +168,13 @@ func TestBrowseMessages(t *testing.T) {
 	}
 }
 
-func TestBrowseMessagesNilBody(t *testing.T) {
+func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, []map[string]interface{}{
-			{"id": "ID:m2", "timestamp": "2024-01-01T00:00:00Z", "body": nil, "properties": map[string]string{}},
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"sourceQueue": "orders", "messageId": "ID:m2", "jmsType": "", "timestamp": "2024-01-01T00:00:00Z", "body": nil, "headers": map[string]string{}},
+			},
+			"errors": []any{},
 		})
 	}))
 	defer stop()
@@ -153,18 +184,41 @@ func TestBrowseMessagesNilBody(t *testing.T) {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
 	if msgs[0].JMSType != "other" {
-		t.Errorf("JMSType = %q, want %q", msgs[0].JMSType, "other")
+		t.Errorf("JMSType = %q, want %q (inferred, since mq-proxy reported an empty jmsType)", msgs[0].JMSType, "other")
 	}
 	if msgs[0].Preview != "" {
 		t.Errorf("Preview = %q, want empty", msgs[0].Preview)
 	}
 }
 
+func TestBrowseMessagesEmptyJMSTypeWithBodyInfersText(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"sourceQueue": "orders", "messageId": "ID:m3", "jmsType": "", "timestamp": "2024-01-01T00:00:00Z", "body": "hi", "headers": map[string]string{}},
+			},
+			"errors": []any{},
+		})
+	}))
+	defer stop()
+
+	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if msgs[0].JMSType != "text" {
+		t.Errorf("JMSType = %q, want %q (inferred from body presence)", msgs[0].JMSType, "text")
+	}
+}
+
 func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 	longBody := strings.Repeat("a", 100)
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, []map[string]interface{}{
-			{"id": "ID:m3", "timestamp": "2024-01-01T00:00:00Z", "body": longBody, "properties": map[string]string{}},
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"sourceQueue": "orders", "messageId": "ID:m4", "jmsType": "text", "timestamp": "2024-01-01T00:00:00Z", "body": longBody, "headers": map[string]string{}},
+			},
+			"errors": []any{},
 		})
 	}))
 	defer stop()
@@ -183,10 +237,20 @@ func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 func TestPurgeQueue(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.Method != http.MethodDelete || r.URL.Path != "/api/queues/orders/messages" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/management/command/delete-messages" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		writeJSON(w, http.StatusOK, map[string]int{"purged": 3})
+		var reqs []deleteMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(reqs) != 1 || reqs[0].SourceQueue != "orders" || reqs[0].Filter.MaxCount != nil {
+			t.Errorf("unexpected request %+v, want a single empty-filter entry for orders", reqs)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []map[string]string{{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"}},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
@@ -211,10 +275,17 @@ func TestPurgeQueueError(t *testing.T) {
 func TestRemoveMessage(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.Method != http.MethodDelete || r.URL.Path != "/api/queues/orders/messages/ID:m1" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		var reqs []deleteMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
 		}
-		w.WriteHeader(http.StatusNoContent)
+		if len(reqs) != 1 || reqs[0].SourceQueue != "orders" || reqs[0].Filter.MessageID != "ID:m1" || reqs[0].Filter.MaxCount == nil || *reqs[0].Filter.MaxCount != 1 {
+			t.Errorf("unexpected request %+v", reqs)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []map[string]string{{"messageId": "ID:m1"}},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
@@ -225,12 +296,15 @@ func TestRemoveMessage(t *testing.T) {
 
 func TestRemoveMessageNotFound(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []any{},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
 	if err := c.RemoveMessage(context.Background(), "orders", "ID:gone"); err == nil {
-		t.Fatal("RemoveMessage() error = nil, want non-nil")
+		t.Fatal("RemoveMessage() error = nil, want non-nil when the filter matched nothing")
 	}
 }
 
@@ -239,14 +313,20 @@ func TestRemoveMessageNotFound(t *testing.T) {
 func TestMoveMessage(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		wantPath := "/api/queues/orders/messages/ID:m1/move"
-		if r.Method != http.MethodPost || r.URL.Path != wantPath {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/management/command/move-messages" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("to") != "dlq" {
-			t.Errorf("query param to = %q, want %q", r.URL.Query().Get("to"), "dlq")
+		var reqs []moveMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
 		}
-		w.WriteHeader(http.StatusNoContent)
+		if len(reqs) != 1 || reqs[0].SourceQueue != "orders" || reqs[0].TargetQueue != "dlq" || reqs[0].Filter.MessageID != "ID:m1" {
+			t.Errorf("unexpected request %+v", reqs)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []map[string]string{{"messageId": "ID:m1"}},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
@@ -257,12 +337,15 @@ func TestMoveMessage(t *testing.T) {
 
 func TestMoveMessageNotFound(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []any{},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
 	if err := c.MoveMessage(context.Background(), "orders", "ID:gone", "dlq"); err == nil {
-		t.Fatal("MoveMessage() error = nil, want non-nil")
+		t.Fatal("MoveMessage() error = nil, want non-nil when the filter matched nothing")
 	}
 }
 
@@ -271,13 +354,20 @@ func TestMoveMessageNotFound(t *testing.T) {
 func TestMoveAllMessages(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.Method != http.MethodPost || r.URL.Path != "/api/queues/orders/move" {
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		var reqs []moveMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
 		}
-		if r.URL.Query().Get("to") != "archive" {
-			t.Errorf("query param to = %q, want %q", r.URL.Query().Get("to"), "archive")
+		if len(reqs) != 1 || reqs[0].Filter.MaxCount != nil {
+			t.Errorf("unexpected request %+v, want a single empty-filter entry", reqs)
 		}
-		writeJSON(w, http.StatusOK, map[string]int{"moved": 7})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]string{
+				{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"},
+				{"messageId": "ID:4"}, {"messageId": "ID:5"}, {"messageId": "ID:6"}, {"messageId": "ID:7"},
+			},
+			"errors": []any{},
+		})
 	}))
 	defer stop()
 
@@ -302,18 +392,84 @@ func TestMoveAllMessagesError(t *testing.T) {
 	}
 }
 
+// ── DeleteMessages / MoveMessages (filtered bulk) ────────────────────────────
+
+func TestDeleteMessagesSendsFilter(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqs []deleteMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(reqs) != 1 {
+			t.Fatalf("len(reqs) = %d, want 1", len(reqs))
+		}
+		f := reqs[0].Filter
+		if f.JMSType != "order-created" || f.MaxCount == nil || *f.MaxCount != 10 {
+			t.Errorf("filter = %+v, want jmsType=order-created maxCount=10", f)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []map[string]string{{"messageId": "ID:1"}, {"messageId": "ID:2"}},
+			"errors": []any{},
+		})
+	}))
+	defer stop()
+
+	n, err := c.DeleteMessages(context.Background(), "orders", queue.MessageFilter{JMSType: "order-created", MaxCount: 10})
+	if err != nil {
+		t.Fatalf("DeleteMessages() error = %v", err)
+	}
+	if n != 2 {
+		t.Errorf("DeleteMessages() = %d, want 2", n)
+	}
+}
+
+func TestMoveMessagesSendsFilter(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqs []moveMessagesRequest
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(reqs) != 1 || reqs[0].TargetQueue != "archive" {
+			t.Fatalf("unexpected request %+v", reqs)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   []map[string]string{{"messageId": "ID:1"}},
+			"errors": []any{},
+		})
+	}))
+	defer stop()
+
+	n, err := c.MoveMessages(context.Background(), "orders", "archive", queue.MessageFilter{MessageID: "ID:1", MaxCount: 1})
+	if err != nil {
+		t.Fatalf("MoveMessages() error = %v", err)
+	}
+	if n != 1 {
+		t.Errorf("MoveMessages() = %d, want 1", n)
+	}
+}
+
 // ── SendMessage ───────────────────────────────────────────────────────────────
 
 func TestSendMessage(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		checkBasicAuth(t, r)
-		if r.Method != http.MethodPost || r.URL.Path != "/api/queues/orders/messages" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/management/command/send-message" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", ct)
 		}
-		w.WriteHeader(http.StatusCreated)
+		var req sendMessageRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.TargetQueue != "orders" || req.JMSType != "text" || req.Body != `{"text":"hello"}` {
+			t.Errorf("unexpected request %+v", req)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":  map[string]string{"messageId": "ID:sent-1"},
+			"error": nil,
+		})
 	}))
 	defer stop()
 
@@ -330,5 +486,19 @@ func TestSendMessageError(t *testing.T) {
 
 	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
 		t.Fatal("SendMessage() error = nil, want non-nil")
+	}
+}
+
+func TestSendMessageEnvelopeError(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":  nil,
+			"error": map[string]string{"code": "INVALID_QUEUE", "message": "no such queue"},
+		})
+	}))
+	defer stop()
+
+	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
+		t.Fatal("SendMessage() error = nil, want non-nil for a populated error field")
 	}
 }

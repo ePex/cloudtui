@@ -12,6 +12,7 @@ type Summary struct {
 	ConsumerCount int64
 	EnqueueCount  int64
 	DequeueCount  int64
+	ProducerCount int64
 }
 
 // Message represents a single message browsed from a queue.
@@ -24,6 +25,17 @@ type Message struct {
 	RawFields     map[string]interface{} // full Jolokia response map for the message
 }
 
+// MessageFilter selects which messages a bulk delete/move operation
+// applies to. A zero-value field means "don't filter on this" — a
+// zero-value MessageFilter matches every message on the queue.
+type MessageFilter struct {
+	JMSType   string
+	MessageID string
+	FromDate  time.Time
+	ToDate    time.Time
+	MaxCount  int // 0 = unlimited
+}
+
 // Backend is the interface all queue data sources must implement.
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
@@ -33,4 +45,6 @@ type Backend interface {
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 	MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 	SendMessage(ctx context.Context, queueName, body string) error
+	DeleteMessages(ctx context.Context, queueName string, filter MessageFilter) (int, error)
+	MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter MessageFilter) (int, error)
 }

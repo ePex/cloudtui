@@ -33,37 +33,124 @@ func NewClient(cfg config.ProxyConfig) *Client {
 	}
 }
 
-// proxyQueue is the JSON shape returned by GET /api/queues.
-type proxyQueue struct {
-	Name          string `json:"name"`
-	PendingCount  int64  `json:"pendingCount"`
-	ConsumerCount int64  `json:"consumerCount"`
-	EnqueueCount  int64  `json:"enqueueCount"`
-	DequeueCount  int64  `json:"dequeueCount"`
+// apiError is a single entry in a response envelope's errors.
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
-// proxyMessage is the JSON shape returned by GET /api/queues/{name}/messages.
+// listEnvelope is the {data, errors} shape every list-returning
+// mq-proxy endpoint responds with.
+type listEnvelope[T any] struct {
+	Data   []T        `json:"data"`
+	Errors []apiError `json:"errors"`
+}
+
+// itemEnvelope is the {data, error} shape single-result mq-proxy
+// endpoints (send-message) respond with.
+type itemEnvelope[T any] struct {
+	Data  *T        `json:"data"`
+	Error *apiError `json:"error"`
+}
+
+// proxyQueue is the JSON shape of one entry in list-queues' data array.
+type proxyQueue struct {
+	Name          string `json:"name"`
+	MessageCount  int64  `json:"messageCount"`
+	ConsumerCount int64  `json:"consumerCount"`
+	EnqueuedCount int64  `json:"enqueuedCount"`
+	DequeuedCount int64  `json:"dequeuedCount"`
+	ProducerCount int64  `json:"producerCount"`
+}
+
+// proxyMessage is the JSON shape of one entry in list-messages' data array.
 type proxyMessage struct {
-	ID         string            `json:"id"`
-	Timestamp  string            `json:"timestamp"`
-	Body       *string           `json:"body"`
-	Properties map[string]string `json:"properties"`
+	SourceQueue string            `json:"sourceQueue"`
+	MessageID   string            `json:"messageId"`
+	JMSType     string            `json:"jmsType"`
+	Body        *string           `json:"body"`
+	Timestamp   string            `json:"timestamp"`
+	Headers     map[string]string `json:"headers"`
+}
+
+// queueMessageFilter mirrors mq-proxy's QueueMessageFilter DTO. Every
+// field is optional; the zero value matches every message on the queue.
+type queueMessageFilter struct {
+	JMSType   string `json:"jmsType,omitempty"`
+	FromDate  string `json:"fromDate,omitempty"`
+	ToDate    string `json:"toDate,omitempty"`
+	MessageID string `json:"messageId,omitempty"`
+	MaxCount  *int   `json:"maxCount,omitempty"`
+}
+
+// toFilterDTO converts a queue.MessageFilter (Go-side, MaxCount 0 means
+// "unlimited") into the wire shape mq-proxy expects (MaxCount omitted
+// entirely means "unlimited" — a present 0 would mean "match nothing").
+func toFilterDTO(f queue.MessageFilter) queueMessageFilter {
+	dto := queueMessageFilter{JMSType: f.JMSType, MessageID: f.MessageID}
+	if !f.FromDate.IsZero() {
+		dto.FromDate = f.FromDate.UTC().Format(time.RFC3339)
+	}
+	if !f.ToDate.IsZero() {
+		dto.ToDate = f.ToDate.UTC().Format(time.RFC3339)
+	}
+	if f.MaxCount > 0 {
+		maxCount := f.MaxCount
+		dto.MaxCount = &maxCount
+	}
+	return dto
+}
+
+type deleteMessagesRequest struct {
+	SourceQueue string             `json:"sourceQueue"`
+	Filter      queueMessageFilter `json:"filter"`
+}
+
+type moveMessagesRequest struct {
+	SourceQueue string             `json:"sourceQueue"`
+	TargetQueue string             `json:"targetQueue"`
+	Filter      queueMessageFilter `json:"filter"`
+}
+
+type sendMessageRequest struct {
+	TargetQueue   string            `json:"targetQueue"`
+	JMSType       string            `json:"jmsType"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	GroupID       string            `json:"groupId,omitempty"`
+	Body          string            `json:"body"`
+	CorrelationID string            `json:"correlationId,omitempty"`
+}
+
+type sendMessageResponse struct {
+	MessageID string `json:"messageId"`
+}
+
+type deletedMessage struct {
+	MessageID string `json:"messageId"`
+}
+
+type movedMessage struct {
+	MessageID string `json:"messageId"`
 }
 
 // List implements queue.Backend.
 func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
-	var resp []proxyQueue
-	if err := c.getJSON(ctx, "/api/queues", &resp); err != nil {
+	var env listEnvelope[proxyQueue]
+	if err := c.getJSON(ctx, "/api/management/command/list-queues", &env); err != nil {
 		return nil, fmt.Errorf("list queues: %w", err)
 	}
-	out := make([]queue.Summary, len(resp))
-	for i, q := range resp {
+	if err := envelopeErr(env.Errors); err != nil {
+		return nil, fmt.Errorf("list queues: %w", err)
+	}
+	out := make([]queue.Summary, len(env.Data))
+	for i, q := range env.Data {
 		out[i] = queue.Summary{
 			Name:          q.Name,
-			PendingCount:  q.PendingCount,
+			PendingCount:  q.MessageCount,
 			ConsumerCount: q.ConsumerCount,
-			EnqueueCount:  q.EnqueueCount,
-			DequeueCount:  q.DequeueCount,
+			EnqueueCount:  q.EnqueuedCount,
+			DequeueCount:  q.DequeuedCount,
+			ProducerCount: q.ProducerCount,
 		}
 	}
 	return out, nil
@@ -71,13 +158,16 @@ func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
 
 // BrowseMessages implements queue.Backend.
 func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.Message, error) {
-	var resp []proxyMessage
-	path := "/api/queues/" + url.PathEscape(queueName) + "/messages"
-	if err := c.getJSON(ctx, path, &resp); err != nil {
+	path := "/api/management/command/list-messages?sourceQueue=" + url.QueryEscape(queueName)
+	var env listEnvelope[proxyMessage]
+	if err := c.getJSON(ctx, path, &env); err != nil {
 		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
 	}
-	out := make([]queue.Message, len(resp))
-	for i, m := range resp {
+	if err := envelopeErr(env.Errors); err != nil {
+		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
+	}
+	out := make([]queue.Message, len(env.Data))
+	for i, m := range env.Data {
 		out[i] = toQueueMessage(m)
 	}
 	return out, nil
@@ -85,8 +175,7 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 
 // PurgeQueue implements queue.Backend.
 func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
-	path := "/api/queues/" + url.PathEscape(queueName) + "/messages"
-	if err := c.doRequest(ctx, http.MethodDelete, path, nil, nil); err != nil {
+	if _, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{}); err != nil {
 		return fmt.Errorf("purge queue %q: %w", queueName, err)
 	}
 	return nil
@@ -94,68 +183,116 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
 
 // RemoveMessage implements queue.Backend.
 func (c *Client) RemoveMessage(ctx context.Context, queueName, messageID string) error {
-	path := "/api/queues/" + url.PathEscape(queueName) + "/messages/" + url.PathEscape(messageID)
-	if err := c.doRequest(ctx, http.MethodDelete, path, nil, nil); err != nil {
+	n, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{MessageID: messageID, MaxCount: 1})
+	if err != nil {
 		return fmt.Errorf("remove message %q from %q: %w", messageID, queueName, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("remove message %q from %q: not found", messageID, queueName)
 	}
 	return nil
 }
 
 // MoveMessage implements queue.Backend.
 func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
-	path := "/api/queues/" + url.PathEscape(sourceQueue) +
-		"/messages/" + url.PathEscape(messageID) +
-		"/move?to=" + url.QueryEscape(targetQueue)
-	if err := c.doRequest(ctx, http.MethodPost, path, nil, nil); err != nil {
+	n, err := c.MoveMessages(ctx, sourceQueue, targetQueue, queue.MessageFilter{MessageID: messageID, MaxCount: 1})
+	if err != nil {
 		return fmt.Errorf("move message %q from %q to %q: %w", messageID, sourceQueue, targetQueue, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("move message %q from %q to %q: not found", messageID, sourceQueue, targetQueue)
 	}
 	return nil
 }
 
 // MoveAllMessages implements queue.Backend.
 func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
-	var resp struct {
-		Moved int `json:"moved"`
-	}
-	path := "/api/queues/" + url.PathEscape(sourceQueue) + "/move?to=" + url.QueryEscape(targetQueue)
-	if err := c.doRequest(ctx, http.MethodPost, path, nil, &resp); err != nil {
+	n, err := c.MoveMessages(ctx, sourceQueue, targetQueue, queue.MessageFilter{})
+	if err != nil {
 		return 0, fmt.Errorf("move all from %q to %q: %w", sourceQueue, targetQueue, err)
 	}
-	return resp.Moved, nil
+	return n, nil
 }
 
 // SendMessage implements queue.Backend.
 func (c *Client) SendMessage(ctx context.Context, queueName, body string) error {
-	path := "/api/queues/" + url.PathEscape(queueName) + "/messages"
-	if err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(body), nil); err != nil {
+	req := sendMessageRequest{TargetQueue: queueName, JMSType: "text", Body: body}
+	var env itemEnvelope[sendMessageResponse]
+	if err := c.postJSON(ctx, "/api/management/command/send-message", req, &env); err != nil {
 		return fmt.Errorf("send message to %q: %w", queueName, err)
+	}
+	if env.Error != nil {
+		return fmt.Errorf("send message to %q: %s: %s", queueName, env.Error.Code, env.Error.Message)
 	}
 	return nil
 }
 
-// toQueueMessage converts a proxyMessage into a queue.Message.
+// DeleteMessages implements queue.Backend.
+func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+	reqs := []deleteMessagesRequest{{SourceQueue: queueName, Filter: toFilterDTO(filter)}}
+	var env listEnvelope[deletedMessage]
+	if err := c.postJSON(ctx, "/api/management/command/delete-messages", reqs, &env); err != nil {
+		return 0, err
+	}
+	if err := envelopeErr(env.Errors); err != nil {
+		return 0, err
+	}
+	return len(env.Data), nil
+}
+
+// MoveMessages implements queue.Backend.
+func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+	reqs := []moveMessagesRequest{{SourceQueue: sourceQueue, TargetQueue: targetQueue, Filter: toFilterDTO(filter)}}
+	var env listEnvelope[movedMessage]
+	if err := c.postJSON(ctx, "/api/management/command/move-messages", reqs, &env); err != nil {
+		return 0, err
+	}
+	if err := envelopeErr(env.Errors); err != nil {
+		return 0, err
+	}
+	return len(env.Data), nil
+}
+
+// envelopeErr builds a Go error from the first entry of a response
+// envelope's errors, or nil if there are none.
+func envelopeErr(errs []apiError) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", errs[0].Code, errs[0].Message)
+}
+
+// toQueueMessage converts a proxyMessage into a queue.Message. Prefers
+// the real jmsType mq-proxy reports (the JMS JMSType header) and only
+// falls back to inferring "text"/"other" from body presence when it's
+// empty — mirrors the Jolokia backend's jMSType-header-first pattern
+// (internal/queue/jolokia/jolokia.go).
 func toQueueMessage(m proxyMessage) queue.Message {
 	ts, _ := time.Parse(time.RFC3339, m.Timestamp)
 
-	jmsType := "other"
+	jmsType := m.JMSType
 	var bodyText string
 	var preview string
 	if m.Body != nil {
-		jmsType = "text"
 		bodyText = *m.Body
 		preview = bodyText
 		if len([]rune(preview)) > 80 {
 			preview = string([]rune(preview)[:80])
 		}
+		if jmsType == "" {
+			jmsType = "text"
+		}
+	} else if jmsType == "" {
+		jmsType = "other"
 	}
 
-	props := make(map[string]interface{}, len(m.Properties))
-	for k, v := range m.Properties {
+	props := make(map[string]interface{}, len(m.Headers))
+	for k, v := range m.Headers {
 		props[k] = v
 	}
 
 	return queue.Message{
-		ID:        m.ID,
+		ID:        m.MessageID,
 		JMSType:   jmsType,
 		Timestamp: ts,
 		Preview:   preview,
@@ -169,6 +306,15 @@ func toQueueMessage(m proxyMessage) queue.Message {
 // getJSON performs a GET and JSON-decodes the response into out.
 func (c *Client) getJSON(ctx context.Context, path string, out interface{}) error {
 	return c.doRequest(ctx, http.MethodGet, path, nil, out)
+}
+
+// postJSON JSON-encodes body, POSTs it, and JSON-decodes the response into out.
+func (c *Client) postJSON(ctx context.Context, path string, body interface{}, out interface{}) error {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encoding request: %w", err)
+	}
+	return c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(encoded)), out)
 }
 
 // doRequest executes an HTTP request against the proxy.
