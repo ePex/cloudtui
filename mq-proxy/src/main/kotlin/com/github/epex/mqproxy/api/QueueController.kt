@@ -1,68 +1,50 @@
 package com.github.epex.mqproxy.api
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.github.epex.mqproxy.api.model.MessageDetail
-import com.github.epex.mqproxy.api.model.MessageSummary
-import com.github.epex.mqproxy.api.model.QueueSummary
+import com.github.epex.mqproxy.api.model.DeleteMessagesRequest
+import com.github.epex.mqproxy.api.model.ItemResponse
+import com.github.epex.mqproxy.api.model.ListResponse
+import com.github.epex.mqproxy.api.model.MoveMessagesRequest
+import com.github.epex.mqproxy.api.model.QueueMessageFilter
+import com.github.epex.mqproxy.api.model.SendMessageRequest
+import com.github.epex.mqproxy.api.model.SendMessageResponseDto
 import com.github.epex.mqproxy.service.BrokerService
-import org.springframework.http.HttpStatus
-import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/management/command")
 class QueueController(private val brokerService: BrokerService) {
 
-    @GetMapping("/queues")
-    fun listQueues(): List<QueueSummary> =
-        brokerService.listQueues()
+    @GetMapping("/list-queues")
+    fun listQueues() = ListResponse(data = brokerService.listQueues())
 
-    @GetMapping("/queues/{name}/messages")
-    fun browseMessages(@PathVariable name: String): List<MessageSummary> =
-        brokerService.browseMessages(name)
+    @GetMapping("/list-messages")
+    fun listMessages(
+        @RequestParam sourceQueue: String,
+        @RequestParam(required = false) jmsType: String?,
+        @RequestParam(required = false) messageId: String?,
+    ) = ListResponse(
+        data = brokerService.browseMessages(
+            sourceQueue,
+            QueueMessageFilter(jmsType = jmsType, messageId = messageId),
+        ),
+    )
 
-    @GetMapping("/queues/{name}/messages/{id:.+}")
-    fun getMessage(
-        @PathVariable name: String,
-        @PathVariable id: String,
-    ): MessageDetail = brokerService.getMessage(name, id)
+    @PostMapping("/send-message")
+    fun sendMessage(@RequestBody request: SendMessageRequest) =
+        ItemResponse(data = SendMessageResponseDto(messageId = brokerService.sendMessage(request)))
 
-    @DeleteMapping("/queues/{name}/messages/{id:.+}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun deleteMessage(
-        @PathVariable name: String,
-        @PathVariable id: String,
-    ) = brokerService.deleteMessage(name, id)
+    @PostMapping("/delete-messages")
+    fun deleteMessages(@RequestBody requests: List<DeleteMessagesRequest>) = ListResponse(
+        data = requests.flatMap { brokerService.deleteMessages(it.sourceQueue, it.filter) },
+    )
 
-    @PostMapping("/queues/{name}/messages/{id:.+}/move")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun moveMessage(
-        @PathVariable name: String,
-        @PathVariable id: String,
-        @RequestParam to: String,
-    ) = brokerService.moveMessage(name, id, to)
-
-    @PostMapping("/queues/{name}/move")
-    fun moveAll(
-        @PathVariable name: String,
-        @RequestParam to: String,
-    ): Map<String, Int> = mapOf("moved" to brokerService.moveAll(name, to))
-
-    @PostMapping("/queues/{name}/messages")
-    @ResponseStatus(HttpStatus.CREATED)
-    fun sendMessage(
-        @PathVariable name: String,
-        @RequestBody body: JsonNode,
-    ) = brokerService.sendMessage(name, body.toString())
-
-    @DeleteMapping("/queues/{name}/messages")
-    fun purgeQueue(@PathVariable name: String): Map<String, Int> =
-        mapOf("purged" to brokerService.purgeQueue(name))
+    @PostMapping("/move-messages")
+    fun moveMessages(@RequestBody requests: List<MoveMessagesRequest>) = ListResponse(
+        data = requests.flatMap { brokerService.moveMessages(it.sourceQueue, it.targetQueue, it.filter) },
+    )
 }

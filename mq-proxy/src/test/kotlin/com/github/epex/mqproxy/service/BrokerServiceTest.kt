@@ -1,5 +1,7 @@
 package com.github.epex.mqproxy.service
 
+import com.github.epex.mqproxy.api.model.QueueMessageFilter
+import com.github.epex.mqproxy.api.model.SendMessageRequest
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -19,7 +21,6 @@ import org.apache.activemq.ActiveMQConnectionFactory
 import org.apache.activemq.advisory.DestinationSource
 import org.apache.activemq.command.ActiveMQQueue
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.util.Collections
 
@@ -60,26 +61,22 @@ class BrokerServiceTest {
         id: String,
         timestamp: Long = 0L,
         body: String = "body",
+        jmsType: String = "text",
     ): TextMessage {
         val msg = mockk<TextMessage>()
         every { msg.jmsMessageID } returns id
         every { msg.jmsTimestamp } returns timestamp
         every { msg.text } returns body
-        every { msg.jmsDeliveryMode } returns 2
-        every { msg.jmsPriority } returns 4
-        every { msg.jmsCorrelationID } returns null
-        every { msg.jmsReplyTo } returns null
-        every { msg.jmsDestination } returns mockk<jakarta.jms.Destination>(relaxed = true)
-        every { msg.jmsRedelivered } returns false
+        every { msg.jmsType } returns jmsType
         every { msg.propertyNames } returns Collections.emptyEnumeration<Any>()
         return msg
     }
 
-    private fun stubBrowser(session: Session, queueName: String, messages: List<Message>): QueueBrowser {
+    private fun stubBrowser(session: Session, queueName: String, selector: String?, messages: List<Message>): QueueBrowser {
         val queue = mockk<Queue>()
         val browser = mockk<QueueBrowser>()
         every { session.createQueue(queueName) } returns queue
-        every { session.createBrowser(queue) } returns browser
+        every { session.createBrowser(queue, selector) } returns browser
         every { browser.enumeration } returns Collections.enumeration(messages)
         every { browser.close() } just Runs
         return browser
@@ -121,8 +118,9 @@ class BrokerServiceTest {
 
         assertThat(result).hasSize(1)
         assertThat(result[0].name).isEqualTo("test.queue")
-        assertThat(result[0].pendingCount).isEqualTo(-1L)
+        assertThat(result[0].messageCount).isEqualTo(-1L)
         assertThat(result[0].consumerCount).isEqualTo(-1L)
+        assertThat(result[0].producerCount).isEqualTo(-1L)
     }
 
     @Test
@@ -168,13 +166,15 @@ class BrokerServiceTest {
     fun `browseMessages maps TextMessage fields to MessageSummary`() {
         val conn = mockConnection()
         val session = stubSession(conn)
-        val msg = stubTextMessage(session, id = "ID:test-1", timestamp = 1_700_000_000_000L, body = "hello")
-        stubBrowser(session, "orders", listOf(msg))
+        val msg = stubTextMessage(session, id = "ID:test-1", timestamp = 1_700_000_000_000L, body = "hello", jmsType = "order-created")
+        stubBrowser(session, "orders", null, listOf(msg))
 
-        val result = service.browseMessages("orders")
+        val result = service.browseMessages("orders", QueueMessageFilter())
 
         assertThat(result).hasSize(1)
-        assertThat(result[0].id).isEqualTo("ID:test-1")
+        assertThat(result[0].sourceQueue).isEqualTo("orders")
+        assertThat(result[0].messageId).isEqualTo("ID:test-1")
+        assertThat(result[0].jmsType).isEqualTo("order-created")
         assertThat(result[0].body).isEqualTo("hello")
         assertThat(result[0].timestamp).startsWith("2023-")
     }
@@ -183,149 +183,130 @@ class BrokerServiceTest {
     fun `browseMessages returns empty list for empty queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
-        stubBrowser(session, "empty.queue", emptyList())
+        stubBrowser(session, "empty.queue", null, emptyList())
 
-        val result = service.browseMessages("empty.queue")
+        val result = service.browseMessages("empty.queue", QueueMessageFilter())
 
         assertThat(result).isEmpty()
     }
 
-    // -------------------------------------------------------------------------
-    // getMessage
-    // -------------------------------------------------------------------------
-
     @Test
-    fun `getMessage returns MessageDetail for matching id`() {
+    fun `browseMessages passes a selector built from the filter`() {
         val conn = mockConnection()
         val session = stubSession(conn)
-        val msg = stubTextMessage(session, id = "ID:abc-1", body = "payload")
-        stubBrowser(session, "myQueue", listOf(msg))
+        stubBrowser(session, "orders", "JMSType = 'order-created'", emptyList())
 
-        val result = service.getMessage("myQueue", "ID:abc-1")
+        service.browseMessages("orders", QueueMessageFilter(jmsType = "order-created"))
 
-        assertThat(result.id).isEqualTo("ID:abc-1")
-        assertThat(result.body).isEqualTo("payload")
-        assertThat(result.priority).isEqualTo(4)
-    }
-
-    @Test
-    fun `getMessage throws NotFoundException when id not in queue`() {
-        val conn = mockConnection()
-        val session = stubSession(conn)
-        val msg = stubTextMessage(session, id = "ID:other")
-        stubBrowser(session, "myQueue", listOf(msg))
-
-        assertThatThrownBy { service.getMessage("myQueue", "ID:missing") }
-            .isInstanceOf(NotFoundException::class.java)
-            .hasMessageContaining("ID:missing")
+        verify { session.createBrowser(any(), "JMSType = 'order-created'") }
     }
 
     // -------------------------------------------------------------------------
-    // deleteMessage
+    // deleteMessages
     // -------------------------------------------------------------------------
 
     @Test
-    fun `deleteMessage consumes message with selector`() {
+    fun `deleteMessages with an empty filter consumes every message`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val queue = mockk<Queue>()
         val consumer = mockk<MessageConsumer>()
-        val msg = mockk<Message>()
+        val msg1 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:1" }
+        val msg2 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:2" }
 
-        every { session.createQueue("dlq") } returns queue
-        every { session.createConsumer(queue, "JMSMessageID = 'ID:x-1'") } returns consumer
-        every { consumer.receive(2_000) } returns msg
+        every { session.createQueue("trash") } returns queue
+        every { session.createConsumer(queue, null) } returns consumer
+        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2, null)
         every { consumer.close() } just Runs
 
-        service.deleteMessage("dlq", "ID:x-1")
+        val result = service.deleteMessages("trash", QueueMessageFilter())
 
-        verify { consumer.receive(2_000) }
-        verify { consumer.close() }
+        assertThat(result.map { it.messageId }).containsExactly("ID:1", "ID:2")
     }
 
     @Test
-    fun `deleteMessage throws NotFoundException when message absent`() {
+    fun `deleteMessages returns empty list for empty queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val queue = mockk<Queue>()
         val consumer = mockk<MessageConsumer>()
 
-        every { session.createQueue("dlq") } returns queue
+        every { session.createQueue("trash") } returns queue
+        every { session.createConsumer(queue, null) } returns consumer
+        every { consumer.receiveNoWait() } returns null
+        every { consumer.close() } just Runs
+
+        assertThat(service.deleteMessages("trash", QueueMessageFilter())).isEmpty()
+    }
+
+    @Test
+    fun `deleteMessages stops after maxCount matches`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val queue = mockk<Queue>()
+        val consumer = mockk<MessageConsumer>()
+        val msg1 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:1" }
+        val msg2 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:2" }
+
+        every { session.createQueue("trash") } returns queue
+        every { session.createConsumer(queue, null) } returns consumer
+        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2)
+        every { consumer.close() } just Runs
+
+        val result = service.deleteMessages("trash", QueueMessageFilter(maxCount = 1))
+
+        assertThat(result.map { it.messageId }).containsExactly("ID:1")
+        verify(exactly = 1) { consumer.receiveNoWait() }
+    }
+
+    @Test
+    fun `deleteMessages builds a selector combining jmsType, messageId, and date range`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val queue = mockk<Queue>()
+        val consumer = mockk<MessageConsumer>()
+
+        every { session.createQueue("orders") } returns queue
         every { session.createConsumer(queue, any()) } returns consumer
-        every { consumer.receive(2_000) } returns null
+        every { consumer.receiveNoWait() } returns null
         every { consumer.close() } just Runs
 
-        assertThatThrownBy { service.deleteMessage("dlq", "ID:gone") }
-            .isInstanceOf(NotFoundException::class.java)
+        service.deleteMessages(
+            "orders",
+            QueueMessageFilter(
+                jmsType = "order-created",
+                messageId = "ID:x",
+                fromDate = "2023-11-14T22:13:20Z",
+                toDate = "2023-11-15T22:13:20Z",
+            ),
+        )
+
+        verify {
+            session.createConsumer(
+                queue,
+                "JMSType = 'order-created' AND JMSMessageID = 'ID:x' AND JMSTimestamp >= 1700000000000 AND JMSTimestamp <= 1700086400000",
+            )
+        }
     }
 
     // -------------------------------------------------------------------------
-    // moveMessage
+    // moveMessages
     // -------------------------------------------------------------------------
 
     @Test
-    fun `moveMessage commits transaction on success`() {
+    fun `moveMessages with an empty filter moves every message and commits`() {
         val conn = mockConnection()
         val session = stubSession(conn, transacted = true)
         val srcQueue = mockk<Queue>()
         val dstQueue = mockk<Queue>()
         val consumer = mockk<MessageConsumer>()
         val producer = mockk<MessageProducer>()
-        val msg = mockk<Message>()
+        val msg1 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:1" }
+        val msg2 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:2" }
 
         every { session.createQueue("src") } returns srcQueue
         every { session.createQueue("dst") } returns dstQueue
-        every { session.createConsumer(srcQueue, "JMSMessageID = 'ID:m1'") } returns consumer
-        every { session.createProducer(dstQueue) } returns producer
-        every { consumer.receive(2_000) } returns msg
-        every { producer.send(msg) } just Runs
-        every { session.commit() } just Runs
-        every { producer.close() } just Runs
-        every { consumer.close() } just Runs
-
-        service.moveMessage("src", "ID:m1", "dst")
-
-        verify { session.commit() }
-        verify { producer.send(msg) }
-    }
-
-    @Test
-    fun `moveMessage rolls back and throws NotFoundException when message absent`() {
-        val conn = mockConnection()
-        val session = stubSession(conn, transacted = true)
-        val srcQueue = mockk<Queue>()
-        val consumer = mockk<MessageConsumer>()
-
-        every { session.createQueue("src") } returns srcQueue
-        every { session.createConsumer(srcQueue, any()) } returns consumer
-        every { consumer.receive(2_000) } returns null
-        every { session.rollback() } just Runs
-        every { consumer.close() } just Runs
-
-        assertThatThrownBy { service.moveMessage("src", "ID:gone", "dst") }
-            .isInstanceOf(NotFoundException::class.java)
-
-        verify { session.rollback() }
-    }
-
-    // -------------------------------------------------------------------------
-    // moveAll
-    // -------------------------------------------------------------------------
-
-    @Test
-    fun `moveAll moves all messages and returns count`() {
-        val conn = mockConnection()
-        val session = stubSession(conn, transacted = true)
-        val srcQueue = mockk<Queue>()
-        val dstQueue = mockk<Queue>()
-        val consumer = mockk<MessageConsumer>()
-        val producer = mockk<MessageProducer>()
-        val msg1 = mockk<Message>()
-        val msg2 = mockk<Message>()
-
-        every { session.createQueue("src") } returns srcQueue
-        every { session.createQueue("dst") } returns dstQueue
-        every { session.createConsumer(srcQueue) } returns consumer
+        every { session.createConsumer(srcQueue, null) } returns consumer
         every { session.createProducer(dstQueue) } returns producer
         every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2, null)
         every { producer.send(any()) } just Runs
@@ -333,15 +314,15 @@ class BrokerServiceTest {
         every { producer.close() } just Runs
         every { consumer.close() } just Runs
 
-        val count = service.moveAll("src", "dst")
+        val result = service.moveMessages("src", "dst", QueueMessageFilter())
 
-        assertThat(count).isEqualTo(2)
+        assertThat(result.map { it.messageId }).containsExactly("ID:1", "ID:2")
         verify(exactly = 2) { producer.send(any()) }
         verify { session.commit() }
     }
 
     @Test
-    fun `moveAll returns zero for empty queue`() {
+    fun `moveMessages returns empty list and still commits for empty queue`() {
         val conn = mockConnection()
         val session = stubSession(conn, transacted = true)
         val srcQueue = mockk<Queue>()
@@ -351,14 +332,42 @@ class BrokerServiceTest {
 
         every { session.createQueue("src") } returns srcQueue
         every { session.createQueue("dst") } returns dstQueue
-        every { session.createConsumer(srcQueue) } returns consumer
+        every { session.createConsumer(srcQueue, null) } returns consumer
         every { session.createProducer(dstQueue) } returns producer
         every { consumer.receiveNoWait() } returns null
         every { session.commit() } just Runs
         every { producer.close() } just Runs
         every { consumer.close() } just Runs
 
-        assertThat(service.moveAll("src", "dst")).isEqualTo(0)
+        assertThat(service.moveMessages("src", "dst", QueueMessageFilter())).isEmpty()
+        verify { session.commit() }
+    }
+
+    @Test
+    fun `moveMessages stops after maxCount matches`() {
+        val conn = mockConnection()
+        val session = stubSession(conn, transacted = true)
+        val srcQueue = mockk<Queue>()
+        val dstQueue = mockk<Queue>()
+        val consumer = mockk<MessageConsumer>()
+        val producer = mockk<MessageProducer>()
+        val msg1 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:1" }
+        val msg2 = mockk<Message>().also { every { it.jmsMessageID } returns "ID:2" }
+
+        every { session.createQueue("src") } returns srcQueue
+        every { session.createQueue("dst") } returns dstQueue
+        every { session.createConsumer(srcQueue, null) } returns consumer
+        every { session.createProducer(dstQueue) } returns producer
+        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2)
+        every { producer.send(any()) } just Runs
+        every { session.commit() } just Runs
+        every { producer.close() } just Runs
+        every { consumer.close() } just Runs
+
+        val result = service.moveMessages("src", "dst", QueueMessageFilter(maxCount = 1))
+
+        assertThat(result.map { it.messageId }).containsExactly("ID:1")
+        verify(exactly = 1) { producer.send(any()) }
     }
 
     // -------------------------------------------------------------------------
@@ -366,7 +375,7 @@ class BrokerServiceTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `sendMessage creates and sends TextMessage`() {
+    fun `sendMessage sets jmsType, correlationId, groupId, and custom headers`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val queue = mockk<Queue>()
@@ -376,45 +385,48 @@ class BrokerServiceTest {
         every { session.createQueue("outbox") } returns queue
         every { session.createProducer(queue) } returns producer
         every { session.createTextMessage("hello world") } returns textMsg
+        every { textMsg.jmsType = "order-created" } just Runs
+        every { textMsg.jmsCorrelationID = "corr-1" } just Runs
+        every { textMsg.setStringProperty("JMSXGroupID", "group-1") } just Runs
+        every { textMsg.setStringProperty("customHeader", "customValue") } just Runs
         every { producer.send(textMsg) } just Runs
         every { producer.close() } just Runs
+        every { textMsg.jmsMessageID } returns "ID:sent-1"
 
-        service.sendMessage("outbox", "hello world")
+        val messageId = service.sendMessage(
+            SendMessageRequest(
+                targetQueue = "outbox",
+                jmsType = "order-created",
+                headers = mapOf("customHeader" to "customValue"),
+                groupId = "group-1",
+                body = "hello world",
+                correlationId = "corr-1",
+            ),
+        )
 
+        assertThat(messageId).isEqualTo("ID:sent-1")
         verify { producer.send(textMsg) }
     }
 
-    // -------------------------------------------------------------------------
-    // purgeQueue
-    // -------------------------------------------------------------------------
-
     @Test
-    fun `purgeQueue drains queue and returns count`() {
+    fun `sendMessage without optional fields sets only jmsType`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val queue = mockk<Queue>()
-        val consumer = mockk<MessageConsumer>()
+        val producer = mockk<MessageProducer>()
+        val textMsg = mockk<TextMessage>()
 
-        every { session.createQueue("trash") } returns queue
-        every { session.createConsumer(queue) } returns consumer
-        every { consumer.receiveNoWait() } returnsMany listOf(mockk(), mockk(), mockk(), null)
-        every { consumer.close() } just Runs
+        every { session.createQueue("outbox") } returns queue
+        every { session.createProducer(queue) } returns producer
+        every { session.createTextMessage("hello world") } returns textMsg
+        every { textMsg.jmsType = "text" } just Runs
+        every { producer.send(textMsg) } just Runs
+        every { producer.close() } just Runs
+        every { textMsg.jmsMessageID } returns "ID:sent-2"
 
-        assertThat(service.purgeQueue("trash")).isEqualTo(3)
-    }
+        service.sendMessage(SendMessageRequest(targetQueue = "outbox", jmsType = "text", body = "hello world"))
 
-    @Test
-    fun `purgeQueue returns zero for empty queue`() {
-        val conn = mockConnection()
-        val session = stubSession(conn)
-        val queue = mockk<Queue>()
-        val consumer = mockk<MessageConsumer>()
-
-        every { session.createQueue("trash") } returns queue
-        every { session.createConsumer(queue) } returns consumer
-        every { consumer.receiveNoWait() } returns null
-        every { consumer.close() } just Runs
-
-        assertThat(service.purgeQueue("trash")).isEqualTo(0)
+        verify(exactly = 0) { textMsg.jmsCorrelationID = any() }
+        verify(exactly = 0) { textMsg.setStringProperty(any(), any()) }
     }
 }

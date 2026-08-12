@@ -9,138 +9,18 @@ servers:
 security:
 - basicAuth: []
 paths:
-  /api/queues/{name}/move:
-    post:
-      tags:
-      - queue-controller
-      operationId: moveAll
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: to
-        in: query
-        required: true
-        schema:
-          type: string
-      responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "500":
-          description: Internal Server Error
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "200":
-          description: OK
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: integer
-                  format: int32
-  /api/queues/{name}/messages:
-    get:
-      tags:
-      - queue-controller
-      operationId: browseMessages
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "500":
-          description: Internal Server Error
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "200":
-          description: OK
-          content:
-            '*/*':
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/MessageSummary"
+  /api/management/command/send-message:
     post:
       tags:
       - queue-controller
       operationId: sendMessage
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/JsonNode"
+              $ref: "#/components/schemas/SendMessageRequest"
         required: true
       responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "500":
-          description: Internal Server Error
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "201":
-          description: Created
-    delete:
-      tags:
-      - queue-controller
-      operationId: purgeQueue
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
         "500":
           description: Internal Server Error
           content:
@@ -154,40 +34,21 @@ paths:
           content:
             '*/*':
               schema:
-                type: object
-                additionalProperties:
-                  type: integer
-                  format: int32
-  /api/queues/{name}/messages/{id}/move:
+                $ref: "#/components/schemas/ItemResponseSendMessageResponseDto"
+  /api/management/command/move-messages:
     post:
       tags:
       - queue-controller
-      operationId: moveMessage
-      parameters:
-      - name: name
-        in: path
+      operationId: moveMessages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/MoveMessagesRequest"
         required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: to
-        in: query
-        required: true
-        schema:
-          type: string
       responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
         "500":
           description: Internal Server Error
           content:
@@ -196,22 +57,46 @@ paths:
                 type: object
                 additionalProperties:
                   type: string
-        "204":
-          description: No Content
-  /api/queues:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ListResponseMovedMessageDto"
+  /api/management/command/delete-messages:
+    post:
+      tags:
+      - queue-controller
+      operationId: deleteMessages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/DeleteMessagesRequest"
+        required: true
+      responses:
+        "500":
+          description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ListResponseDeletedMessageDto"
+  /api/management/command/list-queues:
     get:
       tags:
       - queue-controller
       operationId: listQueues
       responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
         "500":
           description: Internal Server Error
           content:
@@ -225,34 +110,29 @@ paths:
           content:
             '*/*':
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/QueueSummary"
-  /api/queues/{name}/messages/{id}:
+                $ref: "#/components/schemas/ListResponseQueueSummary"
+  /api/management/command/list-messages:
     get:
       tags:
       - queue-controller
-      operationId: getMessage
+      operationId: listMessages
       parameters:
-      - name: name
-        in: path
+      - name: sourceQueue
+        in: query
         required: true
         schema:
           type: string
-      - name: id
-        in: path
-        required: true
+      - name: jmsType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: messageId
+        in: query
+        required: false
         schema:
           type: string
       responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
         "500":
           description: Internal Server Error
           content:
@@ -266,118 +146,209 @@ paths:
           content:
             '*/*':
               schema:
-                $ref: "#/components/schemas/MessageDetail"
-    delete:
-      tags:
-      - queue-controller
-      operationId: deleteMessage
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "404":
-          description: Not Found
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "500":
-          description: Internal Server Error
-          content:
-            '*/*':
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
-        "204":
-          description: No Content
+                $ref: "#/components/schemas/ListResponseMessageSummary"
 components:
   schemas:
-    JsonNode: {}
+    SendMessageRequest:
+      type: object
+      properties:
+        targetQueue:
+          type: string
+        jmsType:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        groupId:
+          type: string
+        body:
+          type: string
+        correlationId:
+          type: string
+      required:
+      - body
+      - jmsType
+      - targetQueue
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+      - message
+    ItemResponseSendMessageResponseDto:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/SendMessageResponseDto"
+        error:
+          $ref: "#/components/schemas/ApiError"
+    SendMessageResponseDto:
+      type: object
+      properties:
+        messageId:
+          type: string
+      required:
+      - messageId
+    MoveMessagesRequest:
+      type: object
+      properties:
+        sourceQueue:
+          type: string
+        targetQueue:
+          type: string
+        filter:
+          $ref: "#/components/schemas/QueueMessageFilter"
+      required:
+      - filter
+      - sourceQueue
+      - targetQueue
+    QueueMessageFilter:
+      type: object
+      properties:
+        jmsType:
+          type: string
+        fromDate:
+          type: string
+        toDate:
+          type: string
+        messageId:
+          type: string
+        maxCount:
+          type: integer
+          format: int32
+    ListResponseMovedMessageDto:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MovedMessageDto"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiError"
+      required:
+      - data
+      - errors
+    MovedMessageDto:
+      type: object
+      properties:
+        messageId:
+          type: string
+      required:
+      - messageId
+    DeleteMessagesRequest:
+      type: object
+      properties:
+        sourceQueue:
+          type: string
+        filter:
+          $ref: "#/components/schemas/QueueMessageFilter"
+      required:
+      - filter
+      - sourceQueue
+    DeletedMessageDto:
+      type: object
+      properties:
+        messageId:
+          type: string
+      required:
+      - messageId
+    ListResponseDeletedMessageDto:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeletedMessageDto"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiError"
+      required:
+      - data
+      - errors
+    ListResponseQueueSummary:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueSummary"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiError"
+      required:
+      - data
+      - errors
     QueueSummary:
       type: object
       properties:
         name:
           type: string
-        pendingCount:
+        messageCount:
           type: integer
           format: int64
         consumerCount:
           type: integer
           format: int64
-        enqueueCount:
+        enqueuedCount:
           type: integer
           format: int64
-        dequeueCount:
+        dequeuedCount:
+          type: integer
+          format: int64
+        producerCount:
           type: integer
           format: int64
       required:
       - consumerCount
-      - dequeueCount
-      - enqueueCount
+      - dequeuedCount
+      - enqueuedCount
+      - messageCount
       - name
-      - pendingCount
+      - producerCount
+    ListResponseMessageSummary:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageSummary"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiError"
+      required:
+      - data
+      - errors
     MessageSummary:
       type: object
       properties:
-        id:
+        sourceQueue:
           type: string
-        timestamp:
+        messageId:
+          type: string
+        jmsType:
           type: string
         body:
           type: string
-        properties:
+        timestamp:
+          type: string
+        headers:
           type: object
           additionalProperties:
             type: string
       required:
-      - id
-      - properties
-      - timestamp
-    MessageDetail:
-      type: object
-      properties:
-        id:
-          type: string
-        timestamp:
-          type: string
-        body:
-          type: string
-        deliveryMode:
-          type: integer
-          format: int32
-        priority:
-          type: integer
-          format: int32
-        correlationId:
-          type: string
-        replyTo:
-          type: string
-        destination:
-          type: string
-        redelivered:
-          type: boolean
-        properties:
-          type: object
-          additionalProperties:
-            type: string
-      required:
-      - deliveryMode
-      - destination
-      - id
-      - priority
-      - properties
-      - redelivered
+      - jmsType
+      - messageId
+      - sourceQueue
       - timestamp
   securitySchemes:
     basicAuth:
