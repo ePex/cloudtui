@@ -229,6 +229,15 @@ single/whole-queue cases are common enough to deserve their own names.
   `jmsType` when non-empty, falling back to today's body-presence
   inference (`"text"`/`"other"`) only when it's empty — mirrors
   `jolokia.go:307-318`.
+  **`headers` decodes as `map[string]interface{}`, not
+  `map[string]string`** (found live, against the reference API): `mq-proxy`
+  always stringifies header values, but that's a `mq-proxy`-specific
+  choice, not part of the contract — a JMS-management API implementing
+  this same contract may legitimately report a message's real property
+  types (numbers, booleans, ...). The UI already renders arbitrary
+  property value types generically (`message_detail.go`'s
+  `decodePropertyValue`), so the Go client shouldn't force a decode
+  failure by assuming every header value is a JSON string.
 - `List`/`BrowseMessages` call `GET .../list-queues` /
   `GET .../list-messages?sourceQueue=...`.
 - `SendMessage(ctx, queueName, body string)` keeps its existing

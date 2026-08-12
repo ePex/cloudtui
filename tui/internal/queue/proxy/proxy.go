@@ -64,13 +64,19 @@ type proxyQueue struct {
 }
 
 // proxyMessage is the JSON shape of one entry in list-messages' data array.
+// Headers is map[string]interface{}, not map[string]string: mq-proxy always
+// stringifies header values, but a JMS-management API implementing this same
+// contract may return a message's real property types (numbers, booleans,
+// etc.) instead — the UI already renders arbitrary property value types
+// (see message_detail.go's decodePropertyValue), so there's no reason to
+// force a decode failure by assuming every value is a string.
 type proxyMessage struct {
-	SourceQueue string            `json:"sourceQueue"`
-	MessageID   string            `json:"messageId"`
-	JMSType     string            `json:"jmsType"`
-	Body        *string           `json:"body"`
-	Timestamp   string            `json:"timestamp"`
-	Headers     map[string]string `json:"headers"`
+	SourceQueue string                 `json:"sourceQueue"`
+	MessageID   string                 `json:"messageId"`
+	JMSType     string                 `json:"jmsType"`
+	Body        *string                `json:"body"`
+	Timestamp   string                 `json:"timestamp"`
+	Headers     map[string]interface{} `json:"headers"`
 }
 
 // queueMessageFilter mirrors mq-proxy's QueueMessageFilter DTO. Every
@@ -286,11 +292,6 @@ func toQueueMessage(m proxyMessage) queue.Message {
 		jmsType = "other"
 	}
 
-	props := make(map[string]interface{}, len(m.Headers))
-	for k, v := range m.Headers {
-		props[k] = v
-	}
-
 	return queue.Message{
 		ID:        m.MessageID,
 		JMSType:   jmsType,
@@ -298,7 +299,7 @@ func toQueueMessage(m proxyMessage) queue.Message {
 		Preview:   preview,
 		RawFields: map[string]interface{}{
 			"text":       bodyText,
-			"properties": props,
+			"properties": m.Headers,
 		},
 	}
 }
