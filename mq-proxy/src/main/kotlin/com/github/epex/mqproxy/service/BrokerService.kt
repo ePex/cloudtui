@@ -1,8 +1,11 @@
 package com.github.epex.mqproxy.service
 
-import com.github.epex.mqproxy.api.model.MessageDetail
+import com.github.epex.mqproxy.api.model.DeletedMessageDto
 import com.github.epex.mqproxy.api.model.MessageSummary
+import com.github.epex.mqproxy.api.model.MovedMessageDto
+import com.github.epex.mqproxy.api.model.QueueMessageFilter
 import com.github.epex.mqproxy.api.model.QueueSummary
+import com.github.epex.mqproxy.api.model.SendMessageRequest
 import jakarta.jms.MapMessage
 import jakarta.jms.Session
 import jakarta.jms.TextMessage
@@ -38,10 +41,11 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
                     val stats = fetchStats(session, queue.physicalName)
                     QueueSummary(
                         name = queue.physicalName,
-                        pendingCount = stats?.getOrDefault("size", -1L) ?: -1L,
+                        messageCount = stats?.getOrDefault("size", -1L) ?: -1L,
                         consumerCount = stats?.getOrDefault("consumerCount", -1L) ?: -1L,
-                        enqueueCount = stats?.getOrDefault("enqueueCount", -1L) ?: -1L,
-                        dequeueCount = stats?.getOrDefault("dequeueCount", -1L) ?: -1L,
+                        enqueuedCount = stats?.getOrDefault("enqueueCount", -1L) ?: -1L,
+                        dequeuedCount = stats?.getOrDefault("dequeueCount", -1L) ?: -1L,
+                        producerCount = stats?.getOrDefault("producerCount", -1L) ?: -1L,
                     )
                 }
                 .sortedBy { it.name }
@@ -54,43 +58,21 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // Message browsing
     // -------------------------------------------------------------------------
 
-    fun browseMessages(queueName: String): List<MessageSummary> {
-        log.info("broker: browseMessages queue={}", queueName)
+    fun browseMessages(queueName: String, filter: QueueMessageFilter): List<MessageSummary> {
+        log.info("broker: browseMessages queue={} filter={}", queueName, filter)
         val connection = connectionFactory.createConnection()
         connection.start()
         return try {
             val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val browser = session.createBrowser(session.createQueue(queueName))
+            val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
             val messages = mutableListOf<MessageSummary>()
             val enum = browser.enumeration
             while (enum.hasMoreElements()) {
                 val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
-                messages += msg.toSummary()
+                messages += msg.toSummary(queueName)
             }
             browser.close()
             messages
-        } finally {
-            connection.close()
-        }
-    }
-
-    fun getMessage(queueName: String, messageId: String): MessageDetail {
-        log.info("broker: getMessage queue={} id={}", queueName, messageId)
-        val connection = connectionFactory.createConnection()
-        connection.start()
-        return try {
-            val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val browser = session.createBrowser(session.createQueue(queueName))
-            val enum = browser.enumeration
-            while (enum.hasMoreElements()) {
-                val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
-                if (msg.jmsMessageID == messageId) {
-                    browser.close()
-                    return msg.toDetail()
-                }
-            }
-            browser.close()
-            throw NotFoundException("Message '$messageId' not found in queue '$queueName'")
         } finally {
             connection.close()
         }
@@ -100,95 +82,66 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // Message write operations
     // -------------------------------------------------------------------------
 
-    fun purgeQueue(queueName: String): Int {
-        log.info("broker: purgeQueue queue={}", queueName)
+    fun sendMessage(request: SendMessageRequest): String {
+        log.info(
+            "broker: sendMessage queue={} jmsType={} bodyLength={}",
+            request.targetQueue, request.jmsType, request.body.length,
+        )
         val connection = connectionFactory.createConnection()
         connection.start()
         try {
             val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val consumer = session.createConsumer(session.createQueue(queueName))
-            var count = 0
-            while (true) {
-                consumer.receiveNoWait() ?: break
-                count++
+            val producer = session.createProducer(session.createQueue(request.targetQueue))
+            val message = session.createTextMessage(request.body)
+            message.jmsType = request.jmsType
+            request.correlationId?.let { message.jmsCorrelationID = it }
+            request.groupId?.let { message.setStringProperty("JMSXGroupID", it) }
+            request.headers?.forEach { (key, value) -> message.setStringProperty(key, value) }
+            producer.send(message)
+            producer.close()
+            return message.jmsMessageID
+        } finally {
+            connection.close()
+        }
+    }
+
+    fun deleteMessages(sourceQueue: String, filter: QueueMessageFilter): List<DeletedMessageDto> {
+        log.info("broker: deleteMessages queue={} filter={}", sourceQueue, filter)
+        val connection = connectionFactory.createConnection()
+        connection.start()
+        try {
+            val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
+            val consumer = session.createConsumer(session.createQueue(sourceQueue), filter.toSelector())
+            val deleted = mutableListOf<DeletedMessageDto>()
+            while (filter.maxCount == null || deleted.size < filter.maxCount) {
+                val msg = consumer.receiveNoWait() ?: break
+                deleted += DeletedMessageDto(messageId = msg.jmsMessageID ?: "")
             }
             consumer.close()
-            return count
+            return deleted
         } finally {
             connection.close()
         }
     }
 
-    fun sendMessage(queueName: String, body: String) {
-        log.info("broker: sendMessage queue={} bodyLength={}", queueName, body.length)
-        val connection = connectionFactory.createConnection()
-        connection.start()
-        try {
-            val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val producer = session.createProducer(session.createQueue(queueName))
-            producer.send(session.createTextMessage(body))
-            producer.close()
-        } finally {
-            connection.close()
-        }
-    }
-
-    fun moveAll(queueName: String, destination: String): Int {
-        log.info("broker: moveAll queue={} to={}", queueName, destination)
+    fun moveMessages(sourceQueue: String, targetQueue: String, filter: QueueMessageFilter): List<MovedMessageDto> {
+        log.info("broker: moveMessages queue={} to={} filter={}", sourceQueue, targetQueue, filter)
         val connection = connectionFactory.createConnection()
         connection.start()
         try {
             val session = connection.createSession(true, Session.SESSION_TRANSACTED)
-            val consumer = session.createConsumer(session.createQueue(queueName))
-            val producer = session.createProducer(session.createQueue(destination))
-            var count = 0
-            while (true) {
+            val consumer = session.createConsumer(session.createQueue(sourceQueue), filter.toSelector())
+            val producer = session.createProducer(session.createQueue(targetQueue))
+            val moved = mutableListOf<MovedMessageDto>()
+            while (filter.maxCount == null || moved.size < filter.maxCount) {
                 val msg = consumer.receiveNoWait() ?: break
                 producer.send(msg)
-                count++
+                moved += MovedMessageDto(messageId = msg.jmsMessageID ?: "")
             }
             session.commit()
             producer.close()
             consumer.close()
-            return count
-        } finally {
-            connection.close()
-        }
-    }
-
-    fun moveMessage(queueName: String, messageId: String, destination: String) {
-        log.info("broker: moveMessage queue={} id={} to={}", queueName, messageId, destination)
-        val connection = connectionFactory.createConnection()
-        connection.start()
-        try {
-            val session = connection.createSession(true, Session.SESSION_TRANSACTED)
-            val consumer = session.createConsumer(session.createQueue(queueName), jmsIdSelector(messageId))
-            val msg = consumer.receive(2_000)
-            if (msg == null) {
-                session.rollback()
-                throw NotFoundException("Message '$messageId' not found in queue '$queueName'")
-            }
-            val producer = session.createProducer(session.createQueue(destination))
-            producer.send(msg)
-            session.commit()
-            producer.close()
-            consumer.close()
-        } finally {
-            connection.close()
-        }
-    }
-
-    fun deleteMessage(queueName: String, messageId: String) {
-        log.info("broker: deleteMessage queue={} id={}", queueName, messageId)
-        val connection = connectionFactory.createConnection()
-        connection.start()
-        try {
-            val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val selector = jmsIdSelector(messageId)
-            val consumer = session.createConsumer(session.createQueue(queueName), selector)
-            val msg = consumer.receive(2_000)
-            consumer.close()
-            if (msg == null) throw NotFoundException("Message '$messageId' not found in queue '$queueName'")
+            return moved
         } finally {
             connection.close()
         }
@@ -199,33 +152,29 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // -------------------------------------------------------------------------
 
     /**
-     * Builds a JMS message selector that matches a single message by its ID.
-     * Single quotes inside the ID are escaped by doubling them, as required
-     * by the JMS selector grammar.
+     * Builds a JMS message selector from this filter's fields, or `null` if
+     * none are set (matching everything — the "purge"/"move all" case).
+     * `JMSType`, `JMSMessageID`, and `JMSTimestamp` are all selectable per
+     * the JMS spec, so criteria can be pushed down to the broker instead of
+     * fetched-then-filtered client-side. `maxCount` isn't expressible in a
+     * selector and is enforced by the caller's receive loop instead.
      */
-    private fun jmsIdSelector(messageId: String): String {
-        val escaped = messageId.replace("'", "''")
-        return "JMSMessageID = '$escaped'"
+    private fun QueueMessageFilter.toSelector(): String? {
+        val clauses = mutableListOf<String>()
+        jmsType?.let { clauses += "JMSType = '${it.replace("'", "''")}'" }
+        messageId?.let { clauses += "JMSMessageID = '${it.replace("'", "''")}'" }
+        fromDate?.let { clauses += "JMSTimestamp >= ${Instant.parse(it).toEpochMilli()}" }
+        toDate?.let { clauses += "JMSTimestamp <= ${Instant.parse(it).toEpochMilli()}" }
+        return clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 
-    private fun jakarta.jms.Message.toSummary() = MessageSummary(
-        id = jmsMessageID ?: "",
-        timestamp = epochMillisToIso(jmsTimestamp),
+    private fun jakarta.jms.Message.toSummary(sourceQueue: String) = MessageSummary(
+        sourceQueue = sourceQueue,
+        messageId = jmsMessageID ?: "",
+        jmsType = jmsType ?: "",
         body = (this as? TextMessage)?.text,
-        properties = stringProperties(),
-    )
-
-    private fun jakarta.jms.Message.toDetail() = MessageDetail(
-        id = jmsMessageID ?: "",
         timestamp = epochMillisToIso(jmsTimestamp),
-        body = (this as? TextMessage)?.text,
-        deliveryMode = jmsDeliveryMode,
-        priority = jmsPriority,
-        correlationId = jmsCorrelationID,
-        replyTo = jmsReplyTo?.toString(),
-        destination = jmsDestination?.toString() ?: "",
-        redelivered = jmsRedelivered,
-        properties = stringProperties(),
+        headers = stringProperties(),
     )
 
     private fun jakarta.jms.Message.stringProperties(): Map<String, String> {
@@ -271,6 +220,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
                 "consumerCount" to runCatching { reply.getLong("consumerCount") }.getOrDefault(-1L),
                 "enqueueCount" to runCatching { reply.getLong("enqueueCount") }.getOrDefault(-1L),
                 "dequeueCount" to runCatching { reply.getLong("dequeueCount") }.getOrDefault(-1L),
+                "producerCount" to runCatching { reply.getLong("producerCount") }.getOrDefault(-1L),
             )
         } finally {
             producer.close()

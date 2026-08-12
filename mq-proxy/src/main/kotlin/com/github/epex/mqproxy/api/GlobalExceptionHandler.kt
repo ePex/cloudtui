@@ -1,6 +1,5 @@
 package com.github.epex.mqproxy.api
 
-import com.github.epex.mqproxy.service.NotFoundException
 import jakarta.jms.JMSException
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -9,11 +8,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
-
-    @ExceptionHandler(NotFoundException::class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    fun handleNotFound(ex: NotFoundException): Map<String, String> =
-        mapOf("error" to (ex.message ?: "Not found"))
 
     @ExceptionHandler(JMSException::class)
     @ResponseStatus(HttpStatus.BAD_GATEWAY)

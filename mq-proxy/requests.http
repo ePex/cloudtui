@@ -10,42 +10,81 @@
 # ─── Queues ───────────────────────────────────────────────────────────────────
 
 ### List all queues with stats
-GET {{baseUrl}}/api/queues
+GET {{baseUrl}}/api/management/command/list-queues
 Authorization: Basic {{username}} {{password}}
 
 ### ─── Messages ────────────────────────────────────────────────────────────────
 
-### Browse all messages in a queue
-GET {{baseUrl}}/api/queues/{{queue}}/messages
+### List all messages in a queue
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}
 Authorization: Basic {{username}} {{password}}
 
-### Get message detail by ID
-GET {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}
+### List messages filtered by JMS type
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&jmsType=order-created
 Authorization: Basic {{username}} {{password}}
 
-### Send a new message (body is any JSON value — object, array, or string)
-POST {{baseUrl}}/api/queues/{{queue}}/messages
+### Send a new message
+POST {{baseUrl}}/api/management/command/send-message
 Authorization: Basic {{username}} {{password}}
 Content-Type: application/json
 
 {
-  "orderId": "12345",
-  "status": "NEW",
-  "amount": 99.95
+  "targetQueue": "{{queue}}",
+  "jmsType": "order-created",
+  "body": "{\"orderId\":\"12345\",\"status\":\"NEW\",\"amount\":99.95}"
 }
 
-### Delete a message by ID
-DELETE {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}
+### Delete a single message by ID
+POST {{baseUrl}}/api/management/command/delete-messages
 Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
+
+[
+  {
+    "sourceQueue": "{{queue}}",
+    "filter": { "messageId": "{{messageId}}", "maxCount": 1 }
+  }
+]
+
+### Delete up to 10 messages of a given JMS type
+POST {{baseUrl}}/api/management/command/delete-messages
+Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
+
+[
+  {
+    "sourceQueue": "{{queue}}",
+    "filter": { "jmsType": "order-created", "maxCount": 10 }
+  }
+]
+
+### Purge all messages from a queue (empty filter matches everything)
+POST {{baseUrl}}/api/management/command/delete-messages
+Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
+
+[
+  { "sourceQueue": "{{queue}}", "filter": {} }
+]
 
 ### Move a single message to another queue
-POST {{baseUrl}}/api/queues/{{queue}}/messages/{{messageId}}/move?to=dlq
+POST {{baseUrl}}/api/management/command/move-messages
 Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
 
-### Move all messages from one queue to another
-POST {{baseUrl}}/api/queues/{{queue}}/move?to=archive
-Authorization: Basic {{username}} {{password}}
+[
+  {
+    "sourceQueue": "{{queue}}",
+    "targetQueue": "dlq",
+    "filter": { "messageId": "{{messageId}}", "maxCount": 1 }
+  }
+]
 
-### Purge all messages from a queue
-DELETE {{baseUrl}}/api/queues/{{queue}}/messages
+### Move all messages from one queue to another (empty filter matches everything)
+POST {{baseUrl}}/api/management/command/move-messages
 Authorization: Basic {{username}} {{password}}
+Content-Type: application/json
+
+[
+  { "sourceQueue": "{{queue}}", "targetQueue": "archive", "filter": {} }
+]

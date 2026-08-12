@@ -1,15 +1,14 @@
 package com.github.epex.mqproxy.api
 
-import com.github.epex.mqproxy.api.model.MessageDetail
+import com.github.epex.mqproxy.api.model.DeletedMessageDto
 import com.github.epex.mqproxy.api.model.MessageSummary
+import com.github.epex.mqproxy.api.model.MovedMessageDto
+import com.github.epex.mqproxy.api.model.QueueMessageFilter
 import com.github.epex.mqproxy.api.model.QueueSummary
 import com.github.epex.mqproxy.config.ProxyAuthProperties
 import com.github.epex.mqproxy.service.BrokerService
-import com.github.epex.mqproxy.service.NotFoundException
 import com.ninjasquad.springmockk.MockkBean
 import io.mockk.every
-import io.mockk.just
-import io.mockk.Runs
 import jakarta.jms.JMSException
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,7 +18,6 @@ import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 
@@ -34,27 +32,29 @@ class QueueControllerTest {
     private lateinit var brokerService: BrokerService
 
     // -------------------------------------------------------------------------
-    // GET /api/queues
+    // GET /api/management/command/list-queues
     // -------------------------------------------------------------------------
 
     @Test
     @WithMockUser
     fun `listQueues returns 200 with queue summaries`() {
         every { brokerService.listQueues() } returns listOf(
-            QueueSummary("orders", 5, 1, 10, 5),
+            QueueSummary("orders", messageCount = 5, consumerCount = 1, enqueuedCount = 10, dequeuedCount = 5, producerCount = 2),
         )
 
-        mockMvc.get("/api/queues")
+        mockMvc.get("/api/management/command/list-queues")
             .andExpect {
                 status { isOk() }
-                jsonPath("$[0].name") { value("orders") }
-                jsonPath("$[0].pendingCount") { value(5) }
+                jsonPath("$.data[0].name") { value("orders") }
+                jsonPath("$.data[0].messageCount") { value(5) }
+                jsonPath("$.data[0].producerCount") { value(2) }
+                jsonPath("$.errors") { isEmpty() }
             }
     }
 
     @Test
     fun `listQueues returns 401 when unauthenticated`() {
-        mockMvc.get("/api/queues")
+        mockMvc.get("/api/management/command/list-queues")
             .andExpect { status { isUnauthorized() } }
     }
 
@@ -63,7 +63,7 @@ class QueueControllerTest {
     fun `listQueues returns 502 on JMSException`() {
         every { brokerService.listQueues() } throws JMSException("broker down")
 
-        mockMvc.get("/api/queues")
+        mockMvc.get("/api/management/command/list-queues")
             .andExpect {
                 status { isBadGateway() }
                 jsonPath("$.error") { value("broker down") }
@@ -71,175 +71,136 @@ class QueueControllerTest {
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/queues/{name}/messages
+    // GET /api/management/command/list-messages
     // -------------------------------------------------------------------------
 
     @Test
     @WithMockUser
-    fun `browseMessages returns 200 with message list`() {
-        every { brokerService.browseMessages("orders") } returns listOf(
-            MessageSummary("ID:m1", "2024-01-01T00:00:00Z", "hello", emptyMap()),
+    fun `listMessages returns 200 with message list`() {
+        every { brokerService.browseMessages("orders", QueueMessageFilter()) } returns listOf(
+            MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap()),
         )
 
-        mockMvc.get("/api/queues/orders/messages")
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders")
             .andExpect {
                 status { isOk() }
-                jsonPath("$[0].id") { value("ID:m1") }
-                jsonPath("$[0].body") { value("hello") }
+                jsonPath("$.data[0].messageId") { value("ID:m1") }
+                jsonPath("$.data[0].jmsType") { value("text") }
+                jsonPath("$.data[0].body") { value("hello") }
             }
     }
 
     @Test
     @WithMockUser
-    fun `browseMessages returns 502 on JMSException`() {
-        every { brokerService.browseMessages("orders") } throws JMSException("connection lost")
+    fun `listMessages passes jmsType and messageId filters through`() {
+        every {
+            brokerService.browseMessages("orders", QueueMessageFilter(jmsType = "order-created", messageId = "ID:m1"))
+        } returns emptyList()
 
-        mockMvc.get("/api/queues/orders/messages")
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&jmsType=order-created&messageId=ID:m1")
+            .andExpect { status { isOk() } }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns 502 on JMSException`() {
+        every { brokerService.browseMessages("orders", QueueMessageFilter()) } throws JMSException("connection lost")
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders")
             .andExpect { status { isBadGateway() } }
     }
 
     // -------------------------------------------------------------------------
-    // GET /api/queues/{name}/messages/{id}
+    // POST /api/management/command/send-message
     // -------------------------------------------------------------------------
 
     @Test
     @WithMockUser
-    fun `getMessage returns 200 with message detail`() {
-        val detail = MessageDetail(
-            id = "ID:abc-1",
-            timestamp = "2024-01-01T00:00:00Z",
-            body = "payload",
-            deliveryMode = 2,
-            priority = 4,
-            correlationId = null,
-            replyTo = null,
-            destination = "queue://orders",
-            redelivered = false,
-            properties = emptyMap(),
-        )
-        every { brokerService.getMessage("orders", "ID:abc-1") } returns detail
+    fun `sendMessage returns 200 with the generated message id`() {
+        every {
+            brokerService.sendMessage(match { it.targetQueue == "orders" && it.body == "hello world" })
+        } returns "ID:sent-1"
 
-        mockMvc.get("/api/queues/orders/messages/ID:abc-1")
-            .andExpect {
-                status { isOk() }
-                jsonPath("$.id") { value("ID:abc-1") }
-                jsonPath("$.body") { value("payload") }
-            }
-    }
-
-    @Test
-    @WithMockUser
-    fun `getMessage returns 404 when not found`() {
-        every { brokerService.getMessage("orders", "ID:missing") } throws
-            NotFoundException("Message not found")
-
-        mockMvc.get("/api/queues/orders/messages/ID:missing")
-            .andExpect {
-                status { isNotFound() }
-                jsonPath("$.error") { value("Message not found") }
-            }
-    }
-
-    // -------------------------------------------------------------------------
-    // DELETE /api/queues/{name}/messages/{id}
-    // -------------------------------------------------------------------------
-
-    @Test
-    @WithMockUser
-    fun `deleteMessage returns 204 on success`() {
-        every { brokerService.deleteMessage("orders", "ID:m1") } just Runs
-
-        mockMvc.delete("/api/queues/orders/messages/ID:m1") { with(csrf()) }
-            .andExpect { status { isNoContent() } }
-    }
-
-    @Test
-    @WithMockUser
-    fun `deleteMessage returns 404 when not found`() {
-        every { brokerService.deleteMessage("orders", "ID:gone") } throws
-            NotFoundException("Message not found")
-
-        mockMvc.delete("/api/queues/orders/messages/ID:gone") { with(csrf()) }
-            .andExpect { status { isNotFound() } }
-    }
-
-    // -------------------------------------------------------------------------
-    // POST /api/queues/{name}/messages/{id}/move
-    // -------------------------------------------------------------------------
-
-    @Test
-    @WithMockUser
-    fun `moveMessage returns 204 on success`() {
-        every { brokerService.moveMessage("orders", "ID:m1", "dlq") } just Runs
-
-        mockMvc.post("/api/queues/orders/messages/ID:m1/move?to=dlq") { with(csrf()) }
-            .andExpect { status { isNoContent() } }
-    }
-
-    @Test
-    @WithMockUser
-    fun `moveMessage returns 404 when not found`() {
-        every { brokerService.moveMessage("orders", "ID:gone", "dlq") } throws
-            NotFoundException("Message not found")
-
-        mockMvc.post("/api/queues/orders/messages/ID:gone/move?to=dlq") { with(csrf()) }
-            .andExpect { status { isNotFound() } }
-    }
-
-    // -------------------------------------------------------------------------
-    // POST /api/queues/{name}/move
-    // -------------------------------------------------------------------------
-
-    @Test
-    @WithMockUser
-    fun `moveAll returns 200 with moved count`() {
-        every { brokerService.moveAll("orders", "archive") } returns 7
-
-        mockMvc.post("/api/queues/orders/move?to=archive") { with(csrf()) }
-            .andExpect {
-                status { isOk() }
-                jsonPath("$.moved") { value(7) }
-            }
-    }
-
-    // -------------------------------------------------------------------------
-    // POST /api/queues/{name}/messages
-    // -------------------------------------------------------------------------
-
-    @Test
-    @WithMockUser
-    fun `sendMessage returns 201 on success`() {
-        every { brokerService.sendMessage("orders", """{"text":"hello world"}""") } just Runs
-
-        mockMvc.post("/api/queues/orders/messages") {
+        mockMvc.post("/api/management/command/send-message") {
             with(csrf())
             contentType = MediaType.APPLICATION_JSON
-            content = """{"text":"hello world"}"""
-        }.andExpect { status { isCreated() } }
+            content = """{"targetQueue":"orders","jmsType":"text","body":"hello world"}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.data.messageId") { value("ID:sent-1") }
+        }
     }
 
     // -------------------------------------------------------------------------
-    // DELETE /api/queues/{name}/messages
+    // POST /api/management/command/delete-messages
     // -------------------------------------------------------------------------
 
     @Test
     @WithMockUser
-    fun `purgeQueue returns 200 with purged count`() {
-        every { brokerService.purgeQueue("orders") } returns 12
+    fun `deleteMessages returns 200 with deleted message ids`() {
+        every {
+            brokerService.deleteMessages("orders", QueueMessageFilter(messageId = "ID:m1", maxCount = 1))
+        } returns listOf(DeletedMessageDto("ID:m1"))
 
-        mockMvc.delete("/api/queues/orders/messages") { with(csrf()) }
-            .andExpect {
-                status { isOk() }
-                jsonPath("$.purged") { value(12) }
-            }
+        mockMvc.post("/api/management/command/delete-messages") {
+            with(csrf())
+            contentType = MediaType.APPLICATION_JSON
+            content = """[{"sourceQueue":"orders","filter":{"messageId":"ID:m1","maxCount":1}}]"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.data[0].messageId") { value("ID:m1") }
+        }
     }
 
     @Test
     @WithMockUser
-    fun `purgeQueue returns 502 on JMSException`() {
-        every { brokerService.purgeQueue("orders") } throws JMSException("broker error")
+    fun `deleteMessages with an empty filter purges the queue`() {
+        every {
+            brokerService.deleteMessages("orders", QueueMessageFilter())
+        } returns listOf(DeletedMessageDto("ID:1"), DeletedMessageDto("ID:2"))
 
-        mockMvc.delete("/api/queues/orders/messages") { with(csrf()) }
-            .andExpect { status { isBadGateway() } }
+        mockMvc.post("/api/management/command/delete-messages") {
+            with(csrf())
+            contentType = MediaType.APPLICATION_JSON
+            content = """[{"sourceQueue":"orders","filter":{}}]"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.data.length()") { value(2) }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/management/command/move-messages
+    // -------------------------------------------------------------------------
+
+    @Test
+    @WithMockUser
+    fun `moveMessages returns 200 with moved message ids`() {
+        every {
+            brokerService.moveMessages("orders", "archive", QueueMessageFilter())
+        } returns listOf(MovedMessageDto("ID:1"), MovedMessageDto("ID:2"))
+
+        mockMvc.post("/api/management/command/move-messages") {
+            with(csrf())
+            contentType = MediaType.APPLICATION_JSON
+            content = """[{"sourceQueue":"orders","targetQueue":"archive","filter":{}}]"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.data.length()") { value(2) }
+        }
+    }
+
+    @Test
+    @WithMockUser
+    fun `moveMessages returns 502 on JMSException`() {
+        every {
+            brokerService.moveMessages("orders", "dlq", QueueMessageFilter(messageId = "ID:m1", maxCount = 1))
+        } throws JMSException("broker error")
+
+        mockMvc.post("/api/management/command/move-messages") {
+            with(csrf())
+            contentType = MediaType.APPLICATION_JSON
+            content = """[{"sourceQueue":"orders","targetQueue":"dlq","filter":{"messageId":"ID:m1","maxCount":1}}]"""
+        }.andExpect { status { isBadGateway() } }
     }
 }
