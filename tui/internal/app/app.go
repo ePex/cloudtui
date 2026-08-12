@@ -110,17 +110,23 @@ type App struct {
 	logDetailV               *logDetailView
 	datadogLogsV             *datadogLogsView
 	datadogLogDetailV        *datadogLogDetailView
-	listParameters           func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter          func(ctx context.Context, profile, name string) (string, error)
-	listSecrets              func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret             func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
-	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	listPipelines            func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
-	getPipelineState         func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
-	notify                   func(title, message string)
-	screen                   tcell.Screen
+	codePipelineListV        *codePipelineListView
+	codePipelineDetailV      *codePipelineDetailView
+	// watchedPipelines/lastPipelineStages back the background
+	// CodePipeline watchers — see codepipelinewatch.go.
+	watchedPipelines   map[string]chan struct{}
+	lastPipelineStages map[string]map[string]string
+	listParameters     func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter    func(ctx context.Context, profile, name string) (string, error)
+	listSecrets        func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret       func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups      func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents    func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs  func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listPipelines      func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState   func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify             func(title, message string)
+	screen             tcell.Screen
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -138,6 +144,7 @@ func New(cfg config.Config) *App {
 				{Name: "secrets-manager", Description: "Browse AWS Secrets Manager secrets"},
 				{Name: "cloudwatch-logs", Description: "Search CloudWatch Logs"},
 				{Name: "datadog-logs", Description: "Search Datadog Logs"},
+				{Name: "codepipeline", Description: "Monitor AWS CodePipeline pipelines"},
 			},
 		},
 		{
@@ -213,6 +220,10 @@ func New(cfg config.Config) *App {
 	a.logDetailV = newLogDetailView(a)
 	a.datadogLogsV = newDatadogLogsView(a)
 	a.datadogLogDetailV = newDatadogLogDetailView(a)
+	a.watchedPipelines = map[string]chan struct{}{}
+	a.lastPipelineStages = map[string]map[string]string{}
+	a.codePipelineListV = newCodePipelineListView(a)
+	a.codePipelineDetailV = newCodePipelineDetailView(a)
 
 	// Wire Enter in the log groups table to open the search view for
 	// the selected log group. Done here because logSearchV must exist first.
@@ -243,6 +254,17 @@ func New(cfg config.Config) *App {
 			return
 		}
 		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
+	})
+
+	// Wire Enter in the CodePipeline table to open the stage-status
+	// detail view for the selected pipeline. Done here because
+	// codePipelineDetailV must exist first.
+	a.codePipelineListV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
+			return
+		}
+		a.openCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
 	})
 	a.secretDetailV = newSecretDetailView(a)
 
@@ -286,7 +308,7 @@ func New(cfg config.Config) *App {
 		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV}
+	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -300,6 +322,7 @@ func New(cfg config.Config) *App {
 	a.pages.AddPage("log-search", a.logSearchV.flex, true, false)
 	a.pages.AddPage("log-event-detail", a.logDetailV.textView, true, false)
 	a.pages.AddPage("datadog-log-detail", a.datadogLogDetailV.textView, true, false)
+	a.pages.AddPage("codepipeline-detail", a.codePipelineDetailV.table, true, false)
 	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -617,6 +640,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.envFilterDD {
+		return event
+	}
+	if a.codePipelineListV != nil && a.tv.GetFocus() == a.codePipelineListV.filterInput {
 		return event
 	}
 
@@ -1139,6 +1165,19 @@ func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
 	a.datadogLogDetailV.render(event)
 	a.pages.SwitchToPage("datadog-log-detail")
 	a.tv.SetFocus(a.pages)
+}
+
+// openCodePipelineDetail opens pipelineName's stage-status detail view
+// and starts loading its current state.
+func (a *App) openCodePipelineDetail(pipelineName string) {
+	a.codePipelineDetailV.open(pipelineName)
+	a.pages.SwitchToPage("codepipeline-detail")
+	a.tv.SetFocus(a.pages)
+	lines := make([]string, 0, len(a.codePipelineDetailV.Shortcuts()))
+	for _, sc := range a.codePipelineDetailV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // copyToClipboard writes data to the system clipboard via the terminal's
