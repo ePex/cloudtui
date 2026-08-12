@@ -168,6 +168,45 @@ func TestBrowseMessages(t *testing.T) {
 	}
 }
 
+// TestBrowseMessagesNonStringHeaderValue covers a real JMS-management API
+// implementing this contract that reports header/property values with their
+// real JMS types (numbers, booleans, ...) instead of mq-proxy's always-a-string
+// convention — decoding must not fail just because a header value isn't a
+// JSON string.
+func TestBrowseMessagesNonStringHeaderValue(t *testing.T) {
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{
+					"sourceQueue": "orders", "messageId": "ID:m5", "jmsType": "text",
+					"timestamp": "2024-01-01T00:00:00Z", "body": "hi",
+					"headers": map[string]any{"retryCount": 3, "urgent": true, "note": "ok"},
+				},
+			},
+			"errors": []any{},
+		})
+	}))
+	defer stop()
+
+	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	props, ok := msgs[0].RawFields["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("RawFields[properties] type = %T, want map[string]interface{}", msgs[0].RawFields["properties"])
+	}
+	if props["retryCount"] != float64(3) {
+		t.Errorf("properties[retryCount] = %v, want 3", props["retryCount"])
+	}
+	if props["urgent"] != true {
+		t.Errorf("properties[urgent] = %v, want true", props["urgent"])
+	}
+	if props["note"] != "ok" {
+		t.Errorf("properties[note] = %v, want %q", props["note"], "ok")
+	}
+}
+
 func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
