@@ -17,7 +17,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager", "cloudwatch-logs", "datadog-logs"}
+	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager", "cloudwatch-logs", "datadog-logs", "codepipeline"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}

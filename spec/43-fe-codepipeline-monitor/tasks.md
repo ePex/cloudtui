@@ -8,16 +8,16 @@
 3. [x] `internal/app`: `App.notify` func field + `desktopNotify` real
    implementation (`internal/app/notify.go`); `listPipelines`/
    `getPipelineState` func fields wired in `New()`.
-4. [ ] `internal/app/codepipelinewatch.go`: `watchedPipelines`/
+4. [x] `internal/app/codepipelinewatch.go`: `watchedPipelines`/
    `lastPipelineStages` fields, `startWatchingPipeline`/
    `stopWatchingPipeline`/`pollPipeline`/`handlePipelinePoll`, and the
    pure helpers `stageTransitions`/`snapshotStages`/`pipelineFinished`.
    Unit tests per plan.md's Testing section.
-5. [ ] `internal/app/codepipelinelist.go`: list view (table, filter,
+5. [x] `internal/app/codepipelinelist.go`: list view (table, filter,
    watching indicator, `w` toggle, `Enter` opens detail), registered in
    Home's "Apps" section. Unit tests mirroring the other list views'
    conventions (Name/Title, header labels, filter, showError).
-6. [ ] `internal/app/codepipelinedetail.go`: detail view (stage table,
+6. [x] `internal/app/codepipelinedetail.go`: detail view (stage table,
    `w` toggle, `r` refresh, `Esc` back). Unit tests mirroring
    `logsearch_test.go`'s conventions.
 7. [ ] Manual verification (per `tui/CLAUDE.md`) — see plan.md's
