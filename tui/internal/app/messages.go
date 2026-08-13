@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -25,12 +27,25 @@ import (
 // the single message under the cursor, so they also work as a single-item
 // shortcut without requiring an explicit mark first. Marks are cleared on
 // every reload (load), since a refreshed list may reorder or drop messages.
+//
+// Two independent, composable filter mechanisms narrow what's shown: the
+// server-side filter ('f', a queue.MessageFilter applied by the backend —
+// see load) determines what's fetched; quick search ('/', a live,
+// client-side substring match over the already-fetched allMsgs — see
+// applyQuickSearch/repaint) determines what's displayed from that. Mark/
+// target logic only ever sees msgs, the currently-displayed (search-
+// filtered) set.
 type messagesView struct {
-	table     *tview.Table
-	app       *App
-	queueName string
-	msgs      []queue.Message // sorted snapshot, index 0 = row 1
-	marked    map[string]bool // message IDs currently marked
+	table       *tview.Table
+	searchInput *tview.InputField
+	flex        *tview.Flex
+	app         *App
+	queueName   string
+	allMsgs     []queue.Message     // full set from the last load, pre-quick-search
+	quickSearch string              // active quick-search text (client-side)
+	filter      queue.MessageFilter // active server-side filter
+	msgs        []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
+	marked      map[string]bool     // message IDs currently marked
 }
 
 func (mv *messagesView) Shortcuts() []ui.Shortcut {
@@ -43,6 +58,8 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
 		{Key: "c", Description: "create message"},
+		{Key: "/", Description: "quick search"},
+		{Key: "f", Description: "filter"},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -55,8 +72,36 @@ func newMessagesView(a *App) *messagesView {
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	mv := &messagesView{table: table, app: a}
+	p := a.cfg.Colors
+	searchInput := tview.NewInputField()
+	searchInput.SetLabel(" / search: ")
+	searchInput.SetLabelColor(tcell.GetColor(p.Label))
+	searchInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	searchInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(table, 0, 1, true).
+		AddItem(searchInput, 1, 0, false)
+
+	mv := &messagesView{table: table, searchInput: searchInput, flex: flex, app: a}
 	mv.setHeader()
+
+	searchInput.SetChangedFunc(func(text string) {
+		mv.applyQuickSearch(text)
+	})
+	searchInput.SetDoneFunc(func(_ tcell.Key) {
+		mv.applyQuickSearch(mv.searchInput.GetText())
+		mv.app.tv.SetFocus(mv.table)
+	})
+	searchInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
+			mv.applyQuickSearch(mv.searchInput.GetText())
+			mv.app.tv.SetFocus(mv.table)
+			mv.table.InputHandler()(event, func(tview.Primitive) {})
+			return nil
+		}
+		return event
+	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -77,6 +122,13 @@ func newMessagesView(a *App) *messagesView {
 			return nil
 		case event.Rune() == 'r':
 			mv.load()
+			return nil
+		case event.Rune() == '/':
+			mv.searchInput.SetText(mv.quickSearch)
+			mv.app.tv.SetFocus(mv.searchInput)
+			return nil
+		case event.Rune() == 'f':
+			a.showMessageFilter()
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
@@ -137,8 +189,9 @@ func (mv *messagesView) setHeader() {
 
 func (mv *messagesView) load() {
 	queueName := mv.queueName
+	filter := mv.filter
 	go func() {
-		msgs, err := mv.app.backend.BrowseMessages(context.Background(), queueName)
+		msgs, err := mv.app.backend.BrowseMessages(context.Background(), queueName, filter)
 		mv.app.tv.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("messages: failed to browse messages", "queue", queueName, "error", err)
@@ -153,12 +206,113 @@ func (mv *messagesView) load() {
 	}()
 }
 
+// applyQuickSearch sets the active quick-search text and re-filters the
+// currently-loaded messages against it, without re-fetching from the
+// backend — unlike the server-side filter form, this is purely client-side
+// and safe to call on every keystroke.
+func (mv *messagesView) applyQuickSearch(s string) {
+	mv.quickSearch = s
+	mv.updateTitle()
+	mv.repaint(mv.allMsgs)
+}
+
+// updateTitle sets the table's border title, reflecting the queue name plus
+// whichever of the two filter mechanisms are active. Parens/brackets wrap
+// active segments only — see queues.go's updateTitle for why "(text)" is
+// used instead of "[text]" (square brackets are swallowed as color tags).
+func (mv *messagesView) updateTitle() {
+	title := fmt.Sprintf(" Messages — %s ", mv.queueName)
+	if desc := describeMessageFilter(mv.filter); desc != "" {
+		title = fmt.Sprintf(" Messages — %s (filter: %s) ", mv.queueName, desc)
+	}
+	if mv.quickSearch != "" {
+		title = strings.TrimRight(title, " ") + fmt.Sprintf(" [search: %s] ", mv.quickSearch)
+	}
+	mv.table.SetTitle(title)
+}
+
+// describeMessageFilter renders f as a short human-readable summary for the
+// table title, e.g. "type=order-created max=100" — empty for a zero-value
+// filter (nothing active).
+func describeMessageFilter(f queue.MessageFilter) string {
+	var parts []string
+	if f.JMSType != "" {
+		parts = append(parts, "type="+f.JMSType)
+	}
+	if !f.FromDate.IsZero() {
+		parts = append(parts, "from="+f.FromDate.Format("2006-01-02"))
+	}
+	if !f.ToDate.IsZero() {
+		parts = append(parts, "to="+f.ToDate.Format("2006-01-02"))
+	}
+	if f.MaxCount > 0 {
+		parts = append(parts, fmt.Sprintf("max=%d", f.MaxCount))
+	}
+	return strings.Join(parts, " ")
+}
+
+// parseMessageFilterForm parses the message filter form's four field values
+// into a queue.MessageFilter. from/to accept time.RFC3339 or a bare
+// "2006-01-02" date (taken as UTC midnight, matching how the proxy backend's
+// toFilterDTO already normalizes filter dates to UTC). maxCount must be a
+// non-negative integer; empty fields are left unset (zero value).
+func parseMessageFilterForm(jmsType, from, to, maxCount string) (queue.MessageFilter, error) {
+	f := queue.MessageFilter{JMSType: strings.TrimSpace(jmsType)}
+
+	parseDate := func(label, s string) (time.Time, error) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return time.Time{}, nil
+		}
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t.UTC(), nil
+		}
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			return t.UTC(), nil
+		}
+		return time.Time{}, fmt.Errorf("invalid %s %q: want RFC3339 or YYYY-MM-DD", label, s)
+	}
+
+	var err error
+	if f.FromDate, err = parseDate("from", from); err != nil {
+		return queue.MessageFilter{}, err
+	}
+	if f.ToDate, err = parseDate("to", to); err != nil {
+		return queue.MessageFilter{}, err
+	}
+
+	maxCount = strings.TrimSpace(maxCount)
+	if maxCount != "" {
+		n, err := strconv.Atoi(maxCount)
+		if err != nil || n < 0 {
+			return queue.MessageFilter{}, fmt.Errorf("invalid max count %q: want a non-negative integer", maxCount)
+		}
+		f.MaxCount = n
+	}
+
+	return f, nil
+}
+
 func (mv *messagesView) repaint(msgs []queue.Message) {
+	mv.allMsgs = msgs
+
+	// Apply quick search.
+	filtered := msgs
+	if mv.quickSearch != "" {
+		lower := strings.ToLower(mv.quickSearch)
+		filtered = make([]queue.Message, 0, len(msgs))
+		for _, m := range msgs {
+			if strings.Contains(strings.ToLower(m.JMSType), lower) || strings.Contains(strings.ToLower(m.Preview), lower) {
+				filtered = append(filtered, m)
+			}
+		}
+	}
+
 	// Sort descending by timestamp (newest first).
-	sort.Slice(msgs, func(i, j int) bool {
-		return msgs[i].Timestamp.After(msgs[j].Timestamp)
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Timestamp.After(filtered[j].Timestamp)
 	})
-	mv.msgs = msgs
+	mv.msgs = filtered
 	mv.marked = map[string]bool{} // a reload may reorder/drop messages; marks don't survive it
 
 	for mv.table.GetRowCount() > 1 {
@@ -170,7 +324,7 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 	tsColor := tcell.GetColor(p.Label)
 	textColor := tcell.GetColor(p.Text)
 
-	for i, m := range msgs {
+	for i, m := range filtered {
 		row := i + 1
 		mv.table.SetCell(row, 0, mv.markerCell(false))
 		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).SetExpansion(2))

@@ -10,6 +10,12 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
+// shortcutPanelRows is the maximum number of shortcut lines any view shows
+// — bump this whenever a view's Shortcuts() grows past it, or entries
+// silently clip off the bottom of the context panel (the top bar's height
+// is fixed, not scrollable). Currently messagesView, at 11.
+const shortcutPanelRows = 11
+
 // topBar is the app's top row: a "info"/"prompt" Pages on the left
 // (connection info, replaced by the command prompt while active),
 // a single-char divider, a context panel (view-specific shortcuts,
@@ -35,8 +41,6 @@ func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
 	contextPanel := tview.NewTextView().SetDynamicColors(true)
 	logoPanel := newLogoPanel(cfg)
 	// Ensure the top bar is tall enough to display all view shortcuts.
-	// shortcutPanelRows is the maximum number of shortcut lines any view shows.
-	const shortcutPanelRows = 6
 	height := maxInt(shortcutPanelRows, len(cfg.Logo))
 	divider := newDivider(cfg, height)
 

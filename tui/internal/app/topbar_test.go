@@ -100,15 +100,16 @@ func TestNewTopBarHeightGrowsWithLogo(t *testing.T) {
 	prompt := tview.NewInputField()
 
 	// A logo taller than shortcutPanelRows drives the height.
-	tall := newTopBar(config.Config{Logo: []string{"1", "2", "3", "4", "5", "6", "7"}}, prompt)
-	if tall.height != 7 {
-		t.Errorf("height with 7-line logo = %d, want 7", tall.height)
+	tallLogo := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"}
+	tall := newTopBar(config.Config{Logo: tallLogo}, prompt)
+	if tall.height != 12 {
+		t.Errorf("height with 12-line logo = %d, want 12", tall.height)
 	}
 
-	// A short logo: height is at least shortcutPanelRows (currently 6).
+	// A short logo: height is at least shortcutPanelRows (currently 11).
 	short := newTopBar(config.Config{Logo: []string{"1"}}, prompt)
-	if short.height != 6 {
-		t.Errorf("height with 1-line logo = %d, want 6 (shortcutPanelRows)", short.height)
+	if short.height != 11 {
+		t.Errorf("height with 1-line logo = %d, want 11 (shortcutPanelRows)", short.height)
 	}
 }
 
