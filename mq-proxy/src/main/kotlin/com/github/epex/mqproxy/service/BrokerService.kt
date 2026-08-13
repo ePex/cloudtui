@@ -20,6 +20,20 @@ import java.time.format.DateTimeFormatter
 @Service
 class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
 
+    companion object {
+        /**
+         * Timeout for [deleteMessages]/[moveMessages]'s receive loop.
+         * `receiveNoWait()` is unreliable immediately after creating a
+         * selector-based consumer: the broker dispatches matching messages
+         * to a new consumer's prefetch buffer asynchronously, so
+         * `receiveNoWait()` can return null even though matching messages
+         * exist and are visible via `list-messages` — confirmed live
+         * (spec/47-bugfix-mq-proxy-delete-move-receive-race). A bounded
+         * `receive(timeout)` waits for that dispatch instead of racing it.
+         */
+        private const val RECEIVE_TIMEOUT_MS = 2000L
+    }
+
     private val log = LoggerFactory.getLogger(BrokerService::class.java)
 
     // -------------------------------------------------------------------------
@@ -114,7 +128,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val consumer = session.createConsumer(session.createQueue(sourceQueue), filter.toSelector())
             val deleted = mutableListOf<DeletedMessageDto>()
             while (filter.maxCount == null || deleted.size < filter.maxCount) {
-                val msg = consumer.receiveNoWait() ?: break
+                val msg = consumer.receive(RECEIVE_TIMEOUT_MS) ?: break
                 deleted += DeletedMessageDto(messageId = msg.jmsMessageID ?: "")
             }
             consumer.close()
@@ -134,7 +148,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val producer = session.createProducer(session.createQueue(targetQueue))
             val moved = mutableListOf<MovedMessageDto>()
             while (filter.maxCount == null || moved.size < filter.maxCount) {
-                val msg = consumer.receiveNoWait() ?: break
+                val msg = consumer.receive(RECEIVE_TIMEOUT_MS) ?: break
                 producer.send(msg)
                 moved += MovedMessageDto(messageId = msg.jmsMessageID ?: "")
             }

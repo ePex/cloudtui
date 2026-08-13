@@ -253,7 +253,7 @@ class BrokerServiceTest {
 
         every { session.createQueue("trash") } returns queue
         every { session.createConsumer(queue, null) } returns consumer
-        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2, null)
+        every { consumer.receive(2000L) } returnsMany listOf(msg1, msg2, null)
         every { consumer.close() } just Runs
 
         val result = service.deleteMessages("trash", QueueMessageFilter())
@@ -270,7 +270,7 @@ class BrokerServiceTest {
 
         every { session.createQueue("trash") } returns queue
         every { session.createConsumer(queue, null) } returns consumer
-        every { consumer.receiveNoWait() } returns null
+        every { consumer.receive(2000L) } returns null
         every { consumer.close() } just Runs
 
         assertThat(service.deleteMessages("trash", QueueMessageFilter())).isEmpty()
@@ -287,13 +287,13 @@ class BrokerServiceTest {
 
         every { session.createQueue("trash") } returns queue
         every { session.createConsumer(queue, null) } returns consumer
-        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2)
+        every { consumer.receive(2000L) } returnsMany listOf(msg1, msg2)
         every { consumer.close() } just Runs
 
         val result = service.deleteMessages("trash", QueueMessageFilter(maxCount = 1))
 
         assertThat(result.map { it.messageId }).containsExactly("ID:1")
-        verify(exactly = 1) { consumer.receiveNoWait() }
+        verify(exactly = 1) { consumer.receive(2000L) }
     }
 
     @Test
@@ -305,7 +305,7 @@ class BrokerServiceTest {
 
         every { session.createQueue("orders") } returns queue
         every { session.createConsumer(queue, any()) } returns consumer
-        every { consumer.receiveNoWait() } returns null
+        every { consumer.receive(2000L) } returns null
         every { consumer.close() } just Runs
 
         service.deleteMessages(
@@ -345,7 +345,7 @@ class BrokerServiceTest {
         every { session.createQueue("dst") } returns dstQueue
         every { session.createConsumer(srcQueue, null) } returns consumer
         every { session.createProducer(dstQueue) } returns producer
-        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2, null)
+        every { consumer.receive(2000L) } returnsMany listOf(msg1, msg2, null)
         every { producer.send(any()) } just Runs
         every { session.commit() } just Runs
         every { producer.close() } just Runs
@@ -371,7 +371,7 @@ class BrokerServiceTest {
         every { session.createQueue("dst") } returns dstQueue
         every { session.createConsumer(srcQueue, null) } returns consumer
         every { session.createProducer(dstQueue) } returns producer
-        every { consumer.receiveNoWait() } returns null
+        every { consumer.receive(2000L) } returns null
         every { session.commit() } just Runs
         every { producer.close() } just Runs
         every { consumer.close() } just Runs
@@ -395,7 +395,7 @@ class BrokerServiceTest {
         every { session.createQueue("dst") } returns dstQueue
         every { session.createConsumer(srcQueue, null) } returns consumer
         every { session.createProducer(dstQueue) } returns producer
-        every { consumer.receiveNoWait() } returnsMany listOf(msg1, msg2)
+        every { consumer.receive(2000L) } returnsMany listOf(msg1, msg2)
         every { producer.send(any()) } just Runs
         every { session.commit() } just Runs
         every { producer.close() } just Runs
