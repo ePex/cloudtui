@@ -117,42 +117,11 @@ paths:
       - queue-controller
       operationId: listMessages
       parameters:
-      - name: sourceQueue
+      - name: query
         in: query
         required: true
         schema:
-          type: string
-      - name: jmsType
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: messageId
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: fromDate
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: toDate
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: maxCount
-        in: query
-        required: false
-        schema:
-          type: integer
-          format: int32
-      - name: returnBody
-        in: query
-        required: false
-        schema:
-          type: boolean
+          $ref: "#/components/schemas/ListMessagesQuery"
       responses:
         "500":
           description: Internal Server Error
@@ -335,6 +304,18 @@ components:
       - messageCount
       - name
       - producerCount
+    ListMessagesQuery:
+      type: object
+      properties:
+        sourceQueue:
+          type: string
+        returnBody:
+          type: boolean
+        filter:
+          $ref: "#/components/schemas/QueueMessageFilter"
+      required:
+      - filter
+      - sourceQueue
     ListResponseMessageSummary:
       type: object
       properties:

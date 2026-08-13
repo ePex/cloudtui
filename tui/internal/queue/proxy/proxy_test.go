@@ -129,7 +129,7 @@ func TestBrowseMessages(t *testing.T) {
 		if r.URL.Query().Get("returnBody") != "true" {
 			t.Errorf("returnBody = %q, want %q", r.URL.Query().Get("returnBody"), "true")
 		}
-		for _, key := range []string{"jmsType", "messageId", "fromDate", "toDate", "maxCount"} {
+		for _, key := range []string{"filter.jmsType", "filter.messageId", "filter.fromDate", "filter.toDate", "filter.maxCount"} {
 			if r.URL.Query().Has(key) {
 				t.Errorf("unexpected query param %q for a zero-value filter", key)
 			}
@@ -177,26 +177,26 @@ func TestBrowseMessages(t *testing.T) {
 }
 
 // TestBrowseMessagesFilterQuery covers that every queue.MessageFilter field
-// is sent as its corresponding list-messages query param.
+// is sent as its corresponding nested "filter." list-messages query param.
 func TestBrowseMessagesFilterQuery(t *testing.T) {
 	from := time.Date(2025, 1, 31, 8, 30, 0, 0, time.UTC)
 	to := time.Date(2025, 2, 1, 17, 0, 0, 0, time.UTC)
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if got, want := q.Get("jmsType"), "order-created"; got != want {
-			t.Errorf("jmsType = %q, want %q", got, want)
+		if got, want := q.Get("filter.jmsType"), "order-created"; got != want {
+			t.Errorf("filter.jmsType = %q, want %q", got, want)
 		}
-		if got, want := q.Get("messageId"), "ID:m1"; got != want {
-			t.Errorf("messageId = %q, want %q", got, want)
+		if got, want := q.Get("filter.messageId"), "ID:m1"; got != want {
+			t.Errorf("filter.messageId = %q, want %q", got, want)
 		}
-		if got, want := q.Get("fromDate"), "2025-01-31T08:30:00Z"; got != want {
-			t.Errorf("fromDate = %q, want %q", got, want)
+		if got, want := q.Get("filter.fromDate"), "2025-01-31T08:30:00Z"; got != want {
+			t.Errorf("filter.fromDate = %q, want %q", got, want)
 		}
-		if got, want := q.Get("toDate"), "2025-02-01T17:00:00Z"; got != want {
-			t.Errorf("toDate = %q, want %q", got, want)
+		if got, want := q.Get("filter.toDate"), "2025-02-01T17:00:00Z"; got != want {
+			t.Errorf("filter.toDate = %q, want %q", got, want)
 		}
-		if got, want := q.Get("maxCount"), "10"; got != want {
-			t.Errorf("maxCount = %q, want %q", got, want)
+		if got, want := q.Get("filter.maxCount"), "10"; got != want {
+			t.Errorf("filter.maxCount = %q, want %q", got, want)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": []any{}, "errors": []any{}})
 	}))
