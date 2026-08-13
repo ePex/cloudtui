@@ -58,8 +58,8 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // Message browsing
     // -------------------------------------------------------------------------
 
-    fun browseMessages(queueName: String, filter: QueueMessageFilter): List<MessageSummary> {
-        log.info("broker: browseMessages queue={} filter={}", queueName, filter)
+    fun browseMessages(queueName: String, filter: QueueMessageFilter, returnBody: Boolean = true): List<MessageSummary> {
+        log.info("broker: browseMessages queue={} filter={} returnBody={}", queueName, filter, returnBody)
         val connection = connectionFactory.createConnection()
         connection.start()
         return try {
@@ -67,9 +67,9 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
             val messages = mutableListOf<MessageSummary>()
             val enum = browser.enumeration
-            while (enum.hasMoreElements()) {
+            while (enum.hasMoreElements() && (filter.maxCount == null || messages.size < filter.maxCount)) {
                 val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
-                messages += msg.toSummary(queueName)
+                messages += msg.toSummary(queueName, returnBody)
             }
             browser.close()
             messages
@@ -168,11 +168,11 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
         return clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 
-    private fun jakarta.jms.Message.toSummary(sourceQueue: String) = MessageSummary(
+    private fun jakarta.jms.Message.toSummary(sourceQueue: String, returnBody: Boolean = true) = MessageSummary(
         sourceQueue = sourceQueue,
         messageId = jmsMessageID ?: "",
         jmsType = jmsType ?: "",
-        body = (this as? TextMessage)?.text,
+        body = if (returnBody) (this as? TextMessage)?.text else null,
         timestamp = epochMillisToIso(jmsTimestamp),
         headers = stringProperties(),
     )

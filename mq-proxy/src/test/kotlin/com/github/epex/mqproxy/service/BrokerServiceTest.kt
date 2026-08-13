@@ -201,6 +201,43 @@ class BrokerServiceTest {
         verify { session.createBrowser(any(), "JMSType = 'order-created'") }
     }
 
+    @Test
+    fun `browseMessages stops after maxCount matches`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 1))
+
+        assertThat(result.map { it.messageId }).containsExactly("ID:1")
+    }
+
+    @Test
+    fun `browseMessages omits body when returnBody is false`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg = stubTextMessage(session, id = "ID:1", body = "hello")
+        stubBrowser(session, "orders", null, listOf(msg))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(), returnBody = false)
+
+        assertThat(result[0].body).isNull()
+    }
+
+    @Test
+    fun `browseMessages includes body by default`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg = stubTextMessage(session, id = "ID:1", body = "hello")
+        stubBrowser(session, "orders", null, listOf(msg))
+
+        val result = service.browseMessages("orders", QueueMessageFilter())
+
+        assertThat(result[0].body).isEqualTo("hello")
+    }
+
     // -------------------------------------------------------------------------
     // deleteMessages
     // -------------------------------------------------------------------------

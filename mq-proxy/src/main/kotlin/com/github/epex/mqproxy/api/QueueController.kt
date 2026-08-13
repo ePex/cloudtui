@@ -27,10 +27,21 @@ class QueueController(private val brokerService: BrokerService) {
         @RequestParam sourceQueue: String,
         @RequestParam(required = false) jmsType: String?,
         @RequestParam(required = false) messageId: String?,
+        @RequestParam(required = false) fromDate: String?,
+        @RequestParam(required = false) toDate: String?,
+        @RequestParam(required = false) maxCount: Int?,
+        @RequestParam(required = false) returnBody: Boolean?,
     ) = ListResponse(
         data = brokerService.browseMessages(
             sourceQueue,
-            QueueMessageFilter(jmsType = jmsType, messageId = messageId),
+            QueueMessageFilter(
+                jmsType = jmsType,
+                messageId = messageId,
+                fromDate = fromDate,
+                toDate = toDate,
+                maxCount = maxCount,
+            ),
+            returnBody = returnBody ?: true,
         ),
     )
 

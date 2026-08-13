@@ -132,6 +132,27 @@ paths:
         required: false
         schema:
           type: string
+      - name: fromDate
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: toDate
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: maxCount
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: returnBody
+        in: query
+        required: false
+        schema:
+          type: boolean
       responses:
         "500":
           description: Internal Server Error
