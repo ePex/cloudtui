@@ -77,11 +77,11 @@ class QueueControllerTest {
     @Test
     @WithMockUser
     fun `listMessages returns 200 with message list`() {
-        every { brokerService.browseMessages("orders", QueueMessageFilter()) } returns listOf(
+        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 50)) } returns listOf(
             MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap()),
         )
 
-        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders")
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=50")
             .andExpect {
                 status { isOk() }
                 jsonPath("$.data[0].messageId") { value("ID:m1") }
@@ -94,10 +94,13 @@ class QueueControllerTest {
     @WithMockUser
     fun `listMessages passes jmsType and messageId filters through`() {
         every {
-            brokerService.browseMessages("orders", QueueMessageFilter(jmsType = "order-created", messageId = "ID:m1"))
+            brokerService.browseMessages(
+                "orders",
+                QueueMessageFilter(jmsType = "order-created", messageId = "ID:m1", maxCount = 50),
+            )
         } returns emptyList()
 
-        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.jmsType=order-created&filter.messageId=ID:m1")
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.jmsType=order-created&filter.messageId=ID:m1&filter.maxCount=50")
             .andExpect { status { isOk() } }
     }
 
@@ -110,10 +113,26 @@ class QueueControllerTest {
 
     @Test
     @WithMockUser
-    fun `listMessages returns 502 on JMSException`() {
-        every { brokerService.browseMessages("orders", QueueMessageFilter()) } throws JMSException("connection lost")
-
+    fun `listMessages returns 400 when maxCount is missing`() {
         mockMvc.get("/api/management/command/list-messages?sourceQueue=orders")
+            .andExpect { status { isBadRequest() } }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns 400 when maxCount is not positive`() {
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=0")
+            .andExpect { status { isBadRequest() } }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns 502 on JMSException`() {
+        every {
+            brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 50))
+        } throws JMSException("connection lost")
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=50")
             .andExpect { status { isBadGateway() } }
     }
 

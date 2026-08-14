@@ -29,6 +29,14 @@ paths:
                 type: object
                 additionalProperties:
                   type: string
+        "400":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
         "200":
           description: OK
           content:
@@ -51,6 +59,14 @@ paths:
       responses:
         "500":
           description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
@@ -85,6 +101,14 @@ paths:
                 type: object
                 additionalProperties:
                   type: string
+        "400":
+          description: Bad Request
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
         "200":
           description: OK
           content:
@@ -99,6 +123,14 @@ paths:
       responses:
         "500":
           description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
@@ -125,6 +157,14 @@ paths:
       responses:
         "500":
           description: Internal Server Error
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:

@@ -3,6 +3,7 @@ package com.github.epex.mqproxy.api
 import com.github.epex.mqproxy.api.model.DeleteMessagesRequest
 import com.github.epex.mqproxy.api.model.ItemResponse
 import com.github.epex.mqproxy.api.model.ListResponse
+import com.github.epex.mqproxy.api.model.MessageSummary
 import com.github.epex.mqproxy.api.model.MoveMessagesRequest
 import com.github.epex.mqproxy.api.model.QueueMessageFilter
 import com.github.epex.mqproxy.api.model.SendMessageRequest
@@ -39,13 +40,17 @@ class QueueController(private val brokerService: BrokerService) {
     fun listQueues() = ListResponse(data = brokerService.listQueues())
 
     @GetMapping("/list-messages")
-    fun listMessages(@ModelAttribute query: ListMessagesQuery) = ListResponse(
-        data = brokerService.browseMessages(
-            query.sourceQueue,
-            query.filter,
-            returnBody = query.returnBody ?: true,
-        ),
-    )
+    fun listMessages(@ModelAttribute query: ListMessagesQuery): ListResponse<MessageSummary> {
+        val maxCount = query.filter.maxCount
+        require(maxCount != null && maxCount > 0) { "filter.maxCount is required and must be > 0" }
+        return ListResponse(
+            data = brokerService.browseMessages(
+                query.sourceQueue,
+                query.filter,
+                returnBody = query.returnBody ?: true,
+            ),
+        )
+    }
 
     @PostMapping("/send-message")
     fun sendMessage(@RequestBody request: SendMessageRequest) =
