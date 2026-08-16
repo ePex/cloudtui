@@ -242,25 +242,38 @@ func TestDatadogLogsViewHeaderLabels(t *testing.T) {
 	}
 }
 
-// TestDatadogLogsViewCycleTimeRange calls cycleTimeRange() directly,
-// which also calls search() (no synchronous "not configured" guard at
-// the view layer — that check lives inside datadoglogs.Search itself,
-// called asynchronously). The resulting goroutine blocks forever on
-// QueueUpdateDraw without a running tview event loop (same reasoning as
-// logSearchView/ssmParamsView's tests), but presetIdx is mutated
-// synchronously before search() is even called, so it's still safe to
-// assert on here.
-func TestDatadogLogsViewCycleTimeRange(t *testing.T) {
+// TestDatadogLogsViewTKeyOpensTimeRangeModal covers spec/53: 't' now opens
+// the shared time range modal (prefilled from dv.tr) instead of cycling
+// presets directly, and the modal's onApply callback writes the result
+// back into dv.tr. Applying spawns search()'s goroutine (no synchronous
+// "not configured" guard at the view layer — that check lives inside
+// datadoglogs.Search itself), which blocks forever on QueueUpdateDraw
+// without a running tview event loop (same reasoning as
+// logSearchView/ssmParamsView's tests), but dv.tr is mutated synchronously
+// before search() is even called, so it's still safe to assert on here.
+func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 	a := New(config.Default())
 	dv := a.datadogLogsV
-	dv.presetIdx = defaultPresetIdx
+	dv.tr = timeRange{mode: timeRangeRelative, presetIdx: 2}
 
-	want := []int{2, 3, 0, 1} // wraps around back to the default ("1h")
-	for _, w := range want {
-		dv.cycleTimeRange()
-		if dv.presetIdx != w {
-			t.Errorf("presetIdx = %d, want %d", dv.presetIdx, w)
-		}
+	capture := dv.table.GetInputCapture()
+	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
+		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
+	}
+	if !a.timeRangeVisible {
+		t.Fatal("'t' did not open the time range modal")
+	}
+	if got := a.timeRangeRelativeList.GetCurrentItem(); got != 2 {
+		t.Errorf("relative list current item = %d, want 2 (dv.tr's preset)", got)
+	}
+
+	if a.timeRangeOnApply == nil {
+		t.Fatal("'t' did not register an onApply callback")
+	}
+	a.timeRangeOnApply(timeRange{mode: timeRangeRelative, presetIdx: 4})
+
+	if want := (timeRange{mode: timeRangeRelative, presetIdx: 4}); dv.tr != want {
+		t.Errorf("dv.tr = %+v, want %+v after applying from the modal", dv.tr, want)
 	}
 }
 
