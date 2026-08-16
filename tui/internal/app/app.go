@@ -34,53 +34,61 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv                   *tview.Application
-	rootPages            *tview.Pages
-	pages                *tview.Pages
-	topLeft              *tview.Pages
-	prompt               *tview.InputField
-	helpVisible          bool
-	views                []ui.View
-	cfg                  config.Config
-	infoPanel            *tview.TextView
-	divider              *tview.TextView
-	contextPanel         *tview.TextView
-	logoPanel            *tview.TextView
-	statusBar            *tview.TextView
-	settingsList         *tview.List
-	logV                 *logView
-	queuesV              *queuesView
-	messagesV            *messagesView
-	messageDetailV       *messageDetailView
-	confirmFlex          *tview.Flex
-	confirmText          *tview.TextView
-	confirmList          *tview.List
-	confirmVisible       bool
-	movePickerFlex       *tview.Flex
-	movePickerList       *tview.List
-	movePickerSearch     *tview.InputField
-	movePickerQueues     []string
-	movePickerPreferred  string
-	movePickerOnSelect   func(string)
-	movePickerOnClose    func()
-	movePickerVisible    bool
-	sendMessageFlex      *tview.Flex
-	sendMessageArea      *tview.TextArea
-	sendMessageList      *tview.List
-	sendMessageOnClose   func()
-	sendMessageVisible   bool
-	connManagerFlex      *tview.Flex
-	connManagerList      *tview.List
-	connManagerHints     *tview.TextView
-	connManagerVisible   bool
-	connEditorForm       *tview.Form
-	connEditorVisible    bool
-	connEditorIsNew      bool
-	connEditorOrigName   string
-	messageFilterForm    *tview.Form
-	messageFilterVisible bool
-	datadogEditorForm    *tview.Form
-	datadogEditorVisible bool
+	tv                    *tview.Application
+	rootPages             *tview.Pages
+	pages                 *tview.Pages
+	topLeft               *tview.Pages
+	prompt                *tview.InputField
+	helpVisible           bool
+	views                 []ui.View
+	cfg                   config.Config
+	infoPanel             *tview.TextView
+	divider               *tview.TextView
+	contextPanel          *tview.TextView
+	logoPanel             *tview.TextView
+	statusBar             *tview.TextView
+	settingsList          *tview.List
+	logV                  *logView
+	queuesV               *queuesView
+	messagesV             *messagesView
+	messageDetailV        *messageDetailView
+	confirmFlex           *tview.Flex
+	confirmText           *tview.TextView
+	confirmList           *tview.List
+	confirmVisible        bool
+	movePickerFlex        *tview.Flex
+	movePickerList        *tview.List
+	movePickerSearch      *tview.InputField
+	movePickerQueues      []string
+	movePickerPreferred   string
+	movePickerOnSelect    func(string)
+	movePickerOnClose     func()
+	movePickerVisible     bool
+	sendMessageFlex       *tview.Flex
+	sendMessageArea       *tview.TextArea
+	sendMessageList       *tview.List
+	sendMessageOnClose    func()
+	sendMessageVisible    bool
+	connManagerFlex       *tview.Flex
+	connManagerList       *tview.List
+	connManagerHints      *tview.TextView
+	connManagerVisible    bool
+	connEditorForm        *tview.Form
+	connEditorVisible     bool
+	connEditorIsNew       bool
+	connEditorOrigName    string
+	messageFilterForm     *tview.Form
+	messageFilterVisible  bool
+	timeRangeFlex         *tview.Flex
+	timeRangeTabs         *tview.TextView
+	timeRangePages        *tview.Pages
+	timeRangeRelativeList *tview.List
+	timeRangeAbsoluteForm *tview.Form
+	timeRangeVisible      bool
+	timeRangeActiveTab    timeRangeMode
+	timeRangeOnApply      func(timeRange)
+	datadogEditorForm     *tview.Form
+	datadogEditorVisible  bool
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
 	// dropped by switchTo if abandoned — see spec/41.
@@ -506,6 +514,72 @@ func New(cfg config.Config) *App {
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := centered(a.messageFilterForm, 64, 16)
 
+	// Time range overlay (spec/53) — shared by logSearchView and
+	// datadogLogsView: a Relative preset list / Absolute date-range form,
+	// switched via tabs rather than two separate overlays.
+	a.timeRangeTabs = tview.NewTextView().SetDynamicColors(true)
+	a.timeRangeRelativeList = tview.NewList().ShowSecondaryText(false)
+	for i, p := range timeRangePresets {
+		idx := i
+		a.timeRangeRelativeList.AddItem(p.label, "", 0, func() {
+			a.applyTimeRangeRelative(idx)
+		})
+	}
+	a.timeRangeRelativeList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	a.timeRangeAbsoluteForm = tview.NewForm()
+	a.timeRangeAbsoluteForm.
+		AddInputField("From (YYYY-MM-DD HH:MM or RFC3339)", "", 30, nil, nil).
+		AddInputField("Until (YYYY-MM-DD HH:MM or RFC3339)", "", 30, nil, nil).
+		AddButton("Apply", func() { a.applyTimeRangeAbsolute() }).
+		AddButton("Cancel", func() { a.closeTimeRangeModal() })
+
+	a.timeRangePages = tview.NewPages().
+		AddPage("relative", a.timeRangeRelativeList, true, true).
+		AddPage("absolute", a.timeRangeAbsoluteForm, true, false)
+
+	a.timeRangeFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.timeRangeTabs, 1, 0, false).
+		AddItem(a.timeRangePages, 0, 1, true)
+	a.timeRangeFlex.SetBorder(true).SetTitle(" Time Range ")
+	// Set on the Flex itself (fires before descending to whichever child —
+	// the relative list or the absolute form/its fields — currently has
+	// focus), not on the individual tabs: 'R'/'A' must switch tabs
+	// regardless of which one is focused. Uppercase specifically to avoid
+	// colliding with typed text in the Absolute tab's date fields (same
+	// reasoning as 'S'/'E' in datadoglogs.go); Left/Right were ruled out
+	// because tview.InputField already consumes those for in-field cursor
+	// movement while a date field has focus.
+	a.timeRangeFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			a.closeTimeRangeModal()
+			return nil
+		case event.Rune() == 'R':
+			a.switchTimeRangeTab(timeRangeRelative)
+			return nil
+		case event.Rune() == 'A':
+			a.switchTimeRangeTab(timeRangeAbsolute)
+			return nil
+		}
+		return event
+	})
+	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
+	// label (35 chars) + its 30-wide field overflows a narrower box
+	// (caught live via verify-live, spec/53 — the same failure mode as
+	// messageFilterOverlay's width, just a longer label this time).
+	// Height: 9 relative presets need 9 content rows; 14 leaves a couple
+	// spare, matching the "give it one spare row" convention elsewhere.
+	timeRangeOverlay := centered(a.timeRangeFlex, 72, 14)
+
 	// Datadog editor overlay (spec/39-fe-datadog-logs) — same shape as
 	// the connection editor, just two fields: Site (plain, not a
 	// secret) and Access Token (a Personal Access Token, masked — see
@@ -623,6 +697,7 @@ func New(cfg config.Config) *App {
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
+		AddPage("time-range", timeRangeOverlay, true, false).
 		AddPage("datadog-editor", datadogEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
@@ -678,7 +753,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.messageFilterVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.messageFilterVisible || a.timeRangeVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
 		return event
 	}
 
@@ -724,7 +799,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilterVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
+		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilterVisible && !a.timeRangeVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
 			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible && !a.awsProfilesVisible {
 			a.tv.SetFocus(a.pages)
 		}
