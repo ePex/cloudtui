@@ -189,9 +189,12 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 // switchTo each time the view becomes active, same as every other
 // registered view's Activate — and matching logSearchView.open's
 // behavior of always running a search immediately (an empty query is
-// valid: "search everything in range").
+// valid: "search everything in range"). Also kicks off facet discovery
+// (spec/52-fe-datadog-logs-facet-listing) — independent of the search
+// above, so it never delays what the user actually sees first.
 func (dv *datadogLogsView) Activate() {
 	dv.search()
+	dv.discoverFacetValues()
 }
 
 func (dv *datadogLogsView) setHeader() {
@@ -286,6 +289,15 @@ func (dv *datadogLogsView) rebuildFilterOptions() {
 			dv.knownEnvs[e.Env] = true
 		}
 	}
+	dv.refreshFilterDropdowns()
+}
+
+// refreshFilterDropdowns rebuilds both dropdowns from the current
+// knownServices/knownEnvs sets — split out from rebuildFilterOptions so
+// facet discovery (see handleFacetDiscoveryResult) can refresh the
+// dropdowns after merging in newly-discovered values without also
+// re-scanning dv.results.
+func (dv *datadogLogsView) refreshFilterDropdowns() {
 	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
@@ -296,6 +308,65 @@ func (dv *datadogLogsView) rebuildFilterOptions() {
 		dv.search()
 		dv.app.tv.SetFocus(dv.table)
 	})
+}
+
+// facetDiscoveryWindow is the fixed, wide time window facet discovery
+// uses to ask Datadog what Service/Env values exist — independent of
+// whatever time range the user has selected for search() (see
+// spec/52-fe-datadog-logs-facet-listing).
+const facetDiscoveryWindow = 30 * 24 * time.Hour
+
+// discoverFacetValues asks Datadog for every distinct Service/Env value
+// seen in the last facetDiscoveryWindow, so the dropdowns can offer
+// values that haven't shown up in anything actually searched yet this
+// session (rebuildFilterOptions alone only ever discovers what's been
+// fetched). Two independent calls, one per facet.
+func (dv *datadogLogsView) discoverFacetValues() {
+	dv.discoverFacetValuesFor("service", dv.knownServices)
+	dv.discoverFacetValuesFor("env", dv.knownEnvs)
+}
+
+// discoverFacetValuesFor runs a single facet-listing call in a goroutine
+// and hands the outcome to handleFacetDiscoveryResult on the tview event
+// loop — same shape as search/handleSearchResult.
+func (dv *datadogLogsView) discoverFacetValuesFor(facet string, known map[string]bool) {
+	cfg := dv.app.cfg.Datadog
+	end := time.Now()
+	start := end.Add(-facetDiscoveryWindow)
+	go func() {
+		values, err := dv.app.listDatadogFacetValues(context.Background(), cfg, facet, start, end)
+		dv.app.tv.QueueUpdateDraw(func() {
+			dv.handleFacetDiscoveryResult(known, values, err)
+		})
+	}()
+}
+
+// handleFacetDiscoveryResult merges values into known (mutating it in
+// place, same as rebuildFilterOptions merges dv.results into
+// knownServices/knownEnvs) and refreshes the dropdowns only if something
+// new was actually found — avoids resetting the dropdowns' state on
+// every activation once nothing new turns up, which is most of them in
+// practice. Fails soft on error (logged, not surfaced to the user): this
+// is a completeness enhancement, not the primary search functionality,
+// and the accumulate-from-results mechanism still works regardless.
+// Split out from discoverFacetValuesFor so it's directly testable
+// without a goroutine or a running tview event loop, same rationale as
+// handleSearchResult.
+func (dv *datadogLogsView) handleFacetDiscoveryResult(known map[string]bool, values []string, err error) {
+	if err != nil {
+		slog.Warn("datadog logs: facet discovery failed", "error", err)
+		return
+	}
+	changed := false
+	for _, v := range values {
+		if v != "" && !known[v] {
+			known[v] = true
+			changed = true
+		}
+	}
+	if changed {
+		dv.refreshFilterDropdowns()
+	}
 }
 
 // sortedKeys returns set's keys sorted ascending.
