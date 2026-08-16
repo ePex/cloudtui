@@ -131,10 +131,10 @@ func prettyJSON(s string) string {
 
 // decodePropertyValue converts a Jolokia property value to a human-readable
 // string. ActiveMQ serialises string properties as ByteSequence objects:
-// a map with a "data" key holding a []interface{} of float64 byte values.
+// a map with a "data" key holding a []any of float64 byte values.
 // Those are decoded to a UTF-8 string. All other values fall back to %v.
-func decodePropertyValue(v interface{}) string {
-	m, ok := v.(map[string]interface{})
+func decodePropertyValue(v any) string {
+	m, ok := v.(map[string]any)
 	if !ok {
 		return fmt.Sprintf("%v", v)
 	}
@@ -142,7 +142,7 @@ func decodePropertyValue(v interface{}) string {
 	if !hasData {
 		return fmt.Sprintf("%v", v)
 	}
-	items, ok := dataRaw.([]interface{})
+	items, ok := dataRaw.([]any)
 	if !ok {
 		return fmt.Sprintf("%v", v)
 	}
@@ -206,7 +206,7 @@ func (dv *messageDetailView) render(queueName string, msg queue.Message) {
 		if f.key == "properties" {
 			// properties is a map of property name → value (possibly ByteSequence).
 			fmt.Fprintf(&b, "[%s]%s:[-]\n", accent, f.label)
-			if props, ok := raw.(map[string]interface{}); ok {
+			if props, ok := raw.(map[string]any); ok {
 				keys := make([]string, 0, len(props))
 				for k := range props {
 					keys = append(keys, k)
