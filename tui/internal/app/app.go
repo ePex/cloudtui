@@ -31,12 +31,19 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv             *tview.Application
-	rootPages      *tview.Pages
-	pages          *tview.Pages
-	topLeft        *tview.Pages
-	prompt         *tview.InputField
-	helpVisible    bool
+	tv          *tview.Application
+	rootPages   *tview.Pages
+	pages       *tview.Pages
+	topLeft     *tview.Pages
+	prompt      *tview.InputField
+	helpVisible bool
+	// focusExemptInputs are input fields that swallow global hotkeys while
+	// focused (e.g. so typing "s" in a search box doesn't trigger the "s"
+	// hotkey). Populated once in New(), after every view exists.
+	focusExemptInputs []tview.Primitive
+	// overlayVisible holds a pointer to each modal overlay's visible flag;
+	// anyOverlayVisible loops over it instead of a hand-maintained OR-chain.
+	overlayVisible []*bool
 	views          []ui.View
 	cfg            config.Config
 	infoPanel      *tview.TextView
@@ -319,6 +326,35 @@ func New(cfg config.Config) *App {
 
 	a.switchTo(a.views[0].Name())
 
+	// Built here, once every view/overlay above exists — onGlobalKey and
+	// onPromptDone loop over these instead of a hand-maintained chain of
+	// per-view/per-overlay checks.
+	a.focusExemptInputs = []tview.Primitive{
+		a.prompt,
+		a.queuesV.filterInput,
+		a.messagesV.searchInput,
+		a.ssmParamsV.filterInput,
+		a.secretsV.filterInput,
+		a.logsV.filterInput,
+		a.logSearchV.patternInput,
+		a.datadogLogsV.queryInput,
+		a.datadogLogsV.serviceFilterDD,
+		a.datadogLogsV.envFilterDD,
+		a.codePipelineListV.filterInput,
+	}
+	a.overlayVisible = []*bool{
+		&a.confirm.visible,
+		&a.movePicker.visible,
+		&a.sendMessage.visible,
+		&a.connManager.visible,
+		&a.connEditor.visible,
+		&a.messageFilter.visible,
+		&a.timeRangeModal.visible,
+		&a.datadogEditor.visible,
+		&a.themePicker.visible,
+		&a.awsProfiles.visible,
+	}
+
 	a.tv.SetRoot(a.rootPages, true).SetFocus(a.pages)
 	a.tv.SetInputCapture(a.onGlobalKey)
 
@@ -333,41 +369,14 @@ func (a *App) Run() error {
 // onGlobalKey handles the app's hotkeys (h/s/q/?) and the ':' command
 // prompt, all inert while the prompt or any input field has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
-	if a.tv.GetFocus() == a.prompt {
-		return event
-	}
-	if a.queuesV != nil && a.tv.GetFocus() == a.queuesV.filterInput {
-		return event
-	}
-	if a.messagesV != nil && a.tv.GetFocus() == a.messagesV.searchInput {
-		return event
-	}
-	if a.ssmParamsV != nil && a.tv.GetFocus() == a.ssmParamsV.filterInput {
-		return event
-	}
-	if a.secretsV != nil && a.tv.GetFocus() == a.secretsV.filterInput {
-		return event
-	}
-	if a.logsV != nil && a.tv.GetFocus() == a.logsV.filterInput {
-		return event
-	}
-	if a.logSearchV != nil && a.tv.GetFocus() == a.logSearchV.patternInput {
-		return event
-	}
-	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.queryInput {
-		return event
-	}
-	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.serviceFilterDD {
-		return event
-	}
-	if a.datadogLogsV != nil && a.tv.GetFocus() == a.datadogLogsV.envFilterDD {
-		return event
-	}
-	if a.codePipelineListV != nil && a.tv.GetFocus() == a.codePipelineListV.filterInput {
-		return event
+	focus := a.tv.GetFocus()
+	for _, in := range a.focusExemptInputs {
+		if focus == in {
+			return event
+		}
 	}
 
-	if a.confirm.visible || a.movePicker.visible || a.sendMessage.visible || a.connManager.visible || a.connEditor.visible || a.messageFilter.visible || a.timeRangeModal.visible || a.datadogEditor.visible || a.themePicker.visible || a.awsProfiles.visible {
+	if a.anyOverlayVisible() {
 		return event
 	}
 
@@ -413,8 +422,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManager.visible && !a.connEditor.visible && !a.messageFilter.visible && !a.timeRangeModal.visible && !a.datadogEditor.visible && !a.themePicker.visible &&
-			!a.confirm.visible && !a.movePicker.visible && !a.sendMessage.visible && !a.awsProfiles.visible {
+		if !a.anyOverlayVisible() {
 			a.tv.SetFocus(a.pages)
 		}
 	}()
@@ -562,6 +570,16 @@ func (a *App) updateContextPanel(v ui.View) {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
 	}
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
+}
+
+// anyOverlayVisible reports whether any modal overlay is currently shown.
+func (a *App) anyOverlayVisible() bool {
+	for _, v := range a.overlayVisible {
+		if *v {
+			return true
+		}
+	}
+	return false
 }
 
 // activeView returns the currently front-most registered view, or nil if
