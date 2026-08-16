@@ -126,6 +126,14 @@ func TestBrowseMessages(t *testing.T) {
 		if r.URL.Query().Get("sourceQueue") != "orders" {
 			t.Errorf("sourceQueue = %q, want %q", r.URL.Query().Get("sourceQueue"), "orders")
 		}
+		if r.URL.Query().Get("returnBody") != "true" {
+			t.Errorf("returnBody = %q, want %q", r.URL.Query().Get("returnBody"), "true")
+		}
+		for _, key := range []string{"filter.jmsType", "filter.messageId", "filter.fromDate", "filter.toDate", "filter.maxCount"} {
+			if r.URL.Query().Has(key) {
+				t.Errorf("unexpected query param %q for a zero-value filter", key)
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"data": []map[string]any{
 				{"sourceQueue": "orders", "messageId": "ID:m1", "jmsType": "order-created", "timestamp": ts, "body": body, "headers": map[string]string{"foo": "bar"}},
@@ -135,7 +143,7 @@ func TestBrowseMessages(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -168,6 +176,40 @@ func TestBrowseMessages(t *testing.T) {
 	}
 }
 
+// TestBrowseMessagesFilterQuery covers that every queue.MessageFilter field
+// is sent as its corresponding nested "filter." list-messages query param.
+func TestBrowseMessagesFilterQuery(t *testing.T) {
+	from := time.Date(2025, 1, 31, 8, 30, 0, 0, time.UTC)
+	to := time.Date(2025, 2, 1, 17, 0, 0, 0, time.UTC)
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got, want := q.Get("filter.jmsType"), "order-created"; got != want {
+			t.Errorf("filter.jmsType = %q, want %q", got, want)
+		}
+		if got, want := q.Get("filter.messageId"), "ID:m1"; got != want {
+			t.Errorf("filter.messageId = %q, want %q", got, want)
+		}
+		if got, want := q.Get("filter.fromDate"), "2025-01-31T08:30:00Z"; got != want {
+			t.Errorf("filter.fromDate = %q, want %q", got, want)
+		}
+		if got, want := q.Get("filter.toDate"), "2025-02-01T17:00:00Z"; got != want {
+			t.Errorf("filter.toDate = %q, want %q", got, want)
+		}
+		if got, want := q.Get("filter.maxCount"), "10"; got != want {
+			t.Errorf("filter.maxCount = %q, want %q", got, want)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": []any{}, "errors": []any{}})
+	}))
+	defer stop()
+
+	_, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{
+		JMSType: "order-created", MessageID: "ID:m1", FromDate: from, ToDate: to, MaxCount: 10,
+	})
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+}
+
 // TestBrowseMessagesNonStringHeaderValue covers a real JMS-management API
 // implementing this contract that reports header/property values with their
 // real JMS types (numbers, booleans, ...) instead of mq-proxy's always-a-string
@@ -188,7 +230,7 @@ func TestBrowseMessagesNonStringHeaderValue(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -218,7 +260,7 @@ func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -241,7 +283,7 @@ func TestBrowseMessagesEmptyJMSTypeWithBodyInfersText(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -262,7 +304,7 @@ func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders")
+	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}

@@ -25,9 +25,9 @@ type Message struct {
 	RawFields     map[string]interface{} // full Jolokia response map for the message
 }
 
-// MessageFilter selects which messages a bulk delete/move operation
-// applies to. A zero-value field means "don't filter on this" — a
-// zero-value MessageFilter matches every message on the queue.
+// MessageFilter selects which messages a browse, bulk delete, or bulk
+// move operation applies to. A zero-value field means "don't filter on
+// this" — a zero-value MessageFilter matches every message on the queue.
 type MessageFilter struct {
 	JMSType   string
 	MessageID string
@@ -39,7 +39,7 @@ type MessageFilter struct {
 // Backend is the interface all queue data sources must implement.
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
-	BrowseMessages(ctx context.Context, queueName string) ([]Message, error)
+	BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, error)
 	PurgeQueue(ctx context.Context, queueName string) error
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error

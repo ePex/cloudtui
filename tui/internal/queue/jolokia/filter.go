@@ -34,14 +34,13 @@ func filterMessages(msgs []queue.Message, filter queue.MessageFilter) []queue.Me
 	return matches
 }
 
-// DeleteMessages implements queue.Backend: browses queueName, filters
-// client-side, and removes each match via RemoveMessage.
+// DeleteMessages implements queue.Backend: browses queueName filtered by
+// filter, and removes each match via RemoveMessage.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
-	msgs, err := c.BrowseMessages(ctx, queueName)
+	matches, err := c.BrowseMessages(ctx, queueName, filter)
 	if err != nil {
 		return 0, fmt.Errorf("delete messages from %q: %w", queueName, err)
 	}
-	matches := filterMessages(msgs, filter)
 	for _, m := range matches {
 		if err := c.RemoveMessage(ctx, queueName, m.ID); err != nil {
 			return 0, fmt.Errorf("delete messages from %q: %w", queueName, err)
@@ -50,14 +49,13 @@ func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter qu
 	return len(matches), nil
 }
 
-// MoveMessages implements queue.Backend: browses sourceQueue, filters
-// client-side, and moves each match via MoveMessage.
+// MoveMessages implements queue.Backend: browses sourceQueue filtered by
+// filter, and moves each match via MoveMessage.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
-	msgs, err := c.BrowseMessages(ctx, sourceQueue)
+	matches, err := c.BrowseMessages(ctx, sourceQueue, filter)
 	if err != nil {
 		return 0, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
 	}
-	matches := filterMessages(msgs, filter)
 	for _, m := range matches {
 		if err := c.MoveMessage(ctx, sourceQueue, m.ID, targetQueue); err != nil {
 			return 0, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)

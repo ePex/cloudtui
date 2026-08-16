@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
 func newTestClient(url string) *Client {
@@ -129,7 +130,7 @@ func TestBrowseMessagesHappyPath(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -147,6 +148,33 @@ func TestBrowseMessagesHappyPath(t *testing.T) {
 	}
 	if msgs[0].Timestamp.IsZero() {
 		t.Error("msgs[0].Timestamp is zero")
+	}
+}
+
+// TestBrowseMessagesFiltersFullPath verifies BrowseMessages applies filter
+// (via filterMessages) to the browseMessagesFull() result before returning.
+func TestBrowseMessagesFiltersFullPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value": []map[string]any{
+				{"messageId": "ID:msg-1", "timestamp": int64(1721000000000), "text": "Hello World"},
+				{"messageId": "ID:msg-2", "timestamp": int64(1721000001000), "text": "Second"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MessageID: "ID:msg-2"})
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1", len(msgs))
+	}
+	if msgs[0].ID != "ID:msg-2" {
+		t.Errorf("msgs[0].ID = %q, want %q", msgs[0].ID, "ID:msg-2")
 	}
 }
 
@@ -176,7 +204,7 @@ func TestBrowseMessagesCompositeDataMessageID(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -193,7 +221,7 @@ func TestBrowseMessagesHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error for HTTP 500, got nil")
 	}
@@ -209,7 +237,7 @@ func TestBrowseMessagesJolokiaError(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error for Jolokia status 500, got nil")
 	}
@@ -381,7 +409,7 @@ func TestBrowseMessagesBackfillsBytesMessageBody(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -442,7 +470,7 @@ func TestBrowseMessagesFallbackFullObject(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -485,7 +513,7 @@ func TestBrowseMessagesFallback(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue")
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -503,6 +531,37 @@ func TestBrowseMessagesFallback(t *testing.T) {
 	}
 }
 
+// TestBrowseMessagesFiltersFallbackPath verifies BrowseMessages applies
+// filter (via filterMessages) to the browse()-fallback result too, not just
+// the browseMessagesFull() path.
+func TestBrowseMessagesFiltersFallbackPath(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": 500,
+				"error":  "java.lang.IllegalStateException: Error while extracting clientID",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value":  []string{"first", "second"},
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MaxCount: 1})
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("len(msgs) = %d, want 1 (MaxCount filter applied to fallback result)", len(msgs))
+	}
+}
+
 func TestBrowseMessagesFallbackBothFail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -513,7 +572,7 @@ func TestBrowseMessagesFallbackBothFail(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue")
+	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error when both operations fail, got nil")
 	}

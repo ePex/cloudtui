@@ -21,7 +21,7 @@ func (f *fakeQueueBackend) List(_ context.Context) ([]queue.Summary, error) {
 	return f.summaries, nil
 }
 
-func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string) ([]queue.Message, error) {
+func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, error) {
 	return nil, nil
 }
 
