@@ -187,9 +187,26 @@ func (mv *messagesView) setHeader() {
 	}
 }
 
+// defaultBrowseMaxCount caps how many messages a browse fetches when the
+// user hasn't set an explicit Max Count via the filter form — mq-proxy
+// requires list-messages' filter.maxCount to be set (spec
+// 51-cr-mq-proxy-require-list-messages-maxcount), and even for the Jolokia
+// backend (which has no request-time cap) this bounds what gets rendered.
+const defaultBrowseMaxCount = 500
+
+// withDefaultMaxCount returns f unchanged if it already has a positive
+// MaxCount, otherwise a copy with MaxCount set to defaultBrowseMaxCount.
+// mv.filter itself is never mutated by this — see load/updateTitle.
+func withDefaultMaxCount(f queue.MessageFilter) queue.MessageFilter {
+	if f.MaxCount <= 0 {
+		f.MaxCount = defaultBrowseMaxCount
+	}
+	return f
+}
+
 func (mv *messagesView) load() {
 	queueName := mv.queueName
-	filter := mv.filter
+	filter := withDefaultMaxCount(mv.filter)
 	go func() {
 		msgs, err := mv.app.backend.BrowseMessages(context.Background(), queueName, filter)
 		mv.app.tv.QueueUpdateDraw(func() {
@@ -222,7 +239,7 @@ func (mv *messagesView) applyQuickSearch(s string) {
 // used instead of "[text]" (square brackets are swallowed as color tags).
 func (mv *messagesView) updateTitle() {
 	title := fmt.Sprintf(" Messages — %s ", mv.queueName)
-	if desc := describeMessageFilter(mv.filter); desc != "" {
+	if desc := describeMessageFilter(withDefaultMaxCount(mv.filter)); desc != "" {
 		title = fmt.Sprintf(" Messages — %s (filter: %s) ", mv.queueName, desc)
 	}
 	if mv.quickSearch != "" {
