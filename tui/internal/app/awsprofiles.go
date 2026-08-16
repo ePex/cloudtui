@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // awsProfilesPicker is the AWS Profiles overlay: a filterable, read-only
@@ -231,7 +232,7 @@ func (ap *awsProfilesPicker) repaint() {
 func (ap *awsProfilesPicker) activate(name string) {
 	a := ap.app
 	a.cfg.ActiveAWSProfile = name
-	a.infoPanel.SetText(infoPanelText(a.cfg))
+	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.refreshSettingsList()
 	ap.close()
 	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))

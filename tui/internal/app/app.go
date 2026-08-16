@@ -161,15 +161,15 @@ func New(cfg config.Config) *App {
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
 
-	tb := newTopBar(cfg, a.prompt)
-	a.topLeft = tb.left
-	a.infoPanel = tb.info
-	a.divider = tb.divider
-	a.contextPanel = tb.contextPanel
-	a.logoPanel = tb.logo
-	a.topBarHeight = tb.height
+	tb := ui.NewTopBar(cfg, a.prompt)
+	a.topLeft = tb.Left
+	a.infoPanel = tb.Info
+	a.divider = tb.Divider
+	a.contextPanel = tb.ContextPanel
+	a.logoPanel = tb.Logo
+	a.topBarHeight = tb.Height
 
-	a.statusBar = newStatusBar(cfg)
+	a.statusBar = ui.NewStatusBar(cfg)
 	a.listAWSProfiles = awsprofile.List
 	a.awsAuthTypeFor = awsprofile.AuthTypeFor
 	a.awsSSOLogin = awsauth.Login
@@ -183,7 +183,7 @@ func New(cfg config.Config) *App {
 	a.listDatadogFacetValues = datadoglogs.ListFacetValues
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
-	a.notify = desktopNotify
+	a.notify = ui.DesktopNotify
 	a.secretCache = newSecretCache()
 
 	// tview.Application never exposes its tcell.Screen directly (no
@@ -260,31 +260,31 @@ func New(cfg config.Config) *App {
 	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tb.root, tb.height, 0, false).
+		AddItem(tb.Root, tb.Height, 0, false).
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
 	a.confirm = newConfirmDialog(a)
-	confirmOverlay := centered(a.confirm.flex, 52, 8)
+	confirmOverlay := ui.Centered(a.confirm.flex, 52, 8)
 
 	a.movePicker = newMovePicker(a)
-	movePickerOverlay := centered(a.movePicker.flex, 52, 22)
+	movePickerOverlay := ui.Centered(a.movePicker.flex, 52, 22)
 
 	a.sendMessage = newSendMessageOverlay(a)
-	sendMessageOverlay := centered(a.sendMessage.flex, 70, 14)
+	sendMessageOverlay := ui.Centered(a.sendMessage.flex, 70, 14)
 
 	a.connManager = newConnManager(a)
-	connManagerOverlay := centered(a.connManager.flex, 64, 20)
+	connManagerOverlay := ui.Centered(a.connManager.flex, 64, 20)
 
 	a.connEditor = newConnEditor(a)
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := centered(a.connEditor.form, 64, 20)
+	connEditorOverlay := ui.Centered(a.connEditor.form, 64, 20)
 
 	a.messageFilter = newMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
-	messageFilterOverlay := centered(a.messageFilter.form, 64, 16)
+	messageFilterOverlay := ui.Centered(a.messageFilter.form, 64, 16)
 
 	a.timeRangeModal = newTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
@@ -293,20 +293,20 @@ func New(cfg config.Config) *App {
 	// messageFilterOverlay's width, just a longer label this time).
 	// Height: 9 relative presets need 9 content rows; 14 leaves a couple
 	// spare, matching the "give it one spare row" convention elsewhere.
-	timeRangeOverlay := centered(a.timeRangeModal.flex, 72, 14)
+	timeRangeOverlay := ui.Centered(a.timeRangeModal.flex, 72, 14)
 
 	a.datadogEditor = newDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
-	datadogEditorOverlay := centered(a.datadogEditor.form, 56, 10)
+	datadogEditorOverlay := ui.Centered(a.datadogEditor.form, 56, 10)
 
 	a.themePicker = newThemePicker(a)
-	themePickerOverlay := centered(a.themePicker.flex, 40, 14)
+	themePickerOverlay := ui.Centered(a.themePicker.flex, 40, 14)
 
 	a.awsProfiles = newAWSProfilesPicker(a)
-	awsProfilesOverlay := centered(a.awsProfiles.flex, 64, 20)
+	awsProfilesOverlay := ui.Centered(a.awsProfiles.flex, 64, 20)
 
-	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
+	helpOverlay := ui.Centered(ui.NewHelpModal(cfg), ui.HelpModalWidth, ui.HelpModalHeight)
 	// "confirm" is added last so it always draws on top of any other overlay
 	// (e.g. conn-manager) that may still be visible underneath it — tview.Pages
 	// draws pages in AddPage order, later pages on top.
@@ -511,7 +511,7 @@ func (a *App) switchConnection(name string) {
 	a.cfg.ActiveConnection = name
 	a.backend = newBackendForConn(a, conn)
 	a.queuesV.backend = a.backend
-	a.infoPanel.SetText(infoPanelText(a.cfg))
+	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.refreshSettingsList()
 	a.switchTo("queues")
 	if err := config.SaveDefault(a.cfg); err != nil {

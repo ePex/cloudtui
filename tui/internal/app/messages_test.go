@@ -9,6 +9,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 func newTestMessagesView(t *testing.T) *messagesView {
@@ -76,14 +77,14 @@ func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
 
 // TestMessagesViewShortcutsFitTopBar guards against shortcut entries
 // silently clipping off the bottom of the context panel: the top bar's
-// height is fixed (topbar.go's shortcutPanelRows), not scrollable, so a
+// height is fixed (ui.ShortcutPanelRows), not scrollable, so a
 // Shortcuts() list longer than that is invisible rather than an error —
 // exactly what happened live when '/' and 'f' were added without bumping
-// shortcutPanelRows to match (found via manual verification, not tests).
+// ShortcutPanelRows to match (found via manual verification, not tests).
 func TestMessagesViewShortcutsFitTopBar(t *testing.T) {
 	mv := newTestMessagesView(t)
-	if got := len(mv.Shortcuts()); got > shortcutPanelRows {
-		t.Errorf("len(Shortcuts()) = %d, want <= %d (shortcutPanelRows) or entries clip off the context panel", got, shortcutPanelRows)
+	if got := len(mv.Shortcuts()); got > ui.ShortcutPanelRows {
+		t.Errorf("len(Shortcuts()) = %d, want <= %d (ui.ShortcutPanelRows) or entries clip off the context panel", got, ui.ShortcutPanelRows)
 	}
 }
 
