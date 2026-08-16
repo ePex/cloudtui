@@ -39,7 +39,7 @@ func (a *App) populateConnManagerList() {
 		if c.Name == a.cfg.ActiveConnection {
 			star = "⭐ "
 		}
-		label := fmt.Sprintf("%s%-8s %-24s (%s)", star, c.Alias, c.Name, c.Backend)
+		label := fmt.Sprintf("%s%-24s (%s)", star, c.Name, c.Backend)
 		a.connManagerList.AddItem(label, "", 0, func() {
 			a.closeConnManager()
 			a.switchConnection(c.Name)
@@ -62,13 +62,12 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 
 	// Prefill form fields (indices match AddInputField/AddDropDown order in New()).
 	a.connEditorForm.GetFormItem(0).(*tview.InputField).SetText(conn.Name)
-	a.connEditorForm.GetFormItem(1).(*tview.InputField).SetText(conn.Alias)
 	backendIdx := 0
 	if conn.Backend == "proxy" {
 		backendIdx = 1
 	}
-	a.connEditorForm.GetFormItem(2).(*tview.DropDown).SetCurrentOption(backendIdx)
-	a.connEditorForm.GetFormItem(3).(*tview.InputField).SetText(conn.Queue.BrokerName)
+	a.connEditorForm.GetFormItem(1).(*tview.DropDown).SetCurrentOption(backendIdx)
+	a.connEditorForm.GetFormItem(2).(*tview.InputField).SetText(conn.Queue.BrokerName)
 	// URL and credentials are backend-specific; show whichever is set.
 	urlVal := conn.Queue.URL
 	username := conn.Queue.Username
@@ -78,9 +77,9 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 		username = conn.Proxy.Username
 		password = conn.Proxy.Password
 	}
-	a.connEditorForm.GetFormItem(4).(*tview.InputField).SetText(urlVal)
-	a.connEditorForm.GetFormItem(5).(*tview.InputField).SetText(username)
-	a.connEditorForm.GetFormItem(6).(*tview.InputField).SetText(password)
+	a.connEditorForm.GetFormItem(3).(*tview.InputField).SetText(urlVal)
+	a.connEditorForm.GetFormItem(4).(*tview.InputField).SetText(username)
+	a.connEditorForm.GetFormItem(5).(*tview.InputField).SetText(password)
 
 	a.rootPages.ShowPage("conn-editor")
 	a.tv.SetFocus(a.connEditorForm)
@@ -101,17 +100,16 @@ func (a *App) closeConnEditor() {
 // saveConnEditor validates and persists the editor form, then closes it.
 func (a *App) saveConnEditor() {
 	name := strings.TrimSpace(a.connEditorForm.GetFormItem(0).(*tview.InputField).GetText())
-	alias := strings.TrimSpace(a.connEditorForm.GetFormItem(1).(*tview.InputField).GetText())
-	backendIdx, _ := a.connEditorForm.GetFormItem(2).(*tview.DropDown).GetCurrentOption()
+	backendIdx, _ := a.connEditorForm.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	backends := []string{"jolokia", "proxy"}
 	backend := backends[backendIdx]
-	brokerName := a.connEditorForm.GetFormItem(3).(*tview.InputField).GetText()
-	urlVal := a.connEditorForm.GetFormItem(4).(*tview.InputField).GetText()
-	username := a.connEditorForm.GetFormItem(5).(*tview.InputField).GetText()
-	password := a.connEditorForm.GetFormItem(6).(*tview.InputField).GetText()
+	brokerName := a.connEditorForm.GetFormItem(2).(*tview.InputField).GetText()
+	urlVal := a.connEditorForm.GetFormItem(3).(*tview.InputField).GetText()
+	username := a.connEditorForm.GetFormItem(4).(*tview.InputField).GetText()
+	password := a.connEditorForm.GetFormItem(5).(*tview.InputField).GetText()
 
-	if name == "" || alias == "" {
-		a.statusBar.SetText("[red]Name and alias are required[-]")
+	if name == "" {
+		a.statusBar.SetText("[red]Name is required[-]")
 		return
 	}
 	for _, c := range a.cfg.Connections {
@@ -121,7 +119,7 @@ func (a *App) saveConnEditor() {
 		}
 	}
 
-	conn := config.Connection{Name: name, Alias: alias, Backend: backend}
+	conn := config.Connection{Name: name, Backend: backend}
 	if backend == "proxy" {
 		conn.Proxy = config.ProxyConfig{URL: urlVal, Username: username, Password: password}
 	} else {
