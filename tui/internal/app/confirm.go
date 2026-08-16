@@ -3,6 +3,9 @@ package app
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // confirmDialog is the Yes/No confirmation overlay used before destructive
@@ -62,3 +65,17 @@ func (c *confirmDialog) close() {
 	c.app.tv.SetFocus(c.app.pages)
 	c.visible = false
 }
+
+// ApplyPalette recolors the confirm dialog for a live theme switch.
+func (c *confirmDialog) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	c.flex.SetBackgroundColor(bg)
+	c.flex.SetBorderColor(tcell.GetColor(p.Border))
+	c.flex.SetTitleColor(tcell.GetColor(p.Border))
+	c.text.SetBackgroundColor(bg)
+	c.text.SetTextColor(tcell.GetColor(p.Text))
+	styleList(c.list, p)
+	c.list.SetBackgroundColor(bg)
+}
+
+var _ ui.Themeable = (*confirmDialog)(nil)

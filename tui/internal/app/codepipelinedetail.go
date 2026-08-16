@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -29,6 +30,14 @@ type codePipelineDetailView struct {
 }
 
 var _ ui.Shortcuttable = (*codePipelineDetailView)(nil)
+var _ ui.Themeable = (*codePipelineDetailView)(nil)
+
+// ApplyPalette recolors the CodePipeline detail view for a live theme switch.
+func (dv *codePipelineDetailView) ApplyPalette(p config.Palette) {
+	dv.table.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
+	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
+}
 
 func (dv *codePipelineDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -35,6 +36,18 @@ type codePipelineListView struct {
 
 var _ ui.View = (*codePipelineListView)(nil)
 var _ ui.Shortcuttable = (*codePipelineListView)(nil)
+var _ ui.Themeable = (*codePipelineListView)(nil)
+
+// ApplyPalette recolors the CodePipeline list view for a live theme switch.
+func (lv *codePipelineListView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	lv.table.SetBackgroundColor(bg)
+	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
+	lv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
+	lv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	lv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	lv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
 
 func (lv *codePipelineListView) Name() string               { return "codepipeline" }
 func (lv *codePipelineListView) Title() string              { return "AWS CodePipeline" }

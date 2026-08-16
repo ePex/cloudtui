@@ -8,6 +8,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -21,6 +22,15 @@ type logDetailView struct {
 	textView *tview.TextView
 	app      *App
 	event    awslogs.LogEvent
+}
+
+var _ ui.Themeable = (*logDetailView)(nil)
+
+// ApplyPalette recolors the log event detail view for a live theme switch.
+func (dv *logDetailView) ApplyPalette(p config.Palette) {
+	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 }
 
 func (dv *logDetailView) Shortcuts() []ui.Shortcut {
