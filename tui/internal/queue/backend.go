@@ -21,8 +21,8 @@ type Message struct {
 	JMSType       string // jMSType header, or inferred type ("text"/"bytes"/"other")
 	CorrelationID string // jMSCorrelationID header
 	Timestamp     time.Time
-	Preview       string                 // first 80 chars of body text; "(binary)" for non-text messages
-	RawFields     map[string]interface{} // full Jolokia response map for the message
+	Preview       string         // first 80 chars of body text; "(binary)" for non-text messages
+	RawFields     map[string]any // full Jolokia response map for the message
 }
 
 // MessageFilter selects which messages a browse, bulk delete, or bulk
