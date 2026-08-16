@@ -260,17 +260,17 @@ func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
 		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
 	}
-	if !a.timeRangeVisible {
+	if !a.timeRangeModal.visible {
 		t.Fatal("'t' did not open the time range modal")
 	}
-	if got := a.timeRangeRelativeList.GetCurrentItem(); got != 2 {
+	if got := a.timeRangeModal.relativeList.GetCurrentItem(); got != 2 {
 		t.Errorf("relative list current item = %d, want 2 (dv.tr's preset)", got)
 	}
 
-	if a.timeRangeOnApply == nil {
+	if a.timeRangeModal.onApply == nil {
 		t.Fatal("'t' did not register an onApply callback")
 	}
-	a.timeRangeOnApply(timeRange{mode: timeRangeRelative, presetIdx: 4})
+	a.timeRangeModal.onApply(timeRange{mode: timeRangeRelative, presetIdx: 4})
 
 	if want := (timeRange{mode: timeRangeRelative, presetIdx: 4}); dv.tr != want {
 		t.Errorf("dv.tr = %+v, want %+v after applying from the modal", dv.tr, want)

@@ -24,21 +24,21 @@ func TestShowAWSProfilesPopulatesTableFromInjectedLister(t *testing.T) {
 		}, nil
 	}
 
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	if !a.awsProfilesVisible {
-		t.Fatal("awsProfilesVisible = false after showAWSProfiles()")
+	if !a.awsProfiles.visible {
+		t.Fatal("awsProfiles.visible = false after awsProfiles.show()")
 	}
-	if got := a.tv.GetFocus(); got != a.awsProfilesTable {
-		t.Errorf("focus after showAWSProfiles() = %v, want the profiles table", got)
+	if got := a.tv.GetFocus(); got != a.awsProfiles.table {
+		t.Errorf("focus after awsProfiles.show() = %v, want the profiles table", got)
 	}
-	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2 profiles
+	if got := a.awsProfiles.table.GetRowCount(); got != 3 { // header + 2 profiles
 		t.Fatalf("row count = %d, want 3 (header + 2 profiles)", got)
 	}
-	if got := a.awsProfilesTable.GetCell(1, 0).Text; got != "work" {
+	if got := a.awsProfiles.table.GetCell(1, 0).Text; got != "work" {
 		t.Errorf("row 1 name = %q, want %q", got, "work")
 	}
-	if got := a.awsProfilesTable.GetCell(1, 2).Text; got != string(awsprofile.AuthSSO) {
+	if got := a.awsProfiles.table.GetCell(1, 2).Text; got != string(awsprofile.AuthSSO) {
 		t.Errorf("row 1 auth = %q, want %q", got, awsprofile.AuthSSO)
 	}
 }
@@ -49,9 +49,9 @@ func TestShowAWSProfilesHandlesEmptyRegion(t *testing.T) {
 		return []awsprofile.Profile{{Name: "no-region", Region: "", AuthType: awsprofile.AuthUnknown}}, nil
 	}
 
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	if got := a.awsProfilesTable.GetCell(1, 1).Text; got != "-" {
+	if got := a.awsProfiles.table.GetCell(1, 1).Text; got != "-" {
 		t.Errorf("region cell for empty region = %q, want %q", got, "-")
 	}
 }
@@ -62,9 +62,9 @@ func TestShowAWSProfilesHandlesListerError(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	if got := a.awsProfilesTable.GetCell(1, 0).Text; !strings.Contains(got, "boom") {
+	if got := a.awsProfiles.table.GetCell(1, 0).Text; !strings.Contains(got, "boom") {
 		t.Errorf("error cell = %q, want it to contain the error message", got)
 	}
 }
@@ -77,10 +77,10 @@ func TestAWSProfilesRefreshReinvokesLister(t *testing.T) {
 		return nil, nil
 	}
 
-	a.showAWSProfiles() // first call
-	capture := a.awsProfilesTable.GetInputCapture()
+	a.awsProfiles.show() // first call
+	capture := a.awsProfiles.table.GetInputCapture()
 	if capture == nil {
-		t.Fatal("awsProfilesTable has no input capture set")
+		t.Fatal("awsProfiles.table has no input capture set")
 	}
 	capture(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModNone))
 
@@ -92,13 +92,13 @@ func TestAWSProfilesRefreshReinvokesLister(t *testing.T) {
 func TestAWSProfilesEscCloses(t *testing.T) {
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	capture := a.awsProfilesTable.GetInputCapture()
+	capture := a.awsProfiles.table.GetInputCapture()
 	if got := capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Errorf("Esc capture returned %v, want nil (event consumed)", got)
 	}
-	if a.awsProfilesVisible {
+	if a.awsProfiles.visible {
 		t.Error("Esc did not close the AWS Profiles overlay")
 	}
 }
@@ -106,12 +106,12 @@ func TestAWSProfilesEscCloses(t *testing.T) {
 func TestAWSProfilesSlashFocusesFilterInput(t *testing.T) {
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	capture := a.awsProfilesTable.GetInputCapture()
+	capture := a.awsProfiles.table.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
 
-	if got := a.tv.GetFocus(); got != a.awsProfilesFilterInput {
+	if got := a.tv.GetFocus(); got != a.awsProfiles.filterInput {
 		t.Errorf("focus after '/' = %v, want the filter input", got)
 	}
 }
@@ -125,18 +125,18 @@ func TestApplyAWSProfilesFilterNarrowsRowsByName(t *testing.T) {
 			{Name: "personal", Region: "us-east-1", AuthType: awsprofile.AuthStaticKeys},
 		}, nil
 	}
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	a.applyAWSProfilesFilter("work")
+	a.awsProfiles.applyFilter("work")
 
-	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2 matches
+	if got := a.awsProfiles.table.GetRowCount(); got != 3 { // header + 2 matches
 		t.Fatalf("row count after filter = %d, want 3 (header + 2 matches)", got)
 	}
-	if got := a.awsProfilesTable.GetTitle(); got != " AWS Profiles (work) " {
+	if got := a.awsProfiles.table.GetTitle(); got != " AWS Profiles (work) " {
 		t.Errorf("title after filter = %q, want %q", got, " AWS Profiles (work) ")
 	}
 
-	rendered := renderedScreenText(t, a.awsProfilesTable, 60, 10)
+	rendered := renderedScreenText(t, a.awsProfiles.table, 60, 10)
 	if !strings.Contains(rendered, "work") {
 		t.Errorf("rendered screen = %q, want it to contain the filter text %q", rendered, "work")
 	}
@@ -150,12 +150,12 @@ func TestApplyAWSProfilesFilterClearRestoresAll(t *testing.T) {
 			{Name: "two", AuthType: awsprofile.AuthUnknown},
 		}, nil
 	}
-	a.showAWSProfiles()
-	a.applyAWSProfilesFilter("one")
+	a.awsProfiles.show()
+	a.awsProfiles.applyFilter("one")
 
-	a.applyAWSProfilesFilter("")
+	a.awsProfiles.applyFilter("")
 
-	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + 2
+	if got := a.awsProfiles.table.GetRowCount(); got != 3 { // header + 2
 		t.Errorf("row count after clearing filter = %d, want 3", got)
 	}
 }
@@ -165,16 +165,16 @@ func TestShowAWSProfilesResetsFilterFromPreviousVisit(t *testing.T) {
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
 		return []awsprofile.Profile{{Name: "one"}, {Name: "two"}}, nil
 	}
-	a.showAWSProfiles()
-	a.applyAWSProfilesFilter("one")
-	a.closeAWSProfiles()
+	a.awsProfiles.show()
+	a.awsProfiles.applyFilter("one")
+	a.awsProfiles.close()
 
-	a.showAWSProfiles() // reopen
+	a.awsProfiles.show() // reopen
 
-	if got := a.awsProfilesTable.GetRowCount(); got != 3 { // header + both, filter reset
+	if got := a.awsProfiles.table.GetRowCount(); got != 3 { // header + both, filter reset
 		t.Errorf("row count on reopen = %d, want 3 (filter should reset)", got)
 	}
-	if got := a.awsProfilesFilterInput.GetText(); got != "" {
+	if got := a.awsProfiles.filterInput.GetText(); got != "" {
 		t.Errorf("filter input text on reopen = %q, want empty", got)
 	}
 }
@@ -183,9 +183,9 @@ func TestActivateAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	t.Chdir(t.TempDir())
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	a.activateAWSProfile("work")
+	a.awsProfiles.activate("work")
 
 	if got := a.cfg.ActiveAWSProfile; got != "work" {
 		t.Errorf("cfg.ActiveAWSProfile = %q, want %q", got, "work")
@@ -196,11 +196,11 @@ func TestActivateAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	if main2, _ := a.settingsList.GetItemText(2); !strings.Contains(main2, "work") {
 		t.Errorf("settings list item 2 = %q, want it to contain %q", main2, "work")
 	}
-	if a.awsProfilesVisible {
+	if a.awsProfiles.visible {
 		t.Error("overlay should close after activating a profile")
 	}
 	if _, err := os.Stat("config.yaml"); err != nil {
-		t.Errorf("config.yaml not written after activateAWSProfile: %v", err)
+		t.Errorf("config.yaml not written after awsProfiles.activate: %v", err)
 	}
 }
 
@@ -211,12 +211,12 @@ func TestAWSProfilesActiveProfileMarkedWithStar(t *testing.T) {
 		return []awsprofile.Profile{{Name: "work"}, {Name: "other"}}, nil
 	}
 
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
-	if got := a.awsProfilesTable.GetCell(1, 0).Text; !strings.Contains(got, "⭐") {
+	if got := a.awsProfiles.table.GetCell(1, 0).Text; !strings.Contains(got, "⭐") {
 		t.Errorf("active profile row = %q, want it marked with ⭐", got)
 	}
-	if got := a.awsProfilesTable.GetCell(2, 0).Text; strings.Contains(got, "⭐") {
+	if got := a.awsProfiles.table.GetCell(2, 0).Text; strings.Contains(got, "⭐") {
 		t.Errorf("inactive profile row = %q, want no ⭐", got)
 	}
 }
@@ -230,12 +230,12 @@ func TestAWSProfilesEnterActivatesRowRespectingFilter(t *testing.T) {
 			{Name: "personal"},
 		}, nil
 	}
-	a.showAWSProfiles()
-	a.applyAWSProfilesFilter("personal") // only "personal" remains, at row 1
+	a.awsProfiles.show()
+	a.awsProfiles.applyFilter("personal") // only "personal" remains, at row 1
 
-	a.awsProfilesTable.Select(1, 0)
+	a.awsProfiles.table.Select(1, 0)
 	// Invoke the table's registered SetSelectedFunc handler directly.
-	handler := a.awsProfilesTable.InputHandler()
+	handler := a.awsProfiles.table.InputHandler()
 	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := a.cfg.ActiveAWSProfile; got != "personal" {
@@ -258,7 +258,7 @@ func TestRepaintAWSProfilesScrollsToTopWithManyRows(t *testing.T) {
 		return profiles, nil
 	}
 
-	table := a.awsProfilesTable
+	table := a.awsProfiles.table
 	table.SetRect(0, 0, 60, 15) // fewer visible rows than profiles above
 
 	screen := tcell.NewSimulationScreen("")
@@ -268,10 +268,10 @@ func TestRepaintAWSProfilesScrollsToTopWithManyRows(t *testing.T) {
 	screen.SetSize(60, 15)
 
 	// First draw while the table is still empty, mirroring the real
-	// sequence: showAWSProfiles draws the overlay before populating it.
+	// sequence: awsProfiles.show draws the overlay before populating it.
 	table.Draw(screen)
 
-	a.showAWSProfiles()
+	a.awsProfiles.show()
 
 	// The redraw that follows population.
 	table.Draw(screen)

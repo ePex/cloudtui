@@ -162,7 +162,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 			dv.search()
 			return nil
 		case 't':
-			a.showTimeRangeModal(dv.tr, func(tr timeRange) {
+			a.timeRangeModal.show(dv.tr, func(tr timeRange) {
 				dv.tr = tr
 				dv.search()
 			})
