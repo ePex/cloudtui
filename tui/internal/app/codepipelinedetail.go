@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -237,4 +238,30 @@ func statusColor(status string) tcell.Color {
 	default: // Cancelled, Skipped, "" (never run)
 		return tcell.ColorGray
 	}
+}
+
+// openCodePipelineDetail opens pipelineName's stage-status detail view
+// and starts loading its current state.
+func (a *App) openCodePipelineDetail(pipelineName string) {
+	a.codePipelineDetailV.open(pipelineName)
+	a.pages.SwitchToPage("codepipeline-detail")
+	a.tv.SetFocus(a.pages)
+	lines := make([]string, 0, len(a.codePipelineDetailV.Shortcuts()))
+	for _, sc := range a.codePipelineDetailV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
+}
+
+// wireCodePipelineListOpensDetail wires Enter in the CodePipeline table
+// to open the stage-status detail view for the selected pipeline. Called
+// from New() once codePipelineDetailV exists.
+func (a *App) wireCodePipelineListOpensDetail() {
+	a.codePipelineListV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
+			return
+		}
+		a.openCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
+	})
 }

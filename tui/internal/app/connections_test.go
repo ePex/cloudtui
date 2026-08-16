@@ -13,19 +13,19 @@ import (
 // Cancel button.
 func TestConnEditorEscapeCloses(t *testing.T) {
 	a := New(config.Default())
-	a.showConnEditor(config.Connection{}, true, "")
-	if !a.connEditorVisible {
-		t.Fatal("showConnEditor() did not open the editor")
+	a.connEditor.show(config.Connection{}, true, "")
+	if !a.connEditor.visible {
+		t.Fatal("connEditor.show() did not open the editor")
 	}
 
-	capture := a.connEditorForm.GetInputCapture()
+	capture := a.connEditor.form.GetInputCapture()
 	if capture == nil {
-		t.Fatal("connEditorForm has no input capture set")
+		t.Fatal("connEditor.form has no input capture set")
 	}
 	if got := capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Errorf("Esc capture returned %v, want nil (event consumed)", got)
 	}
-	if a.connEditorVisible {
+	if a.connEditor.visible {
 		t.Error("Esc did not close the connection editor")
 	}
 }
@@ -34,14 +34,14 @@ func TestConnEditorEscapeCloses(t *testing.T) {
 // swallow other keys needed for normal form interaction (e.g. typing).
 func TestConnEditorOtherKeysPassThrough(t *testing.T) {
 	a := New(config.Default())
-	a.showConnEditor(config.Connection{}, true, "")
+	a.connEditor.show(config.Connection{}, true, "")
 
-	capture := a.connEditorForm.GetInputCapture()
+	capture := a.connEditor.form.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 	if got := capture(event); got != event {
 		t.Errorf("capture() altered/swallowed a non-Esc key: got %v, want it passed through unchanged", got)
 	}
-	if !a.connEditorVisible {
+	if !a.connEditor.visible {
 		t.Error("a non-Esc key should not close the editor")
 	}
 }

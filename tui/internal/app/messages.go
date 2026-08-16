@@ -128,7 +128,7 @@ func newMessagesView(a *App) *messagesView {
 			mv.app.tv.SetFocus(mv.searchInput)
 			return nil
 		case event.Rune() == 'f':
-			a.showMessageFilter()
+			a.messageFilter.show()
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
@@ -593,4 +593,42 @@ func (mv *messagesView) showError(err error) {
 			SetTextColor(tcell.ColorRed).
 			SetExpansion(3),
 	)
+}
+
+// openMessages switches to the messages page for the given queue, sets the
+// title, and starts loading messages asynchronously. Quick search and the
+// server-side filter persist when returning to the same queue, but reset
+// when switching to a different one — carrying a leftover filter across
+// queues would silently narrow what the user sees without them asking.
+func (a *App) openMessages(queueName string) {
+	if a.messagesV.queueName != queueName {
+		a.messagesV.filter = queue.MessageFilter{}
+		a.messagesV.quickSearch = ""
+		a.messagesV.searchInput.SetText("")
+	}
+	a.messagesV.queueName = queueName
+	a.messagesV.updateTitle()
+	a.messagesV.setHeader()
+	a.pages.SwitchToPage("messages")
+	a.tv.SetFocus(a.pages)
+	// Show messagesV shortcuts in the context panel.
+	lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+	for _, sc := range a.messagesV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
+	a.messagesV.load()
+}
+
+// wireQueuesOpensMessages wires Enter in the queues table to open the
+// messages view for the selected queue. Called from New() once
+// messagesV exists.
+func (a *App) wireQueuesOpensMessages() {
+	a.queuesV.table.SetSelectedFunc(func(row, _ int) {
+		cell := a.queuesV.table.GetCell(row, 0)
+		if cell == nil || cell.Text == "" {
+			return
+		}
+		a.openMessages(cell.Text)
+	})
 }

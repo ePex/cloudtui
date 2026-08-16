@@ -45,10 +45,10 @@ func newSettingsView(a *App) ui.View {
 
 	// Items are populated by refreshSettingsList; add placeholders here so
 	// indices are stable.
-	l.AddItem("", "", 0, func() { a.showThemePicker() })
-	l.AddItem("", "", 0, func() { a.showConnectionManager() })
-	l.AddItem("", "", 0, func() { a.showAWSProfiles() })
-	l.AddItem("", "", 0, func() { a.showDatadogEditor() })
+	l.AddItem("", "", 0, func() { a.themePicker.show() })
+	l.AddItem("", "", 0, func() { a.connManager.show() })
+	l.AddItem("", "", 0, func() { a.awsProfiles.show() })
+	l.AddItem("", "", 0, func() { a.datadogEditor.show() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -83,10 +83,10 @@ func (a *App) refreshSettingsList() {
 		awsProfile = "(none)"
 	}
 	a.settingsList.Clear()
-	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
-	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.showConnectionManager() })
-	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
-	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.showDatadogEditor() })
+	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.themePicker.show() })
+	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.connManager.show() })
+	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.awsProfiles.show() })
+	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.datadogEditor.show() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}
@@ -106,37 +106,69 @@ func datadogSettingsLabel(cfg config.DatadogConfig) string {
 	return cfg.Site
 }
 
-// showThemePicker opens the theme-picker overlay, pre-selecting the current theme.
-func (a *App) showThemePicker() {
+// themePicker is the theme-picker overlay: a list of every embedded theme,
+// with the active one marked ⭐.
+type themePicker struct {
+	app     *App
+	flex    *tview.Flex
+	list    *tview.List
+	visible bool
+}
+
+// newThemePicker builds the theme-picker overlay's widgets.
+func newThemePicker(a *App) *themePicker {
+	tp := &themePicker{app: a}
+	tp.list = tview.NewList().ShowSecondaryText(false)
+	tp.flex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(tp.list, 0, 1, true)
+	tp.flex.SetBorder(true).SetTitle(" Theme ")
+	tp.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			tp.close()
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+	return tp
+}
+
+// show opens the theme-picker overlay, pre-selecting the current theme.
+func (tp *themePicker) show() {
+	a := tp.app
 	themes := config.AvailableThemes()
-	a.themePickerList.Clear()
+	tp.list.Clear()
 	for i, name := range themes {
 		n := name
 		prefix := "   "
 		if n == a.cfg.Theme {
 			prefix = "⭐ "
-			a.themePickerList.SetCurrentItem(i)
+			tp.list.SetCurrentItem(i)
 		}
-		a.themePickerList.AddItem(prefix+n, "", 0, func() {
-			a.closeThemePicker()
+		tp.list.AddItem(prefix+n, "", 0, func() {
+			tp.close()
 			a.switchTheme(n)
 		})
 	}
 	// SetCurrentItem must be called after all items are added.
 	for i, name := range themes {
 		if name == a.cfg.Theme {
-			a.themePickerList.SetCurrentItem(i)
+			tp.list.SetCurrentItem(i)
 			break
 		}
 	}
 	a.rootPages.ShowPage("theme-picker")
-	a.tv.SetFocus(a.themePickerList)
-	a.themePickerVisible = true
+	a.tv.SetFocus(tp.list)
+	tp.visible = true
 }
 
-// closeThemePicker hides the theme-picker overlay and restores focus.
-func (a *App) closeThemePicker() {
-	a.rootPages.HidePage("theme-picker")
-	a.themePickerVisible = false
-	a.tv.SetFocus(a.pages)
+// close hides the theme-picker overlay and restores focus.
+func (tp *themePicker) close() {
+	tp.app.rootPages.HidePage("theme-picker")
+	tp.visible = false
+	tp.app.tv.SetFocus(tp.app.pages)
 }
