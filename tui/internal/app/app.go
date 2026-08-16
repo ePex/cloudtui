@@ -65,8 +65,7 @@ type App struct {
 	// doesn't exist while Backend is proxy (rebuildConnEditorTail has
 	// nothing to read it back from otherwise) — see spec/57-bugfix-broker-name-proxy-hidden.
 	connEditorBrokerName  string
-	messageFilterForm     *tview.Form
-	messageFilterVisible  bool
+	messageFilter         *messageFilter
 	timeRangeFlex         *tview.Flex
 	timeRangeTabs         *tview.TextView
 	timeRangePages        *tview.Pages
@@ -75,8 +74,7 @@ type App struct {
 	timeRangeVisible      bool
 	timeRangeActiveTab    timeRangeMode
 	timeRangeOnApply      func(timeRange)
-	datadogEditorForm     *tview.Form
-	datadogEditorVisible  bool
+	datadogEditor         *datadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
 	// dropped by switchTo if abandoned — see spec/41.
@@ -456,29 +454,10 @@ func New(cfg config.Config) *App {
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := centered(a.connEditorForm, 64, 20)
 
-	// Message filter overlay (FE 46) — the server-side counterpart to
-	// messagesView's quick search: JMS type + date range + max count,
-	// applied by the backend rather than client-side.
-	a.messageFilterForm = tview.NewForm()
-	a.messageFilterForm.SetBorder(true).SetTitle(" Message Filter ")
-	a.messageFilterForm.
-		AddInputField("JMS Type", "", 30, nil, nil).
-		AddInputField("From (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
-		AddInputField("To (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
-		AddInputField("Max Count", "", 10, nil, nil).
-		AddButton("Apply", func() { a.applyMessageFilter() }).
-		AddButton("Clear", func() { a.clearMessageFilter() }).
-		AddButton("Cancel", func() { a.closeMessageFilter() })
-	a.messageFilterForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.closeMessageFilter()
-			return nil
-		}
-		return event
-	})
+	a.messageFilter = newMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
-	messageFilterOverlay := centered(a.messageFilterForm, 64, 16)
+	messageFilterOverlay := centered(a.messageFilter.form, 64, 16)
 
 	// Time range overlay (spec/53) — shared by logSearchView and
 	// datadogLogsView: a Relative preset list / Absolute date-range form,
@@ -546,28 +525,10 @@ func New(cfg config.Config) *App {
 	// spare, matching the "give it one spare row" convention elsewhere.
 	timeRangeOverlay := centered(a.timeRangeFlex, 72, 14)
 
-	// Datadog editor overlay (spec/39-fe-datadog-logs) — same shape as
-	// the connection editor, just two fields: Site (plain, not a
-	// secret) and Access Token (a Personal Access Token, masked — see
-	// config.DatadogConfig's doc comment for why this isn't the classic
-	// API Key + Application Key pair).
-	a.datadogEditorForm = tview.NewForm()
-	a.datadogEditorForm.SetBorder(true).SetTitle(" Datadog ")
-	a.datadogEditorForm.
-		AddInputField("Site", "", 30, nil, nil).
-		AddPasswordField("Access Token", "", 40, '*', nil).
-		AddButton("Save", func() { a.saveDatadogEditor() }).
-		AddButton("Cancel", func() { a.closeDatadogEditor() })
-	a.datadogEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.closeDatadogEditor()
-			return nil
-		}
-		return event
-	})
+	a.datadogEditor = newDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
-	datadogEditorOverlay := centered(a.datadogEditorForm, 56, 10)
+	datadogEditorOverlay := centered(a.datadogEditor.form, 56, 10)
 
 	// Theme picker overlay
 	a.themePickerList = tview.NewList().ShowSecondaryText(false)
@@ -719,7 +680,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirm.visible || a.movePicker.visible || a.sendMessage.visible || a.connManagerVisible || a.connEditorVisible || a.messageFilterVisible || a.timeRangeVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
+	if a.confirm.visible || a.movePicker.visible || a.sendMessage.visible || a.connManagerVisible || a.connEditorVisible || a.messageFilter.visible || a.timeRangeVisible || a.datadogEditor.visible || a.themePickerVisible || a.awsProfilesVisible {
 		return event
 	}
 
@@ -765,7 +726,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilterVisible && !a.timeRangeVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
+		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilter.visible && !a.timeRangeVisible && !a.datadogEditor.visible && !a.themePickerVisible &&
 			!a.confirm.visible && !a.movePicker.visible && !a.sendMessage.visible && !a.awsProfilesVisible {
 			a.tv.SetFocus(a.pages)
 		}

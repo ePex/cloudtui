@@ -48,7 +48,7 @@ func newSettingsView(a *App) ui.View {
 	l.AddItem("", "", 0, func() { a.showThemePicker() })
 	l.AddItem("", "", 0, func() { a.showConnectionManager() })
 	l.AddItem("", "", 0, func() { a.showAWSProfiles() })
-	l.AddItem("", "", 0, func() { a.showDatadogEditor() })
+	l.AddItem("", "", 0, func() { a.datadogEditor.show() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -86,7 +86,7 @@ func (a *App) refreshSettingsList() {
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
 	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.showConnectionManager() })
 	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
-	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.showDatadogEditor() })
+	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.datadogEditor.show() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}
