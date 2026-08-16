@@ -64,19 +64,19 @@ type proxyQueue struct {
 }
 
 // proxyMessage is the JSON shape of one entry in list-messages' data array.
-// Headers is map[string]interface{}, not map[string]string: mq-proxy always
+// Headers is map[string]any, not map[string]string: mq-proxy always
 // stringifies header values, but a JMS-management API implementing this same
 // contract may return a message's real property types (numbers, booleans,
 // etc.) instead — the UI already renders arbitrary property value types
 // (see message_detail.go's decodePropertyValue), so there's no reason to
 // force a decode failure by assuming every value is a string.
 type proxyMessage struct {
-	SourceQueue string                 `json:"sourceQueue"`
-	MessageID   string                 `json:"messageId"`
-	JMSType     string                 `json:"jmsType"`
-	Body        *string                `json:"body"`
-	Timestamp   string                 `json:"timestamp"`
-	Headers     map[string]interface{} `json:"headers"`
+	SourceQueue string         `json:"sourceQueue"`
+	MessageID   string         `json:"messageId"`
+	JMSType     string         `json:"jmsType"`
+	Body        *string        `json:"body"`
+	Timestamp   string         `json:"timestamp"`
+	Headers     map[string]any `json:"headers"`
 }
 
 // queueMessageFilter mirrors mq-proxy's QueueMessageFilter DTO. Every
@@ -330,7 +330,7 @@ func toQueueMessage(m proxyMessage) queue.Message {
 		JMSType:   jmsType,
 		Timestamp: ts,
 		Preview:   preview,
-		RawFields: map[string]interface{}{
+		RawFields: map[string]any{
 			"text":       bodyText,
 			"properties": m.Headers,
 		},
@@ -338,12 +338,12 @@ func toQueueMessage(m proxyMessage) queue.Message {
 }
 
 // getJSON performs a GET and JSON-decodes the response into out.
-func (c *Client) getJSON(ctx context.Context, path string, out interface{}) error {
+func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	return c.doRequest(ctx, http.MethodGet, path, nil, out)
 }
 
 // postJSON JSON-encodes body, POSTs it, and JSON-decodes the response into out.
-func (c *Client) postJSON(ctx context.Context, path string, body interface{}, out interface{}) error {
+func (c *Client) postJSON(ctx context.Context, path string, body any, out any) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encoding request: %w", err)
@@ -354,7 +354,7 @@ func (c *Client) postJSON(ctx context.Context, path string, body interface{}, ou
 // doRequest executes an HTTP request against the proxy.
 // body may be nil for requests without a payload.
 // out may be nil to discard the response body.
-func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, out interface{}) error {
+func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, out any) error {
 	newReq := func() (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 		if err != nil {
