@@ -72,18 +72,47 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 	urlVal := conn.Queue.URL
 	username := conn.Queue.Username
 	password := conn.Queue.Password
+	passwordSecret := conn.Queue.PasswordSecret
 	if conn.Backend == "proxy" {
 		urlVal = conn.Proxy.URL
 		username = conn.Proxy.Username
 		password = conn.Proxy.Password
+		passwordSecret = conn.Proxy.PasswordSecret
 	}
 	a.connEditorForm.GetFormItem(3).(*tview.InputField).SetText(urlVal)
 	a.connEditorForm.GetFormItem(4).(*tview.InputField).SetText(username)
-	a.connEditorForm.GetFormItem(5).(*tview.InputField).SetText(password)
+
+	sourceIdx := 0
+	if passwordSecret != "" {
+		sourceIdx = 1
+	}
+	// SetCurrentOption fires the Password Source dropdown's selected
+	// callback (setConnEditorPasswordField), swapping item 6 to match
+	// before its text is set below.
+	a.connEditorForm.GetFormItem(5).(*tview.DropDown).SetCurrentOption(sourceIdx)
+	if sourceIdx == 1 {
+		a.connEditorForm.GetFormItem(6).(*tview.InputField).SetText(passwordSecret)
+	} else {
+		a.connEditorForm.GetFormItem(6).(*tview.InputField).SetText(password)
+	}
 
 	a.rootPages.ShowPage("conn-editor")
 	a.tv.SetFocus(a.connEditorForm)
 	a.connEditorVisible = true
+}
+
+// setConnEditorPasswordField swaps form item 6 — the last item before the
+// Save/Cancel buttons — between a plain Password field (sourceIdx 0) and a
+// Password Secret (AWS) field (sourceIdx 1), driven by the Password Source
+// dropdown at item 5. AddButton items aren't counted by GetFormItem, so
+// item 6 is always the last form item regardless of which field is showing.
+func (a *App) setConnEditorPasswordField(sourceIdx int) {
+	a.connEditorForm.RemoveFormItem(6)
+	if sourceIdx == 1 {
+		a.connEditorForm.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
+	} else {
+		a.connEditorForm.AddPasswordField("Password", "", 20, '*', nil)
+	}
 }
 
 // closeConnEditor hides the editor and returns focus to the manager or pages.
@@ -106,7 +135,13 @@ func (a *App) saveConnEditor() {
 	brokerName := a.connEditorForm.GetFormItem(2).(*tview.InputField).GetText()
 	urlVal := a.connEditorForm.GetFormItem(3).(*tview.InputField).GetText()
 	username := a.connEditorForm.GetFormItem(4).(*tview.InputField).GetText()
-	password := a.connEditorForm.GetFormItem(5).(*tview.InputField).GetText()
+	sourceIdx, _ := a.connEditorForm.GetFormItem(5).(*tview.DropDown).GetCurrentOption()
+	var password, passwordSecret string
+	if sourceIdx == 1 {
+		passwordSecret = strings.TrimSpace(a.connEditorForm.GetFormItem(6).(*tview.InputField).GetText())
+	} else {
+		password = a.connEditorForm.GetFormItem(6).(*tview.InputField).GetText()
+	}
 
 	if name == "" {
 		a.statusBar.SetText("[red]Name is required[-]")
@@ -121,9 +156,9 @@ func (a *App) saveConnEditor() {
 
 	conn := config.Connection{Name: name, Backend: backend}
 	if backend == "proxy" {
-		conn.Proxy = config.ProxyConfig{URL: urlVal, Username: username, Password: password}
+		conn.Proxy = config.ProxyConfig{URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
 	} else {
-		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password}
+		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
 	}
 
 	wasActive := a.cfg.ActiveConnection == a.connEditorOrigName
@@ -139,7 +174,7 @@ func (a *App) saveConnEditor() {
 		}
 		if wasActive {
 			a.cfg.ActiveConnection = name
-			a.backend = newBackendForConn(conn)
+			a.backend = newBackendForConn(a, conn)
 			a.queuesV.backend = a.backend
 			a.infoPanel.SetText(infoPanelText(a.cfg))
 		}
