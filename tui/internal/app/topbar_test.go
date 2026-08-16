@@ -24,7 +24,7 @@ func TestInfoPanelContainsConnectionAlias(t *testing.T) {
 	cfg := config.Default() // alias = "def"
 	text := newInfoPanel(cfg).GetText(true)
 
-	for _, want := range []string{"Connection:", "def"} {
+	for _, want := range []string{"AMQ Connection:", "def"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("info panel text = %q, want it to contain %q", text, want)
 		}
