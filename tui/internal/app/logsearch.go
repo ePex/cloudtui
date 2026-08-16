@@ -152,7 +152,7 @@ func newLogSearchView(a *App) *logSearchView {
 			sv.search()
 			return nil
 		case 't':
-			a.showTimeRangeModal(sv.tr, func(tr timeRange) {
+			a.timeRangeModal.show(sv.tr, func(tr timeRange) {
 				sv.tr = tr
 				sv.search()
 			})

@@ -95,55 +95,61 @@ func reapplyTheme(a *App, p config.Palette) {
 	}
 
 	// Theme picker overlay
-	if a.themePickerFlex != nil {
-		a.themePickerFlex.SetBackgroundColor(bg)
-		a.themePickerFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.themePickerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.themePicker.flex != nil {
+		a.themePicker.flex.SetBackgroundColor(bg)
+		a.themePicker.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.themePicker.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.themePickerList != nil {
-		styleList(a.themePickerList, p)
-		a.themePickerList.SetBackgroundColor(bg)
+	if a.themePicker.list != nil {
+		styleList(a.themePicker.list, p)
+		a.themePicker.list.SetBackgroundColor(bg)
 	}
 
 	// Connection manager overlay
-	if a.connManagerFlex != nil {
-		a.connManagerFlex.SetBackgroundColor(bg)
-		a.connManagerFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.connManagerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.connManager.flex != nil {
+		a.connManager.flex.SetBackgroundColor(bg)
+		a.connManager.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.connManager.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.connManagerList != nil {
-		styleList(a.connManagerList, p)
-		a.connManagerList.SetBackgroundColor(bg)
+	if a.connManager.list != nil {
+		styleList(a.connManager.list, p)
+		a.connManager.list.SetBackgroundColor(bg)
 	}
-	if a.connManagerHints != nil {
-		a.connManagerHints.SetBackgroundColor(bg)
-		a.connManagerHints.SetTextColor(tcell.GetColor(p.Text))
+	if a.connManager.hints != nil {
+		a.connManager.hints.SetBackgroundColor(bg)
+		a.connManager.hints.SetTextColor(tcell.GetColor(p.Text))
 	}
 
 	// Connection editor overlay
-	if a.connEditorForm != nil {
-		a.connEditorForm.SetBackgroundColor(bg)
-		a.connEditorForm.SetBorderColor(tcell.GetColor(p.Border))
-		a.connEditorForm.SetTitleColor(tcell.GetColor(p.Border))
-		if dd, ok := a.connEditorForm.GetFormItem(2).(*tview.DropDown); ok {
+	if a.connEditor.form != nil {
+		a.connEditor.form.SetBackgroundColor(bg)
+		a.connEditor.form.SetBorderColor(tcell.GetColor(p.Border))
+		a.connEditor.form.SetTitleColor(tcell.GetColor(p.Border))
+		// GetFormItem(2) is Broker Name (an InputField), never a DropDown —
+		// this type assertion has been a silent no-op since Password
+		// Source was added at index 5 (it originally targeted the
+		// Backend dropdown before Broker Name/Password Source shifted
+		// indices around it). Preserved as-is: fixing it is a behavior
+		// change, out of scope for this structural move.
+		if dd, ok := a.connEditor.form.GetFormItem(2).(*tview.DropDown); ok {
 			styleDropDown(dd, p)
 		}
 	}
 
 	// AWS Profiles overlay
-	if a.awsProfilesFlex != nil {
-		a.awsProfilesFlex.SetBackgroundColor(bg)
-		a.awsProfilesFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.awsProfilesFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.awsProfiles.flex != nil {
+		a.awsProfiles.flex.SetBackgroundColor(bg)
+		a.awsProfiles.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.awsProfiles.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.awsProfilesTable != nil {
-		a.awsProfilesTable.SetBackgroundColor(bg)
-		a.awsProfilesTable.SetBorderColor(tcell.GetColor(p.Border))
-		a.awsProfilesTable.SetTitleColor(tcell.GetColor(p.Border))
+	if a.awsProfiles.table != nil {
+		a.awsProfiles.table.SetBackgroundColor(bg)
+		a.awsProfiles.table.SetBorderColor(tcell.GetColor(p.Border))
+		a.awsProfiles.table.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.awsProfilesHints != nil {
-		a.awsProfilesHints.SetBackgroundColor(bg)
-		a.awsProfilesHints.SetTextColor(tcell.GetColor(p.Text))
+	if a.awsProfiles.hints != nil {
+		a.awsProfiles.hints.SetBackgroundColor(bg)
+		a.awsProfiles.hints.SetTextColor(tcell.GetColor(p.Text))
 	}
 
 	// Log text view

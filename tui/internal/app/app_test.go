@@ -312,10 +312,10 @@ func TestOnPromptDoneAqOpensConnectionManager(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManagerVisible {
-		t.Error("connManagerVisible = false after ':aq', want true")
+	if !a.connManager.visible {
+		t.Error("connManager.visible = false after ':aq', want true")
 	}
-	if got := a.tv.GetFocus(); got != a.connManagerList {
+	if got := a.tv.GetFocus(); got != a.connManager.list {
 		t.Errorf("focus after ':aq' = %v, want the connection manager list", got)
 	}
 }
@@ -326,8 +326,8 @@ func TestOnPromptDoneConnectionsOpensConnectionManager(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManagerVisible {
-		t.Error("connManagerVisible = false after ':connections', want true")
+	if !a.connManager.visible {
+		t.Error("connManager.visible = false after ':connections', want true")
 	}
 }
 
@@ -338,7 +338,7 @@ func TestOnPromptDoneAqWorksFromAnyView(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManagerVisible {
+	if !a.connManager.visible {
 		t.Error("':aq' from the log view did not open the connection manager")
 	}
 }
@@ -350,10 +350,10 @@ func TestOnPromptDoneApOpensAWSProfiles(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfilesVisible {
-		t.Error("awsProfilesVisible = false after ':ap', want true")
+	if !a.awsProfiles.visible {
+		t.Error("awsProfiles.visible = false after ':ap', want true")
 	}
-	if got := a.tv.GetFocus(); got != a.awsProfilesTable {
+	if got := a.tv.GetFocus(); got != a.awsProfiles.table {
 		t.Errorf("focus after ':ap' = %v, want the AWS profiles table", got)
 	}
 }
@@ -365,8 +365,8 @@ func TestOnPromptDoneAwsprofilesOpensAWSProfiles(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfilesVisible {
-		t.Error("awsProfilesVisible = false after ':awsprofiles', want true")
+	if !a.awsProfiles.visible {
+		t.Error("awsProfiles.visible = false after ':awsprofiles', want true")
 	}
 }
 
@@ -378,7 +378,7 @@ func TestOnPromptDoneApWorksFromAnyView(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfilesVisible {
+	if !a.awsProfiles.visible {
 		t.Error("':ap' from the log view did not open the AWS profiles overlay")
 	}
 }

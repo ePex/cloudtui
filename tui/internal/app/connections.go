@@ -5,78 +5,248 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-// showConnectionManager opens the connection manager overlay.
-func (a *App) showConnectionManager() {
-	a.populateConnManagerList()
-	ac := a.cfg.Colors.Accent
-	a.connManagerHints.SetText(fmt.Sprintf(
+// connManager is the AMQ connection manager overlay: lists all configured
+// connections and lets the user activate/add/edit/duplicate/delete them.
+type connManager struct {
+	app     *App
+	flex    *tview.Flex
+	list    *tview.List
+	hints   *tview.TextView
+	visible bool
+}
+
+// newConnManager builds the connection manager overlay's widgets.
+func newConnManager(a *App) *connManager {
+	cm := &connManager{app: a}
+	cm.list = tview.NewList().ShowSecondaryText(false)
+	cm.hints = tview.NewTextView().SetDynamicColors(true)
+	cm.flex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(cm.list, 0, 1, true).
+		AddItem(cm.hints, 2, 0, false)
+	cm.flex.SetBorder(true).SetTitle(" AMQ Connections ")
+
+	cm.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			cm.close()
+			return nil
+		case event.Rune() == 'n':
+			a.connEditor.show(config.Connection{}, true, "")
+			return nil
+		case event.Rune() == 'e':
+			idx := cm.list.GetCurrentItem()
+			if idx >= 0 && idx < len(a.cfg.Connections) {
+				c := a.cfg.Connections[idx]
+				a.connEditor.show(c, false, c.Name)
+			}
+			return nil
+		case event.Rune() == 'd':
+			idx := cm.list.GetCurrentItem()
+			if idx >= 0 && idx < len(a.cfg.Connections) {
+				dup := a.cfg.Connections[idx]
+				dup.Name = dup.Name + "-copy"
+				a.connEditor.show(dup, true, "")
+			}
+			return nil
+		case event.Key() == tcell.KeyDelete || event.Rune() == 'x':
+			cm.delete()
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	cm.list.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
+		if idx >= 0 && idx < len(a.cfg.Connections) {
+			name := a.cfg.Connections[idx].Name
+			cm.close()
+			a.switchConnection(name)
+		}
+	})
+	return cm
+}
+
+// show opens the connection manager overlay.
+func (cm *connManager) show() {
+	cm.populate()
+	ac := cm.app.cfg.Colors.Accent
+	cm.hints.SetText(fmt.Sprintf(
 		"[%s]<Enter>[-] activate  [%s]<n>[-] new  [%s]<e>[-] edit  [%s]<d>[-] dup  [%s]<Del/x>[-] delete  [%s]<Esc>[-] close",
 		ac, ac, ac, ac, ac, ac,
 	))
-	a.rootPages.ShowPage("conn-manager")
-	a.tv.SetFocus(a.connManagerList)
-	a.connManagerVisible = true
+	cm.app.rootPages.ShowPage("conn-manager")
+	cm.app.tv.SetFocus(cm.list)
+	cm.visible = true
 }
 
-// closeConnManager hides the connection manager overlay.
-func (a *App) closeConnManager() {
-	a.rootPages.HidePage("conn-manager")
-	a.connManagerVisible = false
-	a.tv.SetFocus(a.pages)
+// close hides the connection manager overlay.
+func (cm *connManager) close() {
+	cm.app.rootPages.HidePage("conn-manager")
+	cm.visible = false
+	cm.app.tv.SetFocus(cm.app.pages)
 }
 
-// populateConnManagerList rebuilds the manager list from the current config.
-func (a *App) populateConnManagerList() {
-	a.connManagerList.Clear()
-	for _, conn := range a.cfg.Connections {
+// populate rebuilds the manager list from the current config.
+func (cm *connManager) populate() {
+	cm.list.Clear()
+	for _, conn := range cm.app.cfg.Connections {
 		c := conn // capture per iteration
 		star := "   "
-		if c.Name == a.cfg.ActiveConnection {
+		if c.Name == cm.app.cfg.ActiveConnection {
 			star = "⭐ "
 		}
 		label := fmt.Sprintf("%s%-24s (%s)", star, c.Name, c.Backend)
-		a.connManagerList.AddItem(label, "", 0, func() {
-			a.closeConnManager()
-			a.switchConnection(c.Name)
+		cm.list.AddItem(label, "", 0, func() {
+			cm.close()
+			cm.app.switchConnection(c.Name)
 		})
 	}
 }
 
-// showConnEditor opens the connection editor overlay.
-// conn is pre-filled into the form; isNew=true means adding, false=editing.
-// origName is the current name when editing (used for uniqueness validation).
-func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string) {
-	a.connEditorIsNew = isNew
-	a.connEditorOrigName = origName
+// delete confirms and deletes the currently selected connection. Refuses
+// if it is the only connection.
+func (cm *connManager) delete() {
+	a := cm.app
+	if len(a.cfg.Connections) <= 1 {
+		a.statusBar.SetText("[yellow]Cannot delete the only connection[-]")
+		return
+	}
+	idx := cm.list.GetCurrentItem()
+	if idx < 0 || idx >= len(a.cfg.Connections) {
+		return
+	}
+	toDelete := a.cfg.Connections[idx]
+	a.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
+		wasActive := a.cfg.ActiveConnection == toDelete.Name
+		conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
+		for _, c := range a.cfg.Connections {
+			if c.Name != toDelete.Name {
+				conns = append(conns, c)
+			}
+		}
+		a.cfg.Connections = conns
+		if wasActive {
+			a.cfg.ActiveConnection = a.cfg.Connections[0].Name
+			cm.close()
+			a.switchConnection(a.cfg.ActiveConnection)
+		} else {
+			if err := config.SaveDefault(a.cfg); err != nil {
+				slog.Error("deleteConn: save failed", "error", err)
+			}
+			cm.populate()
+			a.tv.SetFocus(cm.list)
+		}
+	})
+}
+
+// connEditor is the AMQ connection editor overlay, shared by "new",
+// "edit", and "duplicate" from the connection manager.
+type connEditor struct {
+	app      *App
+	form     *tview.Form
+	visible  bool
+	isNew    bool
+	origName string
+	// brokerName shadows the Broker Name field's value across a jolokia ->
+	// proxy -> jolokia round trip, since the field itself doesn't exist
+	// while Backend is proxy (rebuildTail has nothing to read it back from
+	// otherwise) — see spec/57-bugfix-broker-name-proxy-hidden.
+	brokerName string
+}
+
+// newConnEditor builds the connection editor overlay's form.
+func newConnEditor(a *App) *connEditor {
+	ce := &connEditor{app: a}
+	ce.form = tview.NewForm()
+	ce.form.SetBorder(true).SetTitle(" AMQ Connection ")
+	ce.form.
+		AddInputField("Name", "", 30, nil, nil).
+		AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil).
+		AddInputField("Broker Name", "", 30, nil, nil).
+		AddInputField("URL", "", 40, nil, nil).
+		AddInputField("Username", "", 20, nil, nil).
+		AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, 0, nil).
+		AddPasswordField("Password", "", 20, '*', nil).
+		AddButton("Save", func() { ce.save() }).
+		AddButton("Cancel", func() { ce.close() })
+	if dd, ok := ce.form.GetFormItem(1).(*tview.DropDown); ok {
+		styleDropDown(dd, a.cfg.Colors)
+		// Wired via SetSelectedFunc rather than passed to AddDropDown
+		// itself, for the same reason as the Password Source dropdown
+		// below: AddDropDown's initial SetCurrentOption(0) call would
+		// otherwise fire the rebuild before the rest of the chain exists.
+		dd.SetSelectedFunc(func(_ string, idx int) {
+			backends := []string{"jolokia", "proxy"}
+			ce.rebuildTail(backends[idx])
+		})
+	}
+	// The Password Source dropdown swaps the last form item (before the
+	// Save/Cancel buttons, which AddButton keeps separate from GetFormItem)
+	// between a plain Password field and a Password Secret (AWS) field —
+	// see setPasswordField. Wired via SetSelectedFunc rather than passed
+	// to AddDropDown itself, since AddDropDown's initial
+	// SetCurrentOption(0) call would otherwise fire the swap before the
+	// Password field even exists yet. GetFormItem(5) is safe here because
+	// this runs once, right after the static chain above built the default
+	// (jolokia) layout — Password Source is always at index 5 at this
+	// specific point, even though it can move once rebuildTail starts
+	// rebuilding items after a Backend change.
+	if dd, ok := ce.form.GetFormItem(5).(*tview.DropDown); ok {
+		styleDropDown(dd, a.cfg.Colors)
+		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
+			ce.setPasswordField(sourceIdx)
+		})
+	}
+	ce.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			ce.close()
+			return nil
+		}
+		return event
+	})
+	return ce
+}
+
+// show opens the connection editor overlay. conn is pre-filled into the
+// form; isNew=true means adding, false=editing. origName is the current
+// name when editing (used for uniqueness validation).
+func (ce *connEditor) show(conn config.Connection, isNew bool, origName string) {
+	a := ce.app
+	ce.isNew = isNew
+	ce.origName = origName
 
 	title := " New AMQ Connection "
 	if !isNew {
 		title = fmt.Sprintf(" Edit — %s ", origName)
 	}
-	a.connEditorForm.SetTitle(title)
+	ce.form.SetTitle(title)
 
 	// Name and Backend are always at fixed indices 0/1 — everything after
-	// them is looked up by label instead, since rebuildConnEditorTail can
-	// change which fields exist and where.
-	a.connEditorForm.GetFormItem(0).(*tview.InputField).SetText(conn.Name)
+	// them is looked up by label instead, since rebuildTail can change
+	// which fields exist and where.
+	ce.form.GetFormItem(0).(*tview.InputField).SetText(conn.Name)
 	backendIdx := 0
 	if conn.Backend == "proxy" {
 		backendIdx = 1
 	}
 	// SetCurrentOption fires the Backend dropdown's selected callback
-	// (rebuildConnEditorTail), rebuilding every item after it — including
-	// whether Broker Name exists at all. rebuildConnEditorTail's own
-	// capture step runs as part of this call and will read (and shadow)
-	// whatever the form's *previous* Broker Name field held — not conn's —
-	// so conn.Queue.BrokerName is applied explicitly afterward instead of
+	// (rebuildTail), rebuilding every item after it — including whether
+	// Broker Name exists at all. rebuildTail's own capture step runs as
+	// part of this call and will read (and shadow) whatever the form's
+	// *previous* Broker Name field held — not conn's — so
+	// conn.Queue.BrokerName is applied explicitly afterward instead of
 	// being set beforehand (setting it first would just get clobbered by
 	// that capture step).
-	a.connEditorForm.GetFormItem(1).(*tview.DropDown).SetCurrentOption(backendIdx)
+	ce.form.GetFormItem(1).(*tview.DropDown).SetCurrentOption(backendIdx)
 
 	// URL and credentials are backend-specific; show whichever is set.
 	urlVal := conn.Queue.URL
@@ -89,43 +259,42 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 		password = conn.Proxy.Password
 		passwordSecret = conn.Proxy.PasswordSecret
 	} else {
-		a.connEditorBrokerName = conn.Queue.BrokerName
-		if item, ok := a.connEditorForm.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
+		ce.brokerName = conn.Queue.BrokerName
+		if item, ok := ce.form.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
 			item.SetText(conn.Queue.BrokerName)
 		}
 	}
-	a.connEditorForm.GetFormItemByLabel("URL").(*tview.InputField).SetText(urlVal)
-	a.connEditorForm.GetFormItemByLabel("Username").(*tview.InputField).SetText(username)
+	ce.form.GetFormItemByLabel("URL").(*tview.InputField).SetText(urlVal)
+	ce.form.GetFormItemByLabel("Username").(*tview.InputField).SetText(username)
 
 	sourceIdx := 0
 	if passwordSecret != "" {
 		sourceIdx = 1
 	}
 	// SetCurrentOption fires the Password Source dropdown's selected
-	// callback (setConnEditorPasswordField), swapping the trailing field to
-	// match before its text is set below.
-	a.connEditorForm.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
+	// callback (setPasswordField), swapping the trailing field to match
+	// before its text is set below.
+	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
-		a.connEditorForm.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).SetText(passwordSecret)
+		ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).SetText(passwordSecret)
 	} else {
-		a.connEditorForm.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
+		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
 	}
 
 	a.rootPages.ShowPage("conn-editor")
-	a.tv.SetFocus(a.connEditorForm)
-	a.connEditorVisible = true
+	a.tv.SetFocus(ce.form)
+	ce.visible = true
 }
 
-// setConnEditorPasswordField swaps the last form item — the item right
-// before the Save/Cancel buttons — between a plain Password field
-// (sourceIdx 0) and a Password Secret (AWS) field (sourceIdx 1), driven by
-// the Password Source dropdown. AddButton items aren't counted by
-// GetFormItem, so the last form item is always the password-ish field
-// regardless of which one is showing or whether Broker Name is present
-// (see rebuildConnEditorTail) — hence computing the index instead of
-// assuming a fixed one.
-func (a *App) setConnEditorPasswordField(sourceIdx int) {
-	f := a.connEditorForm
+// setPasswordField swaps the last form item — the item right before the
+// Save/Cancel buttons — between a plain Password field (sourceIdx 0) and
+// a Password Secret (AWS) field (sourceIdx 1), driven by the Password
+// Source dropdown. AddButton items aren't counted by GetFormItem, so the
+// last form item is always the password-ish field regardless of which
+// one is showing or whether Broker Name is present (see rebuildTail) —
+// hence computing the index instead of assuming a fixed one.
+func (ce *connEditor) setPasswordField(sourceIdx int) {
+	f := ce.form
 	f.RemoveFormItem(f.GetFormItemCount() - 1)
 	if sourceIdx == 1 {
 		f.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
@@ -134,14 +303,14 @@ func (a *App) setConnEditorPasswordField(sourceIdx int) {
 	}
 }
 
-// rebuildConnEditorTail rebuilds every connection-editor form item after
-// Backend (item 1, never removed) — Broker Name (jolokia only), URL,
-// Username, Password Source, and Password/Password Secret — for the given
-// backend. Broker Name only means anything for the jolokia backend (see
+// rebuildTail rebuilds every connection-editor form item after Backend
+// (item 1, never removed) — Broker Name (jolokia only), URL, Username,
+// Password Source, and Password/Password Secret — for the given backend.
+// Broker Name only means anything for the jolokia backend (see
 // spec/57-bugfix-broker-name-proxy-hidden); everything else is backend-
 // agnostic and just gets rebuilt alongside it since it isn't the form's
-// last item and can't be swapped in place the way
-// setConnEditorPasswordField swaps the trailing field.
+// last item and can't be swapped in place the way setPasswordField swaps
+// the trailing field.
 //
 // Whatever the user already typed/selected is captured via
 // GetFormItemByLabel (nil-safe: an absent field just contributes its zero
@@ -152,16 +321,16 @@ func (a *App) setConnEditorPasswordField(sourceIdx int) {
 // Broker Name is the one field that can't be captured this way alone: once
 // Backend is proxy, the field doesn't exist, so a later jolokia->proxy->
 // jolokia round trip would have nothing to read it back from and silently
-// reset it to "". a.connEditorBrokerName shadows it across exactly that
-// gap — updated here whenever the field exists, left untouched (and used
-// as the restore value) whenever it doesn't.
-func (a *App) rebuildConnEditorTail(backend string) {
-	f := a.connEditorForm
+// reset it to "". ce.brokerName shadows it across exactly that gap —
+// updated here whenever the field exists, left untouched (and used as the
+// restore value) whenever it doesn't.
+func (ce *connEditor) rebuildTail(backend string) {
+	f := ce.form
 
 	var url, username, passwordOrSecret string
 	sourceIdx := 0
 	if item, ok := f.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
-		a.connEditorBrokerName = item.GetText()
+		ce.brokerName = item.GetText()
 	}
 	if item, ok := f.GetFormItemByLabel("URL").(*tview.InputField); ok {
 		url = item.GetText()
@@ -183,13 +352,13 @@ func (a *App) rebuildConnEditorTail(backend string) {
 	}
 
 	if backend != "proxy" {
-		f.AddInputField("Broker Name", a.connEditorBrokerName, 30, nil, nil)
+		f.AddInputField("Broker Name", ce.brokerName, 30, nil, nil)
 	}
 	f.AddInputField("URL", url, 40, nil, nil)
 	f.AddInputField("Username", username, 20, nil, nil)
 	// nil selected func here for the same reason as the initial
-	// construction in app.go: wiring it before the trailing password-ish
-	// field is added below would fire prematurely.
+	// construction: wiring it before the trailing password-ish field is
+	// added below would fire prematurely.
 	f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
 	if sourceIdx == 1 {
 		f.AddInputField("Password Secret (AWS)", passwordOrSecret, 30, nil, nil)
@@ -198,42 +367,44 @@ func (a *App) rebuildConnEditorTail(backend string) {
 	}
 
 	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
-		styleDropDown(dd, a.cfg.Colors)
+		styleDropDown(dd, ce.app.cfg.Colors)
 		dd.SetSelectedFunc(func(_ string, idx int) {
-			a.setConnEditorPasswordField(idx)
+			ce.setPasswordField(idx)
 		})
 	}
 }
 
-// closeConnEditor hides the editor and returns focus to the manager or pages.
-func (a *App) closeConnEditor() {
+// close hides the editor and returns focus to the manager or pages.
+func (ce *connEditor) close() {
+	a := ce.app
 	a.rootPages.HidePage("conn-editor")
-	a.connEditorVisible = false
-	if a.connManagerVisible {
-		a.tv.SetFocus(a.connManagerList)
+	ce.visible = false
+	if a.connManager.visible {
+		a.tv.SetFocus(a.connManager.list)
 	} else {
 		a.tv.SetFocus(a.pages)
 	}
 }
 
-// saveConnEditor validates and persists the editor form, then closes it.
-func (a *App) saveConnEditor() {
-	name := strings.TrimSpace(a.connEditorForm.GetFormItem(0).(*tview.InputField).GetText())
-	backendIdx, _ := a.connEditorForm.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
+// save validates and persists the editor form, then closes it.
+func (ce *connEditor) save() {
+	a := ce.app
+	name := strings.TrimSpace(ce.form.GetFormItem(0).(*tview.InputField).GetText())
+	backendIdx, _ := ce.form.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	backends := []string{"jolokia", "proxy"}
 	backend := backends[backendIdx]
 	var brokerName string
-	if item, ok := a.connEditorForm.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
+	if item, ok := ce.form.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
 		brokerName = item.GetText()
 	}
-	urlVal := a.connEditorForm.GetFormItemByLabel("URL").(*tview.InputField).GetText()
-	username := a.connEditorForm.GetFormItemByLabel("Username").(*tview.InputField).GetText()
-	sourceIdx, _ := a.connEditorForm.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
+	urlVal := ce.form.GetFormItemByLabel("URL").(*tview.InputField).GetText()
+	username := ce.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
+	sourceIdx, _ := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
 	var password, passwordSecret string
 	if sourceIdx == 1 {
-		passwordSecret = strings.TrimSpace(a.connEditorForm.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).GetText())
+		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).GetText())
 	} else {
-		password = a.connEditorForm.GetFormItemByLabel("Password").(*tview.InputField).GetText()
+		password = ce.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
 	}
 
 	if name == "" {
@@ -241,7 +412,7 @@ func (a *App) saveConnEditor() {
 		return
 	}
 	for _, c := range a.cfg.Connections {
-		if c.Name == name && c.Name != a.connEditorOrigName {
+		if c.Name == name && c.Name != ce.origName {
 			a.statusBar.SetText(fmt.Sprintf("[red]Connection %q already exists[-]", name))
 			return
 		}
@@ -254,13 +425,13 @@ func (a *App) saveConnEditor() {
 		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
 	}
 
-	wasActive := a.cfg.ActiveConnection == a.connEditorOrigName
+	wasActive := a.cfg.ActiveConnection == ce.origName
 
-	if a.connEditorIsNew {
+	if ce.isNew {
 		a.cfg.Connections = append(a.cfg.Connections, conn)
 	} else {
 		for i, c := range a.cfg.Connections {
-			if c.Name == a.connEditorOrigName {
+			if c.Name == ce.origName {
 				a.cfg.Connections[i] = conn
 				break
 			}
@@ -277,41 +448,6 @@ func (a *App) saveConnEditor() {
 		slog.Error("saveConnEditor: save failed", "error", err)
 	}
 	a.refreshSettingsList()
-	a.closeConnEditor()
-	a.populateConnManagerList()
-}
-
-// deleteConnFromManager confirms and deletes the currently selected connection.
-// Refuses if it is the only connection.
-func (a *App) deleteConnFromManager() {
-	if len(a.cfg.Connections) <= 1 {
-		a.statusBar.SetText("[yellow]Cannot delete the only connection[-]")
-		return
-	}
-	idx := a.connManagerList.GetCurrentItem()
-	if idx < 0 || idx >= len(a.cfg.Connections) {
-		return
-	}
-	toDelete := a.cfg.Connections[idx]
-	a.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
-		wasActive := a.cfg.ActiveConnection == toDelete.Name
-		conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
-		for _, c := range a.cfg.Connections {
-			if c.Name != toDelete.Name {
-				conns = append(conns, c)
-			}
-		}
-		a.cfg.Connections = conns
-		if wasActive {
-			a.cfg.ActiveConnection = a.cfg.Connections[0].Name
-			a.closeConnManager()
-			a.switchConnection(a.cfg.ActiveConnection)
-		} else {
-			if err := config.SaveDefault(a.cfg); err != nil {
-				slog.Error("deleteConn: save failed", "error", err)
-			}
-			a.populateConnManagerList()
-			a.tv.SetFocus(a.connManagerList)
-		}
-	})
+	ce.close()
+	a.connManager.populate()
 }
