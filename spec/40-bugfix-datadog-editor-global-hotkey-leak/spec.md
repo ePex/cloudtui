@@ -46,3 +46,15 @@ every other overlay.
 
 - Auditing every other overlay/view for the same class of gap — none
   reported live; not preemptively hunting for hypothetical ones.
+
+## Later note
+
+The OR-chain shown above (both in `onGlobalKey` and `onPromptDone`) was
+collapsed into a single `a.anyOverlayVisible()` helper looping over an
+`overlayVisible []*bool` slice built once in `New()`, as part of a
+`/simplify` pass on `onGlobalKey` (2026-08-16, no dedicated spec folder —
+pure duplication cleanup, no behavior change). The "add one flag to two
+exemption lists" fix pattern this bugfix documents still applies
+conceptually — a new overlay now gets one line added to the
+`overlayVisible` slice-literal in `New()` instead of one line in each of
+two OR-chains.
