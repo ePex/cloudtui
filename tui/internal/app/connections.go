@@ -293,7 +293,7 @@ func (a *App) deleteConnFromManager() {
 		return
 	}
 	toDelete := a.cfg.Connections[idx]
-	a.showConfirm(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
+	a.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
 		wasActive := a.cfg.ActiveConnection == toDelete.Name
 		conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
 		for _, c := range a.cfg.Connections {
