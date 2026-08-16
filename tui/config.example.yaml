@@ -46,8 +46,8 @@ logo:
 activeConnection: default
 
 # connections: named broker connections. Each connection has:
-#   name    — unique identifier (also the activeConnection key)
-#   alias   — short label (3–8 chars) shown in the top-left info panel
+#   name    — unique identifier (also the activeConnection key, and what's
+#             shown in the top-left info panel and connection manager)
 #   backend — "jolokia" or "proxy"
 #   queue   — Jolokia backend settings (used when backend: jolokia)
 #   proxy   — mq-proxy backend settings (used when backend: proxy)
@@ -56,7 +56,6 @@ activeConnection: default
 # the env var is only applied when the password field is absent or empty.
 connections:
   - name: default
-    alias: def
     backend: jolokia
     queue:
       brokerName: localhost
@@ -66,7 +65,6 @@ connections:
 
   # Example proxy connection (uncomment and fill in to use):
   # - name: aws-staging
-  #   alias: stg
   #   backend: proxy
   #   proxy:
   #     url: http://localhost:8080

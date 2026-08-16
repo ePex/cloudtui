@@ -30,7 +30,6 @@ delete connections — without leaving the app or editing YAML by hand.
 activeConnection: local       # name of the active connection
 connections:
   - name: local
-    alias: lcl
     backend: jolokia
     queue:
       brokerName: localhost
@@ -38,7 +37,6 @@ connections:
       username: admin
       password: ""
   - name: aws-staging
-    alias: stg
     backend: proxy
     proxy:
       url: http://localhost:8080
@@ -46,15 +44,21 @@ connections:
       password: changeme
 ```
 
-`alias` is a short label (e.g. 3–6 chars) shown in the top-left info panel
-where space is tight. `name` is the human-readable identifier used in the
-manager list and as the `activeConnection` key.
+`name` is the human-readable identifier used in the manager list, the
+top-left info panel, and as the `activeConnection` key.
+
+> **Update (CR 55):** the shape above originally also had a short `alias`
+> field (e.g. 3–6 chars) shown in the info panel where space was tight,
+> separate from `name`. It was removed as redundant — see
+> [spec/55-cr-amq-connection-remove-alias](../55-cr-amq-connection-remove-alias/spec.md).
+> `name` alone is now used everywhere.
 
 ### Backwards compatibility
 
 If `connections` is absent from the file, `Load()` synthesises a single
-connection named `"default"` with alias `"def"` from the legacy top-level
-`backend`, `queue`, and `proxy` fields. The legacy fields remain in the struct
+connection named `"default"` (CR 55: originally also with alias `"def"`)
+from the legacy top-level `backend`, `queue`, and `proxy` fields. The legacy
+fields remain in the struct
 for this migration only and are not written back by `Save()`. A file
 round-tripped through `Save()` will always use the new `connections` shape.
 
@@ -62,33 +66,38 @@ round-tripped through `Save()` will always use the new `connections` shape.
 
 ### In scope
 
-- New `Connection` struct (`Name`, `Alias`, `Backend`, `Queue`, `Proxy`) and
-  `Connections []Connection` / `ActiveConnection string` fields on `Config`.
-- `Load()` migration: legacy top-level fields → single `"default"` / `"def"`
-  connection when `connections` is absent.
-- Top-left info panel: second line `Connection: <alias>`.
+- New `Connection` struct (`Name`, `Alias`, `Backend`, `Queue`, `Proxy` — CR 55:
+  `Alias` later removed) and `Connections []Connection` /
+  `ActiveConnection string` fields on `Config`.
+- `Load()` migration: legacy top-level fields → single `"default"` (CR 55:
+  originally `"default"` / `"def"`) connection when `connections` is absent.
+- Top-left info panel: second line `Connection: <alias>` (CR 55: `<name>`).
 - Settings view: replaced `tview.Form` with a `tview.List` — item 0 is
   "Theme: &lt;name&gt;" (opens a theme-picker overlay), item 1 is
-  "Connection: &lt;alias&gt;" (opens the connection manager overlay). Both items
+  "Connection: &lt;alias&gt;" (CR 55: `&lt;name&gt;`) (opens the connection
+  manager overlay). Both items
   reflect the current live values and refresh automatically after changes.
   The theme picker lists all available themes with the active one marked ⭐.
   (A third, unrelated item — "AWS Profiles" — was added later; see
   `spec/28-fe-aws-profile-discovery/`.)
 - **Connection manager overlay**:
-  - Lists all connections as `<alias>  <name>  (<backend>)`; active one marked ⭐.
+  - Lists all connections as `<name>  (<backend>)` (CR 55: originally
+    `<alias>  <name>  (<backend>)`); active one marked ⭐.
   - Keyboard: `Enter` = activate, `n` = new, `e` = edit, `d` = duplicate,
     `Del`/`x` = delete (with confirmation; cannot delete the last connection).
   - Activating a connection hot-swaps the backend immediately, updates the info
     panel, closes any open messages or message-detail view (returning to the
     queues list), and reloads the queue list.
-- **Connection editor overlay**: a form with Name, Alias, Backend (dropdown),
-  and the relevant backend fields (jolokia: BrokerName, URL, Username,
-  Password; proxy: URL, Username, Password). Shared by Add and Edit.
-  `Esc` cancels (same as the Cancel button) without saving — added
-  2026-08-08 after the initial implementation shipped without it, the only
-  way to cancel was tabbing all the way to the Cancel button.
-- Duplicate creates a copy named `"<original>-copy"` / alias `"<alias>2"` and
-  opens the editor on it.
+- **Connection editor overlay**: a form with Name, Backend (dropdown), and
+  the relevant backend fields (jolokia: BrokerName, URL, Username, Password;
+  proxy: URL, Username, Password). Shared by Add and Edit. `Esc` cancels
+  (same as the Cancel button) without saving — added 2026-08-08 after the
+  initial implementation shipped without it, the only way to cancel was
+  tabbing all the way to the Cancel button. (CR 55: the form originally also
+  had an Alias field between Name and Backend; removed.)
+- Duplicate creates a copy named `"<original>-copy"` and opens the editor on
+  it. (CR 55: originally also derived an alias `"<alias>2"`; removed along
+  with the field.)
 - Changes are persisted to `config.yaml` immediately.
 - `config.example.yaml` updated to show the new `connections` shape.
 
@@ -96,8 +105,8 @@ round-tripped through `Save()` will always use the new `connections` shape.
 
 - Per-connection theme.
 - Importing/exporting connections.
-- UI validation beyond "name must not be empty", "alias must not be empty", and
-  "name must be unique".
+- UI validation beyond "name must not be empty" (CR 55: originally also
+  "alias must not be empty") and "name must be unique".
 - Reordering connections.
 
 ## UI flow
@@ -106,7 +115,8 @@ round-tripped through `Save()` will always use the new `connections` shape.
 Settings view (tview.List, j/k to navigate, Enter to open)
   ├─ "Theme: <name>"       →  Theme picker overlay (list of themes, ⭐ = active,
   │                           Enter = apply, Esc = cancel)
-  └─ "Connection: <alias>" →  Connection manager overlay
+  └─ "Connection: <name>"  →  Connection manager overlay (CR 55: originally
+                              "Connection: <alias>")
        ├─ Enter / activate  →  hot-swap backend; close messages/detail;
        │                       reload queues; close overlay
        ├─ n / new          →  Connection editor overlay (empty form)

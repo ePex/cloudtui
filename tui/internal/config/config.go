@@ -20,7 +20,6 @@ var themesFS embed.FS
 // Connection holds all settings for a single named broker connection.
 type Connection struct {
 	Name    string      `yaml:"name"`
-	Alias   string      `yaml:"alias"`   // short label shown in the top-left info panel
 	Backend string      `yaml:"backend"` // "jolokia" | "proxy"
 	Queue   QueueConfig `yaml:"queue"`
 	Proxy   ProxyConfig `yaml:"proxy"`
@@ -249,7 +248,6 @@ func Default() Config {
 		Connections: []Connection{
 			{
 				Name:    "default",
-				Alias:   "def",
 				Backend: "jolokia",
 				Queue: QueueConfig{
 					BrokerName: "localhost",
@@ -322,7 +320,6 @@ func Load(path string) (Config, error) {
 				}
 				cfg.Connections = []Connection{{
 					Name:    "default",
-					Alias:   "def",
 					Backend: legacy.Backend,
 					Queue:   legacy.Queue,
 					Proxy:   legacy.Proxy,

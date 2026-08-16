@@ -446,11 +446,6 @@ func New(cfg config.Config) *App {
 			if idx >= 0 && idx < len(a.cfg.Connections) {
 				dup := a.cfg.Connections[idx]
 				dup.Name = dup.Name + "-copy"
-				al := dup.Alias + "2"
-				if len([]rune(al)) > 8 {
-					al = string([]rune(al)[:8])
-				}
-				dup.Alias = al
 				a.showConnEditor(dup, true, "")
 			}
 			return nil
@@ -478,7 +473,6 @@ func New(cfg config.Config) *App {
 	a.connEditorForm.SetBorder(true).SetTitle(" AMQ Connection ")
 	a.connEditorForm.
 		AddInputField("Name", "", 30, nil, nil).
-		AddInputField("Alias", "", 10, nil, nil).
 		AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil).
 		AddInputField("Broker Name", "", 30, nil, nil).
 		AddInputField("URL", "", 40, nil, nil).
@@ -486,7 +480,7 @@ func New(cfg config.Config) *App {
 		AddPasswordField("Password", "", 20, '*', nil).
 		AddButton("Save", func() { a.saveConnEditor() }).
 		AddButton("Cancel", func() { a.closeConnEditor() })
-	if dd, ok := a.connEditorForm.GetFormItem(2).(*tview.DropDown); ok {
+	if dd, ok := a.connEditorForm.GetFormItem(1).(*tview.DropDown); ok {
 		styleDropDown(dd, cfg.Colors)
 	}
 	a.connEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -496,9 +490,9 @@ func New(cfg config.Config) *App {
 		}
 		return event
 	})
-	// Height must cover border+padding (4 rows) + 7 items * (field + item
-	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := centered(a.connEditorForm, 64, 20)
+	// Height must cover border+padding (4 rows) + 6 items * (field + item
+	// padding) (12 rows) + button row (1 row) = 17; give it one spare row.
+	connEditorOverlay := centered(a.connEditorForm, 64, 18)
 
 	// Message filter overlay (FE 46) — the server-side counterpart to
 	// messagesView's quick search: JMS type + date range + max count,
