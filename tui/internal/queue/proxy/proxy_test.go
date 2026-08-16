@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -581,5 +582,89 @@ func TestSendMessageEnvelopeError(t *testing.T) {
 
 	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
 		t.Fatal("SendMessage() error = nil, want non-nil for a populated error field")
+	}
+}
+
+// ── Cold-start retry (Bugfix 58) ────────────────────────────────────────────
+//
+// hijackAndClose simulates the transport-level failure a cold mq-proxy
+// instance produces (the client's Do call fails with no response ever
+// received) without waiting out a real timeout: it takes over the raw TCP
+// connection and closes it immediately, before any HTTP response is
+// written.
+
+func hijackAndClose(t *testing.T, w http.ResponseWriter) {
+	t.Helper()
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		t.Fatal("ResponseWriter does not support Hijacker")
+	}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		t.Fatalf("Hijack() error = %v", err)
+	}
+	conn.Close()
+}
+
+func TestGetRetriesOnceOnTransportError(t *testing.T) {
+	var calls atomic.Int32
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			hijackAndClose(t, w)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": []map[string]any{
+				{"name": "orders", "messageCount": 1, "consumerCount": 0, "enqueuedCount": 0, "dequeuedCount": 0, "producerCount": 0},
+			},
+			"errors": []any{},
+		})
+	}))
+	defer stop()
+
+	summaries, err := c.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v, want the second (successful) attempt's result", err)
+	}
+	if len(summaries) != 1 || summaries[0].Name != "orders" {
+		t.Errorf("List() = %+v, want the second attempt's data", summaries)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Errorf("handler called %d times, want exactly 2 (initial attempt + one retry)", got)
+	}
+}
+
+func TestGetFailsAfterTwoTransportErrors(t *testing.T) {
+	var calls atomic.Int32
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		hijackAndClose(t, w)
+	}))
+	defer stop()
+
+	if _, err := c.List(context.Background()); err == nil {
+		t.Fatal("List() error = nil, want an error when both attempts fail")
+	}
+	if got := calls.Load(); got != 2 {
+		t.Errorf("handler called %d times, want exactly 2 (no more than one retry)", got)
+	}
+}
+
+func TestPostDoesNotRetryOnTransportError(t *testing.T) {
+	var calls atomic.Int32
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		// Always hijack-and-close: a second (POST) attempt would also
+		// fail here, but the test only cares that no second attempt is
+		// made at all.
+		hijackAndClose(t, w)
+	}))
+	defer stop()
+
+	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
+		t.Fatal("SendMessage() error = nil, want an error from the single failed attempt")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("handler called %d times, want exactly 1 (a POST must never be retried)", got)
 	}
 }
