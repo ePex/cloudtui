@@ -9,6 +9,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // movePicker is the "Move to Queue" overlay: a searchable list of queues
@@ -225,3 +228,19 @@ func (mp *movePicker) close() {
 		mp.onClose()
 	}
 }
+
+// ApplyPalette recolors the move-picker overlay for a live theme switch.
+func (mp *movePicker) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	mp.flex.SetBackgroundColor(bg)
+	mp.flex.SetBorderColor(tcell.GetColor(p.Border))
+	mp.flex.SetTitleColor(tcell.GetColor(p.Border))
+	styleList(mp.list, p)
+	mp.list.SetBackgroundColor(bg)
+	mp.search.SetBackgroundColor(bg)
+	mp.search.SetLabelColor(tcell.GetColor(p.Label))
+	mp.search.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	mp.search.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
+
+var _ ui.Themeable = (*movePicker)(nil)

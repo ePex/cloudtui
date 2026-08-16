@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -48,6 +49,20 @@ type datadogLogsView struct {
 
 var _ ui.View = (*datadogLogsView)(nil)
 var _ ui.Shortcuttable = (*datadogLogsView)(nil)
+var _ ui.Themeable = (*datadogLogsView)(nil)
+
+// ApplyPalette recolors the Datadog Logs view for a live theme switch.
+func (dv *datadogLogsView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	dv.table.SetBackgroundColor(bg)
+	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
+	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("datadog-logs")))
+	dv.queryInput.SetLabelColor(tcell.GetColor(p.Label))
+	dv.queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	dv.queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	styleDropDown(dv.serviceFilterDD, p)
+	styleDropDown(dv.envFilterDD, p)
+}
 
 func (dv *datadogLogsView) Name() string               { return "datadog-logs" }
 func (dv *datadogLogsView) Title() string              { return "Datadog Logs" }

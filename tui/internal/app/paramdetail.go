@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -33,6 +34,15 @@ type paramDetailView struct {
 	app       *App
 	param     awsssm.Parameter
 	displayed bool // the value has been rendered on screen; always true for String/StringList
+}
+
+var _ ui.Themeable = (*paramDetailView)(nil)
+
+// ApplyPalette recolors the parameter detail view for a live theme switch.
+func (dv *paramDetailView) ApplyPalette(p config.Palette) {
+	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 }
 
 func (dv *paramDetailView) Shortcuts() []ui.Shortcut {

@@ -8,6 +8,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // datadogEditor is the Datadog settings overlay (spec/39-fe-datadog-logs)
@@ -58,6 +59,15 @@ func (de *datadogEditor) close() {
 	de.visible = false
 	de.app.tv.SetFocus(de.app.pages)
 }
+
+// ApplyPalette recolors the Datadog settings overlay for a live theme switch.
+func (de *datadogEditor) ApplyPalette(p config.Palette) {
+	de.form.SetBackgroundColor(tcell.GetColor(p.Background))
+	de.form.SetBorderColor(tcell.GetColor(p.Border))
+	de.form.SetTitleColor(tcell.GetColor(p.Border))
+}
+
+var _ ui.Themeable = (*datadogEditor)(nil)
 
 // save persists the editor form into cfg.Datadog, then closes it. Unlike
 // saveConnEditor, there's no required-field validation here — an empty

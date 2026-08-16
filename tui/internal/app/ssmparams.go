@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -32,6 +33,18 @@ type ssmParamsView struct {
 
 var _ ui.View = (*ssmParamsView)(nil)
 var _ ui.Shortcuttable = (*ssmParamsView)(nil)
+var _ ui.Themeable = (*ssmParamsView)(nil)
+
+// ApplyPalette recolors the SSM parameters view for a live theme switch.
+func (pv *ssmParamsView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	pv.table.SetBackgroundColor(bg)
+	pv.table.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+	pv.table.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
+	pv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	pv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	pv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
 
 func (pv *ssmParamsView) Name() string               { return "ssm-parameters" }
 func (pv *ssmParamsView) Title() string              { return "SSM Parameters" }

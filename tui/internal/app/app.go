@@ -44,6 +44,9 @@ type App struct {
 	// overlayVisible holds a pointer to each modal overlay's visible flag;
 	// anyOverlayVisible loops over it instead of a hand-maintained OR-chain.
 	overlayVisible []*bool
+	// themables is every view/overlay that recolors itself on a live theme
+	// switch — reapplyTheme loops over this instead of naming each type.
+	themables      []ui.Themeable
 	views          []ui.View
 	cfg            config.Config
 	infoPanel      *tview.TextView
@@ -353,6 +356,33 @@ func New(cfg config.Config) *App {
 		&a.datadogEditor.visible,
 		&a.themePicker.visible,
 		&a.awsProfiles.visible,
+	}
+	a.themables = []ui.Themeable{
+		a.logV,
+		a.queuesV,
+		a.messagesV,
+		a.messageDetailV,
+		a.ssmParamsV,
+		a.paramDetailV,
+		a.secretsV,
+		a.secretDetailV,
+		a.logsV,
+		a.logSearchV,
+		a.logDetailV,
+		a.datadogLogsV,
+		a.datadogLogDetailV,
+		a.codePipelineListV,
+		a.codePipelineDetailV,
+		a.confirm,
+		a.movePicker,
+		a.sendMessage,
+		a.connManager,
+		a.connEditor,
+		a.messageFilter,
+		a.timeRangeModal,
+		a.datadogEditor,
+		a.themePicker,
+		a.awsProfiles,
 	}
 
 	a.tv.SetRoot(a.rootPages, true).SetFocus(a.pages)

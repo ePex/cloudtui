@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -32,6 +33,18 @@ type queuesView struct {
 
 var _ ui.View = (*queuesView)(nil)
 var _ ui.Shortcuttable = (*queuesView)(nil)
+var _ ui.Themeable = (*queuesView)(nil)
+
+// ApplyPalette recolors the queues view for a live theme switch.
+func (qv *queuesView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	qv.table.SetBackgroundColor(bg)
+	qv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
+	qv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+	qv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	qv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	qv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
 
 func (qv *queuesView) Name() string               { return "queues" }
 func (qv *queuesView) Title() string              { return "Queues" }

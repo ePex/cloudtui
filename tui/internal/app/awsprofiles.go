@@ -134,6 +134,21 @@ func (ap *awsProfilesPicker) close() {
 	ap.app.tv.SetFocus(ap.app.pages)
 }
 
+// ApplyPalette recolors the AWS Profiles overlay for a live theme switch.
+func (ap *awsProfilesPicker) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	ap.flex.SetBackgroundColor(bg)
+	ap.flex.SetBorderColor(tcell.GetColor(p.Border))
+	ap.flex.SetTitleColor(tcell.GetColor(p.Border))
+	ap.table.SetBackgroundColor(bg)
+	ap.table.SetBorderColor(tcell.GetColor(p.Border))
+	ap.table.SetTitleColor(tcell.GetColor(p.Border))
+	ap.hints.SetBackgroundColor(bg)
+	ap.hints.SetTextColor(tcell.GetColor(p.Text))
+}
+
+var _ ui.Themeable = (*awsProfilesPicker)(nil)
+
 // populate re-runs discovery via app.listAWSProfiles and redraws the
 // table. Called on open and on 'r' (the files may have changed since
 // cloudtui started, or since the overlay was last opened).

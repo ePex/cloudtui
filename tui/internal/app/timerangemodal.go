@@ -6,6 +6,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // timeRangeModal is the shared Relative/Absolute time range overlay
@@ -134,6 +137,24 @@ func (tm *timeRangeModal) close() {
 	tm.visible = false
 	tm.app.tv.SetFocus(tm.app.pages)
 }
+
+// ApplyPalette recolors the time range overlay for a live theme switch.
+func (tm *timeRangeModal) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	tm.flex.SetBackgroundColor(bg)
+	tm.flex.SetBorderColor(tcell.GetColor(p.Border))
+	tm.flex.SetTitleColor(tcell.GetColor(p.Border))
+	tm.tabs.SetBackgroundColor(bg)
+	tm.renderTabs()
+	tm.pages.SetBackgroundColor(bg)
+	styleList(tm.relativeList, p)
+	tm.relativeList.SetBackgroundColor(bg)
+	tm.absoluteForm.SetBackgroundColor(bg)
+	tm.absoluteForm.SetBorderColor(tcell.GetColor(p.Border))
+	tm.absoluteForm.SetTitleColor(tcell.GetColor(p.Border))
+}
+
+var _ ui.Themeable = (*timeRangeModal)(nil)
 
 // switchTab activates mode's tab: re-renders the tab indicator, switches
 // pages, and focuses the tab's primitive (the relative list or the
