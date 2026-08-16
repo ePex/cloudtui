@@ -355,16 +355,37 @@ func (c *Client) postJSON(ctx context.Context, path string, body interface{}, ou
 // body may be nil for requests without a payload.
 // out may be nil to discard the response body.
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, out interface{}) error {
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	newReq := func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+		if err != nil {
+			return nil, err
+		}
+		req.SetBasicAuth(c.username, c.password)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return req, nil
+	}
+
+	req, err := newReq()
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
-	req.SetBasicAuth(c.username, c.password)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
 	resp, err := c.httpClient.Do(req)
+	if err != nil && method == http.MethodGet {
+		// The proxy can time out waiting for headers on its first request
+		// after a period of inactivity (JVM/DB connection warmup on
+		// AWS-hosted deployments) even though it's otherwise healthy — a
+		// second identical request typically succeeds immediately.
+		// Retried only for GET: a body-less, side-effect-free request is
+		// always safe to repeat; a POST that timed out waiting for a
+		// response may already have been applied server-side, so retrying
+		// it risks applying it twice. body is always nil for GET (only
+		// postJSON passes a non-nil body), so newReq() needs no rewind.
+		if retryReq, rerr := newReq(); rerr == nil {
+			resp, err = c.httpClient.Do(retryReq)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, path, err)
 	}
