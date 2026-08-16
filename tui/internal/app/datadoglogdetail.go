@@ -126,3 +126,24 @@ func (dv *datadogLogDetailView) refreshContextPanel() {
 	}
 	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
 }
+
+// openDatadogLogDetail renders the full detail for event and switches
+// to the datadog-log-detail page.
+func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
+	a.datadogLogDetailV.render(event)
+	a.pages.SwitchToPage("datadog-log-detail")
+	a.tv.SetFocus(a.pages)
+}
+
+// wireDatadogLogsOpensDetail wires Enter in the Datadog Logs results
+// table to open the detail view for the selected event. Called from
+// New() once datadogLogDetailV exists.
+func (a *App) wireDatadogLogsOpensDetail() {
+	a.datadogLogsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.datadogLogsV.results) {
+			return
+		}
+		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
+	})
+}

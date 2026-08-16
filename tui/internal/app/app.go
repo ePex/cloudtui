@@ -31,67 +31,38 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv                 *tview.Application
-	rootPages          *tview.Pages
-	pages              *tview.Pages
-	topLeft            *tview.Pages
-	prompt             *tview.InputField
-	helpVisible        bool
-	views              []ui.View
-	cfg                config.Config
-	infoPanel          *tview.TextView
-	divider            *tview.TextView
-	contextPanel       *tview.TextView
-	logoPanel          *tview.TextView
-	statusBar          *tview.TextView
-	settingsList       *tview.List
-	logV               *logView
-	queuesV            *queuesView
-	messagesV          *messagesView
-	messageDetailV     *messageDetailView
-	confirm            *confirmDialog
-	movePicker         *movePicker
-	sendMessage        *sendMessageOverlay
-	connManagerFlex    *tview.Flex
-	connManagerList    *tview.List
-	connManagerHints   *tview.TextView
-	connManagerVisible bool
-	connEditorForm     *tview.Form
-	connEditorVisible  bool
-	connEditorIsNew    bool
-	connEditorOrigName string
-	// connEditorBrokerName shadows the Broker Name field's value across a
-	// jolokia -> proxy -> jolokia round trip, since the field itself
-	// doesn't exist while Backend is proxy (rebuildConnEditorTail has
-	// nothing to read it back from otherwise) — see spec/57-bugfix-broker-name-proxy-hidden.
-	connEditorBrokerName  string
-	messageFilterForm     *tview.Form
-	messageFilterVisible  bool
-	timeRangeFlex         *tview.Flex
-	timeRangeTabs         *tview.TextView
-	timeRangePages        *tview.Pages
-	timeRangeRelativeList *tview.List
-	timeRangeAbsoluteForm *tview.Form
-	timeRangeVisible      bool
-	timeRangeActiveTab    timeRangeMode
-	timeRangeOnApply      func(timeRange)
-	datadogEditorForm     *tview.Form
-	datadogEditorVisible  bool
+	tv             *tview.Application
+	rootPages      *tview.Pages
+	pages          *tview.Pages
+	topLeft        *tview.Pages
+	prompt         *tview.InputField
+	helpVisible    bool
+	views          []ui.View
+	cfg            config.Config
+	infoPanel      *tview.TextView
+	divider        *tview.TextView
+	contextPanel   *tview.TextView
+	logoPanel      *tview.TextView
+	statusBar      *tview.TextView
+	settingsList   *tview.List
+	logV           *logView
+	queuesV        *queuesView
+	messagesV      *messagesView
+	messageDetailV *messageDetailView
+	confirm        *confirmDialog
+	movePicker     *movePicker
+	sendMessage    *sendMessageOverlay
+	connManager    *connManager
+	connEditor     *connEditor
+	messageFilter  *messageFilter
+	timeRangeModal *timeRangeModal
+	datadogEditor  *datadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
 	// dropped by switchTo if abandoned — see spec/41.
 	pendingCloudWatchPattern string
-	themePickerFlex          *tview.Flex
-	themePickerList          *tview.List
-	themePickerVisible       bool
-	awsProfilesFlex          *tview.Flex
-	awsProfilesTable         *tview.Table
-	awsProfilesFilterInput   *tview.InputField
-	awsProfilesHints         *tview.TextView
-	awsProfilesVisible       bool
-	awsProfilesFilter        string
-	awsProfilesAll           []awsprofile.Profile
-	awsProfilesFiltered      []awsprofile.Profile
+	themePicker              *themePicker
+	awsProfiles              *awsProfilesPicker
 	backend                  queue.Backend
 	homeTable                *tview.Table
 	homeSections             []views.SectionInfo
@@ -218,7 +189,7 @@ func New(cfg config.Config) *App {
 	})
 
 	// All shell primitives are constructed; now create the settings view.
-	// Its list callbacks call showThemePicker / showConnectionManager, which
+	// Its list callbacks call a.themePicker.show / a.connManager.show, which
 	// are safe at this point because all live primitives are set.
 	settingsView := newSettingsView(a)
 	a.logV = newLogView(a)
@@ -239,88 +210,30 @@ func New(cfg config.Config) *App {
 	a.codePipelineListV = newCodePipelineListView(a)
 	a.codePipelineDetailV = newCodePipelineDetailView(a)
 
-	// Wire Enter in the log groups table to open the search view for
-	// the selected log group. Done here because logSearchV must exist first.
-	a.logsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logsV.filtered) {
-			return
-		}
-		a.openLogSearch(a.logsV.filtered[idx].Name)
-	})
+	// Done here because logSearchV must exist first.
+	a.wireLogsOpensSearch()
 
-	// Wire Enter in the log search results table to open the detail view
-	// for the selected event. Done here because logDetailV must exist first.
-	a.logSearchV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logSearchV.results) {
-			return
-		}
-		a.openLogEventDetail(a.logSearchV.results[idx])
-	})
+	// Done here because logDetailV must exist first.
+	a.wireLogSearchOpensEventDetail()
 
-	// Wire Enter in the Datadog Logs results table to open the detail
-	// view for the selected event. Done here because datadogLogDetailV
-	// must exist first.
-	a.datadogLogsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.datadogLogsV.results) {
-			return
-		}
-		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
-	})
+	// Done here because datadogLogDetailV must exist first.
+	a.wireDatadogLogsOpensDetail()
 
-	// Wire Enter in the CodePipeline table to open the stage-status
-	// detail view for the selected pipeline. Done here because
-	// codePipelineDetailV must exist first.
-	a.codePipelineListV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
-			return
-		}
-		a.openCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
-	})
+	// Done here because codePipelineDetailV must exist first.
+	a.wireCodePipelineListOpensDetail()
 	a.secretDetailV = newSecretDetailView(a)
 
-	// Wire Enter in the SSM parameters table to open the detail view for
-	// the selected parameter. Done here because paramDetailV must exist first.
-	a.ssmParamsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
-			return
-		}
-		a.openParamDetail(a.ssmParamsV.filtered[idx])
-	})
+	// Done here because paramDetailV must exist first.
+	a.wireSSMParamsOpensDetail()
 
-	// Wire Enter in the secrets table to open the detail view for the
-	// selected secret. Done here because secretDetailV must exist first.
-	a.secretsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.secretsV.filtered) {
-			return
-		}
-		a.openSecretDetail(a.secretsV.filtered[idx])
-	})
+	// Done here because secretDetailV must exist first.
+	a.wireSecretsOpensDetail()
 
-	// Wire Enter in the queues table to open the messages view for the
-	// selected queue. Done here because messagesV must exist first.
-	a.queuesV.table.SetSelectedFunc(func(row, _ int) {
-		cell := a.queuesV.table.GetCell(row, 0)
-		if cell == nil || cell.Text == "" {
-			return
-		}
-		a.openMessages(cell.Text)
-	})
+	// Done here because messagesV must exist first.
+	a.wireQueuesOpensMessages()
 
-	// Wire Enter in the messages table to open the detail view for the
-	// selected message. Done here because messageDetailV must exist first.
-	a.messagesV.table.SetSelectedFunc(func(row, _ int) {
-		msgIdx := row - 1 // row 0 is the header
-		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
-			return
-		}
-		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
-	})
+	// Done here because messageDetailV must exist first.
+	a.wireMessagesOpensDetail()
 
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
@@ -353,303 +266,38 @@ func New(cfg config.Config) *App {
 	a.sendMessage = newSendMessageOverlay(a)
 	sendMessageOverlay := centered(a.sendMessage.flex, 70, 14)
 
-	// Connection manager overlay
-	a.connManagerList = tview.NewList().ShowSecondaryText(false)
-	a.connManagerHints = tview.NewTextView().SetDynamicColors(true)
-	a.connManagerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.connManagerList, 0, 1, true).
-		AddItem(a.connManagerHints, 2, 0, false)
-	a.connManagerFlex.SetBorder(true).SetTitle(" AMQ Connections ")
-	connManagerOverlay := centered(a.connManagerFlex, 64, 20)
+	a.connManager = newConnManager(a)
+	connManagerOverlay := centered(a.connManager.flex, 64, 20)
 
-	a.connManagerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
-			a.closeConnManager()
-			return nil
-		case event.Rune() == 'n':
-			a.showConnEditor(config.Connection{}, true, "")
-			return nil
-		case event.Rune() == 'e':
-			idx := a.connManagerList.GetCurrentItem()
-			if idx >= 0 && idx < len(a.cfg.Connections) {
-				c := a.cfg.Connections[idx]
-				a.showConnEditor(c, false, c.Name)
-			}
-			return nil
-		case event.Rune() == 'd':
-			idx := a.connManagerList.GetCurrentItem()
-			if idx >= 0 && idx < len(a.cfg.Connections) {
-				dup := a.cfg.Connections[idx]
-				dup.Name = dup.Name + "-copy"
-				a.showConnEditor(dup, true, "")
-			}
-			return nil
-		case event.Key() == tcell.KeyDelete || event.Rune() == 'x':
-			a.deleteConnFromManager()
-			return nil
-		case event.Rune() == 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Rune() == 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		}
-		return event
-	})
-
-	a.connManagerList.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
-		if idx >= 0 && idx < len(a.cfg.Connections) {
-			name := a.cfg.Connections[idx].Name
-			a.closeConnManager()
-			a.switchConnection(name)
-		}
-	})
-
-	// Connection editor overlay
-	a.connEditorForm = tview.NewForm()
-	a.connEditorForm.SetBorder(true).SetTitle(" AMQ Connection ")
-	a.connEditorForm.
-		AddInputField("Name", "", 30, nil, nil).
-		AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil).
-		AddInputField("Broker Name", "", 30, nil, nil).
-		AddInputField("URL", "", 40, nil, nil).
-		AddInputField("Username", "", 20, nil, nil).
-		AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, 0, nil).
-		AddPasswordField("Password", "", 20, '*', nil).
-		AddButton("Save", func() { a.saveConnEditor() }).
-		AddButton("Cancel", func() { a.closeConnEditor() })
-	if dd, ok := a.connEditorForm.GetFormItem(1).(*tview.DropDown); ok {
-		styleDropDown(dd, cfg.Colors)
-		// Wired via SetSelectedFunc rather than passed to AddDropDown
-		// itself, for the same reason as the Password Source dropdown
-		// below: AddDropDown's initial SetCurrentOption(0) call would
-		// otherwise fire the rebuild before the rest of the chain exists.
-		dd.SetSelectedFunc(func(_ string, idx int) {
-			backends := []string{"jolokia", "proxy"}
-			a.rebuildConnEditorTail(backends[idx])
-		})
-	}
-	// The Password Source dropdown swaps the last form item (before the
-	// Save/Cancel buttons, which AddButton keeps separate from GetFormItem)
-	// between a plain Password field and a Password Secret (AWS) field —
-	// see setConnEditorPasswordField. Wired via SetSelectedFunc rather than
-	// passed to AddDropDown itself, since AddDropDown's initial
-	// SetCurrentOption(0) call would otherwise fire the swap before the
-	// Password field even exists yet. GetFormItem(5) is safe here because
-	// this runs once, right after the static chain above built the default
-	// (jolokia) layout — Password Source is always at index 5 at this
-	// specific point, even though it can move once rebuildConnEditorTail
-	// starts rebuilding items after a Backend change.
-	if dd, ok := a.connEditorForm.GetFormItem(5).(*tview.DropDown); ok {
-		styleDropDown(dd, cfg.Colors)
-		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
-			a.setConnEditorPasswordField(sourceIdx)
-		})
-	}
-	a.connEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.closeConnEditor()
-			return nil
-		}
-		return event
-	})
+	a.connEditor = newConnEditor(a)
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := centered(a.connEditorForm, 64, 20)
+	connEditorOverlay := centered(a.connEditor.form, 64, 20)
 
-	// Message filter overlay (FE 46) — the server-side counterpart to
-	// messagesView's quick search: JMS type + date range + max count,
-	// applied by the backend rather than client-side.
-	a.messageFilterForm = tview.NewForm()
-	a.messageFilterForm.SetBorder(true).SetTitle(" Message Filter ")
-	a.messageFilterForm.
-		AddInputField("JMS Type", "", 30, nil, nil).
-		AddInputField("From (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
-		AddInputField("To (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
-		AddInputField("Max Count", "", 10, nil, nil).
-		AddButton("Apply", func() { a.applyMessageFilter() }).
-		AddButton("Clear", func() { a.clearMessageFilter() }).
-		AddButton("Cancel", func() { a.closeMessageFilter() })
-	a.messageFilterForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.closeMessageFilter()
-			return nil
-		}
-		return event
-	})
+	a.messageFilter = newMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
-	messageFilterOverlay := centered(a.messageFilterForm, 64, 16)
+	messageFilterOverlay := centered(a.messageFilter.form, 64, 16)
 
-	// Time range overlay (spec/53) — shared by logSearchView and
-	// datadogLogsView: a Relative preset list / Absolute date-range form,
-	// switched via tabs rather than two separate overlays.
-	a.timeRangeTabs = tview.NewTextView().SetDynamicColors(true)
-	a.timeRangeRelativeList = tview.NewList().ShowSecondaryText(false)
-	for i, p := range timeRangePresets {
-		idx := i
-		a.timeRangeRelativeList.AddItem(p.label, "", 0, func() {
-			a.applyTimeRangeRelative(idx)
-		})
-	}
-	a.timeRangeRelativeList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		}
-		return event
-	})
-
-	a.timeRangeAbsoluteForm = tview.NewForm()
-	a.timeRangeAbsoluteForm.
-		AddInputField("From (YYYY-MM-DD HH:MM or RFC3339)", "", 30, nil, nil).
-		AddInputField("Until (YYYY-MM-DD HH:MM or RFC3339)", "", 30, nil, nil).
-		AddButton("Apply", func() { a.applyTimeRangeAbsolute() }).
-		AddButton("Cancel", func() { a.closeTimeRangeModal() })
-
-	a.timeRangePages = tview.NewPages().
-		AddPage("relative", a.timeRangeRelativeList, true, true).
-		AddPage("absolute", a.timeRangeAbsoluteForm, true, false)
-
-	a.timeRangeFlex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.timeRangeTabs, 1, 0, false).
-		AddItem(a.timeRangePages, 0, 1, true)
-	a.timeRangeFlex.SetBorder(true).SetTitle(" Time Range ")
-	// Set on the Flex itself (fires before descending to whichever child —
-	// the relative list or the absolute form/its fields — currently has
-	// focus), not on the individual tabs: 'R'/'A' must switch tabs
-	// regardless of which one is focused. Uppercase specifically to avoid
-	// colliding with typed text in the Absolute tab's date fields (same
-	// reasoning as 'S'/'E' in datadoglogs.go); Left/Right were ruled out
-	// because tview.InputField already consumes those for in-field cursor
-	// movement while a date field has focus.
-	a.timeRangeFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
-			a.closeTimeRangeModal()
-			return nil
-		case event.Rune() == 'R':
-			a.switchTimeRangeTab(timeRangeRelative)
-			return nil
-		case event.Rune() == 'A':
-			a.switchTimeRangeTab(timeRangeAbsolute)
-			return nil
-		}
-		return event
-	})
+	a.timeRangeModal = newTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
 	// messageFilterOverlay's width, just a longer label this time).
 	// Height: 9 relative presets need 9 content rows; 14 leaves a couple
 	// spare, matching the "give it one spare row" convention elsewhere.
-	timeRangeOverlay := centered(a.timeRangeFlex, 72, 14)
+	timeRangeOverlay := centered(a.timeRangeModal.flex, 72, 14)
 
-	// Datadog editor overlay (spec/39-fe-datadog-logs) — same shape as
-	// the connection editor, just two fields: Site (plain, not a
-	// secret) and Access Token (a Personal Access Token, masked — see
-	// config.DatadogConfig's doc comment for why this isn't the classic
-	// API Key + Application Key pair).
-	a.datadogEditorForm = tview.NewForm()
-	a.datadogEditorForm.SetBorder(true).SetTitle(" Datadog ")
-	a.datadogEditorForm.
-		AddInputField("Site", "", 30, nil, nil).
-		AddPasswordField("Access Token", "", 40, '*', nil).
-		AddButton("Save", func() { a.saveDatadogEditor() }).
-		AddButton("Cancel", func() { a.closeDatadogEditor() })
-	a.datadogEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.closeDatadogEditor()
-			return nil
-		}
-		return event
-	})
+	a.datadogEditor = newDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
-	datadogEditorOverlay := centered(a.datadogEditorForm, 56, 10)
+	datadogEditorOverlay := centered(a.datadogEditor.form, 56, 10)
 
-	// Theme picker overlay
-	a.themePickerList = tview.NewList().ShowSecondaryText(false)
-	a.themePickerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.themePickerList, 0, 1, true)
-	a.themePickerFlex.SetBorder(true).SetTitle(" Theme ")
-	a.themePickerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
-			a.closeThemePicker()
-			return nil
-		case event.Rune() == 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Rune() == 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		}
-		return event
-	})
-	themePickerOverlay := centered(a.themePickerFlex, 40, 14)
+	a.themePicker = newThemePicker(a)
+	themePickerOverlay := centered(a.themePicker.flex, 40, 14)
 
-	// AWS Profiles overlay — filterable; Enter activates the selected profile.
-	a.awsProfilesTable = tview.NewTable()
-	a.awsProfilesTable.SetBorder(true).SetTitle(" AWS Profiles ")
-	a.awsProfilesTable.SetSelectable(true, false)
-	a.awsProfilesTable.SetFixed(1, 0)
-	a.awsProfilesFilterInput = tview.NewInputField()
-	a.awsProfilesFilterInput.SetLabel(" / filter: ")
-	a.awsProfilesFilterInput.SetLabelColor(tcell.GetColor(cfg.Colors.Label))
-	a.awsProfilesFilterInput.SetFieldBackgroundColor(tcell.GetColor(cfg.Colors.SelectionBg))
-	a.awsProfilesFilterInput.SetFieldTextColor(tcell.GetColor(cfg.Colors.SelectionText))
-	a.awsProfilesHints = tview.NewTextView().SetDynamicColors(true)
-	a.awsProfilesHints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
-		cfg.Colors.Accent, cfg.Colors.Accent, cfg.Colors.Accent, cfg.Colors.Accent))
-	a.awsProfilesFlex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.awsProfilesTable, 0, 1, true).
-		AddItem(a.awsProfilesFilterInput, 1, 0, false).
-		AddItem(a.awsProfilesHints, 1, 0, false)
-	a.setAWSProfilesHeader()
-
-	a.awsProfilesTable.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1
-		if idx < 0 || idx >= len(a.awsProfilesFiltered) {
-			return
-		}
-		a.activateAWSProfile(a.awsProfilesFiltered[idx].Name)
-	})
-	a.awsProfilesTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
-			a.closeAWSProfiles()
-			return nil
-		case event.Rune() == 'r':
-			a.populateAWSProfilesTable()
-			return nil
-		case event.Rune() == '/':
-			a.awsProfilesFilterInput.SetText(a.awsProfilesFilter)
-			a.tv.SetFocus(a.awsProfilesFilterInput)
-			return nil
-		case event.Rune() == 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Rune() == 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		}
-		return event
-	})
-	a.awsProfilesFilterInput.SetChangedFunc(func(text string) {
-		a.applyAWSProfilesFilter(text)
-	})
-	a.awsProfilesFilterInput.SetDoneFunc(func(_ tcell.Key) {
-		a.applyAWSProfilesFilter(a.awsProfilesFilterInput.GetText())
-		a.tv.SetFocus(a.awsProfilesTable)
-	})
-	a.awsProfilesFilterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
-			a.applyAWSProfilesFilter(a.awsProfilesFilterInput.GetText())
-			a.tv.SetFocus(a.awsProfilesTable)
-			a.awsProfilesTable.InputHandler()(event, func(tview.Primitive) {})
-			return nil
-		}
-		return event
-	})
-	awsProfilesOverlay := centered(a.awsProfilesFlex, 64, 20)
+	a.awsProfiles = newAWSProfilesPicker(a)
+	awsProfilesOverlay := centered(a.awsProfiles.flex, 64, 20)
 
 	helpOverlay := centered(newHelpModal(cfg), helpModalWidth, helpModalHeight)
 	// "confirm" is added last so it always draws on top of any other overlay
@@ -719,7 +367,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirm.visible || a.movePicker.visible || a.sendMessage.visible || a.connManagerVisible || a.connEditorVisible || a.messageFilterVisible || a.timeRangeVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
+	if a.confirm.visible || a.movePicker.visible || a.sendMessage.visible || a.connManager.visible || a.connEditor.visible || a.messageFilter.visible || a.timeRangeModal.visible || a.datadogEditor.visible || a.themePicker.visible || a.awsProfiles.visible {
 		return event
 	}
 
@@ -765,8 +413,8 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilterVisible && !a.timeRangeVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
-			!a.confirm.visible && !a.movePicker.visible && !a.sendMessage.visible && !a.awsProfilesVisible {
+		if !a.connManager.visible && !a.connEditor.visible && !a.messageFilter.visible && !a.timeRangeModal.visible && !a.datadogEditor.visible && !a.themePicker.visible &&
+			!a.confirm.visible && !a.movePicker.visible && !a.sendMessage.visible && !a.awsProfiles.visible {
 			a.tv.SetFocus(a.pages)
 		}
 	}()
@@ -784,9 +432,9 @@ func (a *App) onPromptDone(key tcell.Key) {
 	case cmd == "s" || cmd == "settings":
 		a.switchTo("settings")
 	case cmd == "aq" || cmd == "connections":
-		a.showConnectionManager()
+		a.connManager.show()
 	case cmd == "ap" || cmd == "awsprofiles":
-		a.showAWSProfiles()
+		a.awsProfiles.show()
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:
@@ -886,108 +534,6 @@ func (a *App) switchTo(name string) {
 			return
 		}
 	}
-}
-
-// openMessages switches to the messages page for the given queue, sets the
-// title, and starts loading messages asynchronously. Quick search and the
-// server-side filter persist when returning to the same queue, but reset
-// when switching to a different one — carrying a leftover filter across
-// queues would silently narrow what the user sees without them asking.
-func (a *App) openMessages(queueName string) {
-	if a.messagesV.queueName != queueName {
-		a.messagesV.filter = queue.MessageFilter{}
-		a.messagesV.quickSearch = ""
-		a.messagesV.searchInput.SetText("")
-	}
-	a.messagesV.queueName = queueName
-	a.messagesV.updateTitle()
-	a.messagesV.setHeader()
-	a.pages.SwitchToPage("messages")
-	a.tv.SetFocus(a.pages)
-	// Show messagesV shortcuts in the context panel.
-	lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-	for _, sc := range a.messagesV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-	a.messagesV.load()
-}
-
-// openMessageDetail renders the full detail for msg and switches to the
-// message-detail page.
-func (a *App) openMessageDetail(queueName string, msg queue.Message) {
-	a.messageDetailV.render(queueName, msg)
-	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
-	a.pages.SwitchToPage("message-detail")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
-	for _, sc := range a.messageDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// openParamDetail renders the full detail for param and switches to the
-// ssm-param-detail page. paramDetailView.render sets the context panel
-// itself (its shortcuts change once a SecureString is revealed).
-func (a *App) openParamDetail(param awsssm.Parameter) {
-	a.paramDetailV.render(param)
-	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
-	a.pages.SwitchToPage("ssm-param-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-func (a *App) openSecretDetail(secret awssecrets.Secret) {
-	a.secretDetailV.render(secret)
-	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
-	a.pages.SwitchToPage("secret-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openLogSearch opens the search view for logGroupName and runs the
-// first search immediately (see logSearchView.open). logSearchView isn't
-// a registered ui.View, so its context panel is populated manually here
-// — same pattern as openMessages.
-func (a *App) openLogSearch(logGroupName string) {
-	pattern := a.pendingCloudWatchPattern
-	a.pendingCloudWatchPattern = ""
-	a.logSearchV.open(logGroupName, pattern)
-	a.pages.SwitchToPage("log-search")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
-	for _, sc := range a.logSearchV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// openLogEventDetail renders the full detail for event and switches to
-// the log-event-detail page.
-func (a *App) openLogEventDetail(event awslogs.LogEvent) {
-	a.logDetailV.render(event)
-	a.pages.SwitchToPage("log-event-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openDatadogLogDetail renders the full detail for event and switches
-// to the datadog-log-detail page.
-func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
-	a.datadogLogDetailV.render(event)
-	a.pages.SwitchToPage("datadog-log-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openCodePipelineDetail opens pipelineName's stage-status detail view
-// and starts loading its current state.
-func (a *App) openCodePipelineDetail(pipelineName string) {
-	a.codePipelineDetailV.open(pipelineName)
-	a.pages.SwitchToPage("codepipeline-detail")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.codePipelineDetailV.Shortcuts()))
-	for _, sc := range a.codePipelineDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // copyToClipboard writes data to the system clipboard via the terminal's

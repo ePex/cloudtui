@@ -13,13 +13,96 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-// setAWSProfilesHeader draws the overlay's column header row.
-func (a *App) setAWSProfilesHeader() {
-	p := a.cfg.Colors
+// awsProfilesPicker is the AWS Profiles overlay: a filterable, read-only
+// list of every discoverable AWS CLI profile, with Enter activating the
+// selected one. Named awsProfilesPicker, not awsProfiles — too easy to
+// confuse with the imported awsprofile package (singular) at a glance.
+type awsProfilesPicker struct {
+	app         *App
+	flex        *tview.Flex
+	table       *tview.Table
+	filterInput *tview.InputField
+	hints       *tview.TextView
+	visible     bool
+	filter      string
+	all         []awsprofile.Profile
+	filtered    []awsprofile.Profile
+}
+
+// newAWSProfilesPicker builds the AWS Profiles overlay's widgets.
+func newAWSProfilesPicker(a *App) *awsProfilesPicker {
+	ap := &awsProfilesPicker{app: a}
+	ap.table = tview.NewTable()
+	ap.table.SetBorder(true).SetTitle(" AWS Profiles ")
+	ap.table.SetSelectable(true, false)
+	ap.table.SetFixed(1, 0)
+	ap.filterInput = tview.NewInputField()
+	ap.filterInput.SetLabel(" / filter: ")
+	ap.filterInput.SetLabelColor(tcell.GetColor(a.cfg.Colors.Label))
+	ap.filterInput.SetFieldBackgroundColor(tcell.GetColor(a.cfg.Colors.SelectionBg))
+	ap.filterInput.SetFieldTextColor(tcell.GetColor(a.cfg.Colors.SelectionText))
+	ap.hints = tview.NewTextView().SetDynamicColors(true)
+	ac := a.cfg.Colors.Accent
+	ap.hints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
+		ac, ac, ac, ac))
+	ap.flex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(ap.table, 0, 1, true).
+		AddItem(ap.filterInput, 1, 0, false).
+		AddItem(ap.hints, 1, 0, false)
+	ap.setHeader()
+
+	ap.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1
+		if idx < 0 || idx >= len(ap.filtered) {
+			return
+		}
+		ap.activate(ap.filtered[idx].Name)
+	})
+	ap.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			ap.close()
+			return nil
+		case event.Rune() == 'r':
+			ap.populate()
+			return nil
+		case event.Rune() == '/':
+			ap.filterInput.SetText(ap.filter)
+			a.tv.SetFocus(ap.filterInput)
+			return nil
+		case event.Rune() == 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+	ap.filterInput.SetChangedFunc(func(text string) {
+		ap.applyFilter(text)
+	})
+	ap.filterInput.SetDoneFunc(func(_ tcell.Key) {
+		ap.applyFilter(ap.filterInput.GetText())
+		a.tv.SetFocus(ap.table)
+	})
+	ap.filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
+			ap.applyFilter(ap.filterInput.GetText())
+			a.tv.SetFocus(ap.table)
+			ap.table.InputHandler()(event, func(tview.Primitive) {})
+			return nil
+		}
+		return event
+	})
+	return ap
+}
+
+// setHeader draws the overlay's column header row.
+func (ap *awsProfilesPicker) setHeader() {
+	p := ap.app.cfg.Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "REGION", "AUTH"} {
-		a.awsProfilesTable.SetCell(0, i,
+		ap.table.SetCell(0, i,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
@@ -29,36 +112,36 @@ func (a *App) setAWSProfilesHeader() {
 	}
 }
 
-// showAWSProfiles opens the AWS Profiles overlay, resetting any filter left
-// over from a previous visit. Discovery is local file I/O (~/.aws/config,
+// show opens the AWS Profiles overlay, resetting any filter left over
+// from a previous visit. Discovery is local file I/O (~/.aws/config,
 // ~/.aws/credentials), fast enough to run synchronously — unlike the
 // broker-touching views, which use a goroutine + QueueUpdateDraw
 // specifically because they're network calls.
-func (a *App) showAWSProfiles() {
-	a.awsProfilesFilter = ""
-	a.awsProfilesFilterInput.SetText("")
-	a.populateAWSProfilesTable()
-	a.rootPages.ShowPage("aws-profiles")
-	a.tv.SetFocus(a.awsProfilesTable)
-	a.awsProfilesVisible = true
+func (ap *awsProfilesPicker) show() {
+	ap.filter = ""
+	ap.filterInput.SetText("")
+	ap.populate()
+	ap.app.rootPages.ShowPage("aws-profiles")
+	ap.app.tv.SetFocus(ap.table)
+	ap.visible = true
 }
 
-// closeAWSProfiles hides the AWS Profiles overlay and restores focus.
-func (a *App) closeAWSProfiles() {
-	a.rootPages.HidePage("aws-profiles")
-	a.awsProfilesVisible = false
-	a.tv.SetFocus(a.pages)
+// close hides the AWS Profiles overlay and restores focus.
+func (ap *awsProfilesPicker) close() {
+	ap.app.rootPages.HidePage("aws-profiles")
+	ap.visible = false
+	ap.app.tv.SetFocus(ap.app.pages)
 }
 
-// populateAWSProfilesTable re-runs discovery via a.listAWSProfiles and
-// redraws the table. Called on open and on 'r' (the files may have changed
-// since cloudtui started, or since the overlay was last opened).
-func (a *App) populateAWSProfilesTable() {
-	profiles, err := a.listAWSProfiles(context.Background())
+// populate re-runs discovery via app.listAWSProfiles and redraws the
+// table. Called on open and on 'r' (the files may have changed since
+// cloudtui started, or since the overlay was last opened).
+func (ap *awsProfilesPicker) populate() {
+	profiles, err := ap.app.listAWSProfiles(context.Background())
 	if err != nil {
-		a.awsProfilesAll = nil
-		a.awsProfilesFiltered = nil
-		t := a.awsProfilesTable
+		ap.all = nil
+		ap.filtered = nil
+		t := ap.table
 		for t.GetRowCount() > 1 {
 			t.RemoveRow(t.GetRowCount() - 1)
 		}
@@ -70,40 +153,40 @@ func (a *App) populateAWSProfilesTable() {
 		t.SetTitle(" AWS Profiles ")
 		return
 	}
-	a.awsProfilesAll = profiles
-	a.repaintAWSProfiles()
+	ap.all = profiles
+	ap.repaint()
 }
 
-// applyAWSProfilesFilter updates the active filter and repaints from the
+// applyFilter updates the active filter and repaints from the
 // already-discovered list, without touching disk again.
-func (a *App) applyAWSProfilesFilter(s string) {
-	a.awsProfilesFilter = s
-	a.repaintAWSProfiles()
+func (ap *awsProfilesPicker) applyFilter(s string) {
+	ap.filter = s
+	ap.repaint()
 }
 
-// repaintAWSProfiles redraws the table from a.awsProfilesAll, applying the
-// current filter (case-insensitive substring match on name, matching
-// queuesView's filter convention). Marks the active profile with ⭐, same
-// convention as the connection manager.
-func (a *App) repaintAWSProfiles() {
-	filtered := a.awsProfilesAll
-	if a.awsProfilesFilter != "" {
-		lower := strings.ToLower(a.awsProfilesFilter)
-		filtered = make([]awsprofile.Profile, 0, len(a.awsProfilesAll))
-		for _, prof := range a.awsProfilesAll {
+// repaint redraws the table from ap.all, applying the current filter
+// (case-insensitive substring match on name, matching queuesView's
+// filter convention). Marks the active profile with ⭐, same convention
+// as the connection manager.
+func (ap *awsProfilesPicker) repaint() {
+	filtered := ap.all
+	if ap.filter != "" {
+		lower := strings.ToLower(ap.filter)
+		filtered = make([]awsprofile.Profile, 0, len(ap.all))
+		for _, prof := range ap.all {
 			if strings.Contains(strings.ToLower(prof.Name), lower) {
 				filtered = append(filtered, prof)
 			}
 		}
 	}
-	a.awsProfilesFiltered = filtered
+	ap.filtered = filtered
 
-	t := a.awsProfilesTable
+	t := ap.table
 	for t.GetRowCount() > 1 {
 		t.RemoveRow(t.GetRowCount() - 1)
 	}
 
-	p := a.cfg.Colors
+	p := ap.app.cfg.Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	accentColor := tcell.GetColor(p.Accent)
@@ -111,7 +194,7 @@ func (a *App) repaintAWSProfiles() {
 		row := i + 1
 		name := prof.Name
 		nc := nameColor
-		if prof.Name == a.cfg.ActiveAWSProfile {
+		if prof.Name == ap.app.cfg.ActiveAWSProfile {
 			name = "⭐ " + name
 			nc = accentColor
 		}
@@ -133,22 +216,24 @@ func (a *App) repaintAWSProfiles() {
 	}
 
 	// "(text)", not "[text]" — see queues.go's updateTitle for why.
-	if a.awsProfilesFilter != "" {
-		t.SetTitle(fmt.Sprintf(" AWS Profiles (%s) ", a.awsProfilesFilter))
+	if ap.filter != "" {
+		t.SetTitle(fmt.Sprintf(" AWS Profiles (%s) ", ap.filter))
 	} else {
-		t.SetTitle(fmt.Sprintf(" AWS Profiles (%d) ", len(a.awsProfilesAll)))
+		t.SetTitle(fmt.Sprintf(" AWS Profiles (%d) ", len(ap.all)))
 	}
 }
 
-// activateAWSProfile records name as the selected AWS profile, persists it,
-// updates the info panel, and closes the overlay. This slice of AWS support
-// doesn't do anything else with the selection yet (no backend/broker is
-// wired to it) — see spec/28-fe-aws-profile-discovery's open question.
-func (a *App) activateAWSProfile(name string) {
+// activate records name as the selected AWS profile, persists it,
+// updates the info panel, and closes the overlay. This slice of AWS
+// support doesn't do anything else with the selection yet (no backend/
+// broker is wired to it) — see spec/28-fe-aws-profile-discovery's open
+// question.
+func (ap *awsProfilesPicker) activate(name string) {
+	a := ap.app
 	a.cfg.ActiveAWSProfile = name
 	a.infoPanel.SetText(infoPanelText(a.cfg))
 	a.refreshSettingsList()
-	a.closeAWSProfiles()
+	ap.close()
 	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("activateAWSProfile: save failed", "error", err)
