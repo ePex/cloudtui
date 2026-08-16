@@ -116,19 +116,20 @@ type App struct {
 	codePipelineDetailV      *codePipelineDetailView
 	// watchedPipelines/lastPipelineStages back the background
 	// CodePipeline watchers — see codepipelinewatch.go.
-	watchedPipelines   map[string]chan struct{}
-	lastPipelineStages map[string]map[string]string
-	listParameters     func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter    func(ctx context.Context, profile, name string) (string, error)
-	listSecrets        func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret       func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups      func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents    func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
-	searchDatadogLogs  func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	listPipelines      func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
-	getPipelineState   func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
-	notify             func(title, message string)
-	screen             tcell.Screen
+	watchedPipelines       map[string]chan struct{}
+	lastPipelineStages     map[string]map[string]string
+	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter        func(ctx context.Context, profile, name string) (string, error)
+	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listDatadogFacetValues func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
+	listPipelines          func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify                 func(title, message string)
+	screen                 tcell.Screen
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -192,6 +193,7 @@ func New(cfg config.Config) *App {
 	a.listLogGroups = awslogs.ListLogGroups
 	a.filterLogEvents = awslogs.FilterEvents
 	a.searchDatadogLogs = datadoglogs.Search
+	a.listDatadogFacetValues = datadoglogs.ListFacetValues
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = desktopNotify
