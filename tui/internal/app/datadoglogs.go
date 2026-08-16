@@ -41,7 +41,7 @@ type datadogLogsView struct {
 	// rebuildFilterOptions's doc comment for why.
 	knownServices map[string]bool
 	knownEnvs     map[string]bool
-	presetIdx     int
+	tr            timeRange
 	results       []datadoglogs.LogEvent
 	hasMore       bool
 }
@@ -110,7 +110,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		queryInput:      queryInput,
 		flex:            flex,
 		app:             a,
-		presetIdx:       defaultPresetIdx,
+		tr:              timeRange{mode: timeRangeRelative, presetIdx: defaultPresetIdx},
 		knownServices:   map[string]bool{},
 		knownEnvs:       map[string]bool{},
 	}
@@ -162,7 +162,10 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 			dv.search()
 			return nil
 		case 't':
-			dv.cycleTimeRange()
+			a.showTimeRangeModal(dv.tr, func(tr timeRange) {
+				dv.tr = tr
+				dv.search()
+			})
 			return nil
 		case '/':
 			dv.queryInput.SetText(dv.query)
@@ -210,11 +213,6 @@ func (dv *datadogLogsView) setHeader() {
 				SetExpansion(1).
 				SetAlign(tview.AlignCenter))
 	}
-}
-
-func (dv *datadogLogsView) cycleTimeRange() {
-	dv.presetIdx = (dv.presetIdx + 1) % len(timeRangePresets)
-	dv.search()
 }
 
 // effectiveQuery combines the Service/Env filters with the free-text
@@ -383,8 +381,7 @@ func sortedKeys(set map[string]bool) []string {
 // hands the outcome to handleSearchResult on the tview event loop.
 func (dv *datadogLogsView) search() {
 	query := dv.effectiveQuery()
-	end := time.Now()
-	start := end.Add(-timeRangePresets[dv.presetIdx].duration)
+	start, end := dv.tr.bounds(time.Now())
 	cfg := dv.app.cfg.Datadog
 	go func() {
 		events, hasMore, err := dv.app.searchDatadogLogs(context.Background(), cfg, query, start, end)
@@ -442,8 +439,8 @@ func (dv *datadogLogsView) repaint() {
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
 func (dv *datadogLogsView) updateTitle() {
-	preset := timeRangePresets[dv.presetIdx].label
-	title := fmt.Sprintf(" Datadog Logs — %s — %d events", preset, len(dv.results))
+	label := dv.tr.label()
+	title := fmt.Sprintf(" Datadog Logs — %s — %d events", label, len(dv.results))
 	if dv.hasMore {
 		title += " (more available — narrow your search)"
 	}
