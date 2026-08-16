@@ -50,7 +50,7 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	sv := a.logSearchV
 	sv.pattern = "stale-pattern"
 	sv.patternInput.SetText("stale-pattern")
-	sv.presetIdx = 3
+	sv.tr = timeRange{mode: timeRangeRelative, presetIdx: 3}
 	sv.results = []awslogs.LogEvent{{Message: "stale"}}
 	sv.hasMore = true
 
@@ -62,8 +62,9 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	if got := sv.patternInput.GetText(); got != "" {
 		t.Errorf("patternInput text = %q, want empty after open()", got)
 	}
-	if sv.presetIdx != defaultPresetIdx {
-		t.Errorf("presetIdx = %d, want %d (default) after open()", sv.presetIdx, defaultPresetIdx)
+	want := timeRange{mode: timeRangeRelative, presetIdx: defaultPresetIdx}
+	if sv.tr != want {
+		t.Errorf("tr = %+v, want %+v (default) after open()", sv.tr, want)
 	}
 	if len(sv.results) != 0 {
 		t.Errorf("results = %+v, want empty after open() with no profile selected", sv.results)
@@ -94,19 +95,82 @@ func TestLogSearchViewOpenWithInitialPatternPreFillsIt(t *testing.T) {
 	}
 }
 
-func TestLogSearchViewCycleTimeRange(t *testing.T) {
+// TestLogSearchViewTKeyOpensTimeRangeModal covers spec/53: 't' now opens
+// the shared time range modal (prefilled from sv.tr) instead of cycling
+// presets directly, and the modal's onApply callback writes the result
+// back into sv.tr and re-searches.
+func TestLogSearchViewTKeyOpensTimeRangeModal(t *testing.T) {
 	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = "" // cycleTimeRange's search() call hits the guard, no goroutine
+	a.cfg.ActiveAWSProfile = "" // any search() from onApply hits the guard, no goroutine
 	sv := a.logSearchV
-	sv.presetIdx = defaultPresetIdx
+	sv.tr = timeRange{mode: timeRangeRelative, presetIdx: 2}
 
-	want := []int{2, 3, 0, 1} // wraps around back to the default ("1h")
-	for _, w := range want {
-		sv.cycleTimeRange()
-		if sv.presetIdx != w {
-			t.Errorf("presetIdx = %d, want %d", sv.presetIdx, w)
-		}
+	capture := sv.table.GetInputCapture()
+	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
+		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
 	}
+	if !a.timeRangeVisible {
+		t.Fatal("'t' did not open the time range modal")
+	}
+	if got := a.timeRangeRelativeList.GetCurrentItem(); got != 2 {
+		t.Errorf("relative list current item = %d, want 2 (sv.tr's preset)", got)
+	}
+
+	if a.timeRangeOnApply == nil {
+		t.Fatal("'t' did not register an onApply callback")
+	}
+	a.timeRangeOnApply(timeRange{mode: timeRangeRelative, presetIdx: 4})
+
+	if want := (timeRange{mode: timeRangeRelative, presetIdx: 4}); sv.tr != want {
+		t.Errorf("sv.tr = %+v, want %+v after applying from the modal", sv.tr, want)
+	}
+}
+
+func TestTimeRangeBounds(t *testing.T) {
+	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
+
+	t.Run("relative resolves against now", func(t *testing.T) {
+		tr := timeRange{mode: timeRangeRelative, presetIdx: 4} // "2d"
+		start, end := tr.bounds(now)
+		if !end.Equal(now) {
+			t.Errorf("end = %v, want %v", end, now)
+		}
+		if want := now.Add(-48 * time.Hour); !start.Equal(want) {
+			t.Errorf("start = %v, want %v", start, want)
+		}
+	})
+
+	t.Run("absolute ignores now", func(t *testing.T) {
+		from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+		tr := timeRange{mode: timeRangeAbsolute, from: from, to: to}
+		start, end := tr.bounds(now)
+		if !start.Equal(from) || !end.Equal(to) {
+			t.Errorf("bounds = %v, %v, want %v, %v", start, end, from, to)
+		}
+	})
+}
+
+func TestTimeRangeLabel(t *testing.T) {
+	t.Run("relative uses preset label", func(t *testing.T) {
+		tr := timeRange{mode: timeRangeRelative, presetIdx: 4}
+		if got, want := tr.label(), "2d"; got != want {
+			t.Errorf("label = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("absolute renders both timestamps in local time", func(t *testing.T) {
+		// label() renders via .Local() (matches the results table's own
+		// timestamp display) — built via time.Local, not a hardcoded UTC
+		// offset, so this passes regardless of the machine's timezone.
+		from := time.Date(2026, 8, 1, 9, 30, 0, 0, time.Local)
+		to := time.Date(2026, 8, 2, 17, 45, 0, 0, time.Local)
+		tr := timeRange{mode: timeRangeAbsolute, from: from, to: to}
+		want := "2026-08-01 09:30 → 2026-08-02 17:45"
+		if got := tr.label(); got != want {
+			t.Errorf("label = %q, want %q", got, want)
+		}
+	})
 }
 
 // TestLogSearchViewPatternInputTypingDoesNotSearch and

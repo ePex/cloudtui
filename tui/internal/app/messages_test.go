@@ -469,6 +469,18 @@ func TestParseMessageFilterForm(t *testing.T) {
 			},
 		},
 		{
+			// Local, not UTC (unlike the date-only case above) — see
+			// parseFilterDate's doc comment. Expectations built via
+			// time.Local, not a hardcoded UTC offset, so this passes
+			// regardless of the machine's timezone.
+			name: "date+time dates (minute precision, no timezone) taken as local time",
+			from: "2025-01-31 08:30", to: "2025-02-01 17:00",
+			want: queue.MessageFilter{
+				FromDate: time.Date(2025, 1, 31, 8, 30, 0, 0, time.Local),
+				ToDate:   time.Date(2025, 2, 1, 17, 0, 0, 0, time.Local),
+			},
+		},
+		{
 			name: "max count",
 			max:  "100",
 			want: queue.MessageFilter{MaxCount: 100},
