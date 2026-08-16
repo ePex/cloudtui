@@ -148,14 +148,24 @@ func New(cfg config.Config) *App {
 
 	homeSections := []views.SectionInfo{
 		{
-			Title: "Apps",
+			Title: "ActiveMQ",
 			Entries: []views.ViewInfo{
 				{Name: "queues", Description: "List ActiveMQ queues"},
+			},
+		},
+		{
+			Title: "AWS",
+			Entries: []views.ViewInfo{
 				{Name: "ssm-parameters", Description: "Browse AWS SSM parameters"},
 				{Name: "secrets-manager", Description: "Browse AWS Secrets Manager secrets"},
 				{Name: "cloudwatch-logs", Description: "Search CloudWatch Logs"},
-				{Name: "datadog-logs", Description: "Search Datadog Logs"},
 				{Name: "codepipeline", Description: "Monitor AWS CodePipeline pipelines"},
+			},
+		},
+		{
+			Title: "Datadog",
+			Entries: []views.ViewInfo{
+				{Name: "datadog-logs", Description: "Search Datadog Logs"},
 			},
 		},
 		{

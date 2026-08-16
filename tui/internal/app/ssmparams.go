@@ -18,7 +18,7 @@ import (
 // tview.Table listing AWS Systems Manager Parameter Store entries under
 // "/" for the currently active AWS profile (config.Config.ActiveAWSProfile
 // — see spec/29-fe-aws-profile-selection). A registered top-level ui.View
-// (Home's "Apps" section, alongside "queues"), not a Settings entry —
+// (Home's "AWS" section), not a Settings entry —
 // this is a primary browsing feature, not app configuration.
 type ssmParamsView struct {
 	table       *tview.Table
