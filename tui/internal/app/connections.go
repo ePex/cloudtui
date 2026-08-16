@@ -60,14 +60,24 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 	}
 	a.connEditorForm.SetTitle(title)
 
-	// Prefill form fields (indices match AddInputField/AddDropDown order in New()).
+	// Name and Backend are always at fixed indices 0/1 — everything after
+	// them is looked up by label instead, since rebuildConnEditorTail can
+	// change which fields exist and where.
 	a.connEditorForm.GetFormItem(0).(*tview.InputField).SetText(conn.Name)
 	backendIdx := 0
 	if conn.Backend == "proxy" {
 		backendIdx = 1
 	}
+	// SetCurrentOption fires the Backend dropdown's selected callback
+	// (rebuildConnEditorTail), rebuilding every item after it — including
+	// whether Broker Name exists at all. rebuildConnEditorTail's own
+	// capture step runs as part of this call and will read (and shadow)
+	// whatever the form's *previous* Broker Name field held — not conn's —
+	// so conn.Queue.BrokerName is applied explicitly afterward instead of
+	// being set beforehand (setting it first would just get clobbered by
+	// that capture step).
 	a.connEditorForm.GetFormItem(1).(*tview.DropDown).SetCurrentOption(backendIdx)
-	a.connEditorForm.GetFormItem(2).(*tview.InputField).SetText(conn.Queue.BrokerName)
+
 	// URL and credentials are backend-specific; show whichever is set.
 	urlVal := conn.Queue.URL
 	username := conn.Queue.Username
@@ -78,22 +88,27 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 		username = conn.Proxy.Username
 		password = conn.Proxy.Password
 		passwordSecret = conn.Proxy.PasswordSecret
+	} else {
+		a.connEditorBrokerName = conn.Queue.BrokerName
+		if item, ok := a.connEditorForm.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
+			item.SetText(conn.Queue.BrokerName)
+		}
 	}
-	a.connEditorForm.GetFormItem(3).(*tview.InputField).SetText(urlVal)
-	a.connEditorForm.GetFormItem(4).(*tview.InputField).SetText(username)
+	a.connEditorForm.GetFormItemByLabel("URL").(*tview.InputField).SetText(urlVal)
+	a.connEditorForm.GetFormItemByLabel("Username").(*tview.InputField).SetText(username)
 
 	sourceIdx := 0
 	if passwordSecret != "" {
 		sourceIdx = 1
 	}
 	// SetCurrentOption fires the Password Source dropdown's selected
-	// callback (setConnEditorPasswordField), swapping item 6 to match
-	// before its text is set below.
-	a.connEditorForm.GetFormItem(5).(*tview.DropDown).SetCurrentOption(sourceIdx)
+	// callback (setConnEditorPasswordField), swapping the trailing field to
+	// match before its text is set below.
+	a.connEditorForm.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
-		a.connEditorForm.GetFormItem(6).(*tview.InputField).SetText(passwordSecret)
+		a.connEditorForm.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).SetText(passwordSecret)
 	} else {
-		a.connEditorForm.GetFormItem(6).(*tview.InputField).SetText(password)
+		a.connEditorForm.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
 	}
 
 	a.rootPages.ShowPage("conn-editor")
@@ -101,17 +116,92 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 	a.connEditorVisible = true
 }
 
-// setConnEditorPasswordField swaps form item 6 — the last item before the
-// Save/Cancel buttons — between a plain Password field (sourceIdx 0) and a
-// Password Secret (AWS) field (sourceIdx 1), driven by the Password Source
-// dropdown at item 5. AddButton items aren't counted by GetFormItem, so
-// item 6 is always the last form item regardless of which field is showing.
+// setConnEditorPasswordField swaps the last form item — the item right
+// before the Save/Cancel buttons — between a plain Password field
+// (sourceIdx 0) and a Password Secret (AWS) field (sourceIdx 1), driven by
+// the Password Source dropdown. AddButton items aren't counted by
+// GetFormItem, so the last form item is always the password-ish field
+// regardless of which one is showing or whether Broker Name is present
+// (see rebuildConnEditorTail) — hence computing the index instead of
+// assuming a fixed one.
 func (a *App) setConnEditorPasswordField(sourceIdx int) {
-	a.connEditorForm.RemoveFormItem(6)
+	f := a.connEditorForm
+	f.RemoveFormItem(f.GetFormItemCount() - 1)
 	if sourceIdx == 1 {
-		a.connEditorForm.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
+		f.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
 	} else {
-		a.connEditorForm.AddPasswordField("Password", "", 20, '*', nil)
+		f.AddPasswordField("Password", "", 20, '*', nil)
+	}
+}
+
+// rebuildConnEditorTail rebuilds every connection-editor form item after
+// Backend (item 1, never removed) — Broker Name (jolokia only), URL,
+// Username, Password Source, and Password/Password Secret — for the given
+// backend. Broker Name only means anything for the jolokia backend (see
+// spec/57-bugfix-broker-name-proxy-hidden); everything else is backend-
+// agnostic and just gets rebuilt alongside it since it isn't the form's
+// last item and can't be swapped in place the way
+// setConnEditorPasswordField swaps the trailing field.
+//
+// Whatever the user already typed/selected is captured via
+// GetFormItemByLabel (nil-safe: an absent field just contributes its zero
+// value) before anything is removed, then fed back in as each new field's
+// initial value — toggling Backend mid-edit must not lose Broker Name, URL,
+// Username, the Password Source choice, or the Password/Secret text.
+//
+// Broker Name is the one field that can't be captured this way alone: once
+// Backend is proxy, the field doesn't exist, so a later jolokia->proxy->
+// jolokia round trip would have nothing to read it back from and silently
+// reset it to "". a.connEditorBrokerName shadows it across exactly that
+// gap — updated here whenever the field exists, left untouched (and used
+// as the restore value) whenever it doesn't.
+func (a *App) rebuildConnEditorTail(backend string) {
+	f := a.connEditorForm
+
+	var url, username, passwordOrSecret string
+	sourceIdx := 0
+	if item, ok := f.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
+		a.connEditorBrokerName = item.GetText()
+	}
+	if item, ok := f.GetFormItemByLabel("URL").(*tview.InputField); ok {
+		url = item.GetText()
+	}
+	if item, ok := f.GetFormItemByLabel("Username").(*tview.InputField); ok {
+		username = item.GetText()
+	}
+	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
+		sourceIdx, _ = dd.GetCurrentOption()
+	}
+	if item, ok := f.GetFormItemByLabel("Password").(*tview.InputField); ok {
+		passwordOrSecret = item.GetText()
+	} else if item, ok := f.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField); ok {
+		passwordOrSecret = item.GetText()
+	}
+
+	for f.GetFormItemCount() > 2 {
+		f.RemoveFormItem(2)
+	}
+
+	if backend != "proxy" {
+		f.AddInputField("Broker Name", a.connEditorBrokerName, 30, nil, nil)
+	}
+	f.AddInputField("URL", url, 40, nil, nil)
+	f.AddInputField("Username", username, 20, nil, nil)
+	// nil selected func here for the same reason as the initial
+	// construction in app.go: wiring it before the trailing password-ish
+	// field is added below would fire prematurely.
+	f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
+	if sourceIdx == 1 {
+		f.AddInputField("Password Secret (AWS)", passwordOrSecret, 30, nil, nil)
+	} else {
+		f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
+	}
+
+	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
+		styleDropDown(dd, a.cfg.Colors)
+		dd.SetSelectedFunc(func(_ string, idx int) {
+			a.setConnEditorPasswordField(idx)
+		})
 	}
 }
 
@@ -132,15 +222,18 @@ func (a *App) saveConnEditor() {
 	backendIdx, _ := a.connEditorForm.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	backends := []string{"jolokia", "proxy"}
 	backend := backends[backendIdx]
-	brokerName := a.connEditorForm.GetFormItem(2).(*tview.InputField).GetText()
-	urlVal := a.connEditorForm.GetFormItem(3).(*tview.InputField).GetText()
-	username := a.connEditorForm.GetFormItem(4).(*tview.InputField).GetText()
-	sourceIdx, _ := a.connEditorForm.GetFormItem(5).(*tview.DropDown).GetCurrentOption()
+	var brokerName string
+	if item, ok := a.connEditorForm.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
+		brokerName = item.GetText()
+	}
+	urlVal := a.connEditorForm.GetFormItemByLabel("URL").(*tview.InputField).GetText()
+	username := a.connEditorForm.GetFormItemByLabel("Username").(*tview.InputField).GetText()
+	sourceIdx, _ := a.connEditorForm.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
 	var password, passwordSecret string
 	if sourceIdx == 1 {
-		passwordSecret = strings.TrimSpace(a.connEditorForm.GetFormItem(6).(*tview.InputField).GetText())
+		passwordSecret = strings.TrimSpace(a.connEditorForm.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).GetText())
 	} else {
-		password = a.connEditorForm.GetFormItem(6).(*tview.InputField).GetText()
+		password = a.connEditorForm.GetFormItemByLabel("Password").(*tview.InputField).GetText()
 	}
 
 	if name == "" {
