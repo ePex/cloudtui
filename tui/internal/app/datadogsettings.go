@@ -80,11 +80,15 @@ func (de *datadogEditor) save() {
 	site := strings.TrimSpace(de.form.GetFormItem(0).(*tview.InputField).GetText())
 	token := de.form.GetFormItem(1).(*tview.InputField).GetText()
 
-	a.cfg.Datadog = config.DatadogConfig{Site: site, AccessToken: token}
+	a.SaveDatadogConfig(config.DatadogConfig{Site: site, AccessToken: token})
+	de.close()
+}
 
+// SaveDatadogConfig persists cfg.Datadog and refreshes the settings list.
+func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
+	a.cfg.Datadog = cfg
 	if err := config.SaveDefault(a.cfg); err != nil {
-		slog.Error("saveDatadogEditor: save failed", "error", err)
+		slog.Error("SaveDatadogConfig: save failed", "error", err)
 	}
 	a.refreshSettingsList()
-	de.close()
 }

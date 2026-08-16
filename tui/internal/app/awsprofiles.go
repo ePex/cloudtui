@@ -246,12 +246,18 @@ func (ap *awsProfilesPicker) repaint() {
 // question.
 func (ap *awsProfilesPicker) activate(name string) {
 	a := ap.app
+	a.SetActiveAWSProfile(name)
+	ap.close()
+	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))
+}
+
+// SetActiveAWSProfile sets name as the active AWS profile, updates the
+// info panel, refreshes the settings list, and persists.
+func (a *App) SetActiveAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.refreshSettingsList()
-	ap.close()
-	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))
 	if err := config.SaveDefault(a.cfg); err != nil {
-		slog.Error("activateAWSProfile: save failed", "error", err)
+		slog.Error("SetActiveAWSProfile: save failed", "error", err)
 	}
 }
