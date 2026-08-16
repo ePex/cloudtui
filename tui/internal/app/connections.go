@@ -54,7 +54,7 @@ func (a *App) showConnEditor(conn config.Connection, isNew bool, origName string
 	a.connEditorIsNew = isNew
 	a.connEditorOrigName = origName
 
-	title := " New Connection "
+	title := " New AMQ Connection "
 	if !isNew {
 		title = fmt.Sprintf(" Edit — %s ", origName)
 	}

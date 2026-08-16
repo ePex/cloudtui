@@ -423,7 +423,7 @@ func New(cfg config.Config) *App {
 	a.connManagerFlex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(a.connManagerList, 0, 1, true).
 		AddItem(a.connManagerHints, 2, 0, false)
-	a.connManagerFlex.SetBorder(true).SetTitle(" Connections ")
+	a.connManagerFlex.SetBorder(true).SetTitle(" AMQ Connections ")
 	connManagerOverlay := centered(a.connManagerFlex, 64, 20)
 
 	a.connManagerList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -475,7 +475,7 @@ func New(cfg config.Config) *App {
 
 	// Connection editor overlay
 	a.connEditorForm = tview.NewForm()
-	a.connEditorForm.SetBorder(true).SetTitle(" Connection ")
+	a.connEditorForm.SetBorder(true).SetTitle(" AMQ Connection ")
 	a.connEditorForm.
 		AddInputField("Name", "", 30, nil, nil).
 		AddInputField("Alias", "", 10, nil, nil).
