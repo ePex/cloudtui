@@ -18,7 +18,7 @@ import (
 // read-only tview.Table listing pipelines for the currently active AWS
 // profile (config.Config.ActiveAWSProfile — see
 // spec/29-fe-aws-profile-selection). A registered top-level ui.View
-// (Home's "Apps" section). Selecting a pipeline opens the stage-status
+// (Home's "AWS" section). Selecting a pipeline opens the stage-status
 // detail view (codePipelineDetailView), not a static detail view — same
 // shape as logsView/logSearchView (spec/34-fe-cloudwatch-logs). 'w'
 // toggles watching a pipeline directly from this list, without opening

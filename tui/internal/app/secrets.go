@@ -18,7 +18,7 @@ import (
 // tview.Table listing AWS Secrets Manager entries for the currently
 // active AWS profile (config.Config.ActiveAWSProfile — see
 // spec/29-fe-aws-profile-selection). A registered top-level ui.View
-// (Home's "Apps" section, alongside "queues" and "ssm-parameters").
+// (Home's "AWS" section, alongside "ssm-parameters").
 type secretsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
