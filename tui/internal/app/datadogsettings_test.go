@@ -15,33 +15,33 @@ import (
 // Esc must close without tabbing all the way to Cancel.
 func TestDatadogEditorEscapeCloses(t *testing.T) {
 	a := New(config.Default())
-	a.showDatadogEditor()
-	if !a.datadogEditorVisible {
-		t.Fatal("showDatadogEditor() did not open the editor")
+	a.datadogEditor.show()
+	if !a.datadogEditor.visible {
+		t.Fatal("datadogEditor.show() did not open the editor")
 	}
 
-	capture := a.datadogEditorForm.GetInputCapture()
+	capture := a.datadogEditor.form.GetInputCapture()
 	if capture == nil {
-		t.Fatal("datadogEditorForm has no input capture set")
+		t.Fatal("datadogEditor.form has no input capture set")
 	}
 	if got := capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Errorf("Esc capture returned %v, want nil (event consumed)", got)
 	}
-	if a.datadogEditorVisible {
+	if a.datadogEditor.visible {
 		t.Error("Esc did not close the Datadog editor")
 	}
 }
 
 func TestDatadogEditorOtherKeysPassThrough(t *testing.T) {
 	a := New(config.Default())
-	a.showDatadogEditor()
+	a.datadogEditor.show()
 
-	capture := a.datadogEditorForm.GetInputCapture()
+	capture := a.datadogEditor.form.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 	if got := capture(event); got != event {
 		t.Errorf("capture() altered/swallowed a non-Esc key: got %v, want it passed through unchanged", got)
 	}
-	if !a.datadogEditorVisible {
+	if !a.datadogEditor.visible {
 		t.Error("a non-Esc key should not close the editor")
 	}
 }
@@ -50,12 +50,12 @@ func TestDatadogEditorPrefillsFromConfig(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.Datadog = config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-123"}
 
-	a.showDatadogEditor()
+	a.datadogEditor.show()
 
-	if got := a.datadogEditorForm.GetFormItem(0).(*tview.InputField).GetText(); got != "datadoghq.eu" {
+	if got := a.datadogEditor.form.GetFormItem(0).(*tview.InputField).GetText(); got != "datadoghq.eu" {
 		t.Errorf("Site field = %q, want %q", got, "datadoghq.eu")
 	}
-	if got := a.datadogEditorForm.GetFormItem(1).(*tview.InputField).GetText(); got != "tok-123" {
+	if got := a.datadogEditor.form.GetFormItem(1).(*tview.InputField).GetText(); got != "tok-123" {
 		t.Errorf("Access Token field = %q, want %q", got, "tok-123")
 	}
 }
@@ -69,14 +69,14 @@ func TestSaveDatadogEditorRoundTrip(t *testing.T) {
 	t.Chdir(dir)
 
 	a := New(config.Default())
-	a.showDatadogEditor()
-	a.datadogEditorForm.GetFormItem(0).(*tview.InputField).SetText("datadoghq.eu")
-	a.datadogEditorForm.GetFormItem(1).(*tview.InputField).SetText("tok-456")
+	a.datadogEditor.show()
+	a.datadogEditor.form.GetFormItem(0).(*tview.InputField).SetText("datadoghq.eu")
+	a.datadogEditor.form.GetFormItem(1).(*tview.InputField).SetText("tok-456")
 
-	a.saveDatadogEditor()
+	a.datadogEditor.save()
 
-	if a.datadogEditorVisible {
-		t.Error("saveDatadogEditor() did not close the editor")
+	if a.datadogEditor.visible {
+		t.Error("datadogEditor.save() did not close the editor")
 	}
 	want := config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-456"}
 	if a.cfg.Datadog != want {

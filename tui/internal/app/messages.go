@@ -128,7 +128,7 @@ func newMessagesView(a *App) *messagesView {
 			mv.app.tv.SetFocus(mv.searchInput)
 			return nil
 		case event.Rune() == 'f':
-			a.showMessageFilter()
+			a.messageFilter.show()
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
