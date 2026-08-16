@@ -17,8 +17,8 @@ import (
 // logsView is the CloudWatch Logs screen: a filterable, read-only
 // tview.Table listing log groups for the currently active AWS profile
 // (config.Config.ActiveAWSProfile — see spec/29-fe-aws-profile-selection).
-// A registered top-level ui.View (Home's "Apps" section, alongside
-// "queues"/"ssm-parameters"/"secrets-manager"). Selecting a log group
+// A registered top-level ui.View (Home's "AWS" section, alongside
+// "ssm-parameters"/"secrets-manager"). Selecting a log group
 // opens the search view (logSearchView), not a static detail view — see
 // spec/34-fe-cloudwatch-logs for why this feature's shape differs from
 // the others.
