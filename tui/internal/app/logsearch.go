@@ -316,3 +316,33 @@ func logEventPreview(message string) string {
 	}
 	return message
 }
+
+// openLogSearch opens the search view for logGroupName and runs the
+// first search immediately (see logSearchView.open). logSearchView isn't
+// a registered ui.View, so its context panel is populated manually here
+// — same pattern as openMessages.
+func (a *App) openLogSearch(logGroupName string) {
+	pattern := a.pendingCloudWatchPattern
+	a.pendingCloudWatchPattern = ""
+	a.logSearchV.open(logGroupName, pattern)
+	a.pages.SwitchToPage("log-search")
+	a.tv.SetFocus(a.pages)
+	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
+	for _, sc := range a.logSearchV.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+	}
+	a.contextPanel.SetText(strings.Join(lines, "\n"))
+}
+
+// wireLogsOpensSearch wires Enter in the log groups table to open the
+// search view for the selected log group. Called from New() once
+// logSearchV exists.
+func (a *App) wireLogsOpensSearch() {
+	a.logsV.table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(a.logsV.filtered) {
+			return
+		}
+		a.openLogSearch(a.logsV.filtered[idx].Name)
+	})
+}
