@@ -378,3 +378,84 @@ func TestDatadogLogsViewScrollsToTopWithManyRows(t *testing.T) {
 		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
 	}
 }
+
+// TestHandleFacetDiscoveryResultMergesNewValues confirms newly-discovered
+// values are merged into known and reflected in the dropdown, alongside
+// whatever rebuildFilterOptions had already accumulated from search
+// results — the two merge paths (spec/52) must compose.
+func TestHandleFacetDiscoveryResultMergesNewValues(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
+	dv.rebuildFilterOptions()
+	if got := dv.serviceFilterDD.GetOptionCount(); got != 2 { // "(any)" + activemq
+		t.Fatalf("before discovery: option count = %d, want 2", got)
+	}
+
+	dv.handleFacetDiscoveryResult(dv.knownServices, []string{"activemq", "bar-proxy"}, nil)
+
+	if !dv.knownServices["bar-proxy"] {
+		t.Error("knownServices does not contain the newly-discovered bar-proxy")
+	}
+	if got := dv.serviceFilterDD.GetOptionCount(); got != 3 { // "(any)" + activemq + bar-proxy
+		t.Errorf("after discovery: option count = %d, want 3", got)
+	}
+}
+
+// TestHandleFacetDiscoveryResultNoopOnError confirms a failed discovery
+// call leaves known and the dropdown untouched — fails soft, per spec.
+func TestHandleFacetDiscoveryResultNoopOnError(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
+	dv.rebuildFilterOptions()
+	before := dv.serviceFilterDD.GetOptionCount()
+
+	dv.handleFacetDiscoveryResult(dv.knownServices, nil, context.DeadlineExceeded)
+
+	if len(dv.knownServices) != 1 {
+		t.Errorf("knownServices = %v, want unchanged (len 1)", dv.knownServices)
+	}
+	if got := dv.serviceFilterDD.GetOptionCount(); got != before {
+		t.Errorf("option count = %d, want unchanged at %d", got, before)
+	}
+}
+
+// TestHandleFacetDiscoveryResultSkipsEmptyValues confirms an empty
+// string in the discovered values (shouldn't happen given
+// ListFacetValues already filters these, but defensive here too) never
+// ends up in known.
+func TestHandleFacetDiscoveryResultSkipsEmptyValues(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+
+	dv.handleFacetDiscoveryResult(dv.knownServices, []string{"", "activemq", ""}, nil)
+
+	if len(dv.knownServices) != 1 || !dv.knownServices["activemq"] {
+		t.Errorf("knownServices = %v, want just {activemq: true}", dv.knownServices)
+	}
+}
+
+// TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive
+// confirms a Service filter picked before discovery finishes isn't
+// clobbered when discovery's result lands and rebuilds the dropdown —
+// exercises applyFilterOptions's existing selection-preservation logic
+// through the new discovery call path.
+func TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive(t *testing.T) {
+	a := New(config.Default())
+	dv := a.datadogLogsV
+	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
+	dv.rebuildFilterOptions()
+	dv.serviceFilter = "activemq"
+	dv.serviceFilterDD.SetCurrentOption(1)
+
+	dv.handleFacetDiscoveryResult(dv.knownServices, []string{"activemq", "bar-proxy"}, nil)
+
+	if dv.serviceFilter != "activemq" {
+		t.Errorf("serviceFilter = %q, want %q (unchanged)", dv.serviceFilter, "activemq")
+	}
+	_, selected := dv.serviceFilterDD.GetCurrentOption()
+	if selected != "activemq" {
+		t.Errorf("dropdown's selected option = %q, want %q", selected, "activemq")
+	}
+}

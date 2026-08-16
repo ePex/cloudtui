@@ -44,8 +44,8 @@ type bulkItem struct {
 }
 
 type bulkResponseItem struct {
-	Status int   `json:"status"`
-	Value  int64 `json:"value"`
+	Status int    `json:"status"`
+	Value  int64  `json:"value"`
 	Error  string `json:"error"`
 }
 
@@ -138,10 +138,10 @@ func (c *Client) readMetrics(ctx context.Context, mbeans []string) ([]queue.Summ
 	// [QueueSize, ConsumerCount, EnqueueCount, DequeueCount].
 	summaries := make([]queue.Summary, 0, len(mbeans))
 	for i, mb := range mbeans {
-		queueSize    := results[i*4]
+		queueSize := results[i*4]
 		consumerCount := results[i*4+1]
-		enqueueCount  := results[i*4+2]
-		dequeueCount  := results[i*4+3]
+		enqueueCount := results[i*4+2]
+		dequeueCount := results[i*4+3]
 
 		for _, r := range []struct {
 			item bulkResponseItem
@@ -210,7 +210,12 @@ func splitComma(s string) []string {
 // serialized), it falls back to browse() which returns plain body strings.
 // Fallback messages have empty IDs — individual move/delete will not work for
 // them. If both operations fail, the original browseMessages error is returned.
-func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.Message, error) {
+//
+// filter is applied client-side (via filterMessages, filter.go) after the
+// full/fallback browse completes — JMX has no selector-based browse, unlike
+// the proxy backend, which pushes the filter down to mq-proxy's list-messages
+// endpoint.
+func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
 	msgs, err := c.browseMessagesFull(ctx, queueName)
 	if err != nil {
 		slog.Debug("browseMessages failed, trying browse() fallback", "queue", queueName, "err", err)
@@ -219,9 +224,9 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.
 			slog.Debug("browse() fallback also failed", "queue", queueName, "err", fallbackErr)
 			return nil, err
 		}
-		return fallback, nil
+		return filterMessages(fallback, filter), nil
 	}
-	return msgs, nil
+	return filterMessages(msgs, filter), nil
 }
 
 // browseMessagesFull calls the browseMessages() Jolokia exec operation and
@@ -621,7 +626,7 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
 	}
 
 	// Tier 3: browse-and-remove.
-	msgs, err := c.BrowseMessages(ctx, queueName)
+	msgs, err := c.BrowseMessages(ctx, queueName, queue.MessageFilter{})
 	if err != nil {
 		return fmt.Errorf("purge queue %s: browse: %w", queueName, err)
 	}

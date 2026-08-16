@@ -20,6 +20,20 @@ import java.time.format.DateTimeFormatter
 @Service
 class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
 
+    companion object {
+        /**
+         * Timeout for [deleteMessages]/[moveMessages]'s receive loop.
+         * `receiveNoWait()` is unreliable immediately after creating a
+         * selector-based consumer: the broker dispatches matching messages
+         * to a new consumer's prefetch buffer asynchronously, so
+         * `receiveNoWait()` can return null even though matching messages
+         * exist and are visible via `list-messages` — confirmed live
+         * (spec/47-bugfix-mq-proxy-delete-move-receive-race). A bounded
+         * `receive(timeout)` waits for that dispatch instead of racing it.
+         */
+        private const val RECEIVE_TIMEOUT_MS = 2000L
+    }
+
     private val log = LoggerFactory.getLogger(BrokerService::class.java)
 
     // -------------------------------------------------------------------------
@@ -58,8 +72,8 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // Message browsing
     // -------------------------------------------------------------------------
 
-    fun browseMessages(queueName: String, filter: QueueMessageFilter): List<MessageSummary> {
-        log.info("broker: browseMessages queue={} filter={}", queueName, filter)
+    fun browseMessages(queueName: String, filter: QueueMessageFilter, returnBody: Boolean = true): List<MessageSummary> {
+        log.info("broker: browseMessages queue={} filter={} returnBody={}", queueName, filter, returnBody)
         val connection = connectionFactory.createConnection()
         connection.start()
         return try {
@@ -67,9 +81,9 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
             val messages = mutableListOf<MessageSummary>()
             val enum = browser.enumeration
-            while (enum.hasMoreElements()) {
+            while (enum.hasMoreElements() && (filter.maxCount == null || messages.size < filter.maxCount)) {
                 val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
-                messages += msg.toSummary(queueName)
+                messages += msg.toSummary(queueName, returnBody)
             }
             browser.close()
             messages
@@ -114,7 +128,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val consumer = session.createConsumer(session.createQueue(sourceQueue), filter.toSelector())
             val deleted = mutableListOf<DeletedMessageDto>()
             while (filter.maxCount == null || deleted.size < filter.maxCount) {
-                val msg = consumer.receiveNoWait() ?: break
+                val msg = consumer.receive(RECEIVE_TIMEOUT_MS) ?: break
                 deleted += DeletedMessageDto(messageId = msg.jmsMessageID ?: "")
             }
             consumer.close()
@@ -134,7 +148,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             val producer = session.createProducer(session.createQueue(targetQueue))
             val moved = mutableListOf<MovedMessageDto>()
             while (filter.maxCount == null || moved.size < filter.maxCount) {
-                val msg = consumer.receiveNoWait() ?: break
+                val msg = consumer.receive(RECEIVE_TIMEOUT_MS) ?: break
                 producer.send(msg)
                 moved += MovedMessageDto(messageId = msg.jmsMessageID ?: "")
             }
@@ -168,11 +182,11 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
         return clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
     }
 
-    private fun jakarta.jms.Message.toSummary(sourceQueue: String) = MessageSummary(
+    private fun jakarta.jms.Message.toSummary(sourceQueue: String, returnBody: Boolean = true) = MessageSummary(
         sourceQueue = sourceQueue,
         messageId = jmsMessageID ?: "",
         jmsType = jmsType ?: "",
-        body = (this as? TextMessage)?.text,
+        body = if (returnBody) (this as? TextMessage)?.text else null,
         timestamp = epochMillisToIso(jmsTimestamp),
         headers = stringProperties(),
     )
