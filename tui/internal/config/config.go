@@ -74,6 +74,10 @@ type QueueConfig struct {
 	URL        string `yaml:"url"`        // Jolokia HTTP endpoint
 	Username   string `yaml:"username"`
 	Password   string `yaml:"password"`
+	// PasswordSecret, when non-empty, names an AWS Secrets Manager secret
+	// resolved at connect time via the active AWS profile; it takes
+	// precedence over Password (see spec/56-fe-amq-connection-aws-secret-password).
+	PasswordSecret string `yaml:"passwordSecret,omitempty"`
 }
 
 // ProxyConfig holds the connection settings for the mq-proxy backend.
@@ -81,6 +85,10 @@ type ProxyConfig struct {
 	URL      string `yaml:"url"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	// PasswordSecret, when non-empty, names an AWS Secrets Manager secret
+	// resolved at connect time via the active AWS profile; it takes
+	// precedence over Password (see spec/56-fe-amq-connection-aws-secret-password).
+	PasswordSecret string `yaml:"passwordSecret,omitempty"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values are

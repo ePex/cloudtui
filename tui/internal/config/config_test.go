@@ -536,6 +536,33 @@ func TestSaveLoadRoundTripWithConnection(t *testing.T) {
 	}
 }
 
+func TestSaveLoadRoundTripWithPasswordSecret(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.Connections[0].Queue.PasswordSecret = "/cloudtui/local/mq-password"
+	cfg.Connections = append(cfg.Connections, Connection{
+		Name:    "aws-staging",
+		Backend: "proxy",
+		Proxy:   ProxyConfig{URL: "http://localhost:8080", PasswordSecret: "/cloudtui/aws-staging/mq-password"},
+	})
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Connections[0].Queue.PasswordSecret != "/cloudtui/local/mq-password" {
+		t.Errorf("Connections[0].Queue.PasswordSecret = %q, want %q", got.Connections[0].Queue.PasswordSecret, "/cloudtui/local/mq-password")
+	}
+	if got.Connections[1].Proxy.PasswordSecret != "/cloudtui/aws-staging/mq-password" {
+		t.Errorf("Connections[1].Proxy.PasswordSecret = %q, want %q", got.Connections[1].Proxy.PasswordSecret, "/cloudtui/aws-staging/mq-password")
+	}
+}
+
 func TestSaveLoadRoundTripWithActiveAWSProfile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 
