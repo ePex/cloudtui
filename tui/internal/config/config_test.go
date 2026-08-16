@@ -267,12 +267,6 @@ func TestDefaultConnectionCount(t *testing.T) {
 	}
 }
 
-func TestDefaultConnectionAlias(t *testing.T) {
-	if got := Default().ActiveConn().Alias; got != "def" {
-		t.Errorf("Default().ActiveConn().Alias = %q, want %q", got, "def")
-	}
-}
-
 func TestActiveConnFallsBackToFirst(t *testing.T) {
 	cfg := Default()
 	cfg.ActiveConnection = "nonexistent"
@@ -292,7 +286,7 @@ func TestActiveConnEmptyConnections(t *testing.T) {
 
 func TestLoadConnectionsNewFormat(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	content := "activeConnection: aws\nconnections:\n  - name: aws\n    alias: stg\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"
+	content := "activeConnection: aws\nconnections:\n  - name: aws\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -308,11 +302,28 @@ func TestLoadConnectionsNewFormat(t *testing.T) {
 	if conn.Backend != "proxy" {
 		t.Errorf("Backend = %q, want %q", conn.Backend, "proxy")
 	}
-	if conn.Alias != "stg" {
-		t.Errorf("Alias = %q, want %q", conn.Alias, "stg")
-	}
 	if conn.Proxy.URL != "http://localhost:8080" {
 		t.Errorf("Proxy.URL = %q, want %q", conn.Proxy.URL, "http://localhost:8080")
+	}
+}
+
+// TestLoadIgnoresStaleAliasKey covers the CR 55 migration story: a config
+// file left over from before the alias field was removed should still load
+// cleanly, with the connection identified purely by name.
+func TestLoadIgnoresStaleAliasKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := "activeConnection: aws\nconnections:\n  - name: aws\n    alias: stg\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	conn := got.ActiveConn()
+	if conn.Name != "aws" {
+		t.Errorf("Name = %q, want %q", conn.Name, "aws")
 	}
 }
 
