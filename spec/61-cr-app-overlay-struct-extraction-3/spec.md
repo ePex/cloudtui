@@ -82,3 +82,12 @@ per slice is low.
    existing/added test coverage that live verification is a lighter
    sanity pass, not the primary safety net (mirrors CR 60's differentiated
    treatment of message filter vs. Datadog settings).
+
+## Later note
+
+The "two OR-chain lines, eight `.visible` reads" state described above
+(point 2) was itself replaced (2026-08-16, `/simplify` pass on
+`onGlobalKey`, no dedicated spec folder — pure duplication cleanup, no
+behavior change): both sites now call a shared `a.anyOverlayVisible()`,
+which loops over an `overlayVisible []*bool` slice of the same eight
+(now ten, after later CRs) flag pointers built once in `New()`.
