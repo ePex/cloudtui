@@ -1,4 +1,4 @@
-package app
+package ui
 
 import (
 	"fmt"
@@ -10,29 +10,29 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-// shortcutPanelRows is the maximum number of shortcut lines any view shows
+// ShortcutPanelRows is the maximum number of shortcut lines any view shows
 // — bump this whenever a view's Shortcuts() grows past it, or entries
 // silently clip off the bottom of the context panel (the top bar's height
 // is fixed, not scrollable). Currently messagesView, at 11.
-const shortcutPanelRows = 11
+const ShortcutPanelRows = 11
 
-// topBar is the app's top row: a "info"/"prompt" Pages on the left
+// TopBar is the app's top row: a "info"/"prompt" Pages on the left
 // (connection info, replaced by the command prompt while active),
 // a single-char divider, a context panel (view-specific shortcuts,
 // empty by default), and the logo.
-type topBar struct {
-	root         *tview.Flex
-	left         *tview.Pages
-	info         *tview.TextView
-	divider      *tview.TextView
-	contextPanel *tview.TextView
-	logo         *tview.TextView
-	height       int
+type TopBar struct {
+	Root         *tview.Flex
+	Left         *tview.Pages
+	Info         *tview.TextView
+	Divider      *tview.TextView
+	ContextPanel *tview.TextView
+	Logo         *tview.TextView
+	Height       int
 }
 
-// newTopBar builds the top bar. prompt is added as the left Pages' "prompt"
+// NewTopBar builds the top bar. prompt is added as the left Pages' "prompt"
 // page so the app can switch to it while a command is being typed.
-func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
+func NewTopBar(cfg config.Config, prompt *tview.InputField) *TopBar {
 	info := newInfoPanel(cfg)
 	left := tview.NewPages().
 		AddPage("info", info, true, true).
@@ -41,7 +41,7 @@ func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
 	contextPanel := tview.NewTextView().SetDynamicColors(true)
 	logoPanel := newLogoPanel(cfg)
 	// Ensure the top bar is tall enough to display all view shortcuts.
-	height := maxInt(shortcutPanelRows, len(cfg.Logo))
+	height := maxInt(ShortcutPanelRows, len(cfg.Logo))
 	divider := newDivider(cfg, height)
 
 	root := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -50,14 +50,14 @@ func newTopBar(cfg config.Config, prompt *tview.InputField) *topBar {
 		AddItem(contextPanel, 0, 1, false).
 		AddItem(logoPanel, logoWidth(cfg.Logo), 0, false)
 
-	return &topBar{
-		root:         root,
-		left:         left,
-		info:         info,
-		divider:      divider,
-		contextPanel: contextPanel,
-		logo:         logoPanel,
-		height:       height,
+	return &TopBar{
+		Root:         root,
+		Left:         left,
+		Info:         info,
+		Divider:      divider,
+		ContextPanel: contextPanel,
+		Logo:         logoPanel,
+		Height:       height,
 	}
 }
 
@@ -71,8 +71,8 @@ func newDivider(cfg config.Config, height int) *tview.TextView {
 		SetText(fmt.Sprintf("[%s]%s[-]", cfg.Colors.Border, strings.Join(lines, "\n")))
 }
 
-// infoPanelText renders the connection-info panel's content from cfg.
-func infoPanelText(cfg config.Config) string {
+// InfoPanelText renders the connection-info panel's content from cfg.
+func InfoPanelText(cfg config.Config) string {
 	awsProfile := cfg.ActiveAWSProfile
 	if awsProfile == "" {
 		awsProfile = "(none)"
@@ -88,7 +88,7 @@ func infoPanelText(cfg config.Config) string {
 func newInfoPanel(cfg config.Config) *tview.TextView {
 	return tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(infoPanelText(cfg))
+		SetText(InfoPanelText(cfg))
 }
 
 // newLogoPanel renders the configured ASCII logo. Dynamic colors are left off

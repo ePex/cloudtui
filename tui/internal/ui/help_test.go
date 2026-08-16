@@ -1,4 +1,4 @@
-package app
+package ui
 
 import (
 	"strings"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewHelpModalContainsBindings(t *testing.T) {
-	text := newHelpModal(config.Default()).GetText(true)
+	text := NewHelpModal(config.Default()).GetText(true)
 
 	for _, want := range []string{"h", "home", "s", "settings", "q", "quit", "?", ":", "command", "esc"} {
 		if !strings.Contains(text, want) {
@@ -22,11 +22,11 @@ func TestNewHelpModalContainsBindings(t *testing.T) {
 func TestCenteredWrapsInThreeItems(t *testing.T) {
 	inner := tview.NewBox()
 
-	flex, ok := centered(inner, helpModalWidth, helpModalHeight).(*tview.Flex)
+	flex, ok := Centered(inner, HelpModalWidth, HelpModalHeight).(*tview.Flex)
 	if !ok {
-		t.Fatalf("centered() returned %T, want *tview.Flex", centered(inner, helpModalWidth, helpModalHeight))
+		t.Fatalf("Centered() returned %T, want *tview.Flex", Centered(inner, HelpModalWidth, HelpModalHeight))
 	}
 	if got, want := flex.GetItemCount(), 3; got != want {
-		t.Errorf("centered() top-level item count = %d, want %d", got, want)
+		t.Errorf("Centered() top-level item count = %d, want %d", got, want)
 	}
 }

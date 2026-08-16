@@ -8,6 +8,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
 
@@ -60,7 +61,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Info panel — rebuildtext to show the new theme name
 	a.infoPanel.SetBackgroundColor(bg)
-	a.infoPanel.SetText(infoPanelText(a.cfg))
+	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 
 	// Divider — rebuild color-tagged text to pick up the new border color
 	lines := make([]string, a.topBarHeight)
