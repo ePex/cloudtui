@@ -15,12 +15,12 @@ Authorization: Basic {{username}} {{password}}
 
 ### ─── Messages ────────────────────────────────────────────────────────────────
 
-### List all messages in a queue
-GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}
+### List messages in a queue (filter.maxCount is required, caps how many are returned)
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&filter.maxCount=500
 Authorization: Basic {{username}} {{password}}
 
 ### List messages filtered by JMS type
-GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&filter.jmsType=order-created
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&filter.jmsType=order-created&filter.maxCount=500
 Authorization: Basic {{username}} {{password}}
 
 ### List messages within a date range, capped at 10, without bodies

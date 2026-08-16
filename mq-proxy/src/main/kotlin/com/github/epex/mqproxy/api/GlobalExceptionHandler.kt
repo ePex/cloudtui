@@ -26,6 +26,14 @@ class GlobalExceptionHandler {
     fun handleBind(ex: BindException): Map<String, String> =
         mapOf("error" to (ex.bindingResult.allErrors.firstOrNull()?.defaultMessage ?: "Invalid request parameters"))
 
+    // Explicit request-validation failures (e.g. list-messages' required
+    // filter.maxCount) throw IllegalArgumentException via require(); without
+    // this handler it falls through to handleGeneric's 500, losing the 400.
+    @ExceptionHandler(IllegalArgumentException::class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    fun handleIllegalArgument(ex: IllegalArgumentException): Map<String, String> =
+        mapOf("error" to (ex.message ?: "Invalid request"))
+
     @ExceptionHandler(Exception::class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     fun handleGeneric(ex: Exception): Map<String, String> =
