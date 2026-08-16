@@ -77,6 +77,8 @@ type App struct {
 	connEditorVisible    bool
 	connEditorIsNew      bool
 	connEditorOrigName   string
+	messageFilterForm    *tview.Form
+	messageFilterVisible bool
 	datadogEditorForm    *tview.Form
 	datadogEditorVisible bool
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
@@ -114,19 +116,20 @@ type App struct {
 	codePipelineDetailV      *codePipelineDetailView
 	// watchedPipelines/lastPipelineStages back the background
 	// CodePipeline watchers — see codepipelinewatch.go.
-	watchedPipelines   map[string]chan struct{}
-	lastPipelineStages map[string]map[string]string
-	listParameters     func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter    func(ctx context.Context, profile, name string) (string, error)
-	listSecrets        func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret       func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups      func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents    func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
-	searchDatadogLogs  func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	listPipelines      func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
-	getPipelineState   func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
-	notify             func(title, message string)
-	screen             tcell.Screen
+	watchedPipelines       map[string]chan struct{}
+	lastPipelineStages     map[string]map[string]string
+	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter        func(ctx context.Context, profile, name string) (string, error)
+	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listDatadogFacetValues func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
+	listPipelines          func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify                 func(title, message string)
+	screen                 tcell.Screen
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -190,6 +193,7 @@ func New(cfg config.Config) *App {
 	a.listLogGroups = awslogs.ListLogGroups
 	a.filterLogEvents = awslogs.FilterEvents
 	a.searchDatadogLogs = datadoglogs.Search
+	a.listDatadogFacetValues = datadoglogs.ListFacetValues
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = desktopNotify
@@ -316,7 +320,7 @@ func New(cfg config.Config) *App {
 	}
 	// messages, message-detail, and param-detail pages: not in a.views (no
 	// home entry / switchTo — opened directly via their own open* helper).
-	a.pages.AddPage("messages", a.messagesV.table, true, false)
+	a.pages.AddPage("messages", a.messagesV.flex, true, false)
 	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
 	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
 	a.pages.AddPage("log-search", a.logSearchV.flex, true, false)
@@ -478,6 +482,30 @@ func New(cfg config.Config) *App {
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := centered(a.connEditorForm, 64, 20)
 
+	// Message filter overlay (FE 46) — the server-side counterpart to
+	// messagesView's quick search: JMS type + date range + max count,
+	// applied by the backend rather than client-side.
+	a.messageFilterForm = tview.NewForm()
+	a.messageFilterForm.SetBorder(true).SetTitle(" Message Filter ")
+	a.messageFilterForm.
+		AddInputField("JMS Type", "", 30, nil, nil).
+		AddInputField("From (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
+		AddInputField("To (RFC3339 or YYYY-MM-DD)", "", 30, nil, nil).
+		AddInputField("Max Count", "", 10, nil, nil).
+		AddButton("Apply", func() { a.applyMessageFilter() }).
+		AddButton("Clear", func() { a.clearMessageFilter() }).
+		AddButton("Cancel", func() { a.closeMessageFilter() })
+	a.messageFilterForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.closeMessageFilter()
+			return nil
+		}
+		return event
+	})
+	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
+	// button row (1 row) = 15; give it one spare row.
+	messageFilterOverlay := centered(a.messageFilterForm, 64, 16)
+
 	// Datadog editor overlay (spec/39-fe-datadog-logs) — same shape as
 	// the connection editor, just two fields: Site (plain, not a
 	// secret) and Access Token (a Personal Access Token, masked — see
@@ -594,6 +622,7 @@ func New(cfg config.Config) *App {
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
+		AddPage("message-filter", messageFilterOverlay, true, false).
 		AddPage("datadog-editor", datadogEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
@@ -621,6 +650,9 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.queuesV != nil && a.tv.GetFocus() == a.queuesV.filterInput {
 		return event
 	}
+	if a.messagesV != nil && a.tv.GetFocus() == a.messagesV.searchInput {
+		return event
+	}
 	if a.ssmParamsV != nil && a.tv.GetFocus() == a.ssmParamsV.filterInput {
 		return event
 	}
@@ -646,7 +678,7 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 
-	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
+	if a.confirmVisible || a.movePickerVisible || a.sendMessageVisible || a.connManagerVisible || a.connEditorVisible || a.messageFilterVisible || a.datadogEditorVisible || a.themePickerVisible || a.awsProfilesVisible {
 		return event
 	}
 
@@ -692,7 +724,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 		// focus on that overlay's primitive; a.pages is the underlying main
 		// view, so focusing it here would steal focus out from under the
 		// overlay even though it's still the frontmost visible page.
-		if !a.connManagerVisible && !a.connEditorVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
+		if !a.connManagerVisible && !a.connEditorVisible && !a.messageFilterVisible && !a.datadogEditorVisible && !a.themePickerVisible &&
 			!a.confirmVisible && !a.movePickerVisible && !a.sendMessageVisible && !a.awsProfilesVisible {
 			a.tv.SetFocus(a.pages)
 		}
@@ -1087,10 +1119,18 @@ func (a *App) switchTo(name string) {
 }
 
 // openMessages switches to the messages page for the given queue, sets the
-// title, and starts loading messages asynchronously.
+// title, and starts loading messages asynchronously. Quick search and the
+// server-side filter persist when returning to the same queue, but reset
+// when switching to a different one — carrying a leftover filter across
+// queues would silently narrow what the user sees without them asking.
 func (a *App) openMessages(queueName string) {
+	if a.messagesV.queueName != queueName {
+		a.messagesV.filter = queue.MessageFilter{}
+		a.messagesV.quickSearch = ""
+		a.messagesV.searchInput.SetText("")
+	}
 	a.messagesV.queueName = queueName
-	a.messagesV.table.SetTitle(fmt.Sprintf(" Messages — %s ", queueName))
+	a.messagesV.updateTitle()
 	a.messagesV.setHeader()
 	a.pages.SwitchToPage("messages")
 	a.tv.SetFocus(a.pages)

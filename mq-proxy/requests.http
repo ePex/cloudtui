@@ -20,7 +20,11 @@ GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}
 Authorization: Basic {{username}} {{password}}
 
 ### List messages filtered by JMS type
-GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&jmsType=order-created
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&filter.jmsType=order-created
+Authorization: Basic {{username}} {{password}}
+
+### List messages within a date range, capped at 10, without bodies
+GET {{baseUrl}}/api/management/command/list-messages?sourceQueue={{queue}}&filter.fromDate=2025-01-31T08:30:00Z&filter.toDate=2025-02-01T17:00:00Z&filter.maxCount=10&returnBody=false
 Authorization: Basic {{username}} {{password}}
 
 ### Send a new message

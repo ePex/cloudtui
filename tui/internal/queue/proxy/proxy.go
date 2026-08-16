@@ -107,6 +107,39 @@ func toFilterDTO(f queue.MessageFilter) queueMessageFilter {
 	return dto
 }
 
+// browseQuery builds the list-messages query string for queueName and
+// filter, reusing toFilterDTO's field mapping. returnBody is always sent
+// explicitly true: the message browser needs the body for its preview
+// column, regardless of mq-proxy's own default.
+//
+// Filter fields nest under "filter." (filter.jmsType, filter.maxCount,
+// etc.) — mq-proxy binds list-messages' query the same nested way its
+// delete-messages/move-messages JSON bodies already did, matching the
+// reference API's convention too (spec/49-cr-mq-proxy-nested-filter-query).
+// sourceQueue/returnBody stay top-level on both.
+func browseQuery(queueName string, filter queue.MessageFilter) string {
+	dto := toFilterDTO(filter)
+	q := url.Values{}
+	q.Set("sourceQueue", queueName)
+	q.Set("returnBody", "true")
+	if dto.JMSType != "" {
+		q.Set("filter.jmsType", dto.JMSType)
+	}
+	if dto.MessageID != "" {
+		q.Set("filter.messageId", dto.MessageID)
+	}
+	if dto.FromDate != "" {
+		q.Set("filter.fromDate", dto.FromDate)
+	}
+	if dto.ToDate != "" {
+		q.Set("filter.toDate", dto.ToDate)
+	}
+	if dto.MaxCount != nil {
+		q.Set("filter.maxCount", fmt.Sprintf("%d", *dto.MaxCount))
+	}
+	return q.Encode()
+}
+
 type deleteMessagesRequest struct {
 	SourceQueue string             `json:"sourceQueue"`
 	Filter      queueMessageFilter `json:"filter"`
@@ -163,8 +196,8 @@ func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
 }
 
 // BrowseMessages implements queue.Backend.
-func (c *Client) BrowseMessages(ctx context.Context, queueName string) ([]queue.Message, error) {
-	path := "/api/management/command/list-messages?sourceQueue=" + url.QueryEscape(queueName)
+func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+	path := "/api/management/command/list-messages?" + browseQuery(queueName, filter)
 	var env listEnvelope[proxyMessage]
 	if err := c.getJSON(ctx, path, &env); err != nil {
 		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)

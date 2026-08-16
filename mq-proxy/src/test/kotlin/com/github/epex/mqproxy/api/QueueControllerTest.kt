@@ -97,8 +97,15 @@ class QueueControllerTest {
             brokerService.browseMessages("orders", QueueMessageFilter(jmsType = "order-created", messageId = "ID:m1"))
         } returns emptyList()
 
-        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&jmsType=order-created&messageId=ID:m1")
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.jmsType=order-created&filter.messageId=ID:m1")
             .andExpect { status { isOk() } }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns 400 when sourceQueue is missing`() {
+        mockMvc.get("/api/management/command/list-messages")
+            .andExpect { status { isBadRequest() } }
     }
 
     @Test

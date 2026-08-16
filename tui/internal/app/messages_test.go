@@ -74,6 +74,129 @@ func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
 	}
 }
 
+// TestMessagesViewShortcutsFitTopBar guards against shortcut entries
+// silently clipping off the bottom of the context panel: the top bar's
+// height is fixed (topbar.go's shortcutPanelRows), not scrollable, so a
+// Shortcuts() list longer than that is invisible rather than an error —
+// exactly what happened live when '/' and 'f' were added without bumping
+// shortcutPanelRows to match (found via manual verification, not tests).
+func TestMessagesViewShortcutsFitTopBar(t *testing.T) {
+	mv := newTestMessagesView(t)
+	if got := len(mv.Shortcuts()); got > shortcutPanelRows {
+		t.Errorf("len(Shortcuts()) = %d, want <= %d (shortcutPanelRows) or entries clip off the context panel", got, shortcutPanelRows)
+	}
+}
+
+func TestMessagesViewShortcutsIncludeFilterKeys(t *testing.T) {
+	mv := newTestMessagesView(t)
+	want := []string{"/", "f"}
+	for _, k := range want {
+		found := false
+		for _, s := range mv.Shortcuts() {
+			if s.Key == k {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Shortcuts() missing key %q", k)
+		}
+	}
+}
+
+func TestMessagesViewQuickSearchFilters(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.applyQuickSearch("order")
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(2, 0)},
+		{ID: "msg-2", JMSType: "invoice-created", Timestamp: time.Unix(1, 0)},
+	})
+
+	if got := mv.table.GetRowCount(); got != 2 { // header + 1 match
+		t.Errorf("row count = %d, want 2 (header + 1 match)", got)
+	}
+	if len(mv.msgs) != 1 || mv.msgs[0].ID != "msg-1" {
+		t.Errorf("mv.msgs = %v, want just msg-1", mv.msgs)
+	}
+}
+
+func TestMessagesViewQuickSearchMatchesPreview(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.applyQuickSearch("hello")
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", Preview: "hello world", Timestamp: time.Unix(1, 0)},
+		{ID: "msg-2", Preview: "goodbye", Timestamp: time.Unix(2, 0)},
+	})
+
+	if len(mv.msgs) != 1 || mv.msgs[0].ID != "msg-1" {
+		t.Errorf("mv.msgs = %v, want just msg-1 (matches preview)", mv.msgs)
+	}
+}
+
+func TestMessagesViewQuickSearchPersistsAfterRepaint(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.applyQuickSearch("order")
+	mv.repaint([]queue.Message{{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(1, 0)}})
+	// Second repaint with new data — quick search must still apply.
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(1, 0)},
+		{ID: "msg-2", JMSType: "invoice-created", Timestamp: time.Unix(2, 0)},
+	})
+
+	if got := mv.table.GetRowCount(); got != 2 { // header + 1 match
+		t.Errorf("row count after second repaint = %d, want 2 (header + 1 match)", got)
+	}
+}
+
+func TestMessagesViewQuickSearchClear(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.applyQuickSearch("order")
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(1, 0)},
+		{ID: "msg-2", JMSType: "invoice-created", Timestamp: time.Unix(2, 0)},
+	})
+	mv.applyQuickSearch("")
+
+	if got := mv.table.GetRowCount(); got != 3 { // header + 2 rows
+		t.Errorf("row count after clear = %d, want 3", got)
+	}
+}
+
+func TestMessagesViewMarkAllOnlyMarksSearchFilteredRows(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.applyQuickSearch("order")
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(2, 0)},
+		{ID: "msg-2", JMSType: "invoice-created", Timestamp: time.Unix(1, 0)},
+	})
+
+	mv.markAll()
+
+	if len(mv.marked) != 1 || !mv.marked["msg-1"] {
+		t.Errorf("marked = %v, want just msg-1 (search-filtered out msg-2)", mv.marked)
+	}
+}
+
+func TestMessagesViewTitleUpdatesWithFilterAndSearch(t *testing.T) {
+	mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	mv.updateTitle()
+	if got, want := mv.table.GetTitle(), " Messages — orders "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+
+	mv.filter = queue.MessageFilter{JMSType: "order-created"}
+	mv.updateTitle()
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created) "; got != want {
+		t.Errorf("title with filter = %q, want %q", got, want)
+	}
+
+	mv.applyQuickSearch("foo")
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created) [search: foo] "; got != want {
+		t.Errorf("title with filter and search = %q, want %q", got, want)
+	}
+}
+
 func TestMessagesViewToggleMarkMarksAndUnmarks(t *testing.T) {
 	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
 		{ID: "msg-1", Timestamp: time.Unix(3, 0)},
@@ -276,6 +399,98 @@ func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
 
 	if a.confirmVisible {
 		t.Error("deleteMarked() should not fall back to a cursor row with no ID")
+	}
+}
+
+func TestParseMessageFilterForm(t *testing.T) {
+	tests := []struct {
+		name                   string
+		jmsType, from, to, max string
+		want                   queue.MessageFilter
+		wantErr                bool
+	}{
+		{
+			name: "all empty",
+			want: queue.MessageFilter{},
+		},
+		{
+			name:    "jms type only",
+			jmsType: "order-created",
+			want:    queue.MessageFilter{JMSType: "order-created"},
+		},
+		{
+			name: "RFC3339 dates",
+			from: "2025-01-31T08:30:00Z", to: "2025-02-01T17:00:00Z",
+			want: queue.MessageFilter{
+				FromDate: time.Date(2025, 1, 31, 8, 30, 0, 0, time.UTC),
+				ToDate:   time.Date(2025, 2, 1, 17, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "date-only dates taken as UTC midnight",
+			from: "2025-01-31", to: "2025-02-01",
+			want: queue.MessageFilter{
+				FromDate: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+				ToDate:   time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "max count",
+			max:  "100",
+			want: queue.MessageFilter{MaxCount: 100},
+		},
+		{
+			name: "max count zero",
+			max:  "0",
+			want: queue.MessageFilter{MaxCount: 0},
+		},
+		{
+			name:    "combined",
+			jmsType: "order-created", from: "2025-01-31", max: "10",
+			want: queue.MessageFilter{
+				JMSType:  "order-created",
+				FromDate: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+				MaxCount: 10,
+			},
+		},
+		{
+			name:    "invalid from date",
+			from:    "not-a-date",
+			wantErr: true,
+		},
+		{
+			name:    "invalid to date",
+			to:      "not-a-date",
+			wantErr: true,
+		},
+		{
+			name:    "invalid max count",
+			max:     "abc",
+			wantErr: true,
+		},
+		{
+			name:    "negative max count",
+			max:     "-1",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseMessageFilterForm(tt.jmsType, tt.from, tt.to, tt.max)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseMessageFilterForm() error = nil, want an error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseMessageFilterForm() error = %v", err)
+			}
+			if !got.FromDate.Equal(tt.want.FromDate) || !got.ToDate.Equal(tt.want.ToDate) ||
+				got.JMSType != tt.want.JMSType || got.MaxCount != tt.want.MaxCount {
+				t.Errorf("parseMessageFilterForm() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
 
