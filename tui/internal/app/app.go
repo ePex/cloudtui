@@ -210,88 +210,30 @@ func New(cfg config.Config) *App {
 	a.codePipelineListV = newCodePipelineListView(a)
 	a.codePipelineDetailV = newCodePipelineDetailView(a)
 
-	// Wire Enter in the log groups table to open the search view for
-	// the selected log group. Done here because logSearchV must exist first.
-	a.logsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logsV.filtered) {
-			return
-		}
-		a.openLogSearch(a.logsV.filtered[idx].Name)
-	})
+	// Done here because logSearchV must exist first.
+	a.wireLogsOpensSearch()
 
-	// Wire Enter in the log search results table to open the detail view
-	// for the selected event. Done here because logDetailV must exist first.
-	a.logSearchV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logSearchV.results) {
-			return
-		}
-		a.openLogEventDetail(a.logSearchV.results[idx])
-	})
+	// Done here because logDetailV must exist first.
+	a.wireLogSearchOpensEventDetail()
 
-	// Wire Enter in the Datadog Logs results table to open the detail
-	// view for the selected event. Done here because datadogLogDetailV
-	// must exist first.
-	a.datadogLogsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.datadogLogsV.results) {
-			return
-		}
-		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
-	})
+	// Done here because datadogLogDetailV must exist first.
+	a.wireDatadogLogsOpensDetail()
 
-	// Wire Enter in the CodePipeline table to open the stage-status
-	// detail view for the selected pipeline. Done here because
-	// codePipelineDetailV must exist first.
-	a.codePipelineListV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
-			return
-		}
-		a.openCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
-	})
+	// Done here because codePipelineDetailV must exist first.
+	a.wireCodePipelineListOpensDetail()
 	a.secretDetailV = newSecretDetailView(a)
 
-	// Wire Enter in the SSM parameters table to open the detail view for
-	// the selected parameter. Done here because paramDetailV must exist first.
-	a.ssmParamsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
-			return
-		}
-		a.openParamDetail(a.ssmParamsV.filtered[idx])
-	})
+	// Done here because paramDetailV must exist first.
+	a.wireSSMParamsOpensDetail()
 
-	// Wire Enter in the secrets table to open the detail view for the
-	// selected secret. Done here because secretDetailV must exist first.
-	a.secretsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.secretsV.filtered) {
-			return
-		}
-		a.openSecretDetail(a.secretsV.filtered[idx])
-	})
+	// Done here because secretDetailV must exist first.
+	a.wireSecretsOpensDetail()
 
-	// Wire Enter in the queues table to open the messages view for the
-	// selected queue. Done here because messagesV must exist first.
-	a.queuesV.table.SetSelectedFunc(func(row, _ int) {
-		cell := a.queuesV.table.GetCell(row, 0)
-		if cell == nil || cell.Text == "" {
-			return
-		}
-		a.openMessages(cell.Text)
-	})
+	// Done here because messagesV must exist first.
+	a.wireQueuesOpensMessages()
 
-	// Wire Enter in the messages table to open the detail view for the
-	// selected message. Done here because messageDetailV must exist first.
-	a.messagesV.table.SetSelectedFunc(func(row, _ int) {
-		msgIdx := row - 1 // row 0 is the header
-		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
-			return
-		}
-		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
-	})
+	// Done here because messageDetailV must exist first.
+	a.wireMessagesOpensDetail()
 
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
@@ -592,108 +534,6 @@ func (a *App) switchTo(name string) {
 			return
 		}
 	}
-}
-
-// openMessages switches to the messages page for the given queue, sets the
-// title, and starts loading messages asynchronously. Quick search and the
-// server-side filter persist when returning to the same queue, but reset
-// when switching to a different one — carrying a leftover filter across
-// queues would silently narrow what the user sees without them asking.
-func (a *App) openMessages(queueName string) {
-	if a.messagesV.queueName != queueName {
-		a.messagesV.filter = queue.MessageFilter{}
-		a.messagesV.quickSearch = ""
-		a.messagesV.searchInput.SetText("")
-	}
-	a.messagesV.queueName = queueName
-	a.messagesV.updateTitle()
-	a.messagesV.setHeader()
-	a.pages.SwitchToPage("messages")
-	a.tv.SetFocus(a.pages)
-	// Show messagesV shortcuts in the context panel.
-	lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-	for _, sc := range a.messagesV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-	a.messagesV.load()
-}
-
-// openMessageDetail renders the full detail for msg and switches to the
-// message-detail page.
-func (a *App) openMessageDetail(queueName string, msg queue.Message) {
-	a.messageDetailV.render(queueName, msg)
-	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
-	a.pages.SwitchToPage("message-detail")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
-	for _, sc := range a.messageDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// openParamDetail renders the full detail for param and switches to the
-// ssm-param-detail page. paramDetailView.render sets the context panel
-// itself (its shortcuts change once a SecureString is revealed).
-func (a *App) openParamDetail(param awsssm.Parameter) {
-	a.paramDetailV.render(param)
-	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
-	a.pages.SwitchToPage("ssm-param-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-func (a *App) openSecretDetail(secret awssecrets.Secret) {
-	a.secretDetailV.render(secret)
-	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
-	a.pages.SwitchToPage("secret-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openLogSearch opens the search view for logGroupName and runs the
-// first search immediately (see logSearchView.open). logSearchView isn't
-// a registered ui.View, so its context panel is populated manually here
-// — same pattern as openMessages.
-func (a *App) openLogSearch(logGroupName string) {
-	pattern := a.pendingCloudWatchPattern
-	a.pendingCloudWatchPattern = ""
-	a.logSearchV.open(logGroupName, pattern)
-	a.pages.SwitchToPage("log-search")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
-	for _, sc := range a.logSearchV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// openLogEventDetail renders the full detail for event and switches to
-// the log-event-detail page.
-func (a *App) openLogEventDetail(event awslogs.LogEvent) {
-	a.logDetailV.render(event)
-	a.pages.SwitchToPage("log-event-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openDatadogLogDetail renders the full detail for event and switches
-// to the datadog-log-detail page.
-func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
-	a.datadogLogDetailV.render(event)
-	a.pages.SwitchToPage("datadog-log-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// openCodePipelineDetail opens pipelineName's stage-status detail view
-// and starts loading its current state.
-func (a *App) openCodePipelineDetail(pipelineName string) {
-	a.codePipelineDetailV.open(pipelineName)
-	a.pages.SwitchToPage("codepipeline-detail")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.codePipelineDetailV.Shortcuts()))
-	for _, sc := range a.codePipelineDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
 // copyToClipboard writes data to the system clipboard via the terminal's
