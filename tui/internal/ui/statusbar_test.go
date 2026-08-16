@@ -1,4 +1,4 @@
-package app
+package ui
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 
 func TestNewStatusBarBlankAtIdle(t *testing.T) {
 	cfg := config.Default()
-	tv := newStatusBar(cfg)
+	tv := NewStatusBar(cfg)
 
 	if got := tv.GetText(false); got != "" {
 		t.Errorf("status bar text = %q, want empty (no default legend — see Home's context panel instead)", got)
