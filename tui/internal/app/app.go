@@ -25,8 +25,6 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/queue"
-	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
-	"github.com/ePex/cloudtui/tui/internal/queue/proxy"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 )
@@ -138,6 +136,9 @@ type App struct {
 	getPipelineState       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	notify                 func(title, message string)
 	screen                 tcell.Screen
+	// secretCache backs AWS-Secrets-Manager-resolved connection passwords
+	// (see connectionsecrets.go / spec/56-fe-amq-connection-aws-secret-password).
+	secretCache *secretCache
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -215,6 +216,7 @@ func New(cfg config.Config) *App {
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = desktopNotify
+	a.secretCache = newSecretCache()
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -230,7 +232,7 @@ func New(cfg config.Config) *App {
 	// are safe at this point because all live primitives are set.
 	settingsView := newSettingsView(a)
 	a.logV = newLogView(a)
-	a.backend = newBackendForConn(cfg.ActiveConn())
+	a.backend = newBackendForConn(a, cfg.ActiveConn())
 	a.queuesV = newQueuesView(a, a.backend)
 	a.messagesV = newMessagesView(a)
 	a.messageDetailV = newMessageDetailView(a)
@@ -477,11 +479,24 @@ func New(cfg config.Config) *App {
 		AddInputField("Broker Name", "", 30, nil, nil).
 		AddInputField("URL", "", 40, nil, nil).
 		AddInputField("Username", "", 20, nil, nil).
+		AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, 0, nil).
 		AddPasswordField("Password", "", 20, '*', nil).
 		AddButton("Save", func() { a.saveConnEditor() }).
 		AddButton("Cancel", func() { a.closeConnEditor() })
 	if dd, ok := a.connEditorForm.GetFormItem(1).(*tview.DropDown); ok {
 		styleDropDown(dd, cfg.Colors)
+	}
+	// The Password Source dropdown swaps form item 6 (the last item before
+	// the Save/Cancel buttons) between a plain Password field and a
+	// Password Secret (AWS) field. Wired via SetSelectedFunc rather than
+	// passed to AddDropDown itself, since AddDropDown's initial
+	// SetCurrentOption(0) call would otherwise fire the swap before item 6
+	// (Password) even exists yet.
+	if dd, ok := a.connEditorForm.GetFormItem(5).(*tview.DropDown); ok {
+		styleDropDown(dd, cfg.Colors)
+		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
+			a.setConnEditorPasswordField(sourceIdx)
+		})
 	}
 	a.connEditorForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
@@ -490,9 +505,9 @@ func New(cfg config.Config) *App {
 		}
 		return event
 	})
-	// Height must cover border+padding (4 rows) + 6 items * (field + item
-	// padding) (12 rows) + button row (1 row) = 17; give it one spare row.
-	connEditorOverlay := centered(a.connEditorForm, 64, 18)
+	// Height must cover border+padding (4 rows) + 7 items * (field + item
+	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
+	connEditorOverlay := centered(a.connEditorForm, 64, 20)
 
 	// Message filter overlay (FE 46) — the server-side counterpart to
 	// messagesView's quick search: JMS type + date range + max count,
@@ -1138,14 +1153,6 @@ func (a *App) closeHelp() {
 	a.helpVisible = false
 }
 
-// newBackendForConn constructs the appropriate queue.Backend for conn.
-func newBackendForConn(conn config.Connection) queue.Backend {
-	if conn.Backend == "proxy" {
-		return proxy.NewClient(conn.Proxy)
-	}
-	return jolokia.NewClient(conn.Queue)
-}
-
 // switchConnection activates the named connection: reinitialises the backend,
 // updates the info panel, navigates to the queues view, and persists the config.
 func (a *App) switchConnection(name string) {
@@ -1162,7 +1169,7 @@ func (a *App) switchConnection(name string) {
 		return
 	}
 	a.cfg.ActiveConnection = name
-	a.backend = newBackendForConn(conn)
+	a.backend = newBackendForConn(a, conn)
 	a.queuesV.backend = a.backend
 	a.infoPanel.SetText(infoPanelText(a.cfg))
 	a.refreshSettingsList()

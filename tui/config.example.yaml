@@ -54,6 +54,14 @@ activeConnection: default
 #
 # Password fields can also be supplied via the MQPROXY_CLIENT_PASSWORD env var;
 # the env var is only applied when the password field is absent or empty.
+#
+# passwordSecret (optional, on queue: or proxy:): names an AWS Secrets
+# Manager secret to use as the password instead. Resolved at connect time
+# via the AWS profile selected in Settings -> AWS Profiles (activeAWSProfile
+# below) — a connection using passwordSecret needs a profile selected there.
+# When set, it takes precedence over both password and
+# MQPROXY_CLIENT_PASSWORD; the secret's raw string value is used verbatim
+# (no JSON key extraction).
 connections:
   - name: default
     backend: jolokia
@@ -62,6 +70,7 @@ connections:
       url: http://localhost:8161/api/jolokia
       username: admin
       # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
+      # passwordSecret: "/cloudtui/local/mq-password"   # or resolve from AWS Secrets Manager instead
 
   # Example proxy connection (uncomment and fill in to use):
   # - name: aws-staging
@@ -70,6 +79,7 @@ connections:
   #     url: http://localhost:8080
   #     username: cloudtui
   #     password: changeme
+  #     # passwordSecret: "/cloudtui/aws-staging/mq-password"
 
 # activeAWSProfile: the AWS CLI profile selected in Settings -> AWS Profiles
 # (read from ~/.aws/config / ~/.aws/credentials, or their AWS_CONFIG_FILE /
