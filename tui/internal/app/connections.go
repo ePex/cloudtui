@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // connManager is the AMQ connection manager overlay: lists all configured
@@ -440,7 +441,7 @@ func (ce *connEditor) save() {
 			a.cfg.ActiveConnection = name
 			a.backend = newBackendForConn(a, conn)
 			a.queuesV.backend = a.backend
-			a.infoPanel.SetText(infoPanelText(a.cfg))
+			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 		}
 	}
 

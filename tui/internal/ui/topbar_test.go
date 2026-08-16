@@ -1,4 +1,4 @@
-package app
+package ui
 
 import (
 	"strings"
@@ -35,20 +35,20 @@ func TestInfoPanelTextShowsConnectionName(t *testing.T) {
 	cfg := config.Default()
 	cfg.Connections[0].Name = "staging"
 
-	text := infoPanelText(cfg)
+	text := InfoPanelText(cfg)
 
 	if !strings.Contains(text, "staging") {
-		t.Errorf("infoPanelText() = %q, want it to contain name %q", text, "staging")
+		t.Errorf("InfoPanelText() = %q, want it to contain name %q", text, "staging")
 	}
 }
 
 func TestInfoPanelTextShowsNoneWhenNoAWSProfileSelected(t *testing.T) {
 	cfg := config.Default()
 
-	text := infoPanelText(cfg)
+	text := InfoPanelText(cfg)
 
 	if !strings.Contains(text, "AWS Profile:") || !strings.Contains(text, "(none)") {
-		t.Errorf("infoPanelText() = %q, want it to contain \"AWS Profile:\" and \"(none)\"", text)
+		t.Errorf("InfoPanelText() = %q, want it to contain \"AWS Profile:\" and \"(none)\"", text)
 	}
 }
 
@@ -56,10 +56,10 @@ func TestInfoPanelTextShowsActiveAWSProfile(t *testing.T) {
 	cfg := config.Default()
 	cfg.ActiveAWSProfile = "work"
 
-	text := infoPanelText(cfg)
+	text := InfoPanelText(cfg)
 
 	if !strings.Contains(text, "AWS Profile:") || !strings.Contains(text, "work") {
-		t.Errorf("infoPanelText() = %q, want it to contain \"AWS Profile:\" and \"work\"", text)
+		t.Errorf("InfoPanelText() = %q, want it to contain \"AWS Profile:\" and \"work\"", text)
 	}
 }
 
@@ -67,17 +67,17 @@ func TestInfoPanelTextShowsThemeName(t *testing.T) {
 	cfg := config.Default()
 	cfg.Theme = "cyberpunk"
 
-	text := infoPanelText(cfg)
+	text := InfoPanelText(cfg)
 
 	if !strings.Contains(text, "cyberpunk") {
-		t.Errorf("infoPanelText() = %q, want it to contain %q", text, "cyberpunk")
+		t.Errorf("InfoPanelText() = %q, want it to contain %q", text, "cyberpunk")
 	}
 }
 
 func TestNewTopBarHasDividerBetweenInfoAndNav(t *testing.T) {
-	tb := newTopBar(config.Default(), tview.NewInputField())
+	tb := NewTopBar(config.Default(), tview.NewInputField())
 
-	if got, want := tb.root.GetItemCount(), 4; got != want {
+	if got, want := tb.Root.GetItemCount(), 4; got != want {
 		t.Errorf("root.GetItemCount() = %d, want %d (info, divider, context, logo)", got, want)
 	}
 }
@@ -99,58 +99,58 @@ func TestLogoWidth(t *testing.T) {
 func TestNewTopBarHeightGrowsWithLogo(t *testing.T) {
 	prompt := tview.NewInputField()
 
-	// A logo taller than shortcutPanelRows drives the height.
+	// A logo taller than ShortcutPanelRows drives the height.
 	tallLogo := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"}
-	tall := newTopBar(config.Config{Logo: tallLogo}, prompt)
-	if tall.height != 12 {
-		t.Errorf("height with 12-line logo = %d, want 12", tall.height)
+	tall := NewTopBar(config.Config{Logo: tallLogo}, prompt)
+	if tall.Height != 12 {
+		t.Errorf("height with 12-line logo = %d, want 12", tall.Height)
 	}
 
-	// A short logo: height is at least shortcutPanelRows (currently 11).
-	short := newTopBar(config.Config{Logo: []string{"1"}}, prompt)
-	if short.height != 11 {
-		t.Errorf("height with 1-line logo = %d, want 11 (shortcutPanelRows)", short.height)
+	// A short logo: height is at least ShortcutPanelRows (currently 11).
+	short := NewTopBar(config.Config{Logo: []string{"1"}}, prompt)
+	if short.Height != 11 {
+		t.Errorf("height with 1-line logo = %d, want 11 (ShortcutPanelRows)", short.Height)
 	}
 }
 
 func TestNewTopBarLeftPagesDefaultsToInfo(t *testing.T) {
-	tb := newTopBar(config.Default(), tview.NewInputField())
+	tb := NewTopBar(config.Default(), tview.NewInputField())
 
-	if name, _ := tb.left.GetFrontPage(); name != "info" {
+	if name, _ := tb.Left.GetFrontPage(); name != "info" {
 		t.Errorf("front page = %q, want %q", name, "info")
 	}
 }
 
 func TestNewTopBarExposesInfoPanel(t *testing.T) {
 	cfg := config.Default()
-	tb := newTopBar(cfg, tview.NewInputField())
+	tb := NewTopBar(cfg, tview.NewInputField())
 
-	if tb.info == nil {
-		t.Fatal("topBar.info is nil")
+	if tb.Info == nil {
+		t.Fatal("TopBar.Info is nil")
 	}
-	if got, want := tb.info.GetText(false), infoPanelText(cfg); got != want {
-		t.Errorf("tb.info.GetText(false) = %q, want %q", got, want)
+	if got, want := tb.Info.GetText(false), InfoPanelText(cfg); got != want {
+		t.Errorf("tb.Info.GetText(false) = %q, want %q", got, want)
 	}
 }
 
 func TestNewTopBarExposesDividerContextLogo(t *testing.T) {
-	tb := newTopBar(config.Default(), tview.NewInputField())
+	tb := NewTopBar(config.Default(), tview.NewInputField())
 
-	if tb.divider == nil {
-		t.Error("topBar.divider is nil")
+	if tb.Divider == nil {
+		t.Error("TopBar.Divider is nil")
 	}
-	if tb.contextPanel == nil {
-		t.Error("topBar.contextPanel is nil")
+	if tb.ContextPanel == nil {
+		t.Error("TopBar.ContextPanel is nil")
 	}
-	if tb.logo == nil {
-		t.Error("topBar.logo is nil")
+	if tb.Logo == nil {
+		t.Error("TopBar.Logo is nil")
 	}
 }
 
 func TestNewTopBarContextPanelEmptyByDefault(t *testing.T) {
-	tb := newTopBar(config.Default(), tview.NewInputField())
+	tb := NewTopBar(config.Default(), tview.NewInputField())
 
-	if got := tb.contextPanel.GetText(true); got != "" {
+	if got := tb.ContextPanel.GetText(true); got != "" {
 		t.Errorf("contextPanel initial text = %q, want empty", got)
 	}
 }
