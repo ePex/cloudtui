@@ -239,51 +239,51 @@ func reapplyTheme(a *App, p config.Palette) {
 	}
 
 	// Move-picker
-	if a.movePickerFlex != nil {
-		a.movePickerFlex.SetBackgroundColor(bg)
-		a.movePickerFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.movePickerFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.movePicker.flex != nil {
+		a.movePicker.flex.SetBackgroundColor(bg)
+		a.movePicker.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.movePicker.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.movePickerList != nil {
-		styleList(a.movePickerList, p)
-		a.movePickerList.SetBackgroundColor(bg)
+	if a.movePicker.list != nil {
+		styleList(a.movePicker.list, p)
+		a.movePicker.list.SetBackgroundColor(bg)
 	}
-	if a.movePickerSearch != nil {
-		a.movePickerSearch.SetBackgroundColor(bg)
-		a.movePickerSearch.SetLabelColor(tcell.GetColor(p.Label))
-		a.movePickerSearch.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-		a.movePickerSearch.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	if a.movePicker.search != nil {
+		a.movePicker.search.SetBackgroundColor(bg)
+		a.movePicker.search.SetLabelColor(tcell.GetColor(p.Label))
+		a.movePicker.search.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+		a.movePicker.search.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 	}
 
 	// Confirm dialog
-	if a.confirmFlex != nil {
-		a.confirmFlex.SetBackgroundColor(bg)
-		a.confirmFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.confirmFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.confirm.flex != nil {
+		a.confirm.flex.SetBackgroundColor(bg)
+		a.confirm.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.confirm.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.confirmText != nil {
-		a.confirmText.SetBackgroundColor(bg)
-		a.confirmText.SetTextColor(tcell.GetColor(p.Text))
+	if a.confirm.text != nil {
+		a.confirm.text.SetBackgroundColor(bg)
+		a.confirm.text.SetTextColor(tcell.GetColor(p.Text))
 	}
-	if a.confirmList != nil {
-		styleList(a.confirmList, p)
-		a.confirmList.SetBackgroundColor(bg)
+	if a.confirm.list != nil {
+		styleList(a.confirm.list, p)
+		a.confirm.list.SetBackgroundColor(bg)
 	}
 
 	// Send-message overlay
-	if a.sendMessageFlex != nil {
-		a.sendMessageFlex.SetBackgroundColor(bg)
-		a.sendMessageFlex.SetBorderColor(tcell.GetColor(p.Border))
-		a.sendMessageFlex.SetTitleColor(tcell.GetColor(p.Border))
+	if a.sendMessage.flex != nil {
+		a.sendMessage.flex.SetBackgroundColor(bg)
+		a.sendMessage.flex.SetBorderColor(tcell.GetColor(p.Border))
+		a.sendMessage.flex.SetTitleColor(tcell.GetColor(p.Border))
 	}
-	if a.sendMessageArea != nil {
-		a.sendMessageArea.SetBackgroundColor(bg)
-		a.sendMessageArea.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(tcell.GetColor(p.Background)))
-		a.sendMessageArea.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
+	if a.sendMessage.area != nil {
+		a.sendMessage.area.SetBackgroundColor(bg)
+		a.sendMessage.area.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(tcell.GetColor(p.Background)))
+		a.sendMessage.area.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
 	}
-	if a.sendMessageList != nil {
-		styleList(a.sendMessageList, p)
-		a.sendMessageList.SetBackgroundColor(bg)
+	if a.sendMessage.list != nil {
+		styleList(a.sendMessage.list, p)
+		a.sendMessage.list.SetBackgroundColor(bg)
 	}
 
 }
