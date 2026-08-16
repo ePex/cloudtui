@@ -141,26 +141,40 @@ func (cm *connManager) delete() {
 	}
 	toDelete := a.cfg.Connections[idx]
 	a.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
-		wasActive := a.cfg.ActiveConnection == toDelete.Name
-		conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
-		for _, c := range a.cfg.Connections {
-			if c.Name != toDelete.Name {
-				conns = append(conns, c)
-			}
-		}
-		a.cfg.Connections = conns
-		if wasActive {
-			a.cfg.ActiveConnection = a.cfg.Connections[0].Name
+		if a.DeleteConnection(toDelete.Name) {
 			cm.close()
-			a.switchConnection(a.cfg.ActiveConnection)
 		} else {
-			if err := config.SaveDefault(a.cfg); err != nil {
-				slog.Error("deleteConn: save failed", "error", err)
-			}
 			cm.populate()
 			a.tv.SetFocus(cm.list)
 		}
 	})
+}
+
+// DeleteConnection removes name from Connections. If it was the active
+// connection, activates the first remaining one (reusing switchConnection
+// for the backend-rebuild+persist+refresh path); otherwise persists
+// directly. Returns whether the removed connection was active, so the
+// caller knows which post-delete UI path to take (switchConnection
+// already navigated to "queues"; the non-active path needs the caller
+// to repaint its own list instead).
+func (a *App) DeleteConnection(name string) (wasActive bool) {
+	wasActive = a.cfg.ActiveConnection == name
+	conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
+	for _, c := range a.cfg.Connections {
+		if c.Name != name {
+			conns = append(conns, c)
+		}
+	}
+	a.cfg.Connections = conns
+	if wasActive {
+		a.cfg.ActiveConnection = a.cfg.Connections[0].Name
+		a.switchConnection(a.cfg.ActiveConnection)
+		return true
+	}
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("DeleteConnection: save failed", "error", err)
+	}
+	return false
 }
 
 // connEditor is the AMQ connection editor overlay, shared by "new",
@@ -458,29 +472,35 @@ func (ce *connEditor) save() {
 		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
 	}
 
-	wasActive := a.cfg.ActiveConnection == ce.origName
+	a.SaveConnection(conn, ce.origName, ce.isNew)
+	ce.close()
+	a.connManager.populate()
+}
 
-	if ce.isNew {
+// SaveConnection appends conn (isNew) or replaces the connection named
+// origName (edit) in Connections, rebuilding the active backend in
+// place if the edited connection was the active one, then persists and
+// refreshes the settings list.
+func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool) {
+	wasActive := a.cfg.ActiveConnection == origName
+	if isNew {
 		a.cfg.Connections = append(a.cfg.Connections, conn)
 	} else {
 		for i, c := range a.cfg.Connections {
-			if c.Name == ce.origName {
+			if c.Name == origName {
 				a.cfg.Connections[i] = conn
 				break
 			}
 		}
 		if wasActive {
-			a.cfg.ActiveConnection = name
+			a.cfg.ActiveConnection = conn.Name
 			a.backend = newBackendForConn(a, conn)
 			a.queuesV.backend = a.backend
 			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 		}
 	}
-
 	if err := config.SaveDefault(a.cfg); err != nil {
-		slog.Error("saveConnEditor: save failed", "error", err)
+		slog.Error("SaveConnection: save failed", "error", err)
 	}
 	a.refreshSettingsList()
-	ce.close()
-	a.connManager.populate()
 }
