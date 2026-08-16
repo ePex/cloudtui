@@ -20,7 +20,7 @@ func usage() {
   %[1]s remove-queue <name>    delete a queue via JMX (drops its messages)
   %[1]s start-proxy            build and start mq-proxy in the background
   %[1]s stop-proxy             stop the mq-proxy instance started above
-  %[1]s add-proxy-conn <name> <alias> <url> <username> <password>
+  %[1]s add-proxy-conn <name> <url> <username> <password>
                           append a proxy-backend connection to config.yaml
 `, os.Args[0])
 }
@@ -65,7 +65,7 @@ func main() {
 		fmt.Println("mq-proxy stopped")
 
 	case "add-proxy-conn":
-		if len(os.Args) != 7 {
+		if len(os.Args) != 6 {
 			usage()
 			os.Exit(2)
 		}
@@ -73,14 +73,14 @@ func main() {
 		if err != nil {
 			fail(fmt.Errorf("loading config: %w", err))
 		}
-		updated, err := devtool.AddProxyConnection(cfg, os.Args[2], os.Args[3], os.Args[4], os.Args[5], os.Args[6])
+		updated, err := devtool.AddProxyConnection(cfg, os.Args[2], os.Args[3], os.Args[4], os.Args[5])
 		if err != nil {
 			fail(err)
 		}
 		if err := config.SaveDefault(updated); err != nil {
 			fail(fmt.Errorf("saving config: %w", err))
 		}
-		fmt.Printf("added connection %q (alias %q)\n", os.Args[2], os.Args[3])
+		fmt.Printf("added connection %q\n", os.Args[2])
 
 	default:
 		usage()

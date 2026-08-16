@@ -80,7 +80,7 @@ func infoPanelText(cfg config.Config) string {
 	return fmt.Sprintf(
 		"[%s]Theme:[-] [%s]%s[-]\n[%s]AMQ Connection:[-] [%s]%s[-]\n[%s]AWS Profile:[-] [%s]%s[-]",
 		cfg.Colors.Label, cfg.Colors.Value, cfg.Theme,
-		cfg.Colors.Label, cfg.Colors.Value, cfg.ActiveConn().Alias,
+		cfg.Colors.Label, cfg.Colors.Value, cfg.ActiveConn().Name,
 		cfg.Colors.Label, cfg.Colors.Value, awsProfile,
 	)
 }
