@@ -181,19 +181,53 @@ func TestMessagesViewTitleUpdatesWithFilterAndSearch(t *testing.T) {
 	mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.updateTitle()
-	if got, want := mv.table.GetTitle(), " Messages — orders "; got != want {
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: max=500) "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 
 	mv.filter = queue.MessageFilter{JMSType: "order-created"}
 	mv.updateTitle()
-	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created) "; got != want {
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created max=500) "; got != want {
 		t.Errorf("title with filter = %q, want %q", got, want)
 	}
 
 	mv.applyQuickSearch("foo")
-	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created) [search: foo] "; got != want {
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created max=500) [search: foo] "; got != want {
 		t.Errorf("title with filter and search = %q, want %q", got, want)
+	}
+
+	mv.filter = queue.MessageFilter{JMSType: "order-created", MaxCount: 25}
+	mv.updateTitle()
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=order-created max=25) [search: foo] "; got != want {
+		t.Errorf("title with explicit max count = %q, want %q", got, want)
+	}
+}
+
+func TestWithDefaultMaxCount(t *testing.T) {
+	tests := []struct {
+		name string
+		in   queue.MessageFilter
+		want int
+	}{
+		{"unset defaults", queue.MessageFilter{}, defaultBrowseMaxCount},
+		{"negative defaults", queue.MessageFilter{MaxCount: -1}, defaultBrowseMaxCount},
+		{"positive unchanged", queue.MessageFilter{MaxCount: 25}, 25},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := withDefaultMaxCount(tt.in)
+			if got.MaxCount != tt.want {
+				t.Errorf("withDefaultMaxCount(%+v).MaxCount = %d, want %d", tt.in, got.MaxCount, tt.want)
+			}
+		})
+	}
+
+	original := queue.MessageFilter{JMSType: "order-created"}
+	if got := withDefaultMaxCount(original); got.JMSType != "order-created" {
+		t.Errorf("withDefaultMaxCount changed JMSType: got %q", got.JMSType)
+	}
+	if original.MaxCount != 0 {
+		t.Errorf("withDefaultMaxCount mutated its input: MaxCount = %d, want 0", original.MaxCount)
 	}
 }
 
