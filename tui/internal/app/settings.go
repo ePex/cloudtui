@@ -84,7 +84,7 @@ func (a *App) refreshSettingsList() {
 	}
 	a.settingsList.Clear()
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
-	a.settingsList.AddItem(fmt.Sprintf("Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
+	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
 	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
 	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.showDatadogEditor() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
