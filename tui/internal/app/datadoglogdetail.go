@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -22,6 +23,15 @@ type datadogLogDetailView struct {
 	textView *tview.TextView
 	app      *App
 	event    datadoglogs.LogEvent
+}
+
+var _ ui.Themeable = (*datadogLogDetailView)(nil)
+
+// ApplyPalette recolors the Datadog log detail view for a live theme switch.
+func (dv *datadogLogDetailView) ApplyPalette(p config.Palette) {
+	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
+	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("datadog-logs")))
 }
 
 func (dv *datadogLogDetailView) Shortcuts() []ui.Shortcut {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -31,6 +32,18 @@ type secretsView struct {
 
 var _ ui.View = (*secretsView)(nil)
 var _ ui.Shortcuttable = (*secretsView)(nil)
+var _ ui.Themeable = (*secretsView)(nil)
+
+// ApplyPalette recolors the secrets manager view for a live theme switch.
+func (sv *secretsView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	sv.table.SetBackgroundColor(bg)
+	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+	sv.table.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+	sv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	sv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	sv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
 
 func (sv *secretsView) Name() string               { return "secrets-manager" }
 func (sv *secretsView) Title() string              { return "Secrets Manager" }

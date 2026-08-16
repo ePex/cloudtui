@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -23,6 +24,7 @@ type logView struct {
 
 var _ ui.View = (*logView)(nil)
 var _ ui.Shortcuttable = (*logView)(nil)
+var _ ui.Themeable = (*logView)(nil)
 
 func (lv *logView) Name() string               { return "log" }
 func (lv *logView) Title() string              { return "Log" }
@@ -100,6 +102,13 @@ func colorizeLog(data string) string {
 		lines[i] = fmt.Sprintf("[%s]%s[-]", color, tview.Escape(line))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// ApplyPalette recolors the log view for a live theme switch.
+func (lv *logView) ApplyPalette(p config.Palette) {
+	lv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	lv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("log")))
+	lv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
 }
 
 func logLevelColor(line string) string {

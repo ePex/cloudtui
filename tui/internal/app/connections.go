@@ -96,6 +96,20 @@ func (cm *connManager) close() {
 	cm.app.tv.SetFocus(cm.app.pages)
 }
 
+// ApplyPalette recolors the connection manager overlay for a live theme switch.
+func (cm *connManager) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	cm.flex.SetBackgroundColor(bg)
+	cm.flex.SetBorderColor(tcell.GetColor(p.Border))
+	cm.flex.SetTitleColor(tcell.GetColor(p.Border))
+	styleList(cm.list, p)
+	cm.list.SetBackgroundColor(bg)
+	cm.hints.SetBackgroundColor(bg)
+	cm.hints.SetTextColor(tcell.GetColor(p.Text))
+}
+
+var _ ui.Themeable = (*connManager)(nil)
+
 // populate rebuilds the manager list from the current config.
 func (cm *connManager) populate() {
 	cm.list.Clear()
@@ -386,6 +400,24 @@ func (ce *connEditor) close() {
 		a.tv.SetFocus(a.pages)
 	}
 }
+
+// ApplyPalette recolors the connection editor overlay for a live theme switch.
+func (ce *connEditor) ApplyPalette(p config.Palette) {
+	ce.form.SetBackgroundColor(tcell.GetColor(p.Background))
+	ce.form.SetBorderColor(tcell.GetColor(p.Border))
+	ce.form.SetTitleColor(tcell.GetColor(p.Border))
+	// GetFormItem(2) is Broker Name (an InputField), never a DropDown —
+	// this type assertion has been a silent no-op since Password Source
+	// was added at index 5 (it originally targeted the Backend dropdown
+	// before Broker Name/Password Source shifted indices around it).
+	// Preserved as-is: fixing it is a behavior change, out of scope for
+	// this structural move.
+	if dd, ok := ce.form.GetFormItem(2).(*tview.DropDown); ok {
+		styleDropDown(dd, p)
+	}
+}
+
+var _ ui.Themeable = (*connEditor)(nil)
 
 // save validates and persists the editor form, then closes it.
 func (ce *connEditor) save() {

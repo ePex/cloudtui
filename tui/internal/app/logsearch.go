@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -94,6 +95,19 @@ type logSearchView struct {
 	tr           timeRange
 	results      []awslogs.LogEvent
 	hasMore      bool
+}
+
+var _ ui.Themeable = (*logSearchView)(nil)
+
+// ApplyPalette recolors the CloudWatch Logs search view for a live theme switch.
+func (sv *logSearchView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	sv.table.SetBackgroundColor(bg)
+	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	sv.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	sv.patternInput.SetLabelColor(tcell.GetColor(p.Label))
+	sv.patternInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	sv.patternInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
 func (sv *logSearchView) Shortcuts() []ui.Shortcut {

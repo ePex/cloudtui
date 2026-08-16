@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -24,6 +25,15 @@ type messageDetailView struct {
 	app       *App
 	queueName string
 	msg       queue.Message
+}
+
+var _ ui.Themeable = (*messageDetailView)(nil)
+
+// ApplyPalette recolors the message detail view for a live theme switch.
+func (dv *messageDetailView) ApplyPalette(p config.Palette) {
+	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
+	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 }
 
 func (dv *messageDetailView) Shortcuts() []ui.Shortcut {

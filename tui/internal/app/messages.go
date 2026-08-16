@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -46,6 +47,16 @@ type messagesView struct {
 	filter      queue.MessageFilter // active server-side filter
 	msgs        []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
 	marked      map[string]bool     // message IDs currently marked
+}
+
+var _ ui.Themeable = (*messagesView)(nil)
+
+// ApplyPalette recolors the messages view for a live theme switch.
+func (mv *messagesView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	mv.table.SetBackgroundColor(bg)
+	mv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
+	mv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 }
 
 func (mv *messagesView) Shortcuts() []ui.Shortcut {
