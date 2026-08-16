@@ -20,25 +20,25 @@ func TestInfoPanelContainsTheme(t *testing.T) {
 	}
 }
 
-func TestInfoPanelContainsConnectionAlias(t *testing.T) {
-	cfg := config.Default() // alias = "def"
+func TestInfoPanelContainsConnectionName(t *testing.T) {
+	cfg := config.Default() // name = "default"
 	text := newInfoPanel(cfg).GetText(true)
 
-	for _, want := range []string{"AMQ Connection:", "def"} {
+	for _, want := range []string{"AMQ Connection:", "default"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("info panel text = %q, want it to contain %q", text, want)
 		}
 	}
 }
 
-func TestInfoPanelTextShowsConnectionAlias(t *testing.T) {
+func TestInfoPanelTextShowsConnectionName(t *testing.T) {
 	cfg := config.Default()
-	cfg.Connections[0].Alias = "stg"
+	cfg.Connections[0].Name = "staging"
 
 	text := infoPanelText(cfg)
 
-	if !strings.Contains(text, "stg") {
-		t.Errorf("infoPanelText() = %q, want it to contain alias %q", text, "stg")
+	if !strings.Contains(text, "staging") {
+		t.Errorf("infoPanelText() = %q, want it to contain name %q", text, "staging")
 	}
 }
 

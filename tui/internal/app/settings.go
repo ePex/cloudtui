@@ -68,7 +68,7 @@ func newSettingsView(a *App) ui.View {
 
 // refreshSettingsList rebuilds the displayed text of all settings-list items
 // to reflect the current config values (theme name, active connection
-// alias, active AWS profile, Datadog site). The AWS profile name comes
+// name, active AWS profile, Datadog site). The AWS profile name comes
 // straight from cfg.ActiveAWSProfile — no need to re-read ~/.aws here,
 // unlike opening the overlay itself, which lists every discoverable
 // profile.
@@ -84,7 +84,7 @@ func (a *App) refreshSettingsList() {
 	}
 	a.settingsList.Clear()
 	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.showThemePicker() })
-	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Alias), "", 0, func() { a.showConnectionManager() })
+	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.showConnectionManager() })
 	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.showAWSProfiles() })
 	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.showDatadogEditor() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
