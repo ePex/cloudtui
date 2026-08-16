@@ -172,3 +172,15 @@ func (tp *themePicker) close() {
 	tp.visible = false
 	tp.app.tv.SetFocus(tp.app.pages)
 }
+
+// ApplyPalette recolors the theme-picker overlay for a live theme switch.
+func (tp *themePicker) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	tp.flex.SetBackgroundColor(bg)
+	tp.flex.SetBorderColor(tcell.GetColor(p.Border))
+	tp.flex.SetTitleColor(tcell.GetColor(p.Border))
+	styleList(tp.list, p)
+	tp.list.SetBackgroundColor(bg)
+}
+
+var _ ui.Themeable = (*themePicker)(nil)

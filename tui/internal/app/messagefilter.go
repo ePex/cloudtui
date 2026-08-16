@@ -7,7 +7,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // messageFilter is the server-side message filter overlay (FE 46) — the
@@ -76,6 +78,15 @@ func (mf *messageFilter) close() {
 	mf.visible = false
 	mf.app.tv.SetFocus(mf.app.messagesV.table)
 }
+
+// ApplyPalette recolors the message filter overlay for a live theme switch.
+func (mf *messageFilter) ApplyPalette(p config.Palette) {
+	mf.form.SetBackgroundColor(tcell.GetColor(p.Background))
+	mf.form.SetBorderColor(tcell.GetColor(p.Border))
+	mf.form.SetTitleColor(tcell.GetColor(p.Border))
+}
+
+var _ ui.Themeable = (*messageFilter)(nil)
 
 // apply parses the form's fields, and — on success — sets it as
 // messagesV's active filter, closes the overlay, and reloads. On a parse

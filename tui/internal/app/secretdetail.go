@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -38,6 +39,15 @@ type secretDetailView struct {
 	revealed     bool   // the value has been rendered on screen (implies fetched)
 	isBinary     bool   // valid once fetched: true if the secret has no SecretString
 	displayValue string // pretty-printed (if JSON) fetched value; empty if isBinary
+}
+
+var _ ui.Themeable = (*secretDetailView)(nil)
+
+// ApplyPalette recolors the secret detail view for a live theme switch.
+func (dv *secretDetailView) ApplyPalette(p config.Palette) {
+	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
+	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
+	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 }
 
 func (dv *secretDetailView) Shortcuts() []ui.Shortcut {

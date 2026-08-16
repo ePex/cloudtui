@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -34,6 +35,18 @@ type logsView struct {
 
 var _ ui.View = (*logsView)(nil)
 var _ ui.Shortcuttable = (*logsView)(nil)
+var _ ui.Themeable = (*logsView)(nil)
+
+// ApplyPalette recolors the CloudWatch Logs view for a live theme switch.
+func (lv *logsView) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	lv.table.SetBackgroundColor(bg)
+	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	lv.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
+	lv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
+	lv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
+	lv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+}
 
 func (lv *logsView) Name() string               { return "cloudwatch-logs" }
 func (lv *logsView) Title() string              { return "CloudWatch Logs" }

@@ -7,6 +7,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // sendMessageOverlay is the "Send Message" overlay: a text area plus
@@ -112,3 +115,18 @@ func (sm *sendMessageOverlay) close() {
 		sm.onClose()
 	}
 }
+
+// ApplyPalette recolors the send-message overlay for a live theme switch.
+func (sm *sendMessageOverlay) ApplyPalette(p config.Palette) {
+	bg := tcell.GetColor(p.Background)
+	sm.flex.SetBackgroundColor(bg)
+	sm.flex.SetBorderColor(tcell.GetColor(p.Border))
+	sm.flex.SetTitleColor(tcell.GetColor(p.Border))
+	sm.area.SetBackgroundColor(bg)
+	sm.area.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(tcell.GetColor(p.Background)))
+	sm.area.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
+	styleList(sm.list, p)
+	sm.list.SetBackgroundColor(bg)
+}
+
+var _ ui.Themeable = (*sendMessageOverlay)(nil)
