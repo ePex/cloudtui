@@ -32,49 +32,54 @@ import (
 // App is the root of the TUI: it owns the tview.Application and routes
 // command-prompt/hotkey input to the registered views.
 type App struct {
-	tv                    *tview.Application
-	rootPages             *tview.Pages
-	pages                 *tview.Pages
-	topLeft               *tview.Pages
-	prompt                *tview.InputField
-	helpVisible           bool
-	views                 []ui.View
-	cfg                   config.Config
-	infoPanel             *tview.TextView
-	divider               *tview.TextView
-	contextPanel          *tview.TextView
-	logoPanel             *tview.TextView
-	statusBar             *tview.TextView
-	settingsList          *tview.List
-	logV                  *logView
-	queuesV               *queuesView
-	messagesV             *messagesView
-	messageDetailV        *messageDetailView
-	confirmFlex           *tview.Flex
-	confirmText           *tview.TextView
-	confirmList           *tview.List
-	confirmVisible        bool
-	movePickerFlex        *tview.Flex
-	movePickerList        *tview.List
-	movePickerSearch      *tview.InputField
-	movePickerQueues      []string
-	movePickerPreferred   string
-	movePickerOnSelect    func(string)
-	movePickerOnClose     func()
-	movePickerVisible     bool
-	sendMessageFlex       *tview.Flex
-	sendMessageArea       *tview.TextArea
-	sendMessageList       *tview.List
-	sendMessageOnClose    func()
-	sendMessageVisible    bool
-	connManagerFlex       *tview.Flex
-	connManagerList       *tview.List
-	connManagerHints      *tview.TextView
-	connManagerVisible    bool
-	connEditorForm        *tview.Form
-	connEditorVisible     bool
-	connEditorIsNew       bool
-	connEditorOrigName    string
+	tv                  *tview.Application
+	rootPages           *tview.Pages
+	pages               *tview.Pages
+	topLeft             *tview.Pages
+	prompt              *tview.InputField
+	helpVisible         bool
+	views               []ui.View
+	cfg                 config.Config
+	infoPanel           *tview.TextView
+	divider             *tview.TextView
+	contextPanel        *tview.TextView
+	logoPanel           *tview.TextView
+	statusBar           *tview.TextView
+	settingsList        *tview.List
+	logV                *logView
+	queuesV             *queuesView
+	messagesV           *messagesView
+	messageDetailV      *messageDetailView
+	confirmFlex         *tview.Flex
+	confirmText         *tview.TextView
+	confirmList         *tview.List
+	confirmVisible      bool
+	movePickerFlex      *tview.Flex
+	movePickerList      *tview.List
+	movePickerSearch    *tview.InputField
+	movePickerQueues    []string
+	movePickerPreferred string
+	movePickerOnSelect  func(string)
+	movePickerOnClose   func()
+	movePickerVisible   bool
+	sendMessageFlex     *tview.Flex
+	sendMessageArea     *tview.TextArea
+	sendMessageList     *tview.List
+	sendMessageOnClose  func()
+	sendMessageVisible  bool
+	connManagerFlex     *tview.Flex
+	connManagerList     *tview.List
+	connManagerHints    *tview.TextView
+	connManagerVisible  bool
+	connEditorForm      *tview.Form
+	connEditorVisible   bool
+	connEditorIsNew     bool
+	connEditorOrigName  string
+	// connEditorBrokerName shadows the Broker Name field's value across a
+	// jolokia -> proxy -> jolokia round trip, since the field itself
+	// doesn't exist while Backend is proxy (rebuildConnEditorTail has
+	// nothing to read it back from otherwise) — see spec/57-bugfix-broker-name-proxy-hidden.
+	connEditorBrokerName  string
 	messageFilterForm     *tview.Form
 	messageFilterVisible  bool
 	timeRangeFlex         *tview.Flex
@@ -485,13 +490,26 @@ func New(cfg config.Config) *App {
 		AddButton("Cancel", func() { a.closeConnEditor() })
 	if dd, ok := a.connEditorForm.GetFormItem(1).(*tview.DropDown); ok {
 		styleDropDown(dd, cfg.Colors)
+		// Wired via SetSelectedFunc rather than passed to AddDropDown
+		// itself, for the same reason as the Password Source dropdown
+		// below: AddDropDown's initial SetCurrentOption(0) call would
+		// otherwise fire the rebuild before the rest of the chain exists.
+		dd.SetSelectedFunc(func(_ string, idx int) {
+			backends := []string{"jolokia", "proxy"}
+			a.rebuildConnEditorTail(backends[idx])
+		})
 	}
-	// The Password Source dropdown swaps form item 6 (the last item before
-	// the Save/Cancel buttons) between a plain Password field and a
-	// Password Secret (AWS) field. Wired via SetSelectedFunc rather than
+	// The Password Source dropdown swaps the last form item (before the
+	// Save/Cancel buttons, which AddButton keeps separate from GetFormItem)
+	// between a plain Password field and a Password Secret (AWS) field —
+	// see setConnEditorPasswordField. Wired via SetSelectedFunc rather than
 	// passed to AddDropDown itself, since AddDropDown's initial
-	// SetCurrentOption(0) call would otherwise fire the swap before item 6
-	// (Password) even exists yet.
+	// SetCurrentOption(0) call would otherwise fire the swap before the
+	// Password field even exists yet. GetFormItem(5) is safe here because
+	// this runs once, right after the static chain above built the default
+	// (jolokia) layout — Password Source is always at index 5 at this
+	// specific point, even though it can move once rebuildConnEditorTail
+	// starts rebuilding items after a Backend change.
 	if dd, ok := a.connEditorForm.GetFormItem(5).(*tview.DropDown); ok {
 		styleDropDown(dd, cfg.Colors)
 		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
