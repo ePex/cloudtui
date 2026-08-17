@@ -276,10 +276,11 @@ func New(cfg config.Config) *App {
 	a.sendMessage = newSendMessageOverlay(a)
 	sendMessageOverlay := ui.Centered(a.sendMessage.flex, 70, 14)
 
-	a.connManager = newConnManager(a)
+	a.connManager = newConnManager(a, a.confirm)
 	connManagerOverlay := ui.Centered(a.connManager.flex, 64, 20)
 
-	a.connEditor = newConnEditor(a)
+	a.connEditor = newConnEditor(a, a.connManager)
+	a.connManager.editor = a.connEditor
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := ui.Centered(a.connEditor.form, 64, 20)
