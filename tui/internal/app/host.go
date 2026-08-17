@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/rivo/tview"
 
@@ -61,3 +62,78 @@ func (a *App) ApplyMessagesFilter(f queue.MessageFilter) {
 }
 
 func (a *App) FocusMessages() { a.tv.SetFocus(a.messagesV.table) }
+
+// DeleteConnection removes name from Connections. If it was the active
+// connection, activates the first remaining one (reusing switchConnection
+// for the backend-rebuild+persist+refresh path); otherwise persists
+// directly. Returns whether the removed connection was active, so the
+// caller knows which post-delete UI path to take (switchConnection
+// already navigated to "queues"; the non-active path needs the caller
+// to repaint its own list instead).
+func (a *App) DeleteConnection(name string) (wasActive bool) {
+	wasActive = a.cfg.ActiveConnection == name
+	conns := make([]config.Connection, 0, len(a.cfg.Connections)-1)
+	for _, c := range a.cfg.Connections {
+		if c.Name != name {
+			conns = append(conns, c)
+		}
+	}
+	a.cfg.Connections = conns
+	if wasActive {
+		a.cfg.ActiveConnection = a.cfg.Connections[0].Name
+		a.switchConnection(a.cfg.ActiveConnection)
+		return true
+	}
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("DeleteConnection: save failed", "error", err)
+	}
+	return false
+}
+
+// SaveConnection appends conn (isNew) or replaces the connection named
+// origName (edit) in Connections, rebuilding the active backend in
+// place if the edited connection was the active one, then persists and
+// refreshes the settings list.
+func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool) {
+	wasActive := a.cfg.ActiveConnection == origName
+	if isNew {
+		a.cfg.Connections = append(a.cfg.Connections, conn)
+	} else {
+		for i, c := range a.cfg.Connections {
+			if c.Name == origName {
+				a.cfg.Connections[i] = conn
+				break
+			}
+		}
+		if wasActive {
+			a.cfg.ActiveConnection = conn.Name
+			a.backend = newBackendForConn(a, conn)
+			a.queuesV.backend = a.backend
+			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
+		}
+	}
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("SaveConnection: save failed", "error", err)
+	}
+	a.refreshSettingsList()
+}
+
+// SaveDatadogConfig persists cfg.Datadog and refreshes the settings list.
+func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
+	a.cfg.Datadog = cfg
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("SaveDatadogConfig: save failed", "error", err)
+	}
+	a.refreshSettingsList()
+}
+
+// SetActiveAWSProfile sets name as the active AWS profile, updates the
+// info panel, refreshes the settings list, and persists.
+func (a *App) SetActiveAWSProfile(name string) {
+	a.cfg.ActiveAWSProfile = name
+	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
+	a.refreshSettingsList()
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("SetActiveAWSProfile: save failed", "error", err)
+	}
+}
