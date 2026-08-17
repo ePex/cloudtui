@@ -190,7 +190,7 @@ func TestQueuesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 	screen.SetSize(60, 15)
 
 	// First draw while the table is still empty (header only), mirroring the
-	// real sequence: switchTo("queues") draws before the async load returns.
+	// real sequence: SwitchTo("queues") draws before the async load returns.
 	qv.table.Draw(screen)
 
 	summaries := make([]queue.Summary, 50)

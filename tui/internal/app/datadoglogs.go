@@ -204,7 +204,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 }
 
 // Activate runs a search with the current query/time range. Called by
-// switchTo each time the view becomes active, same as every other
+// SwitchTo each time the view becomes active, same as every other
 // registered view's Activate — and matching logSearchView.open's
 // behavior of always running a search immediately (an empty query is
 // valid: "search everything in range"). Also kicks off facet discovery

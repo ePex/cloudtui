@@ -69,8 +69,8 @@ type App struct {
 	timeRangeModal *dialog.TimeRangeModal
 	datadogEditor  *dialog.DatadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
-	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
-	// dropped by switchTo if abandoned — see spec/41.
+	// FE 41's Datadog->CloudWatch jump, consumed by OpenLogSearch and
+	// dropped by SwitchTo if abandoned — see spec/41.
 	pendingCloudWatchPattern string
 	themePicker              *dialog.ThemePicker
 	awsProfiles              *dialog.AWSProfilesPicker
@@ -157,7 +157,7 @@ func New(cfg config.Config) *App {
 		homeSections: homeSections,
 	}
 
-	homeView := views.NewHome(homeSections, a.switchTo, cfg.Colors.Label, cfg.Colors.Text, cfg.Colors.Border, cfg.Colors.SelectionBg, cfg.Colors.SelectionText)
+	homeView := views.NewHome(homeSections, a.SwitchTo, cfg.Colors.Label, cfg.Colors.Text, cfg.Colors.Border, cfg.Colors.SelectionBg, cfg.Colors.SelectionText)
 	a.homeTable, _ = homeView.Primitive().(*tview.Table)
 
 	a.prompt = tview.NewInputField().
@@ -192,7 +192,7 @@ func New(cfg config.Config) *App {
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
-	// so capture it once here for copyToClipboard's use. Reserved for this
+	// so capture it once here for CopyToClipboard's use. Reserved for this
 	// purpose — if another feature ever needs an after-draw hook too, chain
 	// it from here rather than overwriting.
 	a.tv.SetAfterDrawFunc(func(screen tcell.Screen) {
@@ -253,7 +253,7 @@ func New(cfg config.Config) *App {
 		a.pages.AddPage(v.Name(), prim, true, false)
 	}
 	// messages, message-detail, and param-detail pages: not in a.views (no
-	// home entry / switchTo — opened directly via their own open* helper).
+	// home entry / SwitchTo — opened directly via their own open* helper).
 	a.pages.AddPage("messages", a.messagesV.flex, true, false)
 	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
 	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
@@ -329,7 +329,7 @@ func New(cfg config.Config) *App {
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false)
 
-	a.switchTo(a.views[0].Name())
+	a.SwitchTo(a.views[0].Name())
 
 	// Built here, once every view/overlay above exists — onGlobalKey and
 	// onPromptDone loop over these instead of a hand-maintained chain of
@@ -426,13 +426,13 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		a.tv.SetFocus(a.prompt)
 		return nil
 	case 'h':
-		a.switchTo("home")
+		a.SwitchTo("home")
 		return nil
 	case 's':
-		a.switchTo("settings")
+		a.SwitchTo("settings")
 		return nil
 	case 'l':
-		a.switchTo("log")
+		a.SwitchTo("log")
 		return nil
 	case 'q':
 		a.tv.Stop()
@@ -468,9 +468,9 @@ func (a *App) onPromptDone(key tcell.Key) {
 	case cmd == "q" || cmd == "quit":
 		a.tv.Stop()
 	case cmd == "h" || cmd == "home":
-		a.switchTo("home")
+		a.SwitchTo("home")
 	case cmd == "s" || cmd == "settings":
-		a.switchTo("settings")
+		a.SwitchTo("settings")
 	case cmd == "aq" || cmd == "connections":
 		a.connManager.Show()
 	case cmd == "ap" || cmd == "awsprofiles":
@@ -478,7 +478,7 @@ func (a *App) onPromptDone(key tcell.Key) {
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:
-		a.switchTo(cmd)
+		a.SwitchTo(cmd)
 	}
 }
 
@@ -545,20 +545,20 @@ func (a *App) switchConnection(name string) {
 	a.queuesV.backend = a.backend
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.refreshSettingsList()
-	a.switchTo("queues")
+	a.SwitchTo("queues")
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("switchConnection: save failed", "error", err)
 	}
 }
 
-// switchTo activates the named view if it is registered, updates the top
+// SwitchTo activates the named view if it is registered, updates the top
 // bar's context panel, and calls Activate() if the view implements activatable.
-func (a *App) switchTo(name string) {
+func (a *App) SwitchTo(name string) {
 	// A CorrelationID queued by FE 41's Datadog->CloudWatch jump is
 	// one-shot: if the user lands on the group list but then navigates
 	// anywhere else without picking a group, drop it — otherwise it'd
 	// silently pre-fill some later, unrelated log group's search.
-	// switchTo("cloudwatch-logs") itself (the jump) never hits this,
+	// SwitchTo("cloudwatch-logs") itself (the jump) never hits this,
 	// since name == "cloudwatch-logs" there.
 	if name != "cloudwatch-logs" {
 		a.pendingCloudWatchPattern = ""
@@ -567,7 +567,7 @@ func (a *App) switchTo(name string) {
 		if v.Name() == name {
 			a.pages.SwitchToPage(name)
 			a.tv.SetFocus(v.Primitive())
-			a.updateContextPanel(v)
+			a.UpdateContextPanel(v)
 			if act, ok := v.(activatable); ok {
 				act.Activate()
 			}
@@ -576,22 +576,22 @@ func (a *App) switchTo(name string) {
 	}
 }
 
-// copyToClipboard writes data to the system clipboard via the terminal's
+// CopyToClipboard writes data to the system clipboard via the terminal's
 // OSC 52 escape sequence (tcell.Screen.SetClipboard) rather than shelling
 // out to pbcopy/xclip/clip.exe: no new dependency, and it works the same
 // over SSH as it does locally. a.screen is nil until the first draw (see
 // New()'s SetAfterDrawFunc), which in practice means before Run() starts —
 // a no-op then is correct since there's nothing on screen to have copied.
-func (a *App) copyToClipboard(data string) {
+func (a *App) CopyToClipboard(data string) {
 	if a.screen == nil {
 		return
 	}
 	a.screen.SetClipboard([]byte(data))
 }
 
-// updateContextPanel renders v's shortcuts into the context panel, or clears
+// UpdateContextPanel renders v's shortcuts into the context panel, or clears
 // it when v doesn't implement ui.Shortcuttable.
-func (a *App) updateContextPanel(v ui.View) {
+func (a *App) UpdateContextPanel(v ui.View) {
 	s, ok := v.(ui.Shortcuttable)
 	if !ok || len(s.Shortcuts()) == 0 {
 		a.contextPanel.SetText("")
@@ -646,7 +646,7 @@ type bordered interface {
 }
 
 // activatable is implemented by views that want to refresh their content each
-// time they become active (e.g. logView reloads the log file on switchTo).
+// time they become active (e.g. logView reloads the log file on SwitchTo).
 type activatable interface {
 	Activate()
 }

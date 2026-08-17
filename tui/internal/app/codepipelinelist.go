@@ -122,7 +122,7 @@ func newCodePipelineListView(a *App) *codePipelineListView {
 	return lv
 }
 
-// Activate reloads the pipeline list. Called by switchTo each time the
+// Activate reloads the pipeline list. Called by SwitchTo each time the
 // view becomes active.
 func (lv *codePipelineListView) Activate() {
 	lv.load()
@@ -194,10 +194,10 @@ func (lv *codePipelineListView) toggleWatchSelected() {
 		return
 	}
 	name := lv.filtered[idx].Name
-	if lv.app.isWatchingPipeline(name) {
-		lv.app.stopWatchingPipeline(name)
+	if lv.app.IsWatchingPipeline(name) {
+		lv.app.StopWatchingPipeline(name)
 	} else {
-		lv.app.startWatchingPipeline(name)
+		lv.app.StartWatchingPipeline(name)
 	}
 	lv.repaint(lv.all)
 }
@@ -230,7 +230,7 @@ func (lv *codePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 		lv.table.SetCell(row, 0, tview.NewTableCell(pl.Name).SetTextColor(nameColor).SetExpansion(3))
 		watching := ""
 		watchColor := textColor
-		if lv.app.isWatchingPipeline(pl.Name) {
+		if lv.app.IsWatchingPipeline(pl.Name) {
 			watching = "▶ watching"
 			watchColor = accentColor
 		}

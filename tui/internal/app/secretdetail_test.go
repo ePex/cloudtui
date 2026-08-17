@@ -109,7 +109,7 @@ func TestSecretDetailViewShortcutsHideCopyOnceKnownBinary(t *testing.T) {
 func TestOpenSecretDetailSwitchesPageAndSetsTitle(t *testing.T) {
 	a := New(config.Default())
 
-	a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+	a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 
 	if name, _ := a.pages.GetFrontPage(); name != "secret-detail" {
 		t.Errorf("front page = %q, want %q", name, "secret-detail")
@@ -129,7 +129,7 @@ func TestSecretDetailViewCopyWritesDisplayValueToClipboard(t *testing.T) {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	a.screen = screen
-	a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+	a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 	a.secretDetailV.fetched = true
 	a.secretDetailV.revealed = true
 	a.secretDetailV.displayValue = "hello"
@@ -159,7 +159,7 @@ func TestSecretDetailViewCopyFetchedValueRejectsBinary(t *testing.T) {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	a.screen = screen
-	a.openSecretDetail(awssecrets.Secret{Name: "/app/blob"})
+	a.OpenSecretDetail(awssecrets.Secret{Name: "/app/blob"})
 	a.secretDetailV.fetched = true
 	a.secretDetailV.isBinary = true
 
@@ -187,7 +187,7 @@ func TestHandleFetchResult(t *testing.T) {
 			t.Fatalf("screen.Init: %v", err)
 		}
 		a.screen = screen
-		a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+		a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 
 		a.secretDetailV.handleFetchResult("hello", false, nil, a.secretDetailV.copyFetchedValue)
 
@@ -208,7 +208,7 @@ func TestHandleFetchResult(t *testing.T) {
 
 	t.Run("success then reveal uses the cached value, no re-fetch", func(t *testing.T) {
 		a := New(config.Default())
-		a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+		a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 		a.secretDetailV.handleFetchResult(`{"a":1}`, false, nil, a.secretDetailV.copyFetchedValue)
 
 		calls := 0
@@ -231,7 +231,7 @@ func TestHandleFetchResult(t *testing.T) {
 
 	t.Run("binary secret is cached masked, and Shortcuts drops copy", func(t *testing.T) {
 		a := New(config.Default())
-		a.openSecretDetail(awssecrets.Secret{Name: "/app/blob"})
+		a.OpenSecretDetail(awssecrets.Secret{Name: "/app/blob"})
 
 		called := false
 		a.secretDetailV.handleFetchResult("", true, nil, func() { called = true })
@@ -251,7 +251,7 @@ func TestHandleFetchResult(t *testing.T) {
 
 	t.Run("error logs and shows status, does not call onSuccess", func(t *testing.T) {
 		a := New(config.Default())
-		a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+		a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 
 		called := false
 		a.secretDetailV.handleFetchResult("", false, context.DeadlineExceeded, func() { called = true })
@@ -270,7 +270,7 @@ func TestHandleFetchResult(t *testing.T) {
 
 func TestSecretDetailViewEscReturnsToSecretsManager(t *testing.T) {
 	a := New(config.Default())
-	a.openSecretDetail(awssecrets.Secret{Name: "/app/db"})
+	a.OpenSecretDetail(awssecrets.Secret{Name: "/app/db"})
 
 	capture := a.secretDetailV.textView.GetInputCapture()
 	if capture == nil {

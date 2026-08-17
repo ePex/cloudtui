@@ -15,7 +15,7 @@ import (
 )
 
 // codePipelineDetailView shows a single pipeline's current per-stage
-// status: opened via App.openCodePipelineDetail, not a registered
+// status: opened via App.OpenCodePipelineDetail, not a registered
 // ui.View (same non-registered shape as logSearchView — see
 // spec/34-fe-cloudwatch-logs for why). 'w' toggles watching this
 // pipeline; while watching, this view live-refreshes whenever a poll
@@ -74,7 +74,7 @@ func newCodePipelineDetailView(a *App) *codePipelineDetailView {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:
 			a.pages.SwitchToPage("codepipeline")
 			a.tv.SetFocus(a.codePipelineListV.table)
-			a.updateContextPanel(a.codePipelineListV)
+			a.UpdateContextPanel(a.codePipelineListV)
 			return nil
 		}
 		return event
@@ -112,10 +112,10 @@ func (dv *codePipelineDetailView) open(pipelineName string) {
 }
 
 func (dv *codePipelineDetailView) toggleWatch() {
-	if dv.app.isWatchingPipeline(dv.pipelineName) {
-		dv.app.stopWatchingPipeline(dv.pipelineName)
+	if dv.app.IsWatchingPipeline(dv.pipelineName) {
+		dv.app.StopWatchingPipeline(dv.pipelineName)
 	} else {
-		dv.app.startWatchingPipeline(dv.pipelineName)
+		dv.app.StartWatchingPipeline(dv.pipelineName)
 	}
 	dv.updateTitle()
 }
@@ -187,7 +187,7 @@ func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
 // cells do, silently swallowing square brackets).
 func (dv *codePipelineDetailView) updateTitle() {
 	title := " " + dv.pipelineName
-	if dv.app.isWatchingPipeline(dv.pipelineName) {
+	if dv.app.IsWatchingPipeline(dv.pipelineName) {
 		title += " — ▶ watching"
 	}
 	dv.table.SetTitle(title + " ")

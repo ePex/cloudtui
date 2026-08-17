@@ -35,14 +35,14 @@ func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 func TestSwitchTo(t *testing.T) {
 	a := New(config.Default())
 
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 	if name, _ := a.pages.GetFrontPage(); name != "settings" {
-		t.Fatalf("front page after switchTo(\"settings\") = %q, want %q", name, "settings")
+		t.Fatalf("front page after SwitchTo(\"settings\") = %q, want %q", name, "settings")
 	}
 
-	a.switchTo("bogus")
+	a.SwitchTo("bogus")
 	if name, _ := a.pages.GetFrontPage(); name != "settings" {
-		t.Errorf("front page after switchTo(\"bogus\") = %q, want unchanged %q", name, "settings")
+		t.Errorf("front page after SwitchTo(\"bogus\") = %q, want unchanged %q", name, "settings")
 	}
 }
 
@@ -54,7 +54,7 @@ func TestSwitchToClearsAbandonedPendingCloudWatchPattern(t *testing.T) {
 	a := New(config.Default())
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
 
-	a.switchTo("home")
+	a.SwitchTo("home")
 
 	if a.pendingCloudWatchPattern != "" {
 		t.Errorf("pendingCloudWatchPattern = %q, want cleared after switching away", a.pendingCloudWatchPattern)
@@ -62,13 +62,13 @@ func TestSwitchToClearsAbandonedPendingCloudWatchPattern(t *testing.T) {
 }
 
 // TestSwitchToCloudWatchLogsPreservesPendingPattern confirms the jump
-// itself (switchTo("cloudwatch-logs")) doesn't clear the value it was
+// itself (SwitchTo("cloudwatch-logs")) doesn't clear the value it was
 // just asked to carry — only navigating elsewhere does.
 func TestSwitchToCloudWatchLogsPreservesPendingPattern(t *testing.T) {
 	a := New(config.Default())
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
 
-	a.switchTo("cloudwatch-logs")
+	a.SwitchTo("cloudwatch-logs")
 
 	if a.pendingCloudWatchPattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("pendingCloudWatchPattern = %q, want it preserved by the jump itself", a.pendingCloudWatchPattern)
@@ -81,10 +81,10 @@ func TestSwitchToCloudWatchLogsPreservesPendingPattern(t *testing.T) {
 // must not leave it queued for a later, unrelated group.
 func TestOpenLogSearchConsumesPendingCloudWatchPattern(t *testing.T) {
 	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = "" // openLogSearch's open() -> search() hits the guard, no goroutine
+	a.cfg.ActiveAWSProfile = "" // OpenLogSearch's open() -> search() hits the guard, no goroutine
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
 
-	a.openLogSearch("/aws/lambda/foo")
+	a.OpenLogSearch("/aws/lambda/foo")
 
 	if a.logSearchV.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("logSearchV.pattern = %q, want the queued CorrelationID", a.logSearchV.pattern)
@@ -101,7 +101,7 @@ func TestOpenLogSearchWithoutPendingPatternIsUnaffected(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.ActiveAWSProfile = ""
 
-	a.openLogSearch("/aws/lambda/foo")
+	a.OpenLogSearch("/aws/lambda/foo")
 
 	if a.logSearchV.pattern != "" {
 		t.Errorf("logSearchV.pattern = %q, want empty when no CorrelationID was queued", a.logSearchV.pattern)
@@ -285,7 +285,7 @@ func TestOnPromptDoneSwitchesToKnownView(t *testing.T) {
 
 func TestOnPromptDoneShortAliasH(t *testing.T) {
 	a := New(config.Default())
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 	a.prompt.SetText("h")
 
 	a.onPromptDone(tcell.KeyEnter)
@@ -330,7 +330,7 @@ func TestOnPromptDoneConnectionsOpensConnectionManager(t *testing.T) {
 
 func TestOnPromptDoneAqWorksFromAnyView(t *testing.T) {
 	a := New(config.Default())
-	a.switchTo("log") // not settings — proves ':aq' isn't tied to any specific starting view
+	a.SwitchTo("log") // not settings — proves ':aq' isn't tied to any specific starting view
 	a.prompt.SetText("aq")
 
 	a.onPromptDone(tcell.KeyEnter)
@@ -367,7 +367,7 @@ func TestOnPromptDoneAwsprofilesOpensAWSProfiles(t *testing.T) {
 func TestOnPromptDoneApWorksFromAnyView(t *testing.T) {
 	a := New(config.Default())
 	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
-	a.switchTo("log") // not settings — proves ':ap' isn't tied to any specific starting view
+	a.SwitchTo("log") // not settings — proves ':ap' isn't tied to any specific starting view
 	a.prompt.SetText("ap")
 
 	a.onPromptDone(tcell.KeyEnter)
@@ -415,7 +415,7 @@ func TestOnPromptDoneThemeCommandUnknownIsNoOp(t *testing.T) {
 
 func TestOnPromptDoneUnknownCommandLeavesViewUnchanged(t *testing.T) {
 	a := New(config.Default())
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 	a.prompt.SetText("bogus")
 
 	a.onPromptDone(tcell.KeyEnter)
@@ -430,7 +430,7 @@ func TestOnPromptDoneUnknownCommandLeavesViewUnchanged(t *testing.T) {
 
 func TestOnPromptDoneNonEnterReturnsFocusWithoutSwitching(t *testing.T) {
 	a := New(config.Default())
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 	a.prompt.SetText("settings")
 	a.topLeft.SwitchToPage("prompt")
 	a.tv.SetFocus(a.prompt)
@@ -482,7 +482,7 @@ func TestOnGlobalKeyQuitConsumesEvent(t *testing.T) {
 func TestOnGlobalKeyHelpTogglesAndSwallowsOtherKeys(t *testing.T) {
 	a := New(config.Default())
 	a.tv.SetFocus(a.pages)
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 
 	open := tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone)
 	if got := a.onGlobalKey(open); got != nil {
@@ -558,25 +558,25 @@ func TestSwitchToClearsContextPanelForNonShortcuttableView(t *testing.T) {
 	a := New(config.Default())
 	// settings doesn't implement Shortcuttable (home does, deliberately —
 	// see TestSwitchToHomeShowsGlobalHotkeysInContextPanel).
-	a.switchTo("settings")
+	a.SwitchTo("settings")
 	if got := a.contextPanel.GetText(true); got != "" {
-		t.Errorf("contextPanel after switchTo(settings) = %q, want empty", got)
+		t.Errorf("contextPanel after SwitchTo(settings) = %q, want empty", got)
 	}
 }
 
 func TestSwitchToHomeShowsGlobalHotkeysInContextPanel(t *testing.T) {
 	a := New(config.Default())
 
-	a.switchTo("home")
+	a.SwitchTo("home")
 
 	text := a.contextPanel.GetText(true)
 	for _, want := range []string{"?", "help", "l", "log", "s", "settings", "q", "quit", ":", "command"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("contextPanel after switchTo(home) = %q, want it to contain %q", text, want)
+			t.Errorf("contextPanel after SwitchTo(home) = %q, want it to contain %q", text, want)
 		}
 	}
 	if strings.Contains(text, "home") {
-		t.Errorf("contextPanel after switchTo(home) = %q, want it to omit the redundant \"home\" entry", text)
+		t.Errorf("contextPanel after SwitchTo(home) = %q, want it to omit the redundant \"home\" entry", text)
 	}
 }
 
@@ -586,7 +586,7 @@ func TestSwitchToRendersShortcutsForShortcuttableView(t *testing.T) {
 	a.views = append(a.views, fv)
 	a.pages.AddPage(fv.Name(), fv.Primitive(), true, false)
 
-	a.switchTo("shortcuttable")
+	a.SwitchTo("shortcuttable")
 
 	text := a.contextPanel.GetText(true)
 	for _, want := range []string{"p", "purge", "m", "move"} {
@@ -620,10 +620,10 @@ func TestActivatableCalledBySwitchTo(t *testing.T) {
 	a.views = append(a.views, fv)
 	a.pages.AddPage(fv.Name(), fv.Primitive(), true, false)
 
-	a.switchTo("act-test")
+	a.SwitchTo("act-test")
 
 	if !activated {
-		t.Error("Activate() not called by switchTo for activatable view")
+		t.Error("Activate() not called by SwitchTo for activatable view")
 	}
 }
 
@@ -664,12 +664,12 @@ func TestPromptQueuesCommandSwitchesToQueuesView(t *testing.T) {
 func TestOpenMessageDetailSetsContextPanelShortcuts(t *testing.T) {
 	a := New(config.Default())
 
-	a.openMessageDetail("test-queue", queue.Message{ID: "id-1"})
+	a.OpenMessageDetail("test-queue", queue.Message{ID: "id-1"})
 
 	text := a.contextPanel.GetText(true)
 	for _, want := range []string{"m", "move", "d", "delete", "Esc", "back"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("contextPanel after openMessageDetail = %q, want it to contain %q", text, want)
+			t.Errorf("contextPanel after OpenMessageDetail = %q, want it to contain %q", text, want)
 		}
 	}
 }
@@ -682,7 +682,7 @@ func TestCopyToClipboardWritesViaScreen(t *testing.T) {
 	}
 	a.screen = screen
 
-	a.copyToClipboard("some-value")
+	a.CopyToClipboard("some-value")
 
 	if got := string(screen.GetClipboardData()); got != "some-value" {
 		t.Errorf("clipboard = %q, want %q", got, "some-value")
@@ -693,5 +693,5 @@ func TestCopyToClipboardNoOpWithoutScreen(t *testing.T) {
 	a := New(config.Default())
 	a.screen = nil
 
-	a.copyToClipboard("some-value") // must not panic
+	a.CopyToClipboard("some-value") // must not panic
 }

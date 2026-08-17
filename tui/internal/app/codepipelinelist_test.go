@@ -90,7 +90,7 @@ func TestCodePipelineListViewRepaintShowsDashForNoUpdatedAt(t *testing.T) {
 }
 
 // TestCodePipelineListViewRepaintShowsWatchingIndicator covers the
-// WATCHING column — populated from App.isWatchingPipeline, not from any
+// WATCHING column — populated from App.IsWatchingPipeline, not from any
 // field on awscodepipeline.Pipeline itself.
 func TestCodePipelineListViewRepaintShowsWatchingIndicator(t *testing.T) {
 	a := New(config.Default())
@@ -148,7 +148,7 @@ func TestCodePipelineListViewToggleWatchSelectedStartsAndStops(t *testing.T) {
 	a.codePipelineListV.table.Select(1, 0)
 
 	a.codePipelineListV.toggleWatchSelected()
-	if !a.isWatchingPipeline("pipeline-one") {
+	if !a.IsWatchingPipeline("pipeline-one") {
 		t.Fatal("toggleWatchSelected() did not start watching")
 	}
 	if got := a.codePipelineListV.table.GetCell(1, 1).Text; got != "▶ watching" {
@@ -156,7 +156,7 @@ func TestCodePipelineListViewToggleWatchSelectedStartsAndStops(t *testing.T) {
 	}
 
 	a.codePipelineListV.toggleWatchSelected()
-	if a.isWatchingPipeline("pipeline-one") {
+	if a.IsWatchingPipeline("pipeline-one") {
 		t.Error("toggleWatchSelected() did not stop watching on second call")
 	}
 	if got := a.codePipelineListV.table.GetCell(1, 1).Text; got != "" {
