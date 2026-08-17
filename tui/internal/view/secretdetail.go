@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// secretDetailView shows the full detail of a single Secrets Manager
+// SecretDetailView shows the full detail of a single Secrets Manager
 // secret. It is not a registered ui.View; it is opened via
 // App.OpenSecretDetail and returns to "secrets-manager" on Esc/Backspace.
 // Unlike paramDetailView, a Secret never carries a value at all — Secrets
@@ -30,7 +30,7 @@ import (
 // fetched value on screen. Once fetched, pressing the other key doesn't
 // re-fetch — 'r' after a prior silent 'c' just displays the cached value,
 // and 'c' after a prior 'r' just copies it again.
-type secretDetailView struct {
+type SecretDetailView struct {
 	textView *tview.TextView
 	host     ui.ViewHost
 	secret   awssecrets.Secret
@@ -41,16 +41,18 @@ type secretDetailView struct {
 	displayValue string // pretty-printed (if JSON) fetched value; empty if isBinary
 }
 
-var _ ui.Themeable = (*secretDetailView)(nil)
+var _ ui.Themeable = (*SecretDetailView)(nil)
 
 // ApplyPalette recolors the secret detail view for a live theme switch.
-func (dv *secretDetailView) ApplyPalette(p config.Palette) {
+func (dv *SecretDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 }
 
-func (dv *secretDetailView) Shortcuts() []ui.Shortcut {
+func (dv *SecretDetailView) Primitive() tview.Primitive { return dv.textView }
+
+func (dv *SecretDetailView) Shortcuts() []ui.Shortcut {
 	shortcuts := []ui.Shortcut{{Key: "Esc", Description: "back"}}
 	if !(dv.fetched && dv.isBinary) {
 		shortcuts = append([]ui.Shortcut{{Key: "c", Description: "copy value"}}, shortcuts...)
@@ -61,14 +63,14 @@ func (dv *secretDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func newSecretDetailView(a ui.ViewHost, onBack func()) *secretDetailView {
+func NewSecretDetailView(a ui.ViewHost, onBack func()) *SecretDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Secret ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &secretDetailView{textView: tv, host: a}
+	dv := &SecretDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -92,21 +94,22 @@ func newSecretDetailView(a ui.ViewHost, onBack func()) *secretDetailView {
 	return dv
 }
 
-// render displays secret's detail, freshly masked and unfetched. Called on
+// Render displays secret's detail, freshly masked and unfetched. Called on
 // open — resetting all reveal/fetch state here is what makes this "open a
 // fresh detail view" rather than "redraw the current one"; reveal() and
 // copyValue()'s callbacks call renderBody directly instead, to update in
 // place without losing the just-fetched value.
-func (dv *secretDetailView) render(secret awssecrets.Secret) {
+func (dv *SecretDetailView) Render(secret awssecrets.Secret) {
 	dv.secret = secret
 	dv.fetched = false
 	dv.revealed = false
 	dv.isBinary = false
 	dv.displayValue = ""
+	dv.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
 	dv.renderBody()
 }
 
-func (dv *secretDetailView) renderBody() {
+func (dv *SecretDetailView) renderBody() {
 	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
@@ -142,11 +145,11 @@ func (dv *secretDetailView) renderBody() {
 
 // refreshContextPanel rebuilds the context panel from dv.Shortcuts(),
 // which changes as reveal progresses (the "r: reveal" entry drops out,
-// "c: copy value" appears for a non-binary secret). secretDetailView isn't
+// "c: copy value" appears for a non-binary secret). SecretDetailView isn't
 // a registered ui.View, so this can't go through the generic
 // UpdateContextPanel(ui.View) path — same manual pattern paramDetailView
 // uses.
-func (dv *secretDetailView) refreshContextPanel() {
+func (dv *SecretDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
@@ -158,7 +161,7 @@ func (dv *secretDetailView) refreshContextPanel() {
 // first, silently, if a prior 'c' or 'r' hasn't already. The display stays
 // masked either way; only the status message (naming the secret, never
 // its value) confirms what happened.
-func (dv *secretDetailView) copyValue() {
+func (dv *SecretDetailView) copyValue() {
 	if !dv.fetched {
 		dv.fetchThen(dv.copyFetchedValue)
 		return
@@ -166,7 +169,7 @@ func (dv *secretDetailView) copyValue() {
 	dv.copyFetchedValue()
 }
 
-func (dv *secretDetailView) copyFetchedValue() {
+func (dv *SecretDetailView) copyFetchedValue() {
 	if dv.isBinary {
 		dv.host.SetStatus(fmt.Sprintf("[red]Cannot copy %s: binary secret[-]", dv.secret.Name))
 		return
@@ -177,7 +180,7 @@ func (dv *secretDetailView) copyFetchedValue() {
 
 // reveal displays the fetched value on screen — fetching it first if a
 // prior silent 'c' hasn't already cached it.
-func (dv *secretDetailView) reveal() {
+func (dv *SecretDetailView) reveal() {
 	if dv.fetched {
 		dv.revealed = true
 		dv.renderBody()
@@ -191,7 +194,7 @@ func (dv *secretDetailView) reveal() {
 
 // fetchThen fetches and decrypts the secret's current (AWSCURRENT) value
 // and hands the outcome to handleFetchResult on the tview event loop.
-func (dv *secretDetailView) fetchThen(onSuccess func()) {
+func (dv *SecretDetailView) fetchThen(onSuccess func()) {
 	profile := dv.host.Config().ActiveAWSProfile
 	name := dv.secret.Name
 	go func() {
@@ -209,7 +212,7 @@ func (dv *secretDetailView) fetchThen(onSuccess func()) {
 // this — the part with actual logic — is directly testable without
 // spawning a goroutine or needing a running tview event loop
 // (QueueUpdateDraw blocks forever without one).
-func (dv *secretDetailView) handleFetchResult(value string, isBinary bool, err error, onSuccess func()) {
+func (dv *SecretDetailView) handleFetchResult(value string, isBinary bool, err error, onSuccess func()) {
 	name := dv.secret.Name
 	if err != nil {
 		slog.Error("secret detail: failed to reveal secret", "name", name, "error", err)

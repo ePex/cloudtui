@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"bytes"
@@ -18,10 +18,10 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// messageDetailView shows the full details of a single message.
+// MessageDetailView shows the full details of a single message.
 // It is not a registered ui.View; it is opened via App.OpenMessageDetail
 // and returns to "messages" on Esc/Backspace.
-type messageDetailView struct {
+type MessageDetailView struct {
 	textView   *tview.TextView
 	host       ui.ViewHost
 	movePicker *dialog.MovePicker
@@ -32,16 +32,18 @@ type messageDetailView struct {
 	msg        queue.Message
 }
 
-var _ ui.Themeable = (*messageDetailView)(nil)
+var _ ui.Themeable = (*MessageDetailView)(nil)
 
 // ApplyPalette recolors the message detail view for a live theme switch.
-func (dv *messageDetailView) ApplyPalette(p config.Palette) {
+func (dv *MessageDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 }
 
-func (dv *messageDetailView) Shortcuts() []ui.Shortcut {
+func (dv *MessageDetailView) Primitive() tview.Primitive { return dv.textView }
+
+func (dv *MessageDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "m", Description: "move"},
 		{Key: "d", Description: "delete"},
@@ -49,14 +51,14 @@ func (dv *messageDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func newMessageDetailView(a ui.ViewHost, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *messageDetailView {
+func NewMessageDetailView(a ui.ViewHost, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *MessageDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Message Details ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &messageDetailView{textView: tv, host: a, movePicker: movePicker, confirm: confirm, onBack: onBack, onReload: onReload}
+	dv := &MessageDetailView{textView: tv, host: a, movePicker: movePicker, confirm: confirm, onBack: onBack, onReload: onReload}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -153,10 +155,11 @@ func decodePropertyValue(v any) string {
 	return string(bs)
 }
 
-// render builds and displays the detail text for msg in the context of queueName.
-func (dv *messageDetailView) render(queueName string, msg queue.Message) {
+// Render builds and displays the detail text for msg in the context of queueName.
+func (dv *MessageDetailView) Render(queueName string, msg queue.Message) {
 	dv.queueName = queueName
 	dv.msg = msg
+	dv.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
 	p := dv.host.Config().Colors
 	accent := p.Label
 	text := p.Text

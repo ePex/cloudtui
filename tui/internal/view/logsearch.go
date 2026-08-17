@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -16,13 +16,13 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// logSearchView is the CloudWatch Logs search screen: opened per log
+// LogSearchView is the CloudWatch Logs search screen: opened per log
 // group via App.OpenLogSearch, not a registered ui.View. Unlike every
 // other list view in this app, its filter (the pattern input) is a real
 // AWS API call, not a local client-side filter — so it only searches on
 // Enter, never on keystroke, and results are paginated by AWS but this
 // view never auto-paginates (spec/34-fe-cloudwatch-logs decision 5).
-type logSearchView struct {
+type LogSearchView struct {
 	table          *tview.Table
 	patternInput   *tview.InputField
 	flex           *tview.Flex
@@ -36,10 +36,10 @@ type logSearchView struct {
 	hasMore        bool
 }
 
-var _ ui.Themeable = (*logSearchView)(nil)
+var _ ui.Themeable = (*LogSearchView)(nil)
 
 // ApplyPalette recolors the CloudWatch Logs search view for a live theme switch.
-func (sv *logSearchView) ApplyPalette(p config.Palette) {
+func (sv *LogSearchView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	sv.table.SetBackgroundColor(bg)
 	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
@@ -49,7 +49,17 @@ func (sv *logSearchView) ApplyPalette(p config.Palette) {
 	sv.patternInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (sv *logSearchView) Shortcuts() []ui.Shortcut {
+func (sv *LogSearchView) Primitive() tview.Primitive { return sv.flex }
+func (sv *LogSearchView) Table() *tview.Table        { return sv.table }
+func (sv *LogSearchView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{sv.patternInput}
+}
+
+// Pattern returns the currently active filter pattern (e.g. after
+// App.OpenLogSearch consumes a queued CorrelationID jump).
+func (sv *LogSearchView) Pattern() string { return sv.pattern }
+
+func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
 		{Key: "r", Description: "refresh"},
@@ -58,8 +68,8 @@ func (sv *logSearchView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newLogSearchView constructs the CloudWatch Logs search view.
-func newLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event awslogs.LogEvent), onBack func()) *logSearchView {
+// NewLogSearchView constructs the CloudWatch Logs search view.
+func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event awslogs.LogEvent), onBack func()) *LogSearchView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)
@@ -76,7 +86,7 @@ func newLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 		AddItem(table, 0, 1, true).
 		AddItem(patternInput, 1, 0, false)
 
-	sv := &logSearchView{table: table, patternInput: patternInput, flex: flex, host: a, timeRangeModal: timeRangeModal, onBack: onBack, tr: ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}}
+	sv := &LogSearchView{table: table, patternInput: patternInput, flex: flex, host: a, timeRangeModal: timeRangeModal, onBack: onBack, tr: ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}}
 	sv.setHeader()
 
 	// Unlike every filter input elsewhere in the app, typing here must
@@ -138,7 +148,7 @@ func newLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 	return sv
 }
 
-func (sv *logSearchView) setHeader() {
+func (sv *LogSearchView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -153,12 +163,12 @@ func (sv *logSearchView) setHeader() {
 	}
 }
 
-// open resets the view for a freshly-selected log group and runs the
+// Open resets the view for a freshly-selected log group and runs the
 // first search with the default time range. initialPattern pre-fills
 // the filter pattern (used when arriving via FE 41's CorrelationID
 // jump from a Datadog log); pass "" for the normal empty-pattern
 // default.
-func (sv *logSearchView) open(logGroupName, initialPattern string) {
+func (sv *LogSearchView) Open(logGroupName, initialPattern string) {
 	sv.logGroupName = logGroupName
 	sv.pattern = initialPattern
 	sv.patternInput.SetText(initialPattern)
@@ -177,7 +187,7 @@ func (sv *logSearchView) open(logGroupName, initialPattern string) {
 // hands the outcome to handleSearchResult on the tview event loop.
 // Requires an active AWS profile; errors clearly rather than calling
 // into awslogs with an empty one.
-func (sv *logSearchView) search() {
+func (sv *LogSearchView) search() {
 	profile := sv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -199,7 +209,7 @@ func (sv *logSearchView) search() {
 // Split out from search so this — the part with actual logic — is
 // directly testable without spawning a goroutine or needing a running
 // tview event loop (QueueUpdateDraw blocks forever without one).
-func (sv *logSearchView) handleSearchResult(events []awslogs.LogEvent, hasMore bool, err error) {
+func (sv *LogSearchView) handleSearchResult(events []awslogs.LogEvent, hasMore bool, err error) {
 	if err != nil {
 		slog.Error("cloudwatch logs: search failed", "logGroup", sv.logGroupName, "error", err)
 		sv.showError(err)
@@ -210,7 +220,7 @@ func (sv *logSearchView) handleSearchResult(events []awslogs.LogEvent, hasMore b
 	sv.repaint()
 }
 
-func (sv *logSearchView) repaint() {
+func (sv *LogSearchView) repaint() {
 	for sv.table.GetRowCount() > 1 {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
@@ -239,7 +249,7 @@ func (sv *logSearchView) repaint() {
 // updateTitle never uses "[text]" — see queues.go's updateTitle for why
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
-func (sv *logSearchView) updateTitle() {
+func (sv *LogSearchView) updateTitle() {
 	label := sv.tr.Label()
 	title := fmt.Sprintf(" %s — %s — %d events", sv.logGroupName, label, len(sv.results))
 	if sv.hasMore {
@@ -248,7 +258,7 @@ func (sv *logSearchView) updateTitle() {
 	sv.table.SetTitle(title + " ")
 }
 
-func (sv *logSearchView) showError(err error) {
+func (sv *LogSearchView) showError(err error) {
 	sv.results = nil
 	sv.hasMore = false
 	for sv.table.GetRowCount() > 1 {

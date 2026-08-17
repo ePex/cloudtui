@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// paramDetailView shows the full detail of a single SSM parameter.
+// ParamDetailView shows the full detail of a single SSM parameter.
 // It is not a registered ui.View; it is opened via App.OpenParamDetail
 // and returns to "ssm-parameters" on Esc/Backspace. A SecureString
 // parameter's value starts masked — 'r' explicitly reveals it via a real,
@@ -29,23 +29,25 @@ import (
 // display masked. 'r' additionally renders the fetched value. Once
 // fetched, pressing the other key doesn't re-fetch — 'r' after a prior
 // silent 'c' just displays the cached value.
-type paramDetailView struct {
+type ParamDetailView struct {
 	textView  *tview.TextView
 	host      ui.ViewHost
 	param     awsssm.Parameter
 	displayed bool // the value has been rendered on screen; always true for String/StringList
 }
 
-var _ ui.Themeable = (*paramDetailView)(nil)
+var _ ui.Themeable = (*ParamDetailView)(nil)
 
 // ApplyPalette recolors the parameter detail view for a live theme switch.
-func (dv *paramDetailView) ApplyPalette(p config.Palette) {
+func (dv *ParamDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 }
 
-func (dv *paramDetailView) Shortcuts() []ui.Shortcut {
+func (dv *ParamDetailView) Primitive() tview.Primitive { return dv.textView }
+
+func (dv *ParamDetailView) Shortcuts() []ui.Shortcut {
 	shortcuts := []ui.Shortcut{{Key: "Esc", Description: "back"}, {Key: "c", Description: "copy value"}}
 	if dv.param.Type == awsssm.TypeSecureString && !dv.displayed {
 		shortcuts = append([]ui.Shortcut{{Key: "r", Description: "reveal"}}, shortcuts...)
@@ -53,14 +55,14 @@ func (dv *paramDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func newParamDetailView(a ui.ViewHost, onBack func()) *paramDetailView {
+func NewParamDetailView(a ui.ViewHost, onBack func()) *ParamDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Parameter ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &paramDetailView{textView: tv, host: a}
+	dv := &ParamDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -84,19 +86,20 @@ func newParamDetailView(a ui.ViewHost, onBack func()) *paramDetailView {
 	return dv
 }
 
-// render displays param's detail, freshly masked (for a SecureString) or
+// Render displays param's detail, freshly masked (for a SecureString) or
 // shown (for String/StringList, which carry their value from the list
 // call already). Called on open — resetting displayed here is what makes
 // this "open a fresh detail view" rather than "redraw the current one";
 // reveal()'s callback calls renderBody directly instead, to update in
 // place without losing the just-fetched value.
-func (dv *paramDetailView) render(param awsssm.Parameter) {
+func (dv *ParamDetailView) Render(param awsssm.Parameter) {
 	dv.param = param
 	dv.displayed = param.Type != awsssm.TypeSecureString
+	dv.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
 	dv.renderBody()
 }
 
-func (dv *paramDetailView) renderBody() {
+func (dv *ParamDetailView) renderBody() {
 	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
@@ -125,11 +128,11 @@ func (dv *paramDetailView) renderBody() {
 
 // refreshContextPanel rebuilds the context panel from dv.Shortcuts(),
 // which changes once a SecureString has been revealed (the "r: reveal"
-// entry drops out). paramDetailView isn't a registered ui.View (like
+// entry drops out). ParamDetailView isn't a registered ui.View (like
 // messageDetailView, it's opened directly rather than switched to by
 // name), so this can't go through the generic UpdateContextPanel(ui.View)
 // path — same manual pattern OpenMessageDetail uses.
-func (dv *paramDetailView) refreshContextPanel() {
+func (dv *ParamDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
@@ -144,7 +147,7 @@ func (dv *paramDetailView) refreshContextPanel() {
 // the status message (naming the parameter, never its value) confirms
 // what happened — a decrypted SecureString value must never appear
 // anywhere but the masked/revealed detail text itself.
-func (dv *paramDetailView) copyValue() {
+func (dv *ParamDetailView) copyValue() {
 	if dv.param.Type == awsssm.TypeSecureString && dv.param.Value == "" {
 		dv.fetchThen(dv.copyFetchedValue)
 		return
@@ -152,14 +155,14 @@ func (dv *paramDetailView) copyValue() {
 	dv.copyFetchedValue()
 }
 
-func (dv *paramDetailView) copyFetchedValue() {
+func (dv *ParamDetailView) copyFetchedValue() {
 	dv.host.CopyToClipboard(dv.param.Value)
 	dv.host.SetStatus(fmt.Sprintf("Copied %s to clipboard", dv.param.Name))
 }
 
 // reveal displays the parameter's value on screen — fetching it first if
 // a prior silent 'c' hasn't already cached it.
-func (dv *paramDetailView) reveal() {
+func (dv *ParamDetailView) reveal() {
 	if dv.param.Value != "" {
 		dv.displayed = true
 		dv.renderBody()
@@ -173,7 +176,7 @@ func (dv *paramDetailView) reveal() {
 
 // fetchThen fetches and decrypts a SecureString parameter's value and
 // hands the outcome to handleFetchResult on the tview event loop.
-func (dv *paramDetailView) fetchThen(onSuccess func()) {
+func (dv *ParamDetailView) fetchThen(onSuccess func()) {
 	profile := dv.host.Config().ActiveAWSProfile
 	name := dv.param.Name
 	go func() {
@@ -191,7 +194,7 @@ func (dv *paramDetailView) fetchThen(onSuccess func()) {
 // this — the part with actual logic — is directly testable without
 // spawning a goroutine or needing a running tview event loop
 // (QueueUpdateDraw blocks forever without one).
-func (dv *paramDetailView) handleFetchResult(value string, err error, onSuccess func()) {
+func (dv *ParamDetailView) handleFetchResult(value string, err error, onSuccess func()) {
 	name := dv.param.Name
 	if err != nil {
 		slog.Error("param detail: failed to reveal parameter", "name", name, "error", err)

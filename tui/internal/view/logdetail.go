@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"fmt"
@@ -12,42 +12,44 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// logDetailView shows the full detail of a single CloudWatch Logs event.
+// LogDetailView shows the full detail of a single CloudWatch Logs event.
 // It is not a registered ui.View; it is opened via App.OpenLogEventDetail
 // and returns to the search view on Esc/Backspace. Unlike
 // paramDetailView/secretDetailView, nothing here is masked — a log event
 // is never a secret in the AWS-service sense — so 'c' is always
 // available, no reveal-gating needed.
-type logDetailView struct {
+type LogDetailView struct {
 	textView *tview.TextView
 	host     ui.ViewHost
 	event    awslogs.LogEvent
 }
 
-var _ ui.Themeable = (*logDetailView)(nil)
+var _ ui.Themeable = (*LogDetailView)(nil)
 
 // ApplyPalette recolors the log event detail view for a live theme switch.
-func (dv *logDetailView) ApplyPalette(p config.Palette) {
+func (dv *LogDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 }
 
-func (dv *logDetailView) Shortcuts() []ui.Shortcut {
+func (dv *LogDetailView) Primitive() tview.Primitive { return dv.textView }
+
+func (dv *LogDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "c", Description: "copy message"},
 		{Key: "Esc", Description: "back"},
 	}
 }
 
-func newLogDetailView(a ui.ViewHost, onBack func()) *logDetailView {
+func NewLogDetailView(a ui.ViewHost, onBack func()) *LogDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log Event ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &logDetailView{textView: tv, host: a}
+	dv := &LogDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -69,8 +71,8 @@ func newLogDetailView(a ui.ViewHost, onBack func()) *logDetailView {
 	return dv
 }
 
-// render displays event's detail.
-func (dv *logDetailView) render(event awslogs.LogEvent) {
+// Render displays event's detail.
+func (dv *LogDetailView) Render(event awslogs.LogEvent) {
 	dv.event = event
 	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
@@ -89,7 +91,7 @@ func (dv *logDetailView) render(event awslogs.LogEvent) {
 	dv.refreshContextPanel()
 }
 
-func (dv *logDetailView) refreshContextPanel() {
+func (dv *LogDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))

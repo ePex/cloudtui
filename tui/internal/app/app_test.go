@@ -86,8 +86,8 @@ func TestOpenLogSearchConsumesPendingCloudWatchPattern(t *testing.T) {
 
 	a.OpenLogSearch("/aws/lambda/foo")
 
-	if a.logSearchV.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
-		t.Errorf("logSearchV.pattern = %q, want the queued CorrelationID", a.logSearchV.pattern)
+	if a.logSearchV.Pattern() != "1745d042-94e8-49f0-b223-8900ed9e951e" {
+		t.Errorf("logSearchV.pattern = %q, want the queued CorrelationID", a.logSearchV.Pattern())
 	}
 	if a.pendingCloudWatchPattern != "" {
 		t.Errorf("pendingCloudWatchPattern = %q, want cleared after being consumed", a.pendingCloudWatchPattern)
@@ -103,8 +103,8 @@ func TestOpenLogSearchWithoutPendingPatternIsUnaffected(t *testing.T) {
 
 	a.OpenLogSearch("/aws/lambda/foo")
 
-	if a.logSearchV.pattern != "" {
-		t.Errorf("logSearchV.pattern = %q, want empty when no CorrelationID was queued", a.logSearchV.pattern)
+	if a.logSearchV.Pattern() != "" {
+		t.Errorf("logSearchV.pattern = %q, want empty when no CorrelationID was queued", a.logSearchV.Pattern())
 	}
 }
 
@@ -157,7 +157,7 @@ func TestOnGlobalKeyPassesThroughWhenPromptFocused(t *testing.T) {
 // was missing (queuesV.filterInput has always had it).
 func TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.ssmParamsV.filterInput)
+	a.tv.SetFocus(a.ssmParamsV.FilterInputs()[0])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
@@ -172,7 +172,7 @@ func TestOnGlobalKeyPassesThroughWhenSSMParamsFilterFocused(t *testing.T) {
 // input isn't covered by the overlay *Visible-flag blanket exemption).
 func TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.secretsV.filterInput)
+	a.tv.SetFocus(a.secretsV.FilterInputs()[0])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
@@ -186,7 +186,7 @@ func TestOnGlobalKeyPassesThroughWhenSecretsFilterFocused(t *testing.T) {
 // exemption, needed for the same reason.
 func TestOnGlobalKeyPassesThroughWhenLogsFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.logsV.filterInput)
+	a.tv.SetFocus(a.logsV.FilterInputs()[0])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
@@ -201,7 +201,7 @@ func TestOnGlobalKeyPassesThroughWhenLogsFilterFocused(t *testing.T) {
 // away mid-keystroke).
 func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.logSearchV.patternInput)
+	a.tv.SetFocus(a.logSearchV.FilterInputs()[0])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
@@ -216,7 +216,7 @@ func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
 // navigate away mid-selection.
 func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.datadogLogsV.serviceFilterDD)
+	a.tv.SetFocus(a.datadogLogsV.FilterInputs()[1])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
@@ -228,7 +228,7 @@ func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
 // serviceFilterDD's test above's counterpart for envFilterDD.
 func TestOnGlobalKeyPassesThroughWhenDatadogEnvFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.datadogLogsV.envFilterDD)
+	a.tv.SetFocus(a.datadogLogsV.FilterInputs()[2])
 
 	event := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {

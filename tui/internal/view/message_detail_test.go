@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"strings"
@@ -7,25 +7,27 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
-func newTestMessageDetailView(t *testing.T) *messageDetailView {
+func newTestMessageDetailView(t *testing.T) (*fakeViewHost, *dialog.MovePicker, *dialog.ConfirmDialog, *MessageDetailView) {
 	t.Helper()
-	a := New(config.Default())
-	return newMessageDetailView(a, a.movePicker, a.confirm, func() {}, func() {})
+	host := newFakeViewHost()
+	movePicker := dialog.NewMovePicker(host)
+	confirm := dialog.NewConfirmDialog(host)
+	return host, movePicker, confirm, NewMessageDetailView(host, movePicker, confirm, func() {}, func() {})
 }
 
 func TestMessageDetailViewTitle(t *testing.T) {
-	dv := newTestMessageDetailView(t)
+	_, _, _, dv := newTestMessageDetailView(t)
 	if got, want := dv.textView.GetTitle(), " Message Details "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 }
 
 func TestMessageDetailViewShortcutEscPresent(t *testing.T) {
-	dv := newTestMessageDetailView(t)
+	_, _, _, dv := newTestMessageDetailView(t)
 	for _, s := range dv.Shortcuts() {
 		if s.Key == "Esc" {
 			return
@@ -35,9 +37,9 @@ func TestMessageDetailViewShortcutEscPresent(t *testing.T) {
 }
 
 func TestMessageDetailViewRenderNilRawFields(t *testing.T) {
-	dv := newTestMessageDetailView(t)
+	_, _, _, dv := newTestMessageDetailView(t)
 	// Must not panic when RawFields is nil.
-	dv.render("test-queue", queue.Message{
+	dv.Render("test-queue", queue.Message{
 		ID:        "ID:test:1:1",
 		JMSType:   "text",
 		Timestamp: time.Now(),
@@ -47,8 +49,8 @@ func TestMessageDetailViewRenderNilRawFields(t *testing.T) {
 }
 
 func TestMessageDetailViewRenderWithRawFields(t *testing.T) {
-	dv := newTestMessageDetailView(t)
-	dv.render("test-queue", queue.Message{
+	_, _, _, dv := newTestMessageDetailView(t)
+	dv.Render("test-queue", queue.Message{
 		ID:        "ID:test:1:1",
 		JMSType:   "MYTYPE",
 		Timestamp: time.Now(),
@@ -62,20 +64,8 @@ func TestMessageDetailViewRenderWithRawFields(t *testing.T) {
 	if text == "" {
 		t.Error("rendered text is empty")
 	}
-}
-
-func TestMessageDetailViewEscReturnsToMessages(t *testing.T) {
-	a := New(config.Default())
-	a.OpenMessageDetail("orders", queue.Message{ID: "ID:test:1:1", Timestamp: time.Now()})
-
-	capture := a.messageDetailV.textView.GetInputCapture()
-	if capture == nil {
-		t.Fatal("messageDetailV.textView has no input capture set")
-	}
-	capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-
-	if name, _ := a.pages.GetFrontPage(); name != "messages" {
-		t.Errorf("front page after Esc = %q, want %q", name, "messages")
+	if got, want := dv.textView.GetTitle(), " Message Details — test-queue "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
 	}
 }
 
@@ -89,29 +79,29 @@ func TestMessageDetailViewEscReturnsToMessages(t *testing.T) {
 // synchronously testable. That path is covered by live verification
 // instead — see tasks.md.
 func TestMessageDetailViewMoveOpensPickerWithSourceQueue(t *testing.T) {
-	a := New(config.Default())
-	a.OpenMessageDetail("orders", queue.Message{ID: "ID:test:1:1", Timestamp: time.Now()})
+	_, movePicker, _, dv := newTestMessageDetailView(t)
+	dv.Render("orders", queue.Message{ID: "ID:test:1:1", Timestamp: time.Now()})
 
-	capture := a.messageDetailV.textView.GetInputCapture()
+	capture := dv.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone))
 
-	if !a.movePicker.Visible() {
+	if !movePicker.Visible() {
 		t.Error("'m' should open the move picker")
 	}
 }
 
 func TestMessageDetailViewDeleteOpensConfirmWithPrompt(t *testing.T) {
-	a := New(config.Default())
-	a.OpenMessageDetail("orders", queue.Message{ID: "ID:test:1:1", Timestamp: time.Now()})
+	_, _, confirm, dv := newTestMessageDetailView(t)
+	dv.Render("orders", queue.Message{ID: "ID:test:1:1", Timestamp: time.Now()})
 
-	capture := a.messageDetailV.textView.GetInputCapture()
+	capture := dv.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone))
 
-	if !a.confirm.Visible() {
+	if !confirm.Visible() {
 		t.Fatal("'d' should open the confirm dialog")
 	}
 	want := `Delete message from "orders"?`
-	if got := renderedScreenText(t, a.confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
+	if got := renderedScreenText(t, confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
 		t.Errorf("rendered confirm dialog = %q, want it to contain %q", got, want)
 	}
 }

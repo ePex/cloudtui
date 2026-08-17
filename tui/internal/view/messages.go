@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// messagesView shows the messages currently in a specific queue. It is not a
+// MessagesView shows the messages currently in a specific queue. It is not a
 // registered ui.View (no SwitchTo / home dashboard entry); it is opened
 // exclusively via App.OpenMessages and returns to "queues" on Esc/Backspace.
 //
@@ -35,7 +35,7 @@ import (
 // applyQuickSearch/repaint) determines what's displayed from that. Mark/
 // target logic only ever sees msgs, the currently-displayed (search-
 // filtered) set.
-type messagesView struct {
+type MessagesView struct {
 	table         *tview.Table
 	searchInput   *tview.InputField
 	flex          *tview.Flex
@@ -52,17 +52,54 @@ type messagesView struct {
 	marked        map[string]bool     // message IDs currently marked
 }
 
-var _ ui.Themeable = (*messagesView)(nil)
+var _ ui.Themeable = (*MessagesView)(nil)
 
 // ApplyPalette recolors the messages view for a live theme switch.
-func (mv *messagesView) ApplyPalette(p config.Palette) {
+func (mv *MessagesView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	mv.table.SetBackgroundColor(bg)
 	mv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	mv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 }
 
-func (mv *messagesView) Shortcuts() []ui.Shortcut {
+func (mv *MessagesView) Primitive() tview.Primitive { return mv.flex }
+func (mv *MessagesView) Table() *tview.Table        { return mv.table }
+func (mv *MessagesView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{mv.searchInput}
+}
+
+// QueueName returns the queue this view is currently showing messages for.
+func (mv *MessagesView) QueueName() string { return mv.queueName }
+
+// Filter returns the active server-side filter.
+func (mv *MessagesView) Filter() queue.MessageFilter { return mv.filter }
+
+// ApplyFilter sets f as the active server-side filter, updates the title,
+// and reloads.
+func (mv *MessagesView) ApplyFilter(f queue.MessageFilter) {
+	mv.filter = f
+	mv.updateTitle()
+	mv.Load()
+}
+
+// Open switches this view to show queueName's messages. Quick search and
+// the server-side filter persist when reopened on the same queue, but
+// reset when switching to a different one — carrying a leftover filter
+// across queues would silently narrow what the user sees without them
+// asking.
+func (mv *MessagesView) Open(queueName string) {
+	if mv.queueName != queueName {
+		mv.filter = queue.MessageFilter{}
+		mv.quickSearch = ""
+		mv.searchInput.SetText("")
+	}
+	mv.queueName = queueName
+	mv.updateTitle()
+	mv.setHeader()
+	mv.Load()
+}
+
+func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "space", Description: "mark"},
 		{Key: "a", Description: "mark all"},
@@ -78,9 +115,9 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newMessagesView constructs the messages view. The queue name is set later
+// NewMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *messagesView {
+func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *MessagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
@@ -97,7 +134,7 @@ func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 		AddItem(table, 0, 1, true).
 		AddItem(searchInput, 1, 0, false)
 
-	mv := &messagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
+	mv := &MessagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
 	mv.setHeader()
 
 	searchInput.SetChangedFunc(func(text string) {
@@ -135,7 +172,7 @@ func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 			mv.moveMarked()
 			return nil
 		case event.Rune() == 'r':
-			mv.load()
+			mv.Load()
 			return nil
 		case event.Rune() == '/':
 			mv.searchInput.SetText(mv.quickSearch)
@@ -166,7 +203,7 @@ func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 							mv.showError(err)
 							return
 						}
-						mv.load()
+						mv.Load()
 					})
 				}()
 			})
@@ -193,7 +230,7 @@ func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 	return mv
 }
 
-func (mv *messagesView) setHeader() {
+func (mv *MessagesView) setHeader() {
 	p := mv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -226,7 +263,7 @@ func withDefaultMaxCount(f queue.MessageFilter) queue.MessageFilter {
 	return f
 }
 
-func (mv *messagesView) load() {
+func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	go func() {
@@ -249,7 +286,7 @@ func (mv *messagesView) load() {
 // currently-loaded messages against it, without re-fetching from the
 // backend — unlike the server-side filter form, this is purely client-side
 // and safe to call on every keystroke.
-func (mv *messagesView) applyQuickSearch(s string) {
+func (mv *MessagesView) applyQuickSearch(s string) {
 	mv.quickSearch = s
 	mv.updateTitle()
 	mv.repaint(mv.allMsgs)
@@ -259,7 +296,7 @@ func (mv *messagesView) applyQuickSearch(s string) {
 // whichever of the two filter mechanisms are active. Parens/brackets wrap
 // active segments only — see queues.go's updateTitle for why "(text)" is
 // used instead of "[text]" (square brackets are swallowed as color tags).
-func (mv *messagesView) updateTitle() {
+func (mv *MessagesView) updateTitle() {
 	title := fmt.Sprintf(" Messages — %s ", mv.queueName)
 	if desc := describeMessageFilter(withDefaultMaxCount(mv.filter)); desc != "" {
 		title = fmt.Sprintf(" Messages — %s (filter: %s) ", mv.queueName, desc)
@@ -290,7 +327,7 @@ func describeMessageFilter(f queue.MessageFilter) string {
 	return strings.Join(parts, " ")
 }
 
-func (mv *messagesView) repaint(msgs []queue.Message) {
+func (mv *MessagesView) repaint(msgs []queue.Message) {
 	mv.allMsgs = msgs
 
 	// Apply quick search.
@@ -343,7 +380,7 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 // markerCell builds the checkbox cell shown in the marker column. Plain "[x]"
 // text doesn't work here: tview.Table always interprets "[...]" in cell text
 // as a color/region tag, so it gets silently swallowed instead of displayed.
-func (mv *messagesView) markerCell(marked bool) *tview.TableCell {
+func (mv *MessagesView) markerCell(marked bool) *tview.TableCell {
 	p := mv.host.Config().Colors
 	text, color := " ", tcell.GetColor(p.Text)
 	if marked {
@@ -354,7 +391,7 @@ func (mv *messagesView) markerCell(marked bool) *tview.TableCell {
 
 // refreshMarkerColumn redraws column 0 to reflect the current marked set,
 // without re-fetching or resorting messages.
-func (mv *messagesView) refreshMarkerColumn() {
+func (mv *MessagesView) refreshMarkerColumn() {
 	for i, m := range mv.msgs {
 		mv.table.SetCell(i+1, 0, mv.markerCell(mv.marked[m.ID]))
 	}
@@ -362,7 +399,7 @@ func (mv *messagesView) refreshMarkerColumn() {
 
 // markedIDs returns the IDs of currently marked messages, in the table's
 // current display order.
-func (mv *messagesView) markedIDs() []string {
+func (mv *MessagesView) markedIDs() []string {
 	ids := make([]string, 0, len(mv.marked))
 	for _, m := range mv.msgs {
 		if mv.marked[m.ID] {
@@ -375,7 +412,7 @@ func (mv *messagesView) markedIDs() []string {
 // targetIDs returns the marked message IDs, or — if nothing is marked — the
 // single message under the cursor (if it has an ID), so 'd'/'m' also work as
 // a single-item shortcut without requiring an explicit mark first.
-func (mv *messagesView) targetIDs() []string {
+func (mv *MessagesView) targetIDs() []string {
 	if ids := mv.markedIDs(); len(ids) > 0 {
 		return ids
 	}
@@ -391,7 +428,7 @@ func (mv *messagesView) targetIDs() []string {
 // cursor, so repeated space presses mark a run of messages quickly. Messages
 // without an ID (limited-info mode) can't be marked, matching the existing
 // restriction on individual move/delete.
-func (mv *messagesView) toggleMark() {
+func (mv *MessagesView) toggleMark() {
 	row, _ := mv.table.GetSelection()
 	idx := row - 1
 	if idx < 0 || idx >= len(mv.msgs) {
@@ -417,7 +454,7 @@ func (mv *messagesView) toggleMark() {
 }
 
 // markAll marks every message that has an ID.
-func (mv *messagesView) markAll() {
+func (mv *MessagesView) markAll() {
 	if mv.marked == nil {
 		mv.marked = map[string]bool{}
 	}
@@ -438,7 +475,7 @@ func (mv *messagesView) markAll() {
 }
 
 // clearMarks deselects every marked message.
-func (mv *messagesView) clearMarks() {
+func (mv *MessagesView) clearMarks() {
 	if len(mv.marked) == 0 {
 		return
 	}
@@ -451,7 +488,7 @@ func (mv *messagesView) clearMarks() {
 // marked — the single message under the cursor. Each deletion is
 // independent, so one failure doesn't stop the rest; the status bar reports
 // how many of the batch actually succeeded.
-func (mv *messagesView) deleteMarked() {
+func (mv *MessagesView) deleteMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
 		mv.host.SetStatus("[yellow]No message marked or selected[-]")
@@ -481,7 +518,7 @@ func (mv *messagesView) deleteMarked() {
 				default:
 					a.SetStatus(fmt.Sprintf("Deleted %d message(s)", len(ids)))
 				}
-				mv.load()
+				mv.Load()
 			})
 		}()
 	})
@@ -491,7 +528,7 @@ func (mv *messagesView) deleteMarked() {
 // every marked message there, or — if nothing is marked — the single
 // message under the cursor. As with deleteMarked, one failure doesn't stop
 // the rest.
-func (mv *messagesView) moveMarked() {
+func (mv *MessagesView) moveMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
 		mv.host.SetStatus("[yellow]No message marked or selected[-]")
@@ -526,13 +563,13 @@ func (mv *messagesView) moveMarked() {
 					a.SetStatus(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
 				}
 				restore()
-				mv.load()
+				mv.Load()
 			})
 		}()
 	}, restore)
 }
 
-func (mv *messagesView) showError(err error) {
+func (mv *MessagesView) showError(err error) {
 	for mv.table.GetRowCount() > 1 {
 		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
 	}
