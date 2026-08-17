@@ -1,7 +1,6 @@
 package app
 
 import (
-	"log/slog"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -82,13 +81,4 @@ func (de *datadogEditor) save() {
 
 	de.host.SaveDatadogConfig(config.DatadogConfig{Site: site, AccessToken: token})
 	de.close()
-}
-
-// SaveDatadogConfig persists cfg.Datadog and refreshes the settings list.
-func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
-	a.cfg.Datadog = cfg
-	if err := config.SaveDefault(a.cfg); err != nil {
-		slog.Error("SaveDatadogConfig: save failed", "error", err)
-	}
-	a.refreshSettingsList()
 }

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -250,15 +249,4 @@ func (ap *awsProfilesPicker) activate(name string) {
 	ap.host.SetActiveAWSProfile(name)
 	ap.close()
 	ap.host.SetStatus(fmt.Sprintf("AWS profile: %s", name))
-}
-
-// SetActiveAWSProfile sets name as the active AWS profile, updates the
-// info panel, refreshes the settings list, and persists.
-func (a *App) SetActiveAWSProfile(name string) {
-	a.cfg.ActiveAWSProfile = name
-	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
-	a.refreshSettingsList()
-	if err := config.SaveDefault(a.cfg); err != nil {
-		slog.Error("SetActiveAWSProfile: save failed", "error", err)
-	}
 }
