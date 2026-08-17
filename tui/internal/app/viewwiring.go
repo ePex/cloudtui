@@ -43,19 +43,6 @@ func (a *App) OpenMessages(queueName string) {
 	a.messagesV.load()
 }
 
-// wireQueuesOpensMessages wires Enter in the queues table to open the
-// messages view for the selected queue. Called from New() once
-// messagesV exists.
-func (a *App) wireQueuesOpensMessages() {
-	a.queuesV.table.SetSelectedFunc(func(row, _ int) {
-		cell := a.queuesV.table.GetCell(row, 0)
-		if cell == nil || cell.Text == "" {
-			return
-		}
-		a.OpenMessages(cell.Text)
-	})
-}
-
 // OpenMessageDetail renders the full detail for msg and switches to the
 // message-detail page.
 func (a *App) OpenMessageDetail(queueName string, msg queue.Message) {
@@ -70,19 +57,6 @@ func (a *App) OpenMessageDetail(queueName string, msg queue.Message) {
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
-// wireMessagesOpensDetail wires Enter in the messages table to open the
-// detail view for the selected message. Called from New() once
-// messageDetailV exists.
-func (a *App) wireMessagesOpensDetail() {
-	a.messagesV.table.SetSelectedFunc(func(row, _ int) {
-		msgIdx := row - 1 // row 0 is the header
-		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
-			return
-		}
-		a.OpenMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
-	})
-}
-
 // OpenParamDetail renders the full detail for param and switches to the
 // ssm-param-detail page. paramDetailView.render sets the context panel
 // itself (its shortcuts change once a SecureString is revealed).
@@ -93,37 +67,11 @@ func (a *App) OpenParamDetail(param awsssm.Parameter) {
 	a.tv.SetFocus(a.pages)
 }
 
-// wireSSMParamsOpensDetail wires Enter in the SSM parameters table to
-// open the detail view for the selected parameter. Called from New()
-// once paramDetailV exists.
-func (a *App) wireSSMParamsOpensDetail() {
-	a.ssmParamsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
-			return
-		}
-		a.OpenParamDetail(a.ssmParamsV.filtered[idx])
-	})
-}
-
 func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
 	a.secretDetailV.render(secret)
 	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
 	a.pages.SwitchToPage("secret-detail")
 	a.tv.SetFocus(a.pages)
-}
-
-// wireSecretsOpensDetail wires Enter in the secrets table to open the
-// detail view for the selected secret. Called from New() once
-// secretDetailV exists.
-func (a *App) wireSecretsOpensDetail() {
-	a.secretsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.secretsV.filtered) {
-			return
-		}
-		a.OpenSecretDetail(a.secretsV.filtered[idx])
-	})
 }
 
 // OpenLogSearch opens the search view for logGroupName and runs the
@@ -143,19 +91,6 @@ func (a *App) OpenLogSearch(logGroupName string) {
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
 }
 
-// wireLogsOpensSearch wires Enter in the log groups table to open the
-// search view for the selected log group. Called from New() once
-// logSearchV exists.
-func (a *App) wireLogsOpensSearch() {
-	a.logsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logsV.filtered) {
-			return
-		}
-		a.OpenLogSearch(a.logsV.filtered[idx].Name)
-	})
-}
-
 // OpenLogEventDetail renders the full detail for event and switches to
 // the log-event-detail page.
 func (a *App) OpenLogEventDetail(event awslogs.LogEvent) {
@@ -164,38 +99,12 @@ func (a *App) OpenLogEventDetail(event awslogs.LogEvent) {
 	a.tv.SetFocus(a.pages)
 }
 
-// wireLogSearchOpensEventDetail wires Enter in the log search results
-// table to open the detail view for the selected event. Called from
-// New() once logDetailV exists.
-func (a *App) wireLogSearchOpensEventDetail() {
-	a.logSearchV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logSearchV.results) {
-			return
-		}
-		a.OpenLogEventDetail(a.logSearchV.results[idx])
-	})
-}
-
 // OpenDatadogLogDetail renders the full detail for event and switches
 // to the datadog-log-detail page.
 func (a *App) OpenDatadogLogDetail(event datadoglogs.LogEvent) {
 	a.datadogLogDetailV.render(event)
 	a.pages.SwitchToPage("datadog-log-detail")
 	a.tv.SetFocus(a.pages)
-}
-
-// wireDatadogLogsOpensDetail wires Enter in the Datadog Logs results
-// table to open the detail view for the selected event. Called from
-// New() once datadogLogDetailV exists.
-func (a *App) wireDatadogLogsOpensDetail() {
-	a.datadogLogsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.datadogLogsV.results) {
-			return
-		}
-		a.OpenDatadogLogDetail(a.datadogLogsV.results[idx])
-	})
 }
 
 // OpenCodePipelineDetail opens pipelineName's stage-status detail view
@@ -209,17 +118,4 @@ func (a *App) OpenCodePipelineDetail(pipelineName string) {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
 	}
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// wireCodePipelineListOpensDetail wires Enter in the CodePipeline table
-// to open the stage-status detail view for the selected pipeline. Called
-// from New() once codePipelineDetailV exists.
-func (a *App) wireCodePipelineListOpensDetail() {
-	a.codePipelineListV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
-			return
-		}
-		a.OpenCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
-	})
 }

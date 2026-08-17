@@ -62,7 +62,7 @@ func (lv *codePipelineListView) Shortcuts() []ui.Shortcut {
 }
 
 // newCodePipelineListView constructs the CodePipeline list view.
-func newCodePipelineListView(a *App) *codePipelineListView {
+func newCodePipelineListView(a *App, onSelect func(pipelineName string)) *codePipelineListView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" AWS CodePipeline ")
 	table.SetSelectable(true, false)
@@ -117,6 +117,14 @@ func newCodePipelineListView(a *App) *codePipelineListView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(lv.filtered) {
+			return
+		}
+		onSelect(lv.filtered[idx].Name)
 	})
 
 	return lv

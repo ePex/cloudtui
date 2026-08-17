@@ -62,7 +62,7 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 }
 
 // newQueuesView constructs the queues view backed by b.
-func newQueuesView(a *App, b queue.Backend) *queuesView {
+func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *queuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)
@@ -187,6 +187,14 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 			return nil
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		cell := qv.table.GetCell(row, 0)
+		if cell == nil || cell.Text == "" {
+			return
+		}
+		onSelect(cell.Text)
 	})
 
 	return qv

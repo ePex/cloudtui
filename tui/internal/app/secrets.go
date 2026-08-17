@@ -57,7 +57,7 @@ func (sv *secretsView) Shortcuts() []ui.Shortcut {
 }
 
 // newSecretsView constructs the Secrets Manager view.
-func newSecretsView(a *App) *secretsView {
+func newSecretsView(a *App, onSelect func(secret awssecrets.Secret)) *secretsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Secrets Manager ")
 	table.SetSelectable(true, false)
@@ -109,6 +109,14 @@ func newSecretsView(a *App) *secretsView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(sv.filtered) {
+			return
+		}
+		onSelect(sv.filtered[idx])
 	})
 
 	return sv
