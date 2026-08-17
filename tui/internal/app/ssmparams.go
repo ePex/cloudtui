@@ -58,7 +58,7 @@ func (pv *ssmParamsView) Shortcuts() []ui.Shortcut {
 }
 
 // newSSMParamsView constructs the SSM Parameters view.
-func newSSMParamsView(a *App) *ssmParamsView {
+func newSSMParamsView(a *App, onSelect func(param awsssm.Parameter)) *ssmParamsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" SSM Parameters ")
 	table.SetSelectable(true, false)
@@ -110,6 +110,14 @@ func newSSMParamsView(a *App) *ssmParamsView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(pv.filtered) {
+			return
+		}
+		onSelect(pv.filtered[idx])
 	})
 
 	return pv
