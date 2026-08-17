@@ -209,18 +209,46 @@ func New(cfg config.Config) *App {
 	a.messagesV = newMessagesView(a, a.OpenMessageDetail)
 	a.messageDetailV = newMessageDetailView(a)
 	a.ssmParamsV = newSSMParamsView(a, a.OpenParamDetail)
-	a.paramDetailV = newParamDetailView(a)
+	a.paramDetailV = newParamDetailView(a, func() {
+		a.pages.SwitchToPage("ssm-parameters")
+		a.tv.SetFocus(a.ssmParamsV.table)
+		a.UpdateContextPanel(a.ssmParamsV)
+	})
 	a.secretsV = newSecretsView(a, a.OpenSecretDetail)
 	a.logsV = newLogsView(a, a.OpenLogSearch)
 	a.logSearchV = newLogSearchView(a, a.OpenLogEventDetail)
-	a.logDetailV = newLogDetailView(a)
+	a.logDetailV = newLogDetailView(a, func() {
+		a.pages.SwitchToPage("log-search")
+		a.tv.SetFocus(a.logSearchV.table)
+		// logSearchView isn't a registered ui.View (opened directly,
+		// like messagesView), so it can't go through the generic
+		// UpdateContextPanel(ui.View) path — same manual pattern
+		// OpenLogSearch uses.
+		lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
+		for _, sc := range a.logSearchV.Shortcuts() {
+			lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
+		}
+		a.SetContextHint(strings.Join(lines, "\n"))
+	})
 	a.datadogLogsV = newDatadogLogsView(a, a.OpenDatadogLogDetail)
-	a.datadogLogDetailV = newDatadogLogDetailView(a)
+	a.datadogLogDetailV = newDatadogLogDetailView(a, func() {
+		a.pages.SwitchToPage("datadog-logs")
+		a.tv.SetFocus(a.datadogLogsV.table)
+		a.UpdateContextPanel(a.datadogLogsV)
+	})
 	a.watchedPipelines = map[string]chan struct{}{}
 	a.lastPipelineStages = map[string]map[string]string{}
 	a.codePipelineListV = newCodePipelineListView(a, a.OpenCodePipelineDetail)
-	a.codePipelineDetailV = newCodePipelineDetailView(a)
-	a.secretDetailV = newSecretDetailView(a)
+	a.codePipelineDetailV = newCodePipelineDetailView(a, func() {
+		a.pages.SwitchToPage("codepipeline")
+		a.tv.SetFocus(a.codePipelineListV.table)
+		a.UpdateContextPanel(a.codePipelineListV)
+	})
+	a.secretDetailV = newSecretDetailView(a, func() {
+		a.pages.SwitchToPage("secrets-manager")
+		a.tv.SetFocus(a.secretsV.table)
+		a.UpdateContextPanel(a.secretsV)
+	})
 
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {

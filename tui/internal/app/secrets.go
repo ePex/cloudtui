@@ -24,7 +24,7 @@ type secretsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	app         *App
+	host        ui.ViewHost
 	filter      string
 	all         []awssecrets.Secret // full unfiltered list from last load
 	filtered    []awssecrets.Secret // currently displayed subset, row-indexed
@@ -57,13 +57,13 @@ func (sv *secretsView) Shortcuts() []ui.Shortcut {
 }
 
 // newSecretsView constructs the Secrets Manager view.
-func newSecretsView(a *App, onSelect func(secret awssecrets.Secret)) *secretsView {
+func newSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *secretsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Secrets Manager ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
 	filterInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -74,7 +74,7 @@ func newSecretsView(a *App, onSelect func(secret awssecrets.Secret)) *secretsVie
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	sv := &secretsView{table: table, filterInput: filterInput, flex: flex, app: a}
+	sv := &secretsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	sv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -82,12 +82,12 @@ func newSecretsView(a *App, onSelect func(secret awssecrets.Secret)) *secretsVie
 	})
 	filterInput.SetDoneFunc(func(_ tcell.Key) {
 		sv.applyFilter(sv.filterInput.GetText())
-		sv.app.tv.SetFocus(sv.table)
+		sv.host.SetFocus(sv.table)
 	})
 	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			sv.applyFilter(sv.filterInput.GetText())
-			sv.app.tv.SetFocus(sv.table)
+			sv.host.SetFocus(sv.table)
 			sv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -101,7 +101,7 @@ func newSecretsView(a *App, onSelect func(secret awssecrets.Secret)) *secretsVie
 			return nil
 		case '/':
 			sv.filterInput.SetText(sv.filter)
-			sv.app.tv.SetFocus(sv.filterInput)
+			sv.host.SetFocus(sv.filterInput)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -129,7 +129,7 @@ func (sv *secretsView) Activate() {
 }
 
 func (sv *secretsView) setHeader() {
-	p := sv.app.cfg.Colors
+	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "ROTATION", "LAST CHANGED"} {
@@ -143,32 +143,32 @@ func (sv *secretsView) setHeader() {
 	}
 }
 
-// load fetches secrets from a.listSecrets in a goroutine (a real AWS API
+// load fetches secrets from host.ListSecrets in a goroutine (a real AWS API
 // call) and repaints via QueueUpdateDraw. Requires an active AWS profile;
 // errors clearly rather than calling into awssecrets with an empty one.
 // If the call fails because the profile's cached SSO token is
 // missing/expired, awsauth.WithReauth opens the browser to log in and
 // retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (sv *secretsView) load() {
-	profile := sv.app.cfg.ActiveAWSProfile
+	profile := sv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
 	go func() {
 		ctx := context.Background()
-		authType, _ := sv.app.awsAuthTypeFor(ctx, profile)
-		secrets, err := awsauth.WithReauth(ctx, profile, authType, sv.app.awsSSOLogin,
+		authType, _ := sv.host.AWSAuthTypeFor(ctx, profile)
+		secrets, err := awsauth.WithReauth(ctx, profile, authType, sv.host.AWSSSOLogin,
 			func() {
-				sv.app.tv.QueueUpdateDraw(func() {
+				sv.host.QueueUpdateDraw(func() {
 					sv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
 			func(ctx context.Context) ([]awssecrets.Secret, error) {
-				return sv.app.listSecrets(ctx, profile)
+				return sv.host.ListSecrets(ctx, profile)
 			},
 		)
-		sv.app.tv.QueueUpdateDraw(func() {
+		sv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("secrets manager: failed to list secrets", "error", err)
 				sv.showError(err)
@@ -203,7 +203,7 @@ func (sv *secretsView) repaint(secrets []awssecrets.Secret) {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
 
-	p := sv.app.cfg.Colors
+	p := sv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	for i, s := range filtered {
@@ -262,7 +262,7 @@ func (sv *secretsView) showStatus(msg string) {
 	}
 	sv.table.SetCell(1, 0,
 		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(sv.app.cfg.Colors.Accent)).
+			SetTextColor(tcell.GetColor(sv.host.Config().Colors.Accent)).
 			SetExpansion(3),
 	)
 	sv.table.SetTitle(" Secrets Manager ")
