@@ -39,23 +39,6 @@ func TestApplyThemeSetsBoxDefaults(t *testing.T) {
 	}
 }
 
-func TestStyleListAppliesSelectionColors(t *testing.T) {
-	p := config.Palette{SelectionBg: "#2ac3de", SelectionText: "#1a1b26"}
-	l := styleList(tview.NewList(), p)
-
-	if l == nil {
-		t.Fatal("styleList() returned nil")
-	}
-	// tview.List exposes no getter for its selected-item style, so the
-	// resulting colors can't be asserted directly here; this at least
-	// confirms styleList returns the same list (for chaining) rather
-	// than panicking or discarding it. Visual verification is manual
-	// (see the plan's Testing section).
-	if l.GetItemCount() != 0 {
-		t.Errorf("GetItemCount() = %d, want 0 for a fresh list", l.GetItemCount())
-	}
-}
-
 func TestReapplyThemeUpdatesStatusBarColors(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })

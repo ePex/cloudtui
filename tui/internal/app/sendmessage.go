@@ -120,7 +120,7 @@ func (sm *sendMessageOverlay) ApplyPalette(p config.Palette) {
 	sm.area.SetBackgroundColor(bg)
 	sm.area.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(tcell.GetColor(p.Background)))
 	sm.area.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
-	styleList(sm.list, p)
+	ui.StyleList(sm.list, p)
 	sm.list.SetBackgroundColor(bg)
 }
 

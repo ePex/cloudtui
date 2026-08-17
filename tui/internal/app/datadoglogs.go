@@ -60,8 +60,8 @@ func (dv *datadogLogsView) ApplyPalette(p config.Palette) {
 	dv.queryInput.SetLabelColor(tcell.GetColor(p.Label))
 	dv.queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	dv.queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	styleDropDown(dv.serviceFilterDD, p)
-	styleDropDown(dv.envFilterDD, p)
+	ui.StyleDropDown(dv.serviceFilterDD, p)
+	ui.StyleDropDown(dv.envFilterDD, p)
 }
 
 func (dv *datadogLogsView) Name() string               { return "datadog-logs" }
@@ -100,14 +100,14 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 	// Without this, unselected popup-list items are unreadable — same
 	// gotcha already hit (and fixed via styleDropDown) for the theme and
 	// connection-editor Backend dropdowns.
-	styleDropDown(serviceFilterDD, p)
+	ui.StyleDropDown(serviceFilterDD, p)
 
 	envFilterDD := tview.NewDropDown()
 	envFilterDD.SetLabel(" Env: ")
 	envFilterDD.SetLabelColor(tcell.GetColor(p.Label))
 	envFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	envFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	styleDropDown(envFilterDD, p)
+	ui.StyleDropDown(envFilterDD, p)
 
 	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(serviceFilterDD, 0, 1, false).

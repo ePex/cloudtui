@@ -147,7 +147,7 @@ func (tm *timeRangeModal) ApplyPalette(p config.Palette) {
 	tm.tabs.SetBackgroundColor(bg)
 	tm.renderTabs()
 	tm.pages.SetBackgroundColor(bg)
-	styleList(tm.relativeList, p)
+	ui.StyleList(tm.relativeList, p)
 	tm.relativeList.SetBackgroundColor(bg)
 	tm.absoluteForm.SetBackgroundColor(bg)
 	tm.absoluteForm.SetBorderColor(tcell.GetColor(p.Border))
@@ -217,12 +217,12 @@ func (tm *timeRangeModal) applyAbsolute() {
 	from := tm.absoluteForm.GetFormItem(0).(*tview.InputField).GetText()
 	until := tm.absoluteForm.GetFormItem(1).(*tview.InputField).GetText()
 
-	fromT, err := parseFilterDate("from", from)
+	fromT, err := ui.ParseFilterDate("from", from)
 	if err != nil {
 		tm.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return
 	}
-	untilT, err := parseFilterDate("until", until)
+	untilT, err := ui.ParseFilterDate("until", until)
 	if err != nil {
 		tm.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return
