@@ -17,7 +17,7 @@ import (
 // supplies current/onApply each time show is called. Named timeRangeModal,
 // not timeRange, to avoid shadowing the timeRange value type it edits.
 type timeRangeModal struct {
-	app          *App
+	host         ui.Host
 	flex         *tview.Flex
 	tabs         *tview.TextView
 	pages        *tview.Pages
@@ -29,8 +29,8 @@ type timeRangeModal struct {
 }
 
 // newTimeRangeModal builds the time range overlay's widgets.
-func newTimeRangeModal(a *App) *timeRangeModal {
-	tm := &timeRangeModal{app: a}
+func newTimeRangeModal(host ui.Host) *timeRangeModal {
+	tm := &timeRangeModal{host: host}
 	tm.tabs = tview.NewTextView().SetDynamicColors(true)
 	tm.relativeList = tview.NewList().ShowSecondaryText(false)
 	for i, p := range timeRangePresets {
@@ -105,7 +105,7 @@ func (tm *timeRangeModal) show(current timeRange, onApply func(timeRange)) {
 	tm.absoluteForm.GetFormItem(0).(*tview.InputField).SetText(formatTimeRangeDateTime(current.from))
 	tm.absoluteForm.GetFormItem(1).(*tview.InputField).SetText(formatTimeRangeDateTime(current.to))
 
-	tm.app.rootPages.ShowPage("time-range")
+	tm.host.ShowPage("time-range")
 	tm.visible = true
 	tm.switchTab(current.mode)
 }
@@ -133,9 +133,9 @@ func formatTimeRangeDateTime(t time.Time) string {
 // has no single "the table" to return to; app.pages resolves to whichever
 // view is currently the front page.
 func (tm *timeRangeModal) close() {
-	tm.app.rootPages.HidePage("time-range")
+	tm.host.HidePage("time-range")
 	tm.visible = false
-	tm.app.tv.SetFocus(tm.app.pages)
+	tm.host.FocusMain()
 }
 
 // ApplyPalette recolors the time range overlay for a live theme switch.
@@ -166,7 +166,7 @@ func (tm *timeRangeModal) switchTab(mode timeRangeMode) {
 	switch mode {
 	case timeRangeRelative:
 		tm.pages.SwitchToPage("relative")
-		tm.app.tv.SetFocus(tm.relativeList)
+		tm.host.SetFocus(tm.relativeList)
 	case timeRangeAbsolute:
 		tm.pages.SwitchToPage("absolute")
 		// tview.Form remembers its internal focus index across SetFocus
@@ -175,7 +175,7 @@ func (tm *timeRangeModal) switchTab(mode timeRangeMode) {
 		// previous Absolute-tab session that ended on the Apply/Cancel
 		// button would silently leave keystrokes going nowhere useful.
 		tm.absoluteForm.SetFocus(0)
-		tm.app.tv.SetFocus(tm.absoluteForm)
+		tm.host.SetFocus(tm.absoluteForm)
 	}
 }
 
@@ -184,8 +184,9 @@ func (tm *timeRangeModal) switchTab(mode timeRangeMode) {
 // brackets (those are swallowed by tview's tag parser, same gotcha
 // documented on queues.go's updateTitle).
 func (tm *timeRangeModal) renderTabs() {
-	accent := tm.app.cfg.Colors.Accent
-	text := tm.app.cfg.Colors.Text
+	colors := tm.host.Config().Colors
+	accent := colors.Accent
+	text := colors.Text
 	relative, absolute := "Relative (R)", "Absolute (A)"
 	if tm.activeTab == timeRangeRelative {
 		relative = fmt.Sprintf("[%s::b]%s[-:-:-]", accent, relative)
@@ -218,12 +219,12 @@ func (tm *timeRangeModal) applyAbsolute() {
 
 	fromT, err := parseFilterDate("from", from)
 	if err != nil {
-		tm.app.statusBar.SetText(fmt.Sprintf("[red]%s[-]", err))
+		tm.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return
 	}
 	untilT, err := parseFilterDate("until", until)
 	if err != nil {
-		tm.app.statusBar.SetText(fmt.Sprintf("[red]%s[-]", err))
+		tm.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return
 	}
 

@@ -17,7 +17,7 @@ import (
 // movePicker is the "Move to Queue" overlay: a searchable list of queues
 // used to pick a target for a message move.
 type movePicker struct {
-	app       *App
+	host      ui.Host
 	flex      *tview.Flex
 	list      *tview.List
 	search    *tview.InputField
@@ -29,8 +29,8 @@ type movePicker struct {
 }
 
 // newMovePicker builds the move-picker overlay's widgets.
-func newMovePicker(a *App) *movePicker {
-	mp := &movePicker{app: a}
+func newMovePicker(host ui.Host) *movePicker {
+	mp := &movePicker{host: host}
 	mp.list = tview.NewList().ShowSecondaryText(false)
 	mp.search = tview.NewInputField().SetLabel(" / filter: ")
 	mp.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -40,12 +40,12 @@ func newMovePicker(a *App) *movePicker {
 
 	// SetChangedFunc is registered in show (needs sourceQueue/msg closure).
 	mp.search.SetDoneFunc(func(_ tcell.Key) {
-		a.tv.SetFocus(mp.list)
+		host.SetFocus(mp.list)
 	})
 	mp.search.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			mp.search.SetText("")
-			a.tv.SetFocus(mp.list)
+			host.SetFocus(mp.list)
 			return nil
 		}
 		return event
@@ -126,7 +126,7 @@ func sortPickerQueues(sourceQueue string, names []string) []string {
 // selection. onClose is called (on the UI goroutine) when the picker is
 // dismissed — the caller uses it to restore focus and the context panel.
 func (mp *movePicker) show(sourceQueue string, onSelect func(string), onClose func()) {
-	a := mp.app
+	host := mp.host
 	mp.onSelect = onSelect
 	mp.onClose = onClose
 	mp.list.Clear()
@@ -140,7 +140,7 @@ func (mp *movePicker) show(sourceQueue string, onSelect func(string), onClose fu
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == '/':
-			a.tv.SetFocus(mp.search)
+			host.SetFocus(mp.search)
 			return nil
 		case event.Key() == tcell.KeyEscape:
 			mp.close()
@@ -153,15 +153,15 @@ func (mp *movePicker) show(sourceQueue string, onSelect func(string), onClose fu
 		mp.fillList(text)
 	})
 
-	a.rootPages.ShowPage("move-picker")
-	a.tv.SetFocus(mp.list)
+	host.ShowPage("move-picker")
+	host.SetFocus(mp.list)
 	mp.visible = true
-	ac := a.cfg.Colors.Accent
-	a.contextPanel.SetText(fmt.Sprintf("[%s]<Esc>[-] cancel  [%s]</>[-] search", ac, ac))
+	ac := host.Config().Colors.Accent
+	host.SetContextHint(fmt.Sprintf("[%s]<Esc>[-] cancel  [%s]</>[-] search", ac, ac))
 
 	go func() {
-		summaries, err := a.backend.List(context.Background())
-		a.tv.QueueUpdateDraw(func() {
+		summaries, err := host.Backend().List(context.Background())
+		host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("move-picker: failed to list queues", "error", err)
 				mp.list.Clear()
@@ -222,7 +222,7 @@ func (mp *movePicker) fillList(filter string) {
 // close hides the queue-picker overlay and calls onClose to let the
 // caller restore focus and the context panel.
 func (mp *movePicker) close() {
-	mp.app.rootPages.HidePage("move-picker")
+	mp.host.HidePage("move-picker")
 	mp.visible = false
 	if mp.onClose != nil {
 		mp.onClose()
