@@ -87,3 +87,9 @@ func (tp *themePicker) ApplyPalette(p config.Palette) {
 }
 
 var _ ui.Themeable = (*themePicker)(nil)
+
+// Primitive returns themePicker's root widget, for sizing/embedding.
+func (tp *themePicker) Primitive() tview.Primitive { return tp.flex }
+
+// Visible reports whether themePicker is currently shown.
+func (tp *themePicker) Visible() bool { return tp.visible }

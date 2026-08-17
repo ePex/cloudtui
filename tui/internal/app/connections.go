@@ -114,6 +114,12 @@ func (cm *connManager) ApplyPalette(p config.Palette) {
 
 var _ ui.Themeable = (*connManager)(nil)
 
+// Primitive returns connManager's root widget, for sizing/embedding.
+func (cm *connManager) Primitive() tview.Primitive { return cm.flex }
+
+// Visible reports whether connManager is currently shown.
+func (cm *connManager) Visible() bool { return cm.visible }
+
 // populate rebuilds the manager list from the current config.
 func (cm *connManager) populate() {
 	cm.list.Clear()
@@ -409,6 +415,12 @@ func (ce *connEditor) ApplyPalette(p config.Palette) {
 }
 
 var _ ui.Themeable = (*connEditor)(nil)
+
+// Primitive returns connEditor's root widget, for sizing/embedding.
+func (ce *connEditor) Primitive() tview.Primitive { return ce.form }
+
+// Visible reports whether connEditor is currently shown.
+func (ce *connEditor) Visible() bool { return ce.visible }
 
 // save validates and persists the editor form, then closes it.
 func (ce *connEditor) save() {
