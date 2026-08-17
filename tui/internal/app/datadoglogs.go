@@ -79,7 +79,7 @@ func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
 }
 
 // newDatadogLogsView constructs the Datadog Logs search view.
-func newDatadogLogsView(a *App) *datadogLogsView {
+func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *datadogLogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Datadog Logs ")
 	table.SetSelectable(true, false)
@@ -198,6 +198,14 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(dv.results) {
+			return
+		}
+		onSelect(dv.results[idx])
 	})
 
 	return dv

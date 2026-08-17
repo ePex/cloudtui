@@ -75,7 +75,7 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 
 // newMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func newMessagesView(a *App) *messagesView {
+func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message)) *messagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
@@ -175,6 +175,14 @@ func newMessagesView(a *App) *messagesView {
 			return nil
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		msgIdx := row - 1 // row 0 is the header
+		if msgIdx < 0 || msgIdx >= len(mv.msgs) {
+			return
+		}
+		onSelect(mv.queueName, mv.msgs[msgIdx])
 	})
 
 	return mv

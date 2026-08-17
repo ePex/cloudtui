@@ -205,46 +205,22 @@ func New(cfg config.Config) *App {
 	settingsView := newSettingsView(a)
 	a.logV = newLogView(a)
 	a.backend = newBackendForConn(a, cfg.ActiveConn())
-	a.queuesV = newQueuesView(a, a.backend)
-	a.messagesV = newMessagesView(a)
+	a.queuesV = newQueuesView(a, a.backend, a.OpenMessages)
+	a.messagesV = newMessagesView(a, a.OpenMessageDetail)
 	a.messageDetailV = newMessageDetailView(a)
-	a.ssmParamsV = newSSMParamsView(a)
+	a.ssmParamsV = newSSMParamsView(a, a.OpenParamDetail)
 	a.paramDetailV = newParamDetailView(a)
-	a.secretsV = newSecretsView(a)
-	a.logsV = newLogsView(a)
-	a.logSearchV = newLogSearchView(a)
+	a.secretsV = newSecretsView(a, a.OpenSecretDetail)
+	a.logsV = newLogsView(a, a.OpenLogSearch)
+	a.logSearchV = newLogSearchView(a, a.OpenLogEventDetail)
 	a.logDetailV = newLogDetailView(a)
-	a.datadogLogsV = newDatadogLogsView(a)
+	a.datadogLogsV = newDatadogLogsView(a, a.OpenDatadogLogDetail)
 	a.datadogLogDetailV = newDatadogLogDetailView(a)
 	a.watchedPipelines = map[string]chan struct{}{}
 	a.lastPipelineStages = map[string]map[string]string{}
-	a.codePipelineListV = newCodePipelineListView(a)
+	a.codePipelineListV = newCodePipelineListView(a, a.OpenCodePipelineDetail)
 	a.codePipelineDetailV = newCodePipelineDetailView(a)
-
-	// Done here because logSearchV must exist first.
-	a.wireLogsOpensSearch()
-
-	// Done here because logDetailV must exist first.
-	a.wireLogSearchOpensEventDetail()
-
-	// Done here because datadogLogDetailV must exist first.
-	a.wireDatadogLogsOpensDetail()
-
-	// Done here because codePipelineDetailV must exist first.
-	a.wireCodePipelineListOpensDetail()
 	a.secretDetailV = newSecretDetailView(a)
-
-	// Done here because paramDetailV must exist first.
-	a.wireSSMParamsOpensDetail()
-
-	// Done here because secretDetailV must exist first.
-	a.wireSecretsOpensDetail()
-
-	// Done here because messagesV must exist first.
-	a.wireQueuesOpensMessages()
-
-	// Done here because messageDetailV must exist first.
-	a.wireMessagesOpensDetail()
 
 	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {

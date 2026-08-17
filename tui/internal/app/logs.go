@@ -60,7 +60,7 @@ func (lv *logsView) Shortcuts() []ui.Shortcut {
 }
 
 // newLogsView constructs the CloudWatch Logs (log group list) view.
-func newLogsView(a *App) *logsView {
+func newLogsView(a *App, onSelect func(logGroupName string)) *logsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" CloudWatch Logs ")
 	table.SetSelectable(true, false)
@@ -112,6 +112,14 @@ func newLogsView(a *App) *logsView {
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(lv.filtered) {
+			return
+		}
+		onSelect(lv.filtered[idx].Name)
 	})
 
 	return lv

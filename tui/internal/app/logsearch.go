@@ -56,7 +56,7 @@ func (sv *logSearchView) Shortcuts() []ui.Shortcut {
 }
 
 // newLogSearchView constructs the CloudWatch Logs search view.
-func newLogSearchView(a *App) *logSearchView {
+func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)
@@ -124,6 +124,14 @@ func newLogSearchView(a *App) *logSearchView {
 			return nil
 		}
 		return event
+	})
+
+	table.SetSelectedFunc(func(row, _ int) {
+		idx := row - 1 // row 0 is the header
+		if idx < 0 || idx >= len(sv.results) {
+			return
+		}
+		onSelect(sv.results[idx])
 	})
 
 	return sv
