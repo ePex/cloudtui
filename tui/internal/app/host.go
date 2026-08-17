@@ -125,10 +125,15 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 	a.settingsV.Refresh()
 }
 
-// SetActiveAWSProfile sets name as the active AWS profile, updates the
-// info panel, refreshes the settings list, and persists.
+// SetActiveAWSProfile sets name as the active AWS profile, rebuilds the
+// backend (so a Secrets-Manager-backed connection re-resolves its
+// password against the new profile rather than keeping the old one
+// indefinitely — see spec/88), updates the info panel, refreshes the
+// settings list, and persists.
 func (a *App) SetActiveAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
+	a.backend = newBackendForConn(a, a.cfg.ActiveConn())
+	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()
 	if err := config.SaveDefault(a.cfg); err != nil {

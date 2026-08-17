@@ -114,11 +114,12 @@ func (f *secretsFakeBackend) MoveMessages(ctx context.Context, sourceQueue, targ
 	return 0, nil
 }
 
-func newTestSecretBackend(a *App, fake *secretsFakeBackend) *secretBackend {
+func newTestSecretBackend(a *App, profile string, fake *secretsFakeBackend) *secretBackend {
 	return &secretBackend{
 		app:        a,
 		conn:       config.Connection{Name: "test", Backend: "jolokia", Queue: config.QueueConfig{PasswordSecret: "my-secret"}},
 		secretName: "my-secret",
+		profile:    profile,
 		build:      func(config.Connection) queue.Backend { return fake },
 	}
 }
@@ -130,7 +131,7 @@ func TestSecretBackendListRetriesOnceOnFailure(t *testing.T) {
 		return "pw", false, nil
 	})
 	fake := &secretsFakeBackend{listFailN: 1} // fails once, then succeeds
-	b := newTestSecretBackend(a, fake)
+	b := newTestSecretBackend(a, "prof", fake)
 
 	out, err := b.List(context.Background())
 	if err != nil {
@@ -152,7 +153,7 @@ func TestSecretBackendListSurfacesErrorAfterRetryExhausted(t *testing.T) {
 		return "pw", false, nil
 	})
 	fake := &secretsFakeBackend{listFailN: 100} // always fails
-	b := newTestSecretBackend(a, fake)
+	b := newTestSecretBackend(a, "prof", fake)
 
 	if _, err := b.List(context.Background()); err == nil {
 		t.Fatal("List() error = nil, want the error surfaced after the retry also fails")
@@ -169,7 +170,7 @@ func TestSecretBackendRemoveMessageDoesNotRetryButInvalidatesCache(t *testing.T)
 		return "pw", false, nil
 	})
 	fake := &secretsFakeBackend{removeFails: true}
-	b := newTestSecretBackend(a, fake)
+	b := newTestSecretBackend(a, "prof", fake)
 
 	if err := b.RemoveMessage(context.Background(), "q1", "m1"); err == nil {
 		t.Fatal("RemoveMessage() error = nil, want the injected failure surfaced")
@@ -188,5 +189,31 @@ func TestSecretBackendRemoveMessageDoesNotRetryButInvalidatesCache(t *testing.T)
 	}
 	if revealCalls != 2 {
 		t.Errorf("revealSecret called %d times after a following current(), want 2 (cache invalidated by the failed write)", revealCalls)
+	}
+}
+
+// TestSecretBackendCurrentUsesCapturedProfileNotLiveConfig is a
+// regression test for the bug fixed in spec/88: current() must use the
+// profile captured at construction, not whatever a.cfg.ActiveAWSProfile
+// happens to be at call time.
+func TestSecretBackendCurrentUsesCapturedProfileNotLiveConfig(t *testing.T) {
+	var seenProfiles []string
+	a := newTestAppForSecrets("prof-a", func(_ context.Context, profile, _ string) (string, bool, error) {
+		seenProfiles = append(seenProfiles, profile)
+		return "pw", false, nil
+	})
+	b := newTestSecretBackend(a, "prof-a", &secretsFakeBackend{})
+
+	// Simulate a.cfg changing without going through
+	// SetActiveAWSProfile/newBackendForConn (e.g. a background
+	// goroutine racing the main goroutine's write, or simply a call
+	// site that forgot to rebuild) — current() must be unaffected.
+	a.cfg.ActiveAWSProfile = "prof-b"
+
+	if _, err := b.current(context.Background()); err != nil {
+		t.Fatalf("current() error = %v", err)
+	}
+	if len(seenProfiles) != 1 || seenProfiles[0] != "prof-a" {
+		t.Errorf("revealSecret saw profiles %v, want [%q] (captured at construction, not live a.cfg)", seenProfiles, "prof-a")
 	}
 }

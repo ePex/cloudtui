@@ -64,3 +64,38 @@ func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 		t.Errorf("config.yaml not written after SetActiveAWSProfile: %v", err)
 	}
 }
+
+// TestSetActiveAWSProfileRebuildsSecretBackedBackend is a regression
+// test for spec/88: switching AWS profile must rebuild a
+// Secrets-Manager-backed connection's backend, not leave it resolving
+// against the profile that was active when it was first built.
+func TestSetActiveAWSProfileRebuildsSecretBackedBackend(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	a.cfg.Connections = append(a.cfg.Connections, config.Connection{
+		Name: "secret-conn", Backend: "jolokia",
+		Queue: config.QueueConfig{PasswordSecret: "my-secret"},
+	})
+	a.switchConnection("secret-conn")
+
+	before, ok := a.backend.(*secretBackend)
+	if !ok {
+		t.Fatalf("a.backend = %T, want *secretBackend", a.backend)
+	}
+	if before.profile != "" {
+		t.Errorf("secretBackend.profile before SetActiveAWSProfile = %q, want empty", before.profile)
+	}
+
+	a.SetActiveAWSProfile("work")
+
+	after, ok := a.backend.(*secretBackend)
+	if !ok {
+		t.Fatalf("a.backend after SetActiveAWSProfile = %T, want *secretBackend", a.backend)
+	}
+	if after.profile != "work" {
+		t.Errorf("secretBackend.profile after SetActiveAWSProfile = %q, want %q", after.profile, "work")
+	}
+	if after == before {
+		t.Error("a.backend is the same *secretBackend instance after SetActiveAWSProfile, want a rebuilt one")
+	}
+}
