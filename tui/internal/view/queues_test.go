@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
@@ -53,14 +53,17 @@ func (f *fakeQueueBackend) MoveMessages(_ context.Context, _, _ string, _ queue.
 	return 0, nil
 }
 
-func newTestQueuesView(t *testing.T) *queuesView {
+func newTestQueuesView(t *testing.T) (*fakeViewHost, *QueuesView) {
 	t.Helper()
-	a := New(config.Default())
-	return newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	host := newFakeViewHost()
+	confirm := dialog.NewConfirmDialog(host)
+	movePicker := dialog.NewMovePicker(host)
+	sendMessage := dialog.NewSendMessageOverlay(host)
+	return host, NewQueuesView(host, &fakeQueueBackend{}, confirm, movePicker, sendMessage, func(string) {})
 }
 
 func TestQueuesViewHeaderLabels(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	want := []string{"NAME ▲", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
 	for col, label := range want {
 		cell := qv.table.GetCell(0, col)
@@ -74,14 +77,14 @@ func TestQueuesViewHeaderLabels(t *testing.T) {
 }
 
 func TestQueuesViewColumnCount(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	if got, want := qv.table.GetColumnCount(), 5; got != want {
 		t.Errorf("GetColumnCount() = %d, want %d", got, want)
 	}
 }
 
 func TestQueuesViewShortcutRPresent(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	for _, s := range qv.Shortcuts() {
 		if s.Key == "r" {
 			return
@@ -91,7 +94,7 @@ func TestQueuesViewShortcutRPresent(t *testing.T) {
 }
 
 func TestQueuesViewPurgeShortcutPresent(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	for _, s := range qv.Shortcuts() {
 		if s.Key == "p" {
 			return
@@ -101,7 +104,7 @@ func TestQueuesViewPurgeShortcutPresent(t *testing.T) {
 }
 
 func TestQueuesViewShortcutFilterPresent(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	for _, s := range qv.Shortcuts() {
 		if s.Key == "/" {
 			return
@@ -111,8 +114,7 @@ func TestQueuesViewShortcutFilterPresent(t *testing.T) {
 }
 
 func TestQueuesViewFilterApplied(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	summaries := []queue.Summary{
 		{Name: "foo.queue"},
@@ -129,8 +131,7 @@ func TestQueuesViewFilterApplied(t *testing.T) {
 }
 
 func TestQueuesViewFilterPersistsAfterRepaint(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	qv.applyFilter("foo")
 	qv.repaint([]queue.Summary{{Name: "foo.queue"}, {Name: "bar.queue"}})
@@ -143,8 +144,7 @@ func TestQueuesViewFilterPersistsAfterRepaint(t *testing.T) {
 }
 
 func TestQueuesViewFilterClear(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	summaries := []queue.Summary{
 		{Name: "foo.queue"},
@@ -160,8 +160,7 @@ func TestQueuesViewFilterClear(t *testing.T) {
 }
 
 func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	qv.applyFilter("foo")
 	if got, want := qv.table.GetTitle(), " Queues (foo) "; got != want {
@@ -180,7 +179,7 @@ func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 // async load completes — and stays latched through the repaint that follows,
 // leaving a long list scrolled to the bottom instead of the top.
 func TestQueuesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	qv.table.SetRect(0, 0, 60, 15) // fewer visible rows than summaries below
 
 	screen := tcell.NewSimulationScreen("")
@@ -244,7 +243,7 @@ func renderedScreenText(t *testing.T, prim tview.Primitive, width, height int) s
 // to the title-format fix: GetTitle() alone wouldn't have caught the bug
 // (see renderedScreenText's doc comment).
 func TestQueuesViewFilteredTitleActuallyRenders(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	qv.applyFilter("foo")
 
 	rendered := renderedScreenText(t, qv.table, 60, 10)
@@ -254,7 +253,7 @@ func TestQueuesViewFilteredTitleActuallyRenders(t *testing.T) {
 }
 
 func TestQueuesViewSortShortcutsPresent(t *testing.T) {
-	qv := newTestQueuesView(t)
+	_, qv := newTestQueuesView(t)
 	for _, s := range qv.Shortcuts() {
 		if s.Key == "o/O" {
 			return
@@ -264,8 +263,7 @@ func TestQueuesViewSortShortcutsPresent(t *testing.T) {
 }
 
 func TestQueuesViewSortByPendingDescending(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 	qv.sortCol = 1
 	qv.sortAsc = false
 
@@ -288,8 +286,7 @@ func TestQueuesViewSortByPendingDescending(t *testing.T) {
 }
 
 func TestQueuesViewSortDirectionToggle(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	summaries := []queue.Summary{{Name: "b"}, {Name: "a"}}
 	qv.repaint(summaries) // asc by name: a, b
@@ -305,8 +302,7 @@ func TestQueuesViewSortDirectionToggle(t *testing.T) {
 }
 
 func TestQueuesViewSortHeaderMarker(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 	qv.sortCol = 2
 	qv.sortAsc = true
 	qv.setHeader()
@@ -327,8 +323,7 @@ func TestQueuesViewSortHeaderMarker(t *testing.T) {
 }
 
 func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	_, qv := newTestQueuesView(t)
 
 	summaries := []queue.Summary{
 		{Name: "zebra"},
@@ -350,8 +345,7 @@ func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
 }
 
 func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	host, qv := newTestQueuesView(t)
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 7, ConsumerCount: 1}})
 
@@ -359,7 +353,7 @@ func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
 	if pendingCell == nil {
 		t.Fatal("pending cell is nil")
 	}
-	wantColor := tcell.GetColor(a.cfg.Colors.Accent)
+	wantColor := tcell.GetColor(host.cfg.Colors.Accent)
 	fg, _, _ := pendingCell.Style.Decompose()
 	if fg != wantColor {
 		t.Errorf("pending cell color = %v, want accent %v", fg, wantColor)
@@ -367,8 +361,7 @@ func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
 }
 
 func TestQueuesViewConsumerAccentWhenZero(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	host, qv := newTestQueuesView(t)
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 0, ConsumerCount: 0}})
 
@@ -376,7 +369,7 @@ func TestQueuesViewConsumerAccentWhenZero(t *testing.T) {
 	if consumerCell == nil {
 		t.Fatal("consumer cell is nil")
 	}
-	wantColor := tcell.GetColor(a.cfg.Colors.Accent)
+	wantColor := tcell.GetColor(host.cfg.Colors.Accent)
 	fg, _, _ := consumerCell.Style.Decompose()
 	if fg != wantColor {
 		t.Errorf("consumer cell color = %v, want accent %v", fg, wantColor)
@@ -384,8 +377,7 @@ func TestQueuesViewConsumerAccentWhenZero(t *testing.T) {
 }
 
 func TestQueuesViewPendingTextWhenZero(t *testing.T) {
-	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
+	host, qv := newTestQueuesView(t)
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 0, ConsumerCount: 1}})
 
@@ -393,7 +385,7 @@ func TestQueuesViewPendingTextWhenZero(t *testing.T) {
 	if pendingCell == nil {
 		t.Fatal("pending cell is nil")
 	}
-	wantColor := tcell.GetColor(a.cfg.Colors.Text)
+	wantColor := tcell.GetColor(host.cfg.Colors.Text)
 	fg, _, _ := pendingCell.Style.Decompose()
 	if fg != wantColor {
 		t.Errorf("pending cell color = %v, want text %v", fg, wantColor)

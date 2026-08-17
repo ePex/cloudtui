@@ -7,6 +7,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
+	"github.com/ePex/cloudtui/tui/internal/view"
 )
 
 // pipelinePollInterval is fixed, not user-configurable in this slice —
@@ -115,11 +116,11 @@ func (a *App) handlePipelinePoll(name string, stages []awscodepipeline.StageStat
 		a.StopWatchingPipeline(name)
 	}
 
-	if a.codePipelineDetailV != nil && a.codePipelineDetailV.pipelineName == name {
-		a.codePipelineDetailV.render(stages)
+	if a.codePipelineDetailV != nil && a.codePipelineDetailV.PipelineName() == name {
+		a.codePipelineDetailV.Render(stages)
 	}
 	if a.codePipelineListV != nil {
-		a.codePipelineListV.repaint(a.codePipelineListV.all)
+		a.codePipelineListV.Repaint()
 	}
 }
 
@@ -135,7 +136,7 @@ func stageTransitions(prev map[string]string, stages []awscodepipeline.StageStat
 	var messages []string
 	for _, s := range stages {
 		if prev[s.Name] != s.Status {
-			messages = append(messages, s.Name+": "+statusLabel(s.Status))
+			messages = append(messages, s.Name+": "+view.StatusLabel(s.Status))
 		}
 	}
 	return messages

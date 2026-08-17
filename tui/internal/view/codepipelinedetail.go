@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -14,31 +14,34 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// codePipelineDetailView shows a single pipeline's current per-stage
+// CodePipelineDetailView shows a single pipeline's current per-stage
 // status: opened via App.OpenCodePipelineDetail, not a registered
 // ui.View (same non-registered shape as logSearchView — see
 // spec/34-fe-cloudwatch-logs for why). 'w' toggles watching this
 // pipeline; while watching, this view live-refreshes whenever a poll
 // completes and it's the currently open screen (see
 // App.handlePipelinePoll) — see spec/43-fe-codepipeline-monitor.
-type codePipelineDetailView struct {
+type CodePipelineDetailView struct {
 	table        *tview.Table
 	host         ui.ViewHost
 	pipelineName string
 	stages       []awscodepipeline.StageStatus
 }
 
-var _ ui.Shortcuttable = (*codePipelineDetailView)(nil)
-var _ ui.Themeable = (*codePipelineDetailView)(nil)
+var _ ui.Shortcuttable = (*CodePipelineDetailView)(nil)
+var _ ui.Themeable = (*CodePipelineDetailView)(nil)
 
 // ApplyPalette recolors the CodePipeline detail view for a live theme switch.
-func (dv *codePipelineDetailView) ApplyPalette(p config.Palette) {
+func (dv *CodePipelineDetailView) ApplyPalette(p config.Palette) {
 	dv.table.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
 	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
 }
 
-func (dv *codePipelineDetailView) Shortcuts() []ui.Shortcut {
+func (dv *CodePipelineDetailView) Primitive() tview.Primitive { return dv.table }
+func (dv *CodePipelineDetailView) PipelineName() string       { return dv.pipelineName }
+
+func (dv *CodePipelineDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "w", Description: "watch/unwatch"},
@@ -46,15 +49,15 @@ func (dv *codePipelineDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newCodePipelineDetailView constructs the CodePipeline stage-status
+// NewCodePipelineDetailView constructs the CodePipeline stage-status
 // detail view.
-func newCodePipelineDetailView(a ui.ViewHost, onBack func()) *codePipelineDetailView {
+func NewCodePipelineDetailView(a ui.ViewHost, onBack func()) *CodePipelineDetailView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	dv := &codePipelineDetailView{table: table, host: a}
+	dv := &CodePipelineDetailView{table: table, host: a}
 	dv.setHeader()
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -81,7 +84,7 @@ func newCodePipelineDetailView(a ui.ViewHost, onBack func()) *codePipelineDetail
 	return dv
 }
 
-func (dv *codePipelineDetailView) setHeader() {
+func (dv *CodePipelineDetailView) setHeader() {
 	p := dv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -96,9 +99,9 @@ func (dv *codePipelineDetailView) setHeader() {
 	}
 }
 
-// open resets the view for a freshly-selected pipeline and runs the
+// Open resets the view for a freshly-selected pipeline and runs the
 // first load.
-func (dv *codePipelineDetailView) open(pipelineName string) {
+func (dv *CodePipelineDetailView) Open(pipelineName string) {
 	dv.pipelineName = pipelineName
 	dv.stages = nil
 	for dv.table.GetRowCount() > 1 {
@@ -109,7 +112,7 @@ func (dv *codePipelineDetailView) open(pipelineName string) {
 	dv.load()
 }
 
-func (dv *codePipelineDetailView) toggleWatch() {
+func (dv *CodePipelineDetailView) toggleWatch() {
 	if dv.host.IsWatchingPipeline(dv.pipelineName) {
 		dv.host.StopWatchingPipeline(dv.pipelineName)
 	} else {
@@ -123,7 +126,7 @@ func (dv *codePipelineDetailView) toggleWatch() {
 // because the profile's cached SSO token is missing/expired,
 // awsauth.WithReauth opens the browser to log in and retries once
 // before giving up — see spec/36-fe-aws-sso-reauth.
-func (dv *codePipelineDetailView) load() {
+func (dv *CodePipelineDetailView) load() {
 	profile := dv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		dv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -149,16 +152,16 @@ func (dv *codePipelineDetailView) load() {
 				dv.showError(err)
 				return
 			}
-			dv.render(stages)
+			dv.Render(stages)
 		})
 	}()
 }
 
-// render displays stages' current status. Also called by
+// Render displays stages' current status. Also called by
 // App.handlePipelinePoll when a background watch's poll completes and
 // this view is the one currently open for that pipeline — see
 // spec/43-fe-codepipeline-monitor decision 10.
-func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
+func (dv *CodePipelineDetailView) Render(stages []awscodepipeline.StageStatus) {
 	dv.stages = stages
 	for dv.table.GetRowCount() > 1 {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
@@ -169,7 +172,7 @@ func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
 	for i, s := range stages {
 		row := i + 1
 		dv.table.SetCell(row, 0, tview.NewTableCell(s.Name).SetTextColor(nameColor).SetExpansion(1))
-		dv.table.SetCell(row, 1, tview.NewTableCell(statusLabel(s.Status)).SetTextColor(statusColor(s.Status)).SetExpansion(1))
+		dv.table.SetCell(row, 1, tview.NewTableCell(StatusLabel(s.Status)).SetTextColor(statusColor(s.Status)).SetExpansion(1))
 	}
 
 	if dv.table.GetRowCount() > 1 {
@@ -183,7 +186,7 @@ func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
 // updateTitle never uses "[text]" — see queues.go's updateTitle for why
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
-func (dv *codePipelineDetailView) updateTitle() {
+func (dv *CodePipelineDetailView) updateTitle() {
 	title := " " + dv.pipelineName
 	if dv.host.IsWatchingPipeline(dv.pipelineName) {
 		title += " — ▶ watching"
@@ -191,7 +194,7 @@ func (dv *codePipelineDetailView) updateTitle() {
 	dv.table.SetTitle(title + " ")
 }
 
-func (dv *codePipelineDetailView) showError(err error) {
+func (dv *CodePipelineDetailView) showError(err error) {
 	dv.stages = nil
 	for dv.table.GetRowCount() > 1 {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
@@ -207,7 +210,7 @@ func (dv *codePipelineDetailView) showError(err error) {
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
-func (dv *codePipelineDetailView) showStatus(msg string) {
+func (dv *CodePipelineDetailView) showStatus(msg string) {
 	dv.stages = nil
 	for dv.table.GetRowCount() > 1 {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
@@ -220,9 +223,9 @@ func (dv *codePipelineDetailView) showStatus(msg string) {
 	dv.table.SetTitle(fmt.Sprintf(" %s ", dv.pipelineName))
 }
 
-// statusLabel shows "(never run)" for a stage with no execution yet,
+// StatusLabel shows "(never run)" for a stage with no execution yet,
 // rather than a blank cell that could be misread as a loading glitch.
-func statusLabel(status string) string {
+func StatusLabel(status string) string {
 	if status == "" {
 		return "(never run)"
 	}

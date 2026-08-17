@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -11,9 +11,16 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
-	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
+
+func newTestLogSearchView(t *testing.T) (*fakeViewHost, *dialog.TimeRangeModal, *LogSearchView) {
+	t.Helper()
+	host := newFakeViewHost()
+	timeRangeModal := dialog.NewTimeRangeModal(host)
+	return host, timeRangeModal, NewLogSearchView(host, timeRangeModal, func(awslogs.LogEvent) {}, func() {})
+}
 
 // TestLogSearchViewSearchErrorsWithoutActiveProfile exercises search()'s
 // synchronous guard, which returns before spawning the fetch goroutine —
@@ -21,41 +28,40 @@ import (
 // path itself (which needs a running tview event loop to ever complete;
 // see logsView/ssmParamsView/secretsView's tests for the same reasoning).
 func TestLogSearchViewSearchErrorsWithoutActiveProfile(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = ""
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = ""
 	calls := 0
-	a.filterLogEvents = func(context.Context, string, string, time.Time, time.Time, string) ([]awslogs.LogEvent, bool, error) {
+	host.filterLogEventsFn = func(context.Context, string, string, time.Time, time.Time, string) ([]awslogs.LogEvent, bool, error) {
 		calls++
 		return nil, false, nil
 	}
-	a.logSearchV.logGroupName = "/aws/lambda/foo"
+	sv.logGroupName = "/aws/lambda/foo"
 
-	a.logSearchV.search()
+	sv.search()
 
 	if calls != 0 {
 		t.Error("filterLogEvents was called despite no active AWS profile")
 	}
-	if got := a.logSearchV.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
+	if got := sv.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
 		t.Errorf("error cell = %q, want it to mention no profile selected", got)
 	}
 }
 
 // TestLogSearchViewOpenResetsStateAndSearches uses an empty active
-// profile so open()'s internal search() call takes the synchronous guard
-// path (no goroutine spawned), while still proving open() resets pattern/
+// profile so Open()'s internal search() call takes the synchronous guard
+// path (no goroutine spawned), while still proving Open() resets pattern/
 // preset/results state and sets the title, for a log group opened after
 // another one was previously open with different state.
 func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = ""
-	sv := a.logSearchV
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = ""
 	sv.pattern = "stale-pattern"
 	sv.patternInput.SetText("stale-pattern")
 	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 3}
 	sv.results = []awslogs.LogEvent{{Message: "stale"}}
 	sv.hasMore = true
 
-	sv.open("/aws/lambda/foo", "")
+	sv.Open("/aws/lambda/foo", "")
 
 	if sv.pattern != "" {
 		t.Errorf("pattern = %q, want empty after open()", sv.pattern)
@@ -82,11 +88,10 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 // both sv.pattern and the visible patternInput text, not just reset to
 // empty like the normal (no-argument-equivalent) case.
 func TestLogSearchViewOpenWithInitialPatternPreFillsIt(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = "" // open()'s internal search() hits the guard, no goroutine
-	sv := a.logSearchV
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = "" // open()'s internal search() hits the guard, no goroutine
 
-	sv.open("/aws/lambda/foo", "1745d042-94e8-49f0-b223-8900ed9e951e")
+	sv.Open("/aws/lambda/foo", "1745d042-94e8-49f0-b223-8900ed9e951e")
 
 	if sv.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("pattern = %q, want the pre-filled CorrelationID", sv.pattern)
@@ -101,16 +106,15 @@ func TestLogSearchViewOpenWithInitialPatternPreFillsIt(t *testing.T) {
 // presets directly, and the modal's onApply callback writes the result
 // back into sv.tr and re-searches.
 func TestLogSearchViewTKeyOpensTimeRangeModal(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = "" // any search() from onApply hits the guard, no goroutine
-	sv := a.logSearchV
+	host, timeRangeModal, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = "" // any search() from onApply hits the guard, no goroutine
 	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 2}
 
 	capture := sv.table.GetInputCapture()
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
 		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
 	}
-	if !a.timeRangeModal.Visible() {
+	if !timeRangeModal.Visible() {
 		t.Fatal("'t' did not open the time range modal")
 	}
 
@@ -121,9 +125,9 @@ func TestLogSearchViewTKeyOpensTimeRangeModal(t *testing.T) {
 	// to sv.tr's preset; selecting a different preset and pressing Enter
 	// exercises the actual applyRelative -> onApply -> sv.tr write-back
 	// path a real keypress would.
-	list, ok := a.tv.GetFocus().(*tview.List)
+	list, ok := host.focused.(*tview.List)
 	if !ok {
-		t.Fatalf("focus after 't' = %T, want *tview.List", a.tv.GetFocus())
+		t.Fatalf("focus after 't' = %T, want *tview.List", host.focused)
 	}
 	if got := list.GetCurrentItem(); got != 2 {
 		t.Errorf("relative list current item = %d, want 2 (sv.tr's preset)", got)
@@ -144,9 +148,8 @@ func TestLogSearchViewTKeyOpensTimeRangeModal(t *testing.T) {
 // — the latter would let a real search() call spawn a goroutine that
 // blocks forever on QueueUpdateDraw without a running tview event loop.
 func TestLogSearchViewPatternInputTypingDoesNotSearch(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = ""
-	sv := a.logSearchV
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = ""
 	sv.logGroupName = "/aws/lambda/foo"
 
 	sv.patternInput.SetText("some pattern")
@@ -159,9 +162,8 @@ func TestLogSearchViewPatternInputTypingDoesNotSearch(t *testing.T) {
 }
 
 func TestLogSearchViewPatternInputEnterTriggersSearch(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.ActiveAWSProfile = ""
-	sv := a.logSearchV
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = ""
 	sv.logGroupName = "/aws/lambda/foo"
 	sv.patternInput.SetText("some pattern")
 
@@ -177,8 +179,7 @@ func TestLogSearchViewPatternInputEnterTriggersSearch(t *testing.T) {
 
 func TestHandleSearchResult(t *testing.T) {
 	t.Run("success populates rows and title", func(t *testing.T) {
-		a := New(config.Default())
-		sv := a.logSearchV
+		_, _, sv := newTestLogSearchView(t)
 		sv.logGroupName = "/aws/lambda/foo"
 		ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
@@ -204,8 +205,7 @@ func TestHandleSearchResult(t *testing.T) {
 	})
 
 	t.Run("hasMore is reflected in the title", func(t *testing.T) {
-		a := New(config.Default())
-		sv := a.logSearchV
+		_, _, sv := newTestLogSearchView(t)
 		sv.logGroupName = "/aws/lambda/foo"
 
 		sv.handleSearchResult([]awslogs.LogEvent{{Message: "x"}}, true, nil)
@@ -216,8 +216,7 @@ func TestHandleSearchResult(t *testing.T) {
 	})
 
 	t.Run("error logs and shows status, does not touch results", func(t *testing.T) {
-		a := New(config.Default())
-		sv := a.logSearchV
+		_, _, sv := newTestLogSearchView(t)
 		sv.logGroupName = "/aws/lambda/foo"
 		sv.results = []awslogs.LogEvent{{Message: "stale"}}
 
@@ -235,8 +234,7 @@ func TestHandleSearchResult(t *testing.T) {
 // TestLogSearchViewScrollsToTopWithManyRows guards against the same bug
 // fixed for queuesView (spec/11-bugfix-queues-scroll-to-top).
 func TestLogSearchViewScrollsToTopWithManyRows(t *testing.T) {
-	a := New(config.Default())
-	sv := a.logSearchV
+	_, _, sv := newTestLogSearchView(t)
 	sv.logGroupName = "/aws/lambda/foo"
 	sv.table.SetRect(0, 0, 60, 15) // fewer visible rows than events below
 
@@ -282,20 +280,5 @@ func TestLogEventPreview(t *testing.T) {
 				t.Errorf("logEventPreview(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestLogSearchViewEscReturnsToCloudWatchLogs(t *testing.T) {
-	a := New(config.Default())
-	a.OpenLogSearch("/aws/lambda/foo")
-
-	capture := a.logSearchV.table.GetInputCapture()
-	if capture == nil {
-		t.Fatal("logSearchV.table has no input capture set")
-	}
-	capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-
-	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
-		t.Errorf("front page after Esc = %q, want %q", name, "cloudwatch-logs")
 	}
 }

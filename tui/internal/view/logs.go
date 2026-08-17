@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// logsView is the CloudWatch Logs screen: a filterable, read-only
+// LogsView is the CloudWatch Logs screen: a filterable, read-only
 // tview.Table listing log groups for the currently active AWS profile
 // (config.Config.ActiveAWSProfile — see spec/29-fe-aws-profile-selection).
 // A registered top-level ui.View (Home's "AWS" section, alongside
@@ -23,7 +23,7 @@ import (
 // opens the search view (logSearchView), not a static detail view — see
 // spec/34-fe-cloudwatch-logs for why this feature's shape differs from
 // the others.
-type logsView struct {
+type LogsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
@@ -33,12 +33,12 @@ type logsView struct {
 	filtered    []awslogs.LogGroup // currently displayed subset, row-indexed
 }
 
-var _ ui.View = (*logsView)(nil)
-var _ ui.Shortcuttable = (*logsView)(nil)
-var _ ui.Themeable = (*logsView)(nil)
+var _ ui.View = (*LogsView)(nil)
+var _ ui.Shortcuttable = (*LogsView)(nil)
+var _ ui.Themeable = (*LogsView)(nil)
 
 // ApplyPalette recolors the CloudWatch Logs view for a live theme switch.
-func (lv *logsView) ApplyPalette(p config.Palette) {
+func (lv *LogsView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	lv.table.SetBackgroundColor(bg)
 	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
@@ -48,19 +48,23 @@ func (lv *logsView) ApplyPalette(p config.Palette) {
 	lv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (lv *logsView) Name() string               { return "cloudwatch-logs" }
-func (lv *logsView) Title() string              { return "CloudWatch Logs" }
-func (lv *logsView) Primitive() tview.Primitive { return lv.flex }
+func (lv *LogsView) Name() string               { return "cloudwatch-logs" }
+func (lv *LogsView) Title() string              { return "CloudWatch Logs" }
+func (lv *LogsView) Primitive() tview.Primitive { return lv.flex }
+func (lv *LogsView) Table() *tview.Table        { return lv.table }
+func (lv *LogsView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{lv.filterInput}
+}
 
-func (lv *logsView) Shortcuts() []ui.Shortcut {
+func (lv *LogsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
 	}
 }
 
-// newLogsView constructs the CloudWatch Logs (log group list) view.
-func newLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *logsView {
+// NewLogsView constructs the CloudWatch Logs (log group list) view.
+func NewLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *LogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" CloudWatch Logs ")
 	table.SetSelectable(true, false)
@@ -77,7 +81,7 @@ func newLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *logsView {
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	lv := &logsView{table: table, filterInput: filterInput, flex: flex, host: a}
+	lv := &LogsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	lv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -127,11 +131,11 @@ func newLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *logsView {
 
 // Activate reloads the log group list. Called by SwitchTo each time the
 // view becomes active.
-func (lv *logsView) Activate() {
+func (lv *LogsView) Activate() {
 	lv.load()
 }
 
-func (lv *logsView) setHeader() {
+func (lv *LogsView) setHeader() {
 	p := lv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -152,7 +156,7 @@ func (lv *logsView) setHeader() {
 // empty one. If the call fails because the profile's cached SSO token is
 // missing/expired, awsauth.WithReauth opens the browser to log in and
 // retries once before giving up — see spec/36-fe-aws-sso-reauth.
-func (lv *logsView) load() {
+func (lv *LogsView) load() {
 	profile := lv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -182,12 +186,12 @@ func (lv *logsView) load() {
 	}()
 }
 
-func (lv *logsView) applyFilter(s string) {
+func (lv *LogsView) applyFilter(s string) {
 	lv.filter = s
 	lv.repaint(lv.all)
 }
 
-func (lv *logsView) repaint(groups []awslogs.LogGroup) {
+func (lv *LogsView) repaint(groups []awslogs.LogGroup) {
 	lv.all = groups
 
 	filtered := groups
@@ -240,7 +244,7 @@ func (lv *logsView) repaint(groups []awslogs.LogGroup) {
 	}
 }
 
-func (lv *logsView) showError(err error) {
+func (lv *LogsView) showError(err error) {
 	lv.all = nil
 	lv.filtered = nil
 	for lv.table.GetRowCount() > 1 {
@@ -257,7 +261,7 @@ func (lv *logsView) showError(err error) {
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
-func (lv *logsView) showStatus(msg string) {
+func (lv *LogsView) showStatus(msg string) {
 	lv.all = nil
 	lv.filtered = nil
 	for lv.table.GetRowCount() > 1 {

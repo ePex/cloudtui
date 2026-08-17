@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -10,10 +10,17 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
+
+func newTestDatadogLogsView(t *testing.T) (*fakeViewHost, *dialog.TimeRangeModal, *DatadogLogsView) {
+	t.Helper()
+	host := newFakeViewHost()
+	timeRangeModal := dialog.NewTimeRangeModal(host)
+	return host, timeRangeModal, NewDatadogLogsView(host, timeRangeModal, func(datadoglogs.LogEvent) {})
+}
 
 func TestEffectiveQuery(t *testing.T) {
 	cases := []struct {
@@ -31,8 +38,7 @@ func TestEffectiveQuery(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			a := New(config.Default())
-			dv := a.datadogLogsV
+			_, _, dv := newTestDatadogLogsView(t)
 			dv.serviceFilter = c.serviceFilter
 			dv.envFilter = c.envFilter
 			dv.query = c.query
@@ -45,8 +51,7 @@ func TestEffectiveQuery(t *testing.T) {
 }
 
 func TestApplyFilterOptionsPreservesSelectionWhenStillPresent(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	current := "svc-a"
 
 	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
@@ -61,8 +66,7 @@ func TestApplyFilterOptionsPreservesSelectionWhenStillPresent(t *testing.T) {
 }
 
 func TestApplyFilterOptionsResetsSelectionWhenNoLongerPresent(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	current := "svc-gone"
 
 	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
@@ -77,8 +81,7 @@ func TestApplyFilterOptionsResetsSelectionWhenNoLongerPresent(t *testing.T) {
 }
 
 func TestApplyFilterOptionsOptionCountIncludesAnySentinel(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	current := ""
 
 	dv.applyFilterOptions(dv.serviceFilterDD, []string{"svc-a", "svc-b"}, &current, func(string) {})
@@ -97,8 +100,7 @@ func TestApplyFilterOptionsOptionCountIncludesAnySentinel(t *testing.T) {
 // unselectable without resetting to "(any)" first. Values must
 // accumulate across searches instead of being replaced each time.
 func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 
 	// First (unfiltered) search discovers two services.
 	dv.results = []datadoglogs.LogEvent{
@@ -134,16 +136,15 @@ func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
 // immediately (same reasoning as this file's other tests that only
 // check state set before search()'s goroutine is spawned).
 func TestRebuildFilterOptionsSelectingAnOptionRefocusesTable(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	host, _, dv := newTestDatadogLogsView(t)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
-	a.tv.SetFocus(dv.serviceFilterDD)
+	host.SetFocus(dv.serviceFilterDD)
 
 	// Simulate picking "activemq" (options: 0="(any)", 1="activemq").
 	dv.serviceFilterDD.SetCurrentOption(1)
 
-	if got := a.tv.GetFocus(); got != dv.table {
+	if got := host.focused; got != dv.table {
 		t.Errorf("focus after selecting a Service option = %v, want the results table", got)
 	}
 }
@@ -160,8 +161,7 @@ func TestRebuildFilterOptionsSelectingAnOptionRefocusesTable(t *testing.T) {
 // goroutine (same discipline as this file's other tests that only
 // assert on state mutated before search() is ever called).
 func TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	current := "svc-a"
 	fired := false
 
@@ -181,8 +181,7 @@ func TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation(t *testing.T)
 // reaches onSelect — the recursion guard above must not have also
 // disabled real selection handling.
 func TestApplyFilterOptionsCallbackFiresOnSubsequentSelection(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	current := ""
 	var selected string
 	fireCount := 0
@@ -204,9 +203,9 @@ func TestApplyFilterOptionsCallbackFiresOnSubsequentSelection(t *testing.T) {
 }
 
 func TestDatadogLogsViewShortcutsIncludeServiceAndEnvFilters(t *testing.T) {
-	a := New(config.Default())
+	_, _, dv := newTestDatadogLogsView(t)
 	var haveS, haveE bool
-	for _, sc := range a.datadogLogsV.Shortcuts() {
+	for _, sc := range dv.Shortcuts() {
 		if sc.Key == "S" {
 			haveS = true
 		}
@@ -220,20 +219,20 @@ func TestDatadogLogsViewShortcutsIncludeServiceAndEnvFilters(t *testing.T) {
 }
 
 func TestDatadogLogsViewNameAndTitle(t *testing.T) {
-	a := New(config.Default())
-	if got := a.datadogLogsV.Name(); got != "datadog-logs" {
+	_, _, dv := newTestDatadogLogsView(t)
+	if got := dv.Name(); got != "datadog-logs" {
 		t.Errorf("Name() = %q, want %q", got, "datadog-logs")
 	}
-	if got := a.datadogLogsV.Title(); got != "Datadog Logs" {
+	if got := dv.Title(); got != "Datadog Logs" {
 		t.Errorf("Title() = %q, want %q", got, "Datadog Logs")
 	}
 }
 
 func TestDatadogLogsViewHeaderLabels(t *testing.T) {
-	a := New(config.Default())
+	_, _, dv := newTestDatadogLogsView(t)
 	want := []string{"TIMESTAMP", "SERVICE", "STATUS", "MESSAGE"}
 	for col, label := range want {
-		cell := a.datadogLogsV.table.GetCell(0, col)
+		cell := dv.table.GetCell(0, col)
 		if cell == nil {
 			t.Fatalf("header cell at column %d is nil", col)
 		}
@@ -253,15 +252,14 @@ func TestDatadogLogsViewHeaderLabels(t *testing.T) {
 // logSearchView/ssmParamsView's tests), but dv.tr is mutated synchronously
 // before search() is even called, so it's still safe to assert on here.
 func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	host, timeRangeModal, dv := newTestDatadogLogsView(t)
 	dv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 2}
 
 	capture := dv.table.GetInputCapture()
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
 		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
 	}
-	if !a.timeRangeModal.Visible() {
+	if !timeRangeModal.Visible() {
 		t.Fatal("'t' did not open the time range modal")
 	}
 
@@ -272,9 +270,9 @@ func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 	// to dv.tr's preset; selecting a different preset and pressing Enter
 	// exercises the actual applyRelative -> onApply -> dv.tr write-back
 	// path a real keypress would.
-	list, ok := a.tv.GetFocus().(*tview.List)
+	list, ok := host.focused.(*tview.List)
 	if !ok {
-		t.Fatalf("focus after 't' = %T, want *tview.List", a.tv.GetFocus())
+		t.Fatalf("focus after 't' = %T, want *tview.List", host.focused)
 	}
 	if got := list.GetCurrentItem(); got != 2 {
 		t.Errorf("relative list current item = %d, want 2 (dv.tr's preset)", got)
@@ -292,8 +290,7 @@ func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 // SetChangedFunc wired (only SetDoneFunc for Enter), so typing alone
 // has no side effects — checked here via dv.query staying empty.
 func TestDatadogLogsViewQueryInputTypingDoesNotSearch(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 
 	dv.queryInput.SetText("env:testt service:bar-proxy")
 
@@ -308,8 +305,7 @@ func TestDatadogLogsViewQueryInputTypingDoesNotSearch(t *testing.T) {
 // under the test's non-running tview event loop (same reasoning as
 // TestDatadogLogsViewCycleTimeRange above).
 func TestDatadogLogsViewQueryInputEnterSetsQuery(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	dv.queryInput.SetText("env:testt service:bar-proxy")
 
 	dv.queryInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
@@ -321,8 +317,7 @@ func TestDatadogLogsViewQueryInputEnterSetsQuery(t *testing.T) {
 
 func TestDatadogLogsViewHandleSearchResult(t *testing.T) {
 	t.Run("success populates rows and title", func(t *testing.T) {
-		a := New(config.Default())
-		dv := a.datadogLogsV
+		_, _, dv := newTestDatadogLogsView(t)
 		ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 		dv.handleSearchResult([]datadoglogs.LogEvent{
@@ -350,8 +345,7 @@ func TestDatadogLogsViewHandleSearchResult(t *testing.T) {
 	})
 
 	t.Run("hasMore is reflected in the title", func(t *testing.T) {
-		a := New(config.Default())
-		dv := a.datadogLogsV
+		_, _, dv := newTestDatadogLogsView(t)
 
 		dv.handleSearchResult([]datadoglogs.LogEvent{{Message: "x"}}, true, nil)
 
@@ -361,8 +355,7 @@ func TestDatadogLogsViewHandleSearchResult(t *testing.T) {
 	})
 
 	t.Run("error logs and shows status, does not touch results", func(t *testing.T) {
-		a := New(config.Default())
-		dv := a.datadogLogsV
+		_, _, dv := newTestDatadogLogsView(t)
 		dv.results = []datadoglogs.LogEvent{{Message: "stale"}}
 
 		dv.handleSearchResult(nil, false, context.DeadlineExceeded)
@@ -379,8 +372,7 @@ func TestDatadogLogsViewHandleSearchResult(t *testing.T) {
 // TestDatadogLogsViewScrollsToTopWithManyRows guards against the same
 // bug fixed for queuesView (spec/11-bugfix-queues-scroll-to-top).
 func TestDatadogLogsViewScrollsToTopWithManyRows(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	dv.table.SetRect(0, 0, 60, 15) // fewer visible rows than events below
 
 	screen := tcell.NewSimulationScreen("")
@@ -408,8 +400,7 @@ func TestDatadogLogsViewScrollsToTopWithManyRows(t *testing.T) {
 // whatever rebuildFilterOptions had already accumulated from search
 // results — the two merge paths (spec/52) must compose.
 func TestHandleFacetDiscoveryResultMergesNewValues(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
 	if got := dv.serviceFilterDD.GetOptionCount(); got != 2 { // "(any)" + activemq
@@ -429,8 +420,7 @@ func TestHandleFacetDiscoveryResultMergesNewValues(t *testing.T) {
 // TestHandleFacetDiscoveryResultNoopOnError confirms a failed discovery
 // call leaves known and the dropdown untouched — fails soft, per spec.
 func TestHandleFacetDiscoveryResultNoopOnError(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
 	before := dv.serviceFilterDD.GetOptionCount()
@@ -450,8 +440,7 @@ func TestHandleFacetDiscoveryResultNoopOnError(t *testing.T) {
 // ListFacetValues already filters these, but defensive here too) never
 // ends up in known.
 func TestHandleFacetDiscoveryResultSkipsEmptyValues(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 
 	dv.handleFacetDiscoveryResult(dv.knownServices, []string{"", "activemq", ""}, nil)
 
@@ -466,8 +455,7 @@ func TestHandleFacetDiscoveryResultSkipsEmptyValues(t *testing.T) {
 // exercises applyFilterOptions's existing selection-preservation logic
 // through the new discovery call path.
 func TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive(t *testing.T) {
-	a := New(config.Default())
-	dv := a.datadogLogsV
+	_, _, dv := newTestDatadogLogsView(t)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
 	dv.serviceFilter = "activemq"

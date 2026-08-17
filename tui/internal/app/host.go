@@ -40,15 +40,15 @@ func (a *App) Backend() queue.Backend { return a.backend }
 // existed.
 func (a *App) ReloadAfterSend(queueName string) {
 	if a.queuesV != nil {
-		a.queuesV.load()
+		a.queuesV.Load()
 	}
-	if a.messagesV != nil && a.messagesV.queueName == queueName {
-		a.messagesV.load()
+	if a.messagesV != nil && a.messagesV.QueueName() == queueName {
+		a.messagesV.Load()
 	}
 }
 
 func (a *App) MessagesFilter() queue.MessageFilter {
-	return a.messagesV.filter
+	return a.messagesV.Filter()
 }
 
 // ApplyMessagesFilter sets f as the messages view's active filter,
@@ -56,12 +56,10 @@ func (a *App) MessagesFilter() queue.MessageFilter {
 // and .clear, which each did this identical 3-line sequence inline
 // before this method existed.
 func (a *App) ApplyMessagesFilter(f queue.MessageFilter) {
-	a.messagesV.filter = f
-	a.messagesV.updateTitle()
-	a.messagesV.load()
+	a.messagesV.ApplyFilter(f)
 }
 
-func (a *App) FocusMessages() { a.tv.SetFocus(a.messagesV.table) }
+func (a *App) FocusMessages() { a.tv.SetFocus(a.messagesV.Table()) }
 
 // DeleteConnection removes name from Connections. If it was the active
 // connection, activates the first remaining one (reusing switchConnection
@@ -108,7 +106,7 @@ func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool
 		if wasActive {
 			a.cfg.ActiveConnection = conn.Name
 			a.backend = newBackendForConn(a, conn)
-			a.queuesV.backend = a.backend
+			a.queuesV.SetBackend(a.backend)
 			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 		}
 	}

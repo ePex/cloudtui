@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// codePipelineListView is the AWS CodePipeline screen: a filterable,
+// CodePipelineListView is the AWS CodePipeline screen: a filterable,
 // read-only tview.Table listing pipelines for the currently active AWS
 // profile (config.Config.ActiveAWSProfile — see
 // spec/29-fe-aws-profile-selection). A registered top-level ui.View
@@ -24,7 +24,7 @@ import (
 // shape as logsView/logSearchView (spec/34-fe-cloudwatch-logs). 'w'
 // toggles watching a pipeline directly from this list, without opening
 // detail first — see spec/43-fe-codepipeline-monitor.
-type codePipelineListView struct {
+type CodePipelineListView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
@@ -34,12 +34,12 @@ type codePipelineListView struct {
 	filtered    []awscodepipeline.Pipeline
 }
 
-var _ ui.View = (*codePipelineListView)(nil)
-var _ ui.Shortcuttable = (*codePipelineListView)(nil)
-var _ ui.Themeable = (*codePipelineListView)(nil)
+var _ ui.View = (*CodePipelineListView)(nil)
+var _ ui.Shortcuttable = (*CodePipelineListView)(nil)
+var _ ui.Themeable = (*CodePipelineListView)(nil)
 
 // ApplyPalette recolors the CodePipeline list view for a live theme switch.
-func (lv *codePipelineListView) ApplyPalette(p config.Palette) {
+func (lv *CodePipelineListView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	lv.table.SetBackgroundColor(bg)
 	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
@@ -49,11 +49,20 @@ func (lv *codePipelineListView) ApplyPalette(p config.Palette) {
 	lv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (lv *codePipelineListView) Name() string               { return "codepipeline" }
-func (lv *codePipelineListView) Title() string              { return "AWS CodePipeline" }
-func (lv *codePipelineListView) Primitive() tview.Primitive { return lv.flex }
+func (lv *CodePipelineListView) Name() string               { return "codepipeline" }
+func (lv *CodePipelineListView) Title() string              { return "AWS CodePipeline" }
+func (lv *CodePipelineListView) Primitive() tview.Primitive { return lv.flex }
+func (lv *CodePipelineListView) Table() *tview.Table        { return lv.table }
+func (lv *CodePipelineListView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{lv.filterInput}
+}
 
-func (lv *codePipelineListView) Shortcuts() []ui.Shortcut {
+// Repaint redraws the table from the already-cached pipeline list — used
+// by the background watcher (codepipelinewatch.go) to reflect a live stage
+// update without exposing the underlying slice.
+func (lv *CodePipelineListView) Repaint() { lv.repaint(lv.all) }
+
+func (lv *CodePipelineListView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
@@ -61,8 +70,8 @@ func (lv *codePipelineListView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newCodePipelineListView constructs the CodePipeline list view.
-func newCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) *codePipelineListView {
+// NewCodePipelineListView constructs the CodePipeline list view.
+func NewCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) *CodePipelineListView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" AWS CodePipeline ")
 	table.SetSelectable(true, false)
@@ -79,7 +88,7 @@ func newCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) 
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	lv := &codePipelineListView{table: table, filterInput: filterInput, flex: flex, host: a}
+	lv := &CodePipelineListView{table: table, filterInput: filterInput, flex: flex, host: a}
 	lv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -132,11 +141,11 @@ func newCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) 
 
 // Activate reloads the pipeline list. Called by SwitchTo each time the
 // view becomes active.
-func (lv *codePipelineListView) Activate() {
+func (lv *CodePipelineListView) Activate() {
 	lv.load()
 }
 
-func (lv *codePipelineListView) setHeader() {
+func (lv *CodePipelineListView) setHeader() {
 	p := lv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -157,7 +166,7 @@ func (lv *codePipelineListView) setHeader() {
 // an empty one. If the call fails because the profile's cached SSO
 // token is missing/expired, awsauth.WithReauth opens the browser to log
 // in and retries once before giving up — see spec/36-fe-aws-sso-reauth.
-func (lv *codePipelineListView) load() {
+func (lv *CodePipelineListView) load() {
 	profile := lv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -187,7 +196,7 @@ func (lv *codePipelineListView) load() {
 	}()
 }
 
-func (lv *codePipelineListView) applyFilter(s string) {
+func (lv *CodePipelineListView) applyFilter(s string) {
 	lv.filter = s
 	lv.repaint(lv.all)
 }
@@ -195,7 +204,7 @@ func (lv *codePipelineListView) applyFilter(s string) {
 // toggleWatchSelected starts or stops watching the pipeline under the
 // table's current selection, then repaints so the WATCHING column
 // reflects the change immediately.
-func (lv *codePipelineListView) toggleWatchSelected() {
+func (lv *CodePipelineListView) toggleWatchSelected() {
 	row, _ := lv.table.GetSelection()
 	idx := row - 1 // row 0 is the header
 	if idx < 0 || idx >= len(lv.filtered) {
@@ -210,7 +219,7 @@ func (lv *codePipelineListView) toggleWatchSelected() {
 	lv.repaint(lv.all)
 }
 
-func (lv *codePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
+func (lv *CodePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 	lv.all = pipelines
 
 	filtered := pipelines
@@ -266,7 +275,7 @@ func (lv *codePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 	}
 }
 
-func (lv *codePipelineListView) showError(err error) {
+func (lv *CodePipelineListView) showError(err error) {
 	lv.all = nil
 	lv.filtered = nil
 	for lv.table.GetRowCount() > 1 {
@@ -283,7 +292,7 @@ func (lv *codePipelineListView) showError(err error) {
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
-func (lv *codePipelineListView) showStatus(msg string) {
+func (lv *CodePipelineListView) showStatus(msg string) {
 	lv.all = nil
 	lv.filtered = nil
 	for lv.table.GetRowCount() > 1 {
