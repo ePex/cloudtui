@@ -15,7 +15,9 @@ import (
 // connManager is the AMQ connection manager overlay: lists all configured
 // connections and lets the user activate/add/edit/duplicate/delete them.
 type connManager struct {
-	app     *App
+	host    ui.Host
+	confirm *confirmDialog
+	editor  *connEditor // set after construction — see New()
 	flex    *tview.Flex
 	list    *tview.List
 	hints   *tview.TextView
@@ -23,8 +25,8 @@ type connManager struct {
 }
 
 // newConnManager builds the connection manager overlay's widgets.
-func newConnManager(a *App) *connManager {
-	cm := &connManager{app: a}
+func newConnManager(host ui.Host, confirm *confirmDialog) *connManager {
+	cm := &connManager{host: host, confirm: confirm}
 	cm.list = tview.NewList().ShowSecondaryText(false)
 	cm.hints = tview.NewTextView().SetDynamicColors(true)
 	cm.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -38,21 +40,23 @@ func newConnManager(a *App) *connManager {
 			cm.close()
 			return nil
 		case event.Rune() == 'n':
-			a.connEditor.show(config.Connection{}, true, "")
+			cm.editor.show(config.Connection{}, true, "")
 			return nil
 		case event.Rune() == 'e':
 			idx := cm.list.GetCurrentItem()
-			if idx >= 0 && idx < len(a.cfg.Connections) {
-				c := a.cfg.Connections[idx]
-				a.connEditor.show(c, false, c.Name)
+			conns := cm.host.Config().Connections
+			if idx >= 0 && idx < len(conns) {
+				c := conns[idx]
+				cm.editor.show(c, false, c.Name)
 			}
 			return nil
 		case event.Rune() == 'd':
 			idx := cm.list.GetCurrentItem()
-			if idx >= 0 && idx < len(a.cfg.Connections) {
-				dup := a.cfg.Connections[idx]
+			conns := cm.host.Config().Connections
+			if idx >= 0 && idx < len(conns) {
+				dup := conns[idx]
 				dup.Name = dup.Name + "-copy"
-				a.connEditor.show(dup, true, "")
+				cm.editor.show(dup, true, "")
 			}
 			return nil
 		case event.Key() == tcell.KeyDelete || event.Rune() == 'x':
@@ -67,10 +71,11 @@ func newConnManager(a *App) *connManager {
 	})
 
 	cm.list.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
-		if idx >= 0 && idx < len(a.cfg.Connections) {
-			name := a.cfg.Connections[idx].Name
+		conns := cm.host.Config().Connections
+		if idx >= 0 && idx < len(conns) {
+			name := conns[idx].Name
 			cm.close()
-			a.switchConnection(name)
+			cm.host.SwitchConnection(name)
 		}
 	})
 	return cm
@@ -79,21 +84,21 @@ func newConnManager(a *App) *connManager {
 // show opens the connection manager overlay.
 func (cm *connManager) show() {
 	cm.populate()
-	ac := cm.app.cfg.Colors.Accent
+	ac := cm.host.Config().Colors.Accent
 	cm.hints.SetText(fmt.Sprintf(
 		"[%s]<Enter>[-] activate  [%s]<n>[-] new  [%s]<e>[-] edit  [%s]<d>[-] dup  [%s]<Del/x>[-] delete  [%s]<Esc>[-] close",
 		ac, ac, ac, ac, ac, ac,
 	))
-	cm.app.rootPages.ShowPage("conn-manager")
-	cm.app.tv.SetFocus(cm.list)
+	cm.host.ShowPage("conn-manager")
+	cm.host.SetFocus(cm.list)
 	cm.visible = true
 }
 
 // close hides the connection manager overlay.
 func (cm *connManager) close() {
-	cm.app.rootPages.HidePage("conn-manager")
+	cm.host.HidePage("conn-manager")
 	cm.visible = false
-	cm.app.tv.SetFocus(cm.app.pages)
+	cm.host.FocusMain()
 }
 
 // ApplyPalette recolors the connection manager overlay for a live theme switch.
@@ -113,16 +118,17 @@ var _ ui.Themeable = (*connManager)(nil)
 // populate rebuilds the manager list from the current config.
 func (cm *connManager) populate() {
 	cm.list.Clear()
-	for _, conn := range cm.app.cfg.Connections {
+	cfg := cm.host.Config()
+	for _, conn := range cfg.Connections {
 		c := conn // capture per iteration
 		star := "   "
-		if c.Name == cm.app.cfg.ActiveConnection {
+		if c.Name == cfg.ActiveConnection {
 			star = "⭐ "
 		}
 		label := fmt.Sprintf("%s%-24s (%s)", star, c.Name, c.Backend)
 		cm.list.AddItem(label, "", 0, func() {
 			cm.close()
-			cm.app.switchConnection(c.Name)
+			cm.host.SwitchConnection(c.Name)
 		})
 	}
 }
@@ -130,22 +136,22 @@ func (cm *connManager) populate() {
 // delete confirms and deletes the currently selected connection. Refuses
 // if it is the only connection.
 func (cm *connManager) delete() {
-	a := cm.app
-	if len(a.cfg.Connections) <= 1 {
-		a.statusBar.SetText("[yellow]Cannot delete the only connection[-]")
+	conns := cm.host.Config().Connections
+	if len(conns) <= 1 {
+		cm.host.SetStatus("[yellow]Cannot delete the only connection[-]")
 		return
 	}
 	idx := cm.list.GetCurrentItem()
-	if idx < 0 || idx >= len(a.cfg.Connections) {
+	if idx < 0 || idx >= len(conns) {
 		return
 	}
-	toDelete := a.cfg.Connections[idx]
-	a.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
-		if a.DeleteConnection(toDelete.Name) {
+	toDelete := conns[idx]
+	cm.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
+		if cm.host.DeleteConnection(toDelete.Name) {
 			cm.close()
 		} else {
 			cm.populate()
-			a.tv.SetFocus(cm.list)
+			cm.host.SetFocus(cm.list)
 		}
 	})
 }
@@ -180,7 +186,8 @@ func (a *App) DeleteConnection(name string) (wasActive bool) {
 // connEditor is the AMQ connection editor overlay, shared by "new",
 // "edit", and "duplicate" from the connection manager.
 type connEditor struct {
-	app      *App
+	host     ui.Host
+	manager  *connManager
 	form     *tview.Form
 	visible  bool
 	isNew    bool
@@ -193,8 +200,8 @@ type connEditor struct {
 }
 
 // newConnEditor builds the connection editor overlay's form.
-func newConnEditor(a *App) *connEditor {
-	ce := &connEditor{app: a}
+func newConnEditor(host ui.Host, manager *connManager) *connEditor {
+	ce := &connEditor{host: host, manager: manager}
 	ce.form = tview.NewForm()
 	ce.form.SetBorder(true).SetTitle(" AMQ Connection ")
 	ce.form.
@@ -208,7 +215,7 @@ func newConnEditor(a *App) *connEditor {
 		AddButton("Save", func() { ce.save() }).
 		AddButton("Cancel", func() { ce.close() })
 	if dd, ok := ce.form.GetFormItem(1).(*tview.DropDown); ok {
-		styleDropDown(dd, a.cfg.Colors)
+		styleDropDown(dd, host.Config().Colors)
 		// Wired via SetSelectedFunc rather than passed to AddDropDown
 		// itself, for the same reason as the Password Source dropdown
 		// below: AddDropDown's initial SetCurrentOption(0) call would
@@ -230,7 +237,7 @@ func newConnEditor(a *App) *connEditor {
 	// specific point, even though it can move once rebuildTail starts
 	// rebuilding items after a Backend change.
 	if dd, ok := ce.form.GetFormItem(5).(*tview.DropDown); ok {
-		styleDropDown(dd, a.cfg.Colors)
+		styleDropDown(dd, host.Config().Colors)
 		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
 			ce.setPasswordField(sourceIdx)
 		})
@@ -249,7 +256,6 @@ func newConnEditor(a *App) *connEditor {
 // form; isNew=true means adding, false=editing. origName is the current
 // name when editing (used for uniqueness validation).
 func (ce *connEditor) show(conn config.Connection, isNew bool, origName string) {
-	a := ce.app
 	ce.isNew = isNew
 	ce.origName = origName
 
@@ -310,8 +316,8 @@ func (ce *connEditor) show(conn config.Connection, isNew bool, origName string) 
 		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
 	}
 
-	a.rootPages.ShowPage("conn-editor")
-	a.tv.SetFocus(ce.form)
+	ce.host.ShowPage("conn-editor")
+	ce.host.SetFocus(ce.form)
 	ce.visible = true
 }
 
@@ -396,7 +402,7 @@ func (ce *connEditor) rebuildTail(backend string) {
 	}
 
 	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
-		styleDropDown(dd, ce.app.cfg.Colors)
+		styleDropDown(dd, ce.host.Config().Colors)
 		dd.SetSelectedFunc(func(_ string, idx int) {
 			ce.setPasswordField(idx)
 		})
@@ -405,13 +411,12 @@ func (ce *connEditor) rebuildTail(backend string) {
 
 // close hides the editor and returns focus to the manager or pages.
 func (ce *connEditor) close() {
-	a := ce.app
-	a.rootPages.HidePage("conn-editor")
+	ce.host.HidePage("conn-editor")
 	ce.visible = false
-	if a.connManager.visible {
-		a.tv.SetFocus(a.connManager.list)
+	if ce.manager.visible {
+		ce.host.SetFocus(ce.manager.list)
 	} else {
-		a.tv.SetFocus(a.pages)
+		ce.host.FocusMain()
 	}
 }
 
@@ -435,7 +440,6 @@ var _ ui.Themeable = (*connEditor)(nil)
 
 // save validates and persists the editor form, then closes it.
 func (ce *connEditor) save() {
-	a := ce.app
 	name := strings.TrimSpace(ce.form.GetFormItem(0).(*tview.InputField).GetText())
 	backendIdx, _ := ce.form.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	backends := []string{"jolokia", "proxy"}
@@ -455,12 +459,12 @@ func (ce *connEditor) save() {
 	}
 
 	if name == "" {
-		a.statusBar.SetText("[red]Name is required[-]")
+		ce.host.SetStatus("[red]Name is required[-]")
 		return
 	}
-	for _, c := range a.cfg.Connections {
+	for _, c := range ce.host.Config().Connections {
 		if c.Name == name && c.Name != ce.origName {
-			a.statusBar.SetText(fmt.Sprintf("[red]Connection %q already exists[-]", name))
+			ce.host.SetStatus(fmt.Sprintf("[red]Connection %q already exists[-]", name))
 			return
 		}
 	}
@@ -472,9 +476,9 @@ func (ce *connEditor) save() {
 		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
 	}
 
-	a.SaveConnection(conn, ce.origName, ce.isNew)
+	ce.host.SaveConnection(conn, ce.origName, ce.isNew)
 	ce.close()
-	a.connManager.populate()
+	ce.manager.populate()
 }
 
 // SaveConnection appends conn (isNew) or replaces the connection named
