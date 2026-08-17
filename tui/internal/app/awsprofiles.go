@@ -149,6 +149,12 @@ func (ap *awsProfilesPicker) ApplyPalette(p config.Palette) {
 
 var _ ui.Themeable = (*awsProfilesPicker)(nil)
 
+// Primitive returns awsProfilesPicker's root widget, for sizing/embedding.
+func (ap *awsProfilesPicker) Primitive() tview.Primitive { return ap.flex }
+
+// Visible reports whether awsProfilesPicker is currently shown.
+func (ap *awsProfilesPicker) Visible() bool { return ap.visible }
+
 // populate re-runs discovery via app.listAWSProfiles and redraws the
 // table. Called on open and on 'r' (the files may have changed since
 // cloudtui started, or since the overlay was last opened).

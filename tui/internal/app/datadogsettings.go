@@ -69,6 +69,12 @@ func (de *datadogEditor) ApplyPalette(p config.Palette) {
 
 var _ ui.Themeable = (*datadogEditor)(nil)
 
+// Primitive returns datadogEditor's root widget, for sizing/embedding.
+func (de *datadogEditor) Primitive() tview.Primitive { return de.form }
+
+// Visible reports whether datadogEditor is currently shown.
+func (de *datadogEditor) Visible() bool { return de.visible }
+
 // save persists the editor form into cfg.Datadog, then closes it. Unlike
 // saveConnEditor, there's no required-field validation here — an empty
 // Site defaults to datadoghq.com at search time

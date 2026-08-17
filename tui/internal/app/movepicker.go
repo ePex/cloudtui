@@ -244,3 +244,9 @@ func (mp *movePicker) ApplyPalette(p config.Palette) {
 }
 
 var _ ui.Themeable = (*movePicker)(nil)
+
+// Primitive returns movePicker's root widget, for sizing/embedding.
+func (mp *movePicker) Primitive() tview.Primitive { return mp.flex }
+
+// Visible reports whether movePicker is currently shown.
+func (mp *movePicker) Visible() bool { return mp.visible }

@@ -79,3 +79,9 @@ func (c *confirmDialog) ApplyPalette(p config.Palette) {
 }
 
 var _ ui.Themeable = (*confirmDialog)(nil)
+
+// Primitive returns confirmDialog's root widget, for sizing/embedding.
+func (c *confirmDialog) Primitive() tview.Primitive { return c.flex }
+
+// Visible reports whether confirmDialog is currently shown.
+func (c *confirmDialog) Visible() bool { return c.visible }
