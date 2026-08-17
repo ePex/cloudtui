@@ -12,7 +12,7 @@ import (
 // actions (delete, purge, ...) across every view. "No" is item 0 (default
 // focus) to prevent accidental actions.
 type confirmDialog struct {
-	app     *App
+	host    ui.Host
 	flex    *tview.Flex
 	text    *tview.TextView
 	list    *tview.List
@@ -21,8 +21,8 @@ type confirmDialog struct {
 
 // newConfirmDialog builds the confirm overlay's widgets. Shared across
 // every caller of show — its content is rebuilt each time.
-func newConfirmDialog(a *App) *confirmDialog {
-	c := &confirmDialog{app: a}
+func newConfirmDialog(host ui.Host) *confirmDialog {
+	c := &confirmDialog{host: host}
 	c.text = tview.NewTextView().SetWrap(true)
 	c.list = tview.NewList().ShowSecondaryText(false)
 	c.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -54,15 +54,15 @@ func (c *confirmDialog) show(question string, onConfirm func()) {
 		return event
 	})
 
-	c.app.rootPages.ShowPage("confirm")
-	c.app.tv.SetFocus(c.list)
+	c.host.ShowPage("confirm")
+	c.host.SetFocus(c.list)
 	c.visible = true
 }
 
 // close hides the confirmation dialog and restores focus.
 func (c *confirmDialog) close() {
-	c.app.rootPages.HidePage("confirm")
-	c.app.tv.SetFocus(c.app.pages)
+	c.host.HidePage("confirm")
+	c.host.FocusMain()
 	c.visible = false
 }
 
