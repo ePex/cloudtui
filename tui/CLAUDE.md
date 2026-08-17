@@ -36,6 +36,10 @@ this module.
   `ui.ViewHost` rather than `internal/app`'s concrete `*App`.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
 - `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
+- `internal/queue/secretbackend/` — `queue.Backend` decorator that
+  resolves a connection's password from AWS Secrets Manager on first
+  use, caching and transparently re-resolving on a stale/rotated
+  secret (see `spec/56-fe-amq-connection-aws-secret-password`).
 - `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
 - `internal/devtool/` — JMX queue admin and mq-proxy process management,
   used by `cmd/devtool`.

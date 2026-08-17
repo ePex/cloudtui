@@ -25,6 +25,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 	"github.com/ePex/cloudtui/tui/internal/view"
@@ -106,9 +107,10 @@ type App struct {
 	getPipelineState         func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	notify                   func(title, message string)
 	screen                   tcell.Screen
-	// secretCache backs AWS-Secrets-Manager-resolved connection passwords
-	// (see connectionsecrets.go / spec/56-fe-amq-connection-aws-secret-password).
-	secretCache *secretCache
+	// secretResolver resolves AWS-Secrets-Manager-backed connection
+	// passwords (see internal/queue/secretbackend /
+	// spec/56-fe-amq-connection-aws-secret-password).
+	secretResolver *secretbackend.SecretResolver
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -186,7 +188,7 @@ func New(cfg config.Config) *App {
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = ui.DesktopNotify
-	a.secretCache = newSecretCache()
+	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret)
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -199,7 +201,7 @@ func New(cfg config.Config) *App {
 
 	// All shell primitives are constructed.
 	a.logV = view.NewLogView()
-	a.backend = newBackendForConn(a, cfg.ActiveConn())
+	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveAWSProfile, cfg.ActiveConn())
 
 	// Dialogs used directly by the views below (rather than through
 	// ui.ViewHost — see spec/80/83) must exist before those views are
@@ -560,7 +562,7 @@ func (a *App) switchConnection(name string) {
 		return
 	}
 	a.cfg.ActiveConnection = name
-	a.backend = newBackendForConn(a, conn)
+	a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, conn)
 	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()

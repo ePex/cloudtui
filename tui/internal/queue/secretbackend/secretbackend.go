@@ -1,4 +1,4 @@
-package app
+package secretbackend
 
 import (
 	"context"
@@ -46,26 +46,46 @@ func (c *secretCache) invalidate(profile, secretName string) {
 	delete(c.values, secretCacheKey(profile, secretName))
 }
 
-// resolvePassword resolves secretName via the active AWS profile, using the
-// cache when possible. No AWS call is attempted when profile is empty — the
-// caller (a connection with no AWS profile selected) gets an immediate,
-// specific error instead of a doomed API call.
-func (a *App) resolvePassword(ctx context.Context, profile, secretName string) (string, error) {
+// SecretResolver resolves AWS-Secrets-Manager-backed connection
+// passwords, caching resolved values in memory. See
+// spec/56-fe-amq-connection-aws-secret-password.
+type SecretResolver struct {
+	cache  *secretCache
+	reveal func(ctx context.Context, profile, name string) (string, bool, error)
+}
+
+// NewSecretResolver constructs a SecretResolver that resolves secrets via
+// reveal (e.g. awssecrets.Reveal).
+func NewSecretResolver(reveal func(ctx context.Context, profile, name string) (string, bool, error)) *SecretResolver {
+	return &SecretResolver{cache: newSecretCache(), reveal: reveal}
+}
+
+// Resolve resolves secretName via profile, using the cache when possible.
+// No reveal call is attempted when profile is empty — the caller (a
+// connection with no AWS profile selected) gets an immediate, specific
+// error instead of a doomed API call.
+func (r *SecretResolver) Resolve(ctx context.Context, profile, secretName string) (string, error) {
 	if profile == "" {
 		return "", fmt.Errorf("no AWS profile selected — pick one in Settings -> AWS Profiles")
 	}
-	if v, ok := a.secretCache.get(profile, secretName); ok {
+	if v, ok := r.cache.get(profile, secretName); ok {
 		return v, nil
 	}
-	value, isBinary, err := a.revealSecret(ctx, profile, secretName)
+	value, isBinary, err := r.reveal(ctx, profile, secretName)
 	if err != nil {
 		return "", fmt.Errorf("resolving password secret %q: %w", secretName, err)
 	}
 	if isBinary {
 		return "", fmt.Errorf("password secret %q has a binary value, expected a string", secretName)
 	}
-	a.secretCache.set(profile, secretName, value)
+	r.cache.set(profile, secretName, value)
 	return value, nil
+}
+
+// Invalidate forgets a previously-resolved value, forcing the next
+// Resolve call for (profile, secretName) to re-resolve.
+func (r *SecretResolver) Invalidate(profile, secretName string) {
+	r.cache.invalidate(profile, secretName)
 }
 
 // passwordSecretName returns the AWS Secrets Manager secret name configured
@@ -99,25 +119,25 @@ func buildBackend(conn config.Connection) queue.Backend {
 	return jolokia.NewClient(conn.Queue)
 }
 
-// newBackendForConn constructs the queue.Backend for conn. Connections
-// without a passwordSecret behave exactly as before (buildBackend directly,
-// no wrapping). A passwordSecret-bearing connection gets a *secretBackend
-// that resolves the password from AWS Secrets Manager on first use and
-// transparently recovers from a stale/rotated secret — see secretBackend.
-func newBackendForConn(a *App, conn config.Connection) queue.Backend {
+// New constructs the queue.Backend for conn. Connections without a
+// passwordSecret behave exactly as buildBackend directly, no wrapping. A
+// passwordSecret-bearing connection gets a *Backend that resolves the
+// password from AWS Secrets Manager on first use and transparently
+// recovers from a stale/rotated secret — see Backend.
+func New(resolver *SecretResolver, profile string, conn config.Connection) queue.Backend {
 	secretName := passwordSecretName(conn)
 	if secretName == "" {
 		return buildBackend(conn)
 	}
-	return &secretBackend{app: a, conn: conn, secretName: secretName, profile: a.cfg.ActiveAWSProfile, build: buildBackend}
+	return &Backend{resolver: resolver, conn: conn, secretName: secretName, profile: profile, build: buildBackend}
 }
 
-// secretBackend wraps a queue.Backend whose password comes from AWS
-// Secrets Manager. It resolves lazily: the network call happens inside
-// whichever queue.Backend method is called first, which — every call site
-// in this codebase already dispatches queue.Backend calls off the tview
-// goroutine (go func() { ...; QueueUpdateDraw(...) }()) — never blocks the
-// UI. See spec/56-fe-amq-connection-aws-secret-password, "Key technical
+// Backend wraps a queue.Backend whose password comes from AWS Secrets
+// Manager. It resolves lazily: the network call happens inside whichever
+// queue.Backend method is called first, which — every call site in this
+// codebase already dispatches queue.Backend calls off the tview goroutine
+// (go func() { ...; QueueUpdateDraw(...) }()) — never blocks the UI. See
+// spec/56-fe-amq-connection-aws-secret-password, "Key technical
 // decision", for why this piggybacks on that existing pattern instead of
 // adding a bespoke async-resolve step at each activation site.
 //
@@ -127,17 +147,16 @@ func newBackendForConn(a *App, conn config.Connection) queue.Backend {
 // fresh password) but are never retried themselves, since silently
 // replaying a delete/move/send risks double-applying it if the original
 // attempt actually succeeded server-side despite returning an error.
-type secretBackend struct {
-	app        *App
+type Backend struct {
+	resolver   *SecretResolver
 	conn       config.Connection
 	secretName string
-	// profile is captured once, at construction, on the main
-	// goroutine — never re-read from a.cfg here, since every
-	// queue.Backend method (List, BrowseMessages, ...) runs on a
-	// background goroutine that would otherwise race the main
-	// goroutine's own writes to a.cfg (profile switch, connection
-	// switch). Same discipline as spec/87's PipelineWatcher capturing
-	// its profile once in StartWatchingPipeline.
+	// profile is captured once, by the caller of New — never re-read
+	// from any live config here, since every queue.Backend method
+	// (List, BrowseMessages, ...) runs on a background goroutine that
+	// would otherwise race the caller's own config writes. See
+	// spec/88, which introduced this same discipline in the
+	// pre-move secretBackend.
 	profile string
 	build   func(config.Connection) queue.Backend
 
@@ -145,14 +164,20 @@ type secretBackend struct {
 	inner queue.Backend
 }
 
+// Profile returns the AWS profile this Backend was constructed for.
+// Exported for internal/app's own tests, which need to confirm
+// SetActiveAWSProfile actually rebuilds the backend — mirrors CR 84's
+// Table()/CR 85's List() accessors added for the identical reason.
+func (b *Backend) Profile() string { return b.profile }
+
 // current returns the resolved inner backend, building it on first use.
-func (b *secretBackend) current(ctx context.Context) (queue.Backend, error) {
+func (b *Backend) current(ctx context.Context) (queue.Backend, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.inner != nil {
 		return b.inner, nil
 	}
-	pw, err := b.app.resolvePassword(ctx, b.profile, b.secretName)
+	pw, err := b.resolver.Resolve(ctx, b.profile, b.secretName)
 	if err != nil {
 		return nil, err
 	}
@@ -162,14 +187,14 @@ func (b *secretBackend) current(ctx context.Context) (queue.Backend, error) {
 
 // refresh invalidates the cached secret value and forces the next current()
 // call to re-resolve and rebuild the inner backend.
-func (b *secretBackend) refresh() {
-	b.app.secretCache.invalidate(b.profile, b.secretName)
+func (b *Backend) refresh() {
+	b.resolver.Invalidate(b.profile, b.secretName)
 	b.mu.Lock()
 	b.inner = nil
 	b.mu.Unlock()
 }
 
-func (b *secretBackend) List(ctx context.Context) ([]queue.Summary, error) {
+func (b *Backend) List(ctx context.Context) ([]queue.Summary, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return nil, err
@@ -186,7 +211,7 @@ func (b *secretBackend) List(ctx context.Context) ([]queue.Summary, error) {
 	return cur.List(ctx)
 }
 
-func (b *secretBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+func (b *Backend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return nil, err
@@ -203,7 +228,7 @@ func (b *secretBackend) BrowseMessages(ctx context.Context, queueName string, fi
 	return cur.BrowseMessages(ctx, queueName, filter)
 }
 
-func (b *secretBackend) PurgeQueue(ctx context.Context, queueName string) error {
+func (b *Backend) PurgeQueue(ctx context.Context, queueName string) error {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return err
@@ -215,7 +240,7 @@ func (b *secretBackend) PurgeQueue(ctx context.Context, queueName string) error 
 	return nil
 }
 
-func (b *secretBackend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
+func (b *Backend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return err
@@ -227,7 +252,7 @@ func (b *secretBackend) RemoveMessage(ctx context.Context, queueName, messageID 
 	return nil
 }
 
-func (b *secretBackend) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
+func (b *Backend) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return err
@@ -239,7 +264,7 @@ func (b *secretBackend) MoveMessage(ctx context.Context, sourceQueue, messageID,
 	return nil
 }
 
-func (b *secretBackend) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
+func (b *Backend) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return 0, err
@@ -252,7 +277,7 @@ func (b *secretBackend) MoveAllMessages(ctx context.Context, sourceQueue, target
 	return n, nil
 }
 
-func (b *secretBackend) SendMessage(ctx context.Context, queueName, body string) error {
+func (b *Backend) SendMessage(ctx context.Context, queueName, body string) error {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return err
@@ -264,7 +289,7 @@ func (b *secretBackend) SendMessage(ctx context.Context, queueName, body string)
 	return nil
 }
 
-func (b *secretBackend) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+func (b *Backend) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return 0, err
@@ -277,7 +302,7 @@ func (b *secretBackend) DeleteMessages(ctx context.Context, queueName string, fi
 	return n, nil
 }
 
-func (b *secretBackend) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+func (b *Backend) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return 0, err
