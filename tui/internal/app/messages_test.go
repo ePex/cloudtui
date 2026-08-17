@@ -16,7 +16,7 @@ import (
 func newTestMessagesView(t *testing.T) *messagesView {
 	t.Helper()
 	a := New(config.Default())
-	return newMessagesView(a, func(string, queue.Message) {})
+	return newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 }
 
 // newTestMessagesViewWithMsgs builds a messagesView already populated via
@@ -346,7 +346,7 @@ func TestMessagesViewDeleteMarkedNoopOnEmptyList(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
-	mv := newMessagesView(a, func(string, queue.Message) {})
+	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 	mv.queueName = "orders"
 	mv.repaint(nil)
 
@@ -361,7 +361,7 @@ func TestMessagesViewMoveMarkedNoopOnEmptyList(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
-	mv := newMessagesView(a, func(string, queue.Message) {})
+	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 	mv.queueName = "orders"
 	mv.repaint(nil)
 
@@ -376,7 +376,7 @@ func TestMessagesViewDeleteFallsBackToCursorWhenNothingMarked(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
-	mv := newMessagesView(a, func(string, queue.Message) {})
+	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0) // cursor on the only row; nothing marked
@@ -396,7 +396,7 @@ func TestMessagesViewMoveFallsBackToCursorWhenNothingMarked(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
-	mv := newMessagesView(a, func(string, queue.Message) {})
+	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0) // cursor on the only row; nothing marked
@@ -426,7 +426,7 @@ func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
 	a := New(config.Default())
 	backend := &fakeQueueBackend{}
 	a.backend = backend
-	mv := newMessagesView(a, func(string, queue.Message) {})
+	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0)

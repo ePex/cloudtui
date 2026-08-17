@@ -205,9 +205,32 @@ func New(cfg config.Config) *App {
 	settingsView := newSettingsView(a)
 	a.logV = newLogView(a)
 	a.backend = newBackendForConn(a, cfg.ActiveConn())
-	a.queuesV = newQueuesView(a, a.backend, a.OpenMessages)
-	a.messagesV = newMessagesView(a, a.OpenMessageDetail)
-	a.messageDetailV = newMessageDetailView(a)
+
+	// Dialogs used directly by the views below (rather than through
+	// ui.ViewHost — see spec/80/83) must exist before those views are
+	// constructed, since each takes the dialogs it needs as constructor
+	// parameters. Their overlay Primitives are still wired up in their
+	// original position further down.
+	a.confirm = dialog.NewConfirmDialog(a)
+	a.movePicker = dialog.NewMovePicker(a)
+	a.sendMessage = dialog.NewSendMessageOverlay(a)
+	a.messageFilter = dialog.NewMessageFilter(a)
+	a.timeRangeModal = dialog.NewTimeRangeModal(a)
+
+	a.queuesV = newQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
+	a.messagesV = newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
+	a.messageDetailV = newMessageDetailView(a, a.movePicker, a.confirm,
+		func() {
+			a.pages.SwitchToPage("messages")
+			a.tv.SetFocus(a.messagesV.table)
+			lines := make([]string, 0, len(a.messagesV.Shortcuts()))
+			for _, sc := range a.messagesV.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			a.SetContextHint(strings.Join(lines, "\n"))
+		},
+		func() { a.messagesV.load() },
+	)
 	a.ssmParamsV = newSSMParamsView(a, a.OpenParamDetail)
 	a.paramDetailV = newParamDetailView(a, func() {
 		a.pages.SwitchToPage("ssm-parameters")
@@ -216,7 +239,11 @@ func New(cfg config.Config) *App {
 	})
 	a.secretsV = newSecretsView(a, a.OpenSecretDetail)
 	a.logsV = newLogsView(a, a.OpenLogSearch)
-	a.logSearchV = newLogSearchView(a, a.OpenLogEventDetail)
+	a.logSearchV = newLogSearchView(a, a.timeRangeModal, a.OpenLogEventDetail, func() {
+		a.pages.SwitchToPage("cloudwatch-logs")
+		a.tv.SetFocus(a.logsV.table)
+		a.UpdateContextPanel(a.logsV)
+	})
 	a.logDetailV = newLogDetailView(a, func() {
 		a.pages.SwitchToPage("log-search")
 		a.tv.SetFocus(a.logSearchV.table)
@@ -230,7 +257,7 @@ func New(cfg config.Config) *App {
 		}
 		a.SetContextHint(strings.Join(lines, "\n"))
 	})
-	a.datadogLogsV = newDatadogLogsView(a, a.OpenDatadogLogDetail)
+	a.datadogLogsV = newDatadogLogsView(a, a.timeRangeModal, a.OpenDatadogLogDetail)
 	a.datadogLogDetailV = newDatadogLogDetailView(a, func() {
 		a.pages.SwitchToPage("datadog-logs")
 		a.tv.SetFocus(a.datadogLogsV.table)
@@ -272,13 +299,8 @@ func New(cfg config.Config) *App {
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
-	a.confirm = dialog.NewConfirmDialog(a)
 	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
-
-	a.movePicker = dialog.NewMovePicker(a)
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
-
-	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
 
 	a.connManager = dialog.NewConnManager(a, a.confirm)
@@ -290,12 +312,10 @@ func New(cfg config.Config) *App {
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
 
-	a.messageFilter = dialog.NewMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
-	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
