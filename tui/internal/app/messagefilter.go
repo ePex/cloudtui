@@ -104,10 +104,8 @@ func (mf *messageFilter) apply() {
 		return
 	}
 
-	a.messagesV.filter = filter
-	a.messagesV.updateTitle()
+	a.ApplyMessagesFilter(filter)
 	mf.close()
-	a.messagesV.load()
 }
 
 // clear resets the form and messagesV's active filter, closes the
@@ -116,8 +114,6 @@ func (mf *messageFilter) clear() {
 	for i := 0; i < 4; i++ {
 		mf.form.GetFormItem(i).(*tview.InputField).SetText("")
 	}
-	mf.app.messagesV.filter = queue.MessageFilter{}
-	mf.app.messagesV.updateTitle()
+	mf.app.ApplyMessagesFilter(queue.MessageFilter{})
 	mf.close()
-	mf.app.messagesV.load()
 }

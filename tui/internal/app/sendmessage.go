@@ -96,12 +96,7 @@ func (sm *sendMessageOverlay) doSend(queueName string) {
 				return
 			}
 			a.statusBar.SetText(fmt.Sprintf("Message sent to %q", queueName))
-			if a.queuesV != nil {
-				a.queuesV.load()
-			}
-			if a.messagesV != nil && a.messagesV.queueName == queueName {
-				a.messagesV.load()
-			}
+			a.ReloadAfterSend(queueName)
 		})
 	}()
 }
