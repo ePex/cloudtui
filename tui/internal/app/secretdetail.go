@@ -243,23 +243,3 @@ func prettyPrintJSON(raw string) string {
 	}
 	return string(pretty)
 }
-
-func (a *App) openSecretDetail(secret awssecrets.Secret) {
-	a.secretDetailV.render(secret)
-	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
-	a.pages.SwitchToPage("secret-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// wireSecretsOpensDetail wires Enter in the secrets table to open the
-// detail view for the selected secret. Called from New() once
-// secretDetailV exists.
-func (a *App) wireSecretsOpensDetail() {
-	a.secretsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.secretsV.filtered) {
-			return
-		}
-		a.openSecretDetail(a.secretsV.filtered[idx])
-	})
-}

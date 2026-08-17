@@ -248,30 +248,3 @@ func (dv *messageDetailView) render(queueName string, msg queue.Message) {
 	dv.textView.SetText(b.String())
 	dv.textView.ScrollToBeginning()
 }
-
-// openMessageDetail renders the full detail for msg and switches to the
-// message-detail page.
-func (a *App) openMessageDetail(queueName string, msg queue.Message) {
-	a.messageDetailV.render(queueName, msg)
-	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
-	a.pages.SwitchToPage("message-detail")
-	a.tv.SetFocus(a.pages)
-	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
-	for _, sc := range a.messageDetailV.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-	}
-	a.contextPanel.SetText(strings.Join(lines, "\n"))
-}
-
-// wireMessagesOpensDetail wires Enter in the messages table to open the
-// detail view for the selected message. Called from New() once
-// messageDetailV exists.
-func (a *App) wireMessagesOpensDetail() {
-	a.messagesV.table.SetSelectedFunc(func(row, _ int) {
-		msgIdx := row - 1 // row 0 is the header
-		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
-			return
-		}
-		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
-	})
-}

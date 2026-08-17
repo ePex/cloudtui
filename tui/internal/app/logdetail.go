@@ -106,24 +106,3 @@ func (dv *logDetailView) refreshContextPanel() {
 	}
 	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
 }
-
-// openLogEventDetail renders the full detail for event and switches to
-// the log-event-detail page.
-func (a *App) openLogEventDetail(event awslogs.LogEvent) {
-	a.logDetailV.render(event)
-	a.pages.SwitchToPage("log-event-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// wireLogSearchOpensEventDetail wires Enter in the log search results
-// table to open the detail view for the selected event. Called from
-// New() once logDetailV exists.
-func (a *App) wireLogSearchOpensEventDetail() {
-	a.logSearchV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.logSearchV.results) {
-			return
-		}
-		a.openLogEventDetail(a.logSearchV.results[idx])
-	})
-}
