@@ -15,70 +15,6 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// timeRangePreset is one relative time window offered by the time range
-// modal's Relative tab (spec/34-fe-cloudwatch-logs decision 4 — relative
-// presets, not free-form timestamps).
-type timeRangePreset struct {
-	label    string
-	duration time.Duration
-}
-
-var timeRangePresets = []timeRangePreset{
-	{"15m", 15 * time.Minute},
-	{"1h", time.Hour},
-	{"4h", 4 * time.Hour},
-	{"1d", 24 * time.Hour},
-	{"2d", 48 * time.Hour},
-	{"3d", 72 * time.Hour},
-	{"7d", 7 * 24 * time.Hour},
-	{"15d", 15 * 24 * time.Hour},
-	{"1mo", 30 * 24 * time.Hour}, // approximate — time.Duration has no calendar-aware month
-}
-
-// defaultPresetIdx is "1h" — a reasonable default investigation window.
-const defaultPresetIdx = 1
-
-// timeRangeMode selects which of timeRange's two representations is
-// active — a relative preset (index into timeRangePresets) or an
-// absolute [from, to) window (spec/53-fe-log-time-range-modal).
-type timeRangeMode int
-
-const (
-	timeRangeRelative timeRangeMode = iota
-	timeRangeAbsolute
-)
-
-// timeRange is the shared time-window selection for logSearchView and
-// datadogLogsView, driven by the shared Relative/Absolute modal
-// (spec/53-fe-log-time-range-modal). Only one of presetIdx or from/to is
-// meaningful, selected by mode.
-type timeRange struct {
-	mode      timeRangeMode
-	presetIdx int
-	from, to  time.Time
-}
-
-// bounds returns the [start, end) window for tr, resolving a relative
-// preset against now.
-func (tr timeRange) bounds(now time.Time) (start, end time.Time) {
-	if tr.mode == timeRangeAbsolute {
-		return tr.from, tr.to
-	}
-	return now.Add(-timeRangePresets[tr.presetIdx].duration), now
-}
-
-// label renders tr for display in a view's title. Absolute from/to are
-// stored as UTC (see parseFilterDate); .Local() here matches the results
-// table's own timestamp display (repaint's e.Timestamp.Local()) — showing
-// the UTC instant directly would silently disagree with what the table
-// rows and the Absolute tab's fields themselves show for the same range.
-func (tr timeRange) label() string {
-	if tr.mode == timeRangeAbsolute {
-		return tr.from.Local().Format("2006-01-02 15:04") + " → " + tr.to.Local().Format("2006-01-02 15:04")
-	}
-	return timeRangePresets[tr.presetIdx].label
-}
-
 // logSearchView is the CloudWatch Logs search screen: opened per log
 // group via App.openLogSearch, not a registered ui.View. Unlike every
 // other list view in this app, its filter (the pattern input) is a real
@@ -92,7 +28,7 @@ type logSearchView struct {
 	app          *App
 	logGroupName string
 	pattern      string
-	tr           timeRange
+	tr           ui.TimeRange
 	results      []awslogs.LogEvent
 	hasMore      bool
 }
@@ -137,7 +73,7 @@ func newLogSearchView(a *App) *logSearchView {
 		AddItem(table, 0, 1, true).
 		AddItem(patternInput, 1, 0, false)
 
-	sv := &logSearchView{table: table, patternInput: patternInput, flex: flex, app: a, tr: timeRange{mode: timeRangeRelative, presetIdx: defaultPresetIdx}}
+	sv := &logSearchView{table: table, patternInput: patternInput, flex: flex, app: a, tr: ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}}
 	sv.setHeader()
 
 	// Unlike every filter input elsewhere in the app, typing here must
@@ -166,7 +102,7 @@ func newLogSearchView(a *App) *logSearchView {
 			sv.search()
 			return nil
 		case 't':
-			a.timeRangeModal.Show(sv.tr, func(tr timeRange) {
+			a.timeRangeModal.Show(sv.tr, func(tr ui.TimeRange) {
 				sv.tr = tr
 				sv.search()
 			})
@@ -217,7 +153,7 @@ func (sv *logSearchView) open(logGroupName, initialPattern string) {
 	sv.logGroupName = logGroupName
 	sv.pattern = initialPattern
 	sv.patternInput.SetText(initialPattern)
-	sv.tr = timeRange{mode: timeRangeRelative, presetIdx: defaultPresetIdx}
+	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}
 	sv.results = nil
 	sv.hasMore = false
 	for sv.table.GetRowCount() > 1 {
@@ -240,7 +176,7 @@ func (sv *logSearchView) search() {
 	}
 	logGroupName := sv.logGroupName
 	pattern := sv.pattern
-	start, end := sv.tr.bounds(time.Now())
+	start, end := sv.tr.Bounds(time.Now())
 	go func() {
 		events, hasMore, err := sv.app.filterLogEvents(context.Background(), profile, logGroupName, start, end, pattern)
 		sv.app.tv.QueueUpdateDraw(func() {
@@ -295,7 +231,7 @@ func (sv *logSearchView) repaint() {
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
 func (sv *logSearchView) updateTitle() {
-	label := sv.tr.label()
+	label := sv.tr.Label()
 	title := fmt.Sprintf(" %s — %s — %d events", sv.logGroupName, label, len(sv.results))
 	if sv.hasMore {
 		title += " (more available — narrow your search)"
