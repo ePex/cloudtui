@@ -15,10 +15,10 @@ func TestShowTimeRangeModalRelativePrefill(t *testing.T) {
 	a := New(config.Default())
 	current := timeRange{mode: timeRangeRelative, presetIdx: 3}
 
-	a.timeRangeModal.show(current, func(timeRange) {})
+	a.timeRangeModal.Show(current, func(timeRange) {})
 
 	if !a.timeRangeModal.visible {
-		t.Fatal("timeRangeModal.show() did not open the overlay")
+		t.Fatal("timeRangeModal.Show() did not open the overlay")
 	}
 	if a.timeRangeModal.activeTab != timeRangeRelative {
 		t.Errorf("timeRangeModal.activeTab = %v, want timeRangeRelative", a.timeRangeModal.activeTab)
@@ -40,7 +40,7 @@ func TestShowTimeRangeModalAbsolutePrefill(t *testing.T) {
 	to := time.Date(2026, 8, 2, 17, 45, 0, 0, time.Local)
 	current := timeRange{mode: timeRangeAbsolute, from: from, to: to}
 
-	a.timeRangeModal.show(current, func(timeRange) {})
+	a.timeRangeModal.Show(current, func(timeRange) {})
 
 	if a.timeRangeModal.activeTab != timeRangeAbsolute {
 		t.Errorf("timeRangeModal.activeTab = %v, want timeRangeAbsolute", a.timeRangeModal.activeTab)
@@ -57,7 +57,7 @@ func TestShowTimeRangeModalAbsolutePrefill(t *testing.T) {
 
 func TestCloseTimeRangeModal(t *testing.T) {
 	a := New(config.Default())
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
 
 	a.timeRangeModal.close()
 
@@ -68,7 +68,7 @@ func TestCloseTimeRangeModal(t *testing.T) {
 
 func TestTimeRangeModalEscapeCloses(t *testing.T) {
 	a := New(config.Default())
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
 
 	capture := a.timeRangeModal.flex.GetInputCapture()
 	if capture == nil {
@@ -85,7 +85,7 @@ func TestTimeRangeModalEscapeCloses(t *testing.T) {
 func TestTimeRangeModalEscapeDoesNotApply(t *testing.T) {
 	a := New(config.Default())
 	applied := false
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative, presetIdx: 1}, func(timeRange) {
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative, presetIdx: 1}, func(timeRange) {
 		applied = true
 	})
 
@@ -98,7 +98,7 @@ func TestTimeRangeModalEscapeDoesNotApply(t *testing.T) {
 
 func TestTimeRangeModalTabSwitching(t *testing.T) {
 	a := New(config.Default())
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
 	capture := a.timeRangeModal.flex.GetInputCapture()
 
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 'A', tcell.ModNone)); got != nil {
@@ -124,7 +124,7 @@ func TestTimeRangeModalTabSwitching(t *testing.T) {
 // timeRangeModal.switchTab explicitly resets the form's internal focus to 0.
 func TestSwitchTimeRangeTabResetsAbsoluteFormFocus(t *testing.T) {
 	a := New(config.Default())
-	a.timeRangeModal.show(timeRange{mode: timeRangeAbsolute}, func(timeRange) {})
+	a.timeRangeModal.Show(timeRange{mode: timeRangeAbsolute}, func(timeRange) {})
 	a.timeRangeModal.absoluteForm.SetFocus(2) // simulate a prior session ending on the Apply button
 
 	a.timeRangeModal.switchTab(timeRangeAbsolute)
@@ -137,7 +137,7 @@ func TestSwitchTimeRangeTabResetsAbsoluteFormFocus(t *testing.T) {
 
 func TestTimeRangeModalOtherKeysPassThrough(t *testing.T) {
 	a := New(config.Default())
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative}, func(timeRange) {})
 
 	capture := a.timeRangeModal.flex.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
@@ -150,7 +150,7 @@ func TestApplyTimeRangeRelative(t *testing.T) {
 	a := New(config.Default())
 	var got timeRange
 	applied := false
-	a.timeRangeModal.show(timeRange{mode: timeRangeRelative}, func(tr timeRange) {
+	a.timeRangeModal.Show(timeRange{mode: timeRangeRelative}, func(tr timeRange) {
 		applied = true
 		got = tr
 	})
@@ -172,7 +172,7 @@ func TestApplyTimeRangeAbsoluteValid(t *testing.T) {
 	a := New(config.Default())
 	var got timeRange
 	applied := false
-	a.timeRangeModal.show(timeRange{mode: timeRangeAbsolute}, func(tr timeRange) {
+	a.timeRangeModal.Show(timeRange{mode: timeRangeAbsolute}, func(tr timeRange) {
 		applied = true
 		got = tr
 	})
@@ -199,7 +199,7 @@ func TestApplyTimeRangeAbsoluteValid(t *testing.T) {
 func TestApplyTimeRangeAbsoluteWithTime(t *testing.T) {
 	a := New(config.Default())
 	var got timeRange
-	a.timeRangeModal.show(timeRange{mode: timeRangeAbsolute}, func(tr timeRange) {
+	a.timeRangeModal.Show(timeRange{mode: timeRangeAbsolute}, func(tr timeRange) {
 		got = tr
 	})
 	a.timeRangeModal.absoluteForm.GetFormItem(0).(*tview.InputField).SetText("2026-08-01 09:30")
@@ -221,7 +221,7 @@ func TestApplyTimeRangeAbsoluteWithTime(t *testing.T) {
 func TestApplyTimeRangeAbsoluteInvalidDate(t *testing.T) {
 	a := New(config.Default())
 	applied := false
-	a.timeRangeModal.show(timeRange{mode: timeRangeAbsolute}, func(timeRange) {
+	a.timeRangeModal.Show(timeRange{mode: timeRangeAbsolute}, func(timeRange) {
 		applied = true
 	})
 	a.timeRangeModal.absoluteForm.GetFormItem(0).(*tview.InputField).SetText("not-a-date")

@@ -137,11 +137,11 @@ func newMessagesView(a *App) *messagesView {
 			mv.app.tv.SetFocus(mv.searchInput)
 			return nil
 		case event.Rune() == 'f':
-			a.messageFilter.show()
+			a.messageFilter.Show()
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
-			a.sendMessage.show(name, func() {
+			a.sendMessage.Show(name, func() {
 				a.tv.SetFocus(mv.table)
 				lines := make([]string, 0, len(mv.Shortcuts()))
 				for _, sc := range mv.Shortcuts() {
@@ -152,7 +152,7 @@ func newMessagesView(a *App) *messagesView {
 			return nil
 		case event.Rune() == 'p':
 			name := mv.queueName
-			a.confirm.show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+			a.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
 				go func() {
 					err := a.backend.PurgeQueue(context.Background(), name)
 					a.tv.QueueUpdateDraw(func() {
@@ -450,7 +450,7 @@ func (mv *messagesView) deleteMarked() {
 	if len(mv.markedIDs()) > 0 {
 		question = fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName)
 	}
-	a.confirm.show(question, func() {
+	a.confirm.Show(question, func() {
 		go func() {
 			failed := 0
 			for _, id := range ids {
@@ -494,7 +494,7 @@ func (mv *messagesView) moveMarked() {
 		}
 		a.contextPanel.SetText(strings.Join(lines, "\n"))
 	}
-	a.movePicker.show(srcQueue, func(target string) {
+	a.movePicker.Show(srcQueue, func(target string) {
 		go func() {
 			failed := 0
 			for _, id := range ids {

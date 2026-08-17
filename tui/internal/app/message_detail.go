@@ -70,7 +70,7 @@ func newMessageDetailView(a *App) *messageDetailView {
 				}
 				a.contextPanel.SetText(strings.Join(lines, "\n"))
 			}
-			a.movePicker.show(srcQueue, func(target string) {
+			a.movePicker.Show(srcQueue, func(target string) {
 				err := a.backend.MoveMessage(context.Background(), srcQueue, msgID, target)
 				a.tv.QueueUpdateDraw(func() {
 					if err != nil {
@@ -92,7 +92,7 @@ func newMessageDetailView(a *App) *messageDetailView {
 		case event.Rune() == 'd':
 			queueName := dv.queueName
 			msgID := dv.msg.ID
-			a.confirm.show(fmt.Sprintf("Delete message from %q?", queueName), func() {
+			a.confirm.Show(fmt.Sprintf("Delete message from %q?", queueName), func() {
 				go func() {
 					err := a.backend.RemoveMessage(context.Background(), queueName, msgID)
 					a.tv.QueueUpdateDraw(func() {

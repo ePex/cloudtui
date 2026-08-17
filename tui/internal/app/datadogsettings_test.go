@@ -15,9 +15,9 @@ import (
 // Esc must close without tabbing all the way to Cancel.
 func TestDatadogEditorEscapeCloses(t *testing.T) {
 	a := New(config.Default())
-	a.datadogEditor.show()
+	a.datadogEditor.Show()
 	if !a.datadogEditor.visible {
-		t.Fatal("datadogEditor.show() did not open the editor")
+		t.Fatal("datadogEditor.Show() did not open the editor")
 	}
 
 	capture := a.datadogEditor.form.GetInputCapture()
@@ -34,7 +34,7 @@ func TestDatadogEditorEscapeCloses(t *testing.T) {
 
 func TestDatadogEditorOtherKeysPassThrough(t *testing.T) {
 	a := New(config.Default())
-	a.datadogEditor.show()
+	a.datadogEditor.Show()
 
 	capture := a.datadogEditor.form.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
@@ -50,7 +50,7 @@ func TestDatadogEditorPrefillsFromConfig(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.Datadog = config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-123"}
 
-	a.datadogEditor.show()
+	a.datadogEditor.Show()
 
 	if got := a.datadogEditor.form.GetFormItem(0).(*tview.InputField).GetText(); got != "datadoghq.eu" {
 		t.Errorf("Site field = %q, want %q", got, "datadoghq.eu")
@@ -69,7 +69,7 @@ func TestSaveDatadogEditorRoundTrip(t *testing.T) {
 	t.Chdir(dir)
 
 	a := New(config.Default())
-	a.datadogEditor.show()
+	a.datadogEditor.Show()
 	a.datadogEditor.form.GetFormItem(0).(*tview.InputField).SetText("datadoghq.eu")
 	a.datadogEditor.form.GetFormItem(1).(*tview.InputField).SetText("tok-456")
 

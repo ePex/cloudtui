@@ -52,7 +52,7 @@ func (a *App) MessagesFilter() queue.MessageFilter {
 }
 
 // ApplyMessagesFilter sets f as the messages view's active filter,
-// updates its title, and reloads. Extracted from messageFilter.apply
+// updates its title, and reloads. Extracted from MessageFilter.apply
 // and .clear, which each did this identical 3-line sequence inline
 // before this method existed.
 func (a *App) ApplyMessagesFilter(f queue.MessageFilter) {

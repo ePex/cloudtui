@@ -8,18 +8,18 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// themePicker is the theme-picker overlay: a list of every embedded theme,
+// ThemePicker is the theme-picker overlay: a list of every embedded theme,
 // with the active one marked ⭐.
-type themePicker struct {
+type ThemePicker struct {
 	host    ui.Host
 	flex    *tview.Flex
 	list    *tview.List
 	visible bool
 }
 
-// newThemePicker builds the theme-picker overlay's widgets.
-func newThemePicker(host ui.Host) *themePicker {
-	tp := &themePicker{host: host}
+// NewThemePicker builds the theme-picker overlay's widgets.
+func NewThemePicker(host ui.Host) *ThemePicker {
+	tp := &ThemePicker{host: host}
 	tp.list = tview.NewList().ShowSecondaryText(false)
 	tp.flex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tp.list, 0, 1, true)
@@ -39,8 +39,8 @@ func newThemePicker(host ui.Host) *themePicker {
 	return tp
 }
 
-// show opens the theme-picker overlay, pre-selecting the current theme.
-func (tp *themePicker) show() {
+// Show opens the theme-picker overlay, pre-selecting the current theme.
+func (tp *ThemePicker) Show() {
 	host := tp.host
 	currentTheme := host.Config().Theme
 	themes := config.AvailableThemes()
@@ -70,14 +70,14 @@ func (tp *themePicker) show() {
 }
 
 // close hides the theme-picker overlay and restores focus.
-func (tp *themePicker) close() {
+func (tp *ThemePicker) close() {
 	tp.host.HidePage("theme-picker")
 	tp.visible = false
 	tp.host.FocusMain()
 }
 
 // ApplyPalette recolors the theme-picker overlay for a live theme switch.
-func (tp *themePicker) ApplyPalette(p config.Palette) {
+func (tp *ThemePicker) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	tp.flex.SetBackgroundColor(bg)
 	tp.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -86,10 +86,10 @@ func (tp *themePicker) ApplyPalette(p config.Palette) {
 	tp.list.SetBackgroundColor(bg)
 }
 
-var _ ui.Themeable = (*themePicker)(nil)
+var _ ui.Themeable = (*ThemePicker)(nil)
 
-// Primitive returns themePicker's root widget, for sizing/embedding.
-func (tp *themePicker) Primitive() tview.Primitive { return tp.flex }
+// Primitive returns ThemePicker's root widget, for sizing/embedding.
+func (tp *ThemePicker) Primitive() tview.Primitive { return tp.flex }
 
-// Visible reports whether themePicker is currently shown.
-func (tp *themePicker) Visible() bool { return tp.visible }
+// Visible reports whether ThemePicker is currently shown.
+func (tp *ThemePicker) Visible() bool { return tp.visible }

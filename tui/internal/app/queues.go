@@ -127,7 +127,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 				return nil
 			}
 			name := cell.Text
-			qv.app.confirm.show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+			qv.app.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
 				go func() {
 					err := qv.backend.PurgeQueue(context.Background(), name)
 					qv.app.tv.QueueUpdateDraw(func() {
@@ -156,7 +156,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 				}
 				qv.app.contextPanel.SetText(strings.Join(lines, "\n"))
 			}
-			qv.app.movePicker.show(srcQueue, func(target string) {
+			qv.app.movePicker.Show(srcQueue, func(target string) {
 				count, err := qv.backend.MoveAllMessages(context.Background(), srcQueue, target)
 				qv.app.tv.QueueUpdateDraw(func() {
 					if err != nil {
@@ -176,7 +176,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 				return nil
 			}
 			name := cell.Text
-			qv.app.sendMessage.show(name, func() {
+			qv.app.sendMessage.Show(name, func() {
 				qv.app.tv.SetFocus(qv.table)
 				lines := make([]string, 0, len(qv.Shortcuts()))
 				for _, sc := range qv.Shortcuts() {

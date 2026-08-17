@@ -11,12 +11,12 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// timeRangeModal is the shared Relative/Absolute time range overlay
+// TimeRangeModal is the shared Relative/Absolute time range overlay
 // (spec/53), used by both logSearchView and datadogLogsView. Unlike most
 // other overlays it has no view-specific state of its own — the caller
-// supplies current/onApply each time show is called. Named timeRangeModal,
+// supplies current/onApply each time Show is called. Named TimeRangeModal,
 // not timeRange, to avoid shadowing the timeRange value type it edits.
-type timeRangeModal struct {
+type TimeRangeModal struct {
 	host         ui.Host
 	flex         *tview.Flex
 	tabs         *tview.TextView
@@ -28,9 +28,9 @@ type timeRangeModal struct {
 	onApply      func(timeRange)
 }
 
-// newTimeRangeModal builds the time range overlay's widgets.
-func newTimeRangeModal(host ui.Host) *timeRangeModal {
-	tm := &timeRangeModal{host: host}
+// NewTimeRangeModal builds the time range overlay's widgets.
+func NewTimeRangeModal(host ui.Host) *TimeRangeModal {
+	tm := &TimeRangeModal{host: host}
 	tm.tabs = tview.NewTextView().SetDynamicColors(true)
 	tm.relativeList = tview.NewList().ShowSecondaryText(false)
 	for i, p := range timeRangePresets {
@@ -89,14 +89,14 @@ func newTimeRangeModal(host ui.Host) *timeRangeModal {
 	return tm
 }
 
-// show opens the shared Relative/Absolute time range overlay, prefilled
+// Show opens the shared Relative/Absolute time range overlay, prefilled
 // from the calling view's current timeRange (spec/53), and stores onApply
 // to be called with the user's selection once they apply (a relative
 // preset click, or the Absolute tab's Apply button).
-func (tm *timeRangeModal) show(current timeRange, onApply func(timeRange)) {
+func (tm *TimeRangeModal) Show(current timeRange, onApply func(timeRange)) {
 	tm.onApply = onApply
 
-	// Prefill both tabs unconditionally (mirrors messageFilter.show
+	// Prefill both tabs unconditionally (mirrors MessageFilter.Show
 	// filling all fields from mv.filter every time): current.presetIdx/
 	// from/to are zero-valued for whichever mode isn't active, which
 	// harmlessly clears the other tab's stale state from a previous
@@ -132,14 +132,14 @@ func formatTimeRangeDateTime(t time.Time) string {
 // close, not messageFilter's) — this modal is shared across views, so it
 // has no single "the table" to return to; app.pages resolves to whichever
 // view is currently the front page.
-func (tm *timeRangeModal) close() {
+func (tm *TimeRangeModal) close() {
 	tm.host.HidePage("time-range")
 	tm.visible = false
 	tm.host.FocusMain()
 }
 
 // ApplyPalette recolors the time range overlay for a live theme switch.
-func (tm *timeRangeModal) ApplyPalette(p config.Palette) {
+func (tm *TimeRangeModal) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	tm.flex.SetBackgroundColor(bg)
 	tm.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -154,19 +154,19 @@ func (tm *timeRangeModal) ApplyPalette(p config.Palette) {
 	tm.absoluteForm.SetTitleColor(tcell.GetColor(p.Border))
 }
 
-var _ ui.Themeable = (*timeRangeModal)(nil)
+var _ ui.Themeable = (*TimeRangeModal)(nil)
 
-// Primitive returns timeRangeModal's root widget, for sizing/embedding.
-func (tm *timeRangeModal) Primitive() tview.Primitive { return tm.flex }
+// Primitive returns TimeRangeModal's root widget, for sizing/embedding.
+func (tm *TimeRangeModal) Primitive() tview.Primitive { return tm.flex }
 
-// Visible reports whether timeRangeModal is currently shown.
-func (tm *timeRangeModal) Visible() bool { return tm.visible }
+// Visible reports whether TimeRangeModal is currently shown.
+func (tm *TimeRangeModal) Visible() bool { return tm.visible }
 
 // switchTab activates mode's tab: re-renders the tab indicator, switches
 // pages, and focuses the tab's primitive (the relative list or the
 // absolute form). Called both on open and by the 'R'/'A' shortcuts while
 // the modal is visible.
-func (tm *timeRangeModal) switchTab(mode timeRangeMode) {
+func (tm *TimeRangeModal) switchTab(mode timeRangeMode) {
 	tm.activeTab = mode
 	tm.renderTabs()
 	switch mode {
@@ -189,7 +189,7 @@ func (tm *timeRangeModal) switchTab(mode timeRangeMode) {
 // the theme's accent color — a real "[color]...[-]" tag, not literal
 // brackets (those are swallowed by tview's tag parser, same gotcha
 // documented on queues.go's updateTitle).
-func (tm *timeRangeModal) renderTabs() {
+func (tm *TimeRangeModal) renderTabs() {
 	colors := tm.host.Config().Colors
 	accent := colors.Accent
 	text := colors.Text
@@ -208,7 +208,7 @@ func (tm *timeRangeModal) renderTabs() {
 // modal, and hands it to onApply — wired as each relativeList item's
 // selected-func, so selecting a preset applies immediately (no separate
 // Apply step, unlike the Absolute tab).
-func (tm *timeRangeModal) applyRelative(presetIdx int) {
+func (tm *TimeRangeModal) applyRelative(presetIdx int) {
 	tr := timeRange{mode: timeRangeRelative, presetIdx: presetIdx}
 	tm.close()
 	tm.onApply(tr)
@@ -219,7 +219,7 @@ func (tm *timeRangeModal) applyRelative(presetIdx int) {
 // "YYYY-MM-DD" — see messages.go). On a parse error, the status bar
 // reports it and the modal stays open for correction — same pattern as
 // messageFilter.apply.
-func (tm *timeRangeModal) applyAbsolute() {
+func (tm *TimeRangeModal) applyAbsolute() {
 	from := tm.absoluteForm.GetFormItem(0).(*tview.InputField).GetText()
 	until := tm.absoluteForm.GetFormItem(1).(*tview.InputField).GetText()
 
