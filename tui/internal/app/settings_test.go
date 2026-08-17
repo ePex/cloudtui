@@ -140,3 +140,23 @@ func TestSwitchThemePersistsConfig(t *testing.T) {
 		t.Errorf("config.yaml not written after switchTheme: %v", err)
 	}
 }
+
+func TestDatadogSettingsLabel(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  config.DatadogConfig
+		want string
+	}{
+		{"unconfigured", config.DatadogConfig{}, "(none)"},
+		{"token without site defaults label", config.DatadogConfig{AccessToken: "tok"}, "datadoghq.com"},
+		{"token with site shows site", config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok"}, "datadoghq.eu"},
+		{"site without token still (none)", config.DatadogConfig{Site: "datadoghq.eu"}, "(none)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := datadogSettingsLabel(c.cfg); got != c.want {
+				t.Errorf("datadogSettingsLabel(%+v) = %q, want %q", c.cfg, got, c.want)
+			}
+		})
+	}
+}

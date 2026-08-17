@@ -10,52 +10,58 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
+func newTestDatadogEditor(t *testing.T) (*DatadogEditor, *testHost) {
+	t.Helper()
+	host := newTestHost()
+	return NewDatadogEditor(host), host
+}
+
 // TestDatadogEditorEscapeCloses guards against the same UX gap
 // TestConnEditorEscapeCloses guards against for the connection editor —
 // Esc must close without tabbing all the way to Cancel.
 func TestDatadogEditorEscapeCloses(t *testing.T) {
-	a := New(config.Default())
-	a.datadogEditor.Show()
-	if !a.datadogEditor.visible {
-		t.Fatal("datadogEditor.Show() did not open the editor")
+	de, _ := newTestDatadogEditor(t)
+	de.Show()
+	if !de.visible {
+		t.Fatal("DatadogEditor.Show() did not open the editor")
 	}
 
-	capture := a.datadogEditor.form.GetInputCapture()
+	capture := de.form.GetInputCapture()
 	if capture == nil {
-		t.Fatal("datadogEditor.form has no input capture set")
+		t.Fatal("DatadogEditor.form has no input capture set")
 	}
 	if got := capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Errorf("Esc capture returned %v, want nil (event consumed)", got)
 	}
-	if a.datadogEditor.visible {
+	if de.visible {
 		t.Error("Esc did not close the Datadog editor")
 	}
 }
 
 func TestDatadogEditorOtherKeysPassThrough(t *testing.T) {
-	a := New(config.Default())
-	a.datadogEditor.Show()
+	de, _ := newTestDatadogEditor(t)
+	de.Show()
 
-	capture := a.datadogEditor.form.GetInputCapture()
+	capture := de.form.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 	if got := capture(event); got != event {
 		t.Errorf("capture() altered/swallowed a non-Esc key: got %v, want it passed through unchanged", got)
 	}
-	if !a.datadogEditor.visible {
+	if !de.visible {
 		t.Error("a non-Esc key should not close the editor")
 	}
 }
 
 func TestDatadogEditorPrefillsFromConfig(t *testing.T) {
-	a := New(config.Default())
-	a.cfg.Datadog = config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-123"}
+	de, host := newTestDatadogEditor(t)
+	host.cfg.Datadog = config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-123"}
 
-	a.datadogEditor.Show()
+	de.Show()
 
-	if got := a.datadogEditor.form.GetFormItem(0).(*tview.InputField).GetText(); got != "datadoghq.eu" {
+	if got := de.form.GetFormItem(0).(*tview.InputField).GetText(); got != "datadoghq.eu" {
 		t.Errorf("Site field = %q, want %q", got, "datadoghq.eu")
 	}
-	if got := a.datadogEditor.form.GetFormItem(1).(*tview.InputField).GetText(); got != "tok-123" {
+	if got := de.form.GetFormItem(1).(*tview.InputField).GetText(); got != "tok-123" {
 		t.Errorf("Access Token field = %q, want %q", got, "tok-123")
 	}
 }
@@ -89,25 +95,5 @@ func TestSaveDatadogEditorRoundTrip(t *testing.T) {
 	}
 	if got.Datadog != want {
 		t.Errorf("persisted Datadog = %+v, want %+v", got.Datadog, want)
-	}
-}
-
-func TestDatadogSettingsLabel(t *testing.T) {
-	cases := []struct {
-		name string
-		cfg  config.DatadogConfig
-		want string
-	}{
-		{"unconfigured", config.DatadogConfig{}, "(none)"},
-		{"token without site defaults label", config.DatadogConfig{AccessToken: "tok"}, "datadoghq.com"},
-		{"token with site shows site", config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok"}, "datadoghq.eu"},
-		{"site without token still (none)", config.DatadogConfig{Site: "datadoghq.eu"}, "(none)"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := datadogSettingsLabel(c.cfg); got != c.want {
-				t.Errorf("datadogSettingsLabel(%+v) = %q, want %q", c.cfg, got, c.want)
-			}
-		})
 	}
 }
