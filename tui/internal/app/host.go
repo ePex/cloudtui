@@ -9,6 +9,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -105,7 +106,7 @@ func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool
 		}
 		if wasActive {
 			a.cfg.ActiveConnection = conn.Name
-			a.backend = newBackendForConn(a, conn)
+			a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, conn)
 			a.queuesV.SetBackend(a.backend)
 			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 		}
@@ -132,7 +133,7 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 // settings list, and persists.
 func (a *App) SetActiveAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
-	a.backend = newBackendForConn(a, a.cfg.ActiveConn())
+	a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, a.cfg.ActiveConn())
 	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()

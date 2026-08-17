@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
 )
 
 // TestSaveDatadogConfigPersists confirms App's real SaveDatadogConfig
@@ -78,24 +79,24 @@ func TestSetActiveAWSProfileRebuildsSecretBackedBackend(t *testing.T) {
 	})
 	a.switchConnection("secret-conn")
 
-	before, ok := a.backend.(*secretBackend)
+	before, ok := a.backend.(*secretbackend.Backend)
 	if !ok {
-		t.Fatalf("a.backend = %T, want *secretBackend", a.backend)
+		t.Fatalf("a.backend = %T, want *secretbackend.Backend", a.backend)
 	}
-	if before.profile != "" {
-		t.Errorf("secretBackend.profile before SetActiveAWSProfile = %q, want empty", before.profile)
+	if before.Profile() != "" {
+		t.Errorf("Backend.Profile() before SetActiveAWSProfile = %q, want empty", before.Profile())
 	}
 
 	a.SetActiveAWSProfile("work")
 
-	after, ok := a.backend.(*secretBackend)
+	after, ok := a.backend.(*secretbackend.Backend)
 	if !ok {
-		t.Fatalf("a.backend after SetActiveAWSProfile = %T, want *secretBackend", a.backend)
+		t.Fatalf("a.backend after SetActiveAWSProfile = %T, want *secretbackend.Backend", a.backend)
 	}
-	if after.profile != "work" {
-		t.Errorf("secretBackend.profile after SetActiveAWSProfile = %q, want %q", after.profile, "work")
+	if after.Profile() != "work" {
+		t.Errorf("Backend.Profile() after SetActiveAWSProfile = %q, want %q", after.Profile(), "work")
 	}
 	if after == before {
-		t.Error("a.backend is the same *secretBackend instance after SetActiveAWSProfile, want a rebuilt one")
+		t.Error("a.backend is the same *secretbackend.Backend instance after SetActiveAWSProfile, want a rebuilt one")
 	}
 }
