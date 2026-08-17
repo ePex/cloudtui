@@ -15,7 +15,7 @@ import (
 )
 
 // paramDetailView shows the full detail of a single SSM parameter.
-// It is not a registered ui.View; it is opened via App.openParamDetail
+// It is not a registered ui.View; it is opened via App.OpenParamDetail
 // and returns to "ssm-parameters" on Esc/Backspace. A SecureString
 // parameter's value starts masked — 'r' explicitly reveals it via a real,
 // separate GetParameter call (see awsssm.Reveal), matching the connection
@@ -77,7 +77,7 @@ func newParamDetailView(a *App) *paramDetailView {
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.SwitchToPage("ssm-parameters")
 			a.tv.SetFocus(a.ssmParamsV.table)
-			a.updateContextPanel(a.ssmParamsV)
+			a.UpdateContextPanel(a.ssmParamsV)
 			return nil
 		}
 		return event
@@ -129,8 +129,8 @@ func (dv *paramDetailView) renderBody() {
 // which changes once a SecureString has been revealed (the "r: reveal"
 // entry drops out). paramDetailView isn't a registered ui.View (like
 // messageDetailView, it's opened directly rather than switched to by
-// name), so this can't go through the generic updateContextPanel(ui.View)
-// path — same manual pattern openMessageDetail uses.
+// name), so this can't go through the generic UpdateContextPanel(ui.View)
+// path — same manual pattern OpenMessageDetail uses.
 func (dv *paramDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
@@ -155,7 +155,7 @@ func (dv *paramDetailView) copyValue() {
 }
 
 func (dv *paramDetailView) copyFetchedValue() {
-	dv.app.copyToClipboard(dv.param.Value)
+	dv.app.CopyToClipboard(dv.param.Value)
 	dv.app.statusBar.SetText(fmt.Sprintf("Copied %s to clipboard", dv.param.Name))
 }
 

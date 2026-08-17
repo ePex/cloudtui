@@ -18,7 +18,7 @@ import (
 )
 
 // messageDetailView shows the full details of a single message.
-// It is not a registered ui.View; it is opened via App.openMessageDetail
+// It is not a registered ui.View; it is opened via App.OpenMessageDetail
 // and returns to "messages" on Esc/Backspace.
 type messageDetailView struct {
 	textView  *tview.TextView

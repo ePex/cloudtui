@@ -42,7 +42,7 @@ func TestLogDetailViewShortcutsAlwaysIncludeCopy(t *testing.T) {
 func TestOpenLogEventDetailSwitchesPage(t *testing.T) {
 	a := New(config.Default())
 
-	a.openLogEventDetail(awslogs.LogEvent{Message: "hello"})
+	a.OpenLogEventDetail(awslogs.LogEvent{Message: "hello"})
 
 	if name, _ := a.pages.GetFrontPage(); name != "log-event-detail" {
 		t.Errorf("front page = %q, want %q", name, "log-event-detail")
@@ -56,7 +56,7 @@ func TestLogDetailViewCopyWritesMessageToClipboard(t *testing.T) {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	a.screen = screen
-	a.openLogEventDetail(awslogs.LogEvent{Message: "hello"})
+	a.OpenLogEventDetail(awslogs.LogEvent{Message: "hello"})
 
 	capture := a.logDetailV.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
@@ -69,7 +69,7 @@ func TestLogDetailViewCopyWritesMessageToClipboard(t *testing.T) {
 func TestLogDetailViewEscReturnsToLogSearch(t *testing.T) {
 	a := New(config.Default())
 	a.logSearchV.logGroupName = "/aws/lambda/foo"
-	a.openLogEventDetail(awslogs.LogEvent{Message: "hello"})
+	a.OpenLogEventDetail(awslogs.LogEvent{Message: "hello"})
 
 	capture := a.logDetailV.textView.GetInputCapture()
 	if capture == nil {

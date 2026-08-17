@@ -64,7 +64,7 @@ func TestOpenCodePipelineDetailSwitchesPage(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.ActiveAWSProfile = "" // load() bails out synchronously, no goroutine spawned
 
-	a.openCodePipelineDetail("my-pipeline")
+	a.OpenCodePipelineDetail("my-pipeline")
 
 	if name, _ := a.pages.GetFrontPage(); name != "codepipeline-detail" {
 		t.Errorf("front page = %q, want %q", name, "codepipeline-detail")
@@ -82,7 +82,7 @@ func TestCodePipelineDetailViewToggleWatchUpdatesTitle(t *testing.T) {
 	a.codePipelineDetailV.pipelineName = "my-pipeline"
 
 	a.codePipelineDetailV.toggleWatch()
-	if !a.isWatchingPipeline("my-pipeline") {
+	if !a.IsWatchingPipeline("my-pipeline") {
 		t.Fatal("toggleWatch() did not start watching")
 	}
 	if got := a.codePipelineDetailV.table.GetTitle(); !strings.Contains(got, "▶ watching") {
@@ -90,7 +90,7 @@ func TestCodePipelineDetailViewToggleWatchUpdatesTitle(t *testing.T) {
 	}
 
 	a.codePipelineDetailV.toggleWatch()
-	if a.isWatchingPipeline("my-pipeline") {
+	if a.IsWatchingPipeline("my-pipeline") {
 		t.Error("toggleWatch() did not stop watching on second call")
 	}
 	if got := a.codePipelineDetailV.table.GetTitle(); strings.Contains(got, "▶ watching") {
@@ -128,7 +128,7 @@ func TestCodePipelineDetailViewShowStatusRendersMessage(t *testing.T) {
 func TestCodePipelineDetailViewEscReturnsToList(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.ActiveAWSProfile = ""
-	a.openCodePipelineDetail("my-pipeline")
+	a.OpenCodePipelineDetail("my-pipeline")
 
 	capture := a.codePipelineDetailV.table.GetInputCapture()
 	if capture == nil {

@@ -192,7 +192,7 @@ func newQueuesView(a *App, b queue.Backend) *queuesView {
 	return qv
 }
 
-// Activate reloads the queue list. Called by switchTo each time the queues
+// Activate reloads the queue list. Called by SwitchTo each time the queues
 // view becomes active.
 func (qv *queuesView) Activate() {
 	qv.load()

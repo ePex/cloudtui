@@ -72,7 +72,7 @@ func TestParamDetailViewShortcutsExcludeRevealForStringType(t *testing.T) {
 func TestOpenParamDetailSwitchesPageAndSetsTitle(t *testing.T) {
 	a := New(config.Default())
 
-	a.openParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
+	a.OpenParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
 
 	if name, _ := a.pages.GetFrontPage(); name != "ssm-param-detail" {
 		t.Errorf("front page = %q, want %q", name, "ssm-param-detail")
@@ -108,7 +108,7 @@ func TestParamDetailViewCopyWritesValueToClipboard(t *testing.T) {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	a.screen = screen
-	a.openParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
+	a.OpenParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
 
 	capture := a.paramDetailV.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
@@ -138,7 +138,7 @@ func TestParamDetailViewHandleFetchResult(t *testing.T) {
 			t.Fatalf("screen.Init: %v", err)
 		}
 		a.screen = screen
-		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+		a.OpenParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
 
 		a.paramDetailV.handleFetchResult("hello", nil, a.paramDetailV.copyFetchedValue)
 
@@ -159,7 +159,7 @@ func TestParamDetailViewHandleFetchResult(t *testing.T) {
 
 	t.Run("success then reveal uses the cached value, no re-fetch", func(t *testing.T) {
 		a := New(config.Default())
-		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+		a.OpenParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
 		a.paramDetailV.handleFetchResult("hello", nil, a.paramDetailV.copyFetchedValue)
 
 		calls := 0
@@ -182,7 +182,7 @@ func TestParamDetailViewHandleFetchResult(t *testing.T) {
 
 	t.Run("error logs and shows status, does not call onSuccess", func(t *testing.T) {
 		a := New(config.Default())
-		a.openParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
+		a.OpenParamDetail(awsssm.Parameter{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""})
 
 		called := false
 		a.paramDetailV.handleFetchResult("", context.DeadlineExceeded, func() { called = true })
@@ -201,7 +201,7 @@ func TestParamDetailViewHandleFetchResult(t *testing.T) {
 
 func TestParamDetailViewEscReturnsToSSMParameters(t *testing.T) {
 	a := New(config.Default())
-	a.openParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
+	a.OpenParamDetail(awsssm.Parameter{Name: "/app/name", Type: awsssm.TypeString, Value: "hello"})
 
 	capture := a.paramDetailV.textView.GetInputCapture()
 	if capture == nil {

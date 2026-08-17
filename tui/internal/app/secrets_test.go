@@ -200,7 +200,7 @@ func TestSecretsViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 	screen.SetSize(60, 15)
 
 	// First draw while the table is still empty (header only), mirroring
-	// the real sequence: switchTo("secrets-manager") draws before the
+	// the real sequence: SwitchTo("secrets-manager") draws before the
 	// async load returns.
 	table.Draw(screen)
 

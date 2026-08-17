@@ -200,7 +200,7 @@ func TestLogsViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 	screen.SetSize(60, 15)
 
 	// First draw while the table is still empty (header only), mirroring
-	// the real sequence: switchTo("cloudwatch-logs") draws before the
+	// the real sequence: SwitchTo("cloudwatch-logs") draws before the
 	// async load returns.
 	table.Draw(screen)
 

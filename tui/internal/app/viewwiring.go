@@ -18,12 +18,12 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
-// openMessages switches to the messages page for the given queue, sets the
+// OpenMessages switches to the messages page for the given queue, sets the
 // title, and starts loading messages asynchronously. Quick search and the
 // server-side filter persist when returning to the same queue, but reset
 // when switching to a different one — carrying a leftover filter across
 // queues would silently narrow what the user sees without them asking.
-func (a *App) openMessages(queueName string) {
+func (a *App) OpenMessages(queueName string) {
 	if a.messagesV.queueName != queueName {
 		a.messagesV.filter = queue.MessageFilter{}
 		a.messagesV.quickSearch = ""
@@ -52,13 +52,13 @@ func (a *App) wireQueuesOpensMessages() {
 		if cell == nil || cell.Text == "" {
 			return
 		}
-		a.openMessages(cell.Text)
+		a.OpenMessages(cell.Text)
 	})
 }
 
-// openMessageDetail renders the full detail for msg and switches to the
+// OpenMessageDetail renders the full detail for msg and switches to the
 // message-detail page.
-func (a *App) openMessageDetail(queueName string, msg queue.Message) {
+func (a *App) OpenMessageDetail(queueName string, msg queue.Message) {
 	a.messageDetailV.render(queueName, msg)
 	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
 	a.pages.SwitchToPage("message-detail")
@@ -79,14 +79,14 @@ func (a *App) wireMessagesOpensDetail() {
 		if msgIdx < 0 || msgIdx >= len(a.messagesV.msgs) {
 			return
 		}
-		a.openMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
+		a.OpenMessageDetail(a.messagesV.queueName, a.messagesV.msgs[msgIdx])
 	})
 }
 
-// openParamDetail renders the full detail for param and switches to the
+// OpenParamDetail renders the full detail for param and switches to the
 // ssm-param-detail page. paramDetailView.render sets the context panel
 // itself (its shortcuts change once a SecureString is revealed).
-func (a *App) openParamDetail(param awsssm.Parameter) {
+func (a *App) OpenParamDetail(param awsssm.Parameter) {
 	a.paramDetailV.render(param)
 	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
 	a.pages.SwitchToPage("ssm-param-detail")
@@ -102,11 +102,11 @@ func (a *App) wireSSMParamsOpensDetail() {
 		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
 			return
 		}
-		a.openParamDetail(a.ssmParamsV.filtered[idx])
+		a.OpenParamDetail(a.ssmParamsV.filtered[idx])
 	})
 }
 
-func (a *App) openSecretDetail(secret awssecrets.Secret) {
+func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
 	a.secretDetailV.render(secret)
 	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
 	a.pages.SwitchToPage("secret-detail")
@@ -122,15 +122,15 @@ func (a *App) wireSecretsOpensDetail() {
 		if idx < 0 || idx >= len(a.secretsV.filtered) {
 			return
 		}
-		a.openSecretDetail(a.secretsV.filtered[idx])
+		a.OpenSecretDetail(a.secretsV.filtered[idx])
 	})
 }
 
-// openLogSearch opens the search view for logGroupName and runs the
+// OpenLogSearch opens the search view for logGroupName and runs the
 // first search immediately (see logSearchView.open). logSearchView isn't
 // a registered ui.View, so its context panel is populated manually here
-// — same pattern as openMessages.
-func (a *App) openLogSearch(logGroupName string) {
+// — same pattern as OpenMessages.
+func (a *App) OpenLogSearch(logGroupName string) {
 	pattern := a.pendingCloudWatchPattern
 	a.pendingCloudWatchPattern = ""
 	a.logSearchV.open(logGroupName, pattern)
@@ -152,13 +152,13 @@ func (a *App) wireLogsOpensSearch() {
 		if idx < 0 || idx >= len(a.logsV.filtered) {
 			return
 		}
-		a.openLogSearch(a.logsV.filtered[idx].Name)
+		a.OpenLogSearch(a.logsV.filtered[idx].Name)
 	})
 }
 
-// openLogEventDetail renders the full detail for event and switches to
+// OpenLogEventDetail renders the full detail for event and switches to
 // the log-event-detail page.
-func (a *App) openLogEventDetail(event awslogs.LogEvent) {
+func (a *App) OpenLogEventDetail(event awslogs.LogEvent) {
 	a.logDetailV.render(event)
 	a.pages.SwitchToPage("log-event-detail")
 	a.tv.SetFocus(a.pages)
@@ -173,13 +173,13 @@ func (a *App) wireLogSearchOpensEventDetail() {
 		if idx < 0 || idx >= len(a.logSearchV.results) {
 			return
 		}
-		a.openLogEventDetail(a.logSearchV.results[idx])
+		a.OpenLogEventDetail(a.logSearchV.results[idx])
 	})
 }
 
-// openDatadogLogDetail renders the full detail for event and switches
+// OpenDatadogLogDetail renders the full detail for event and switches
 // to the datadog-log-detail page.
-func (a *App) openDatadogLogDetail(event datadoglogs.LogEvent) {
+func (a *App) OpenDatadogLogDetail(event datadoglogs.LogEvent) {
 	a.datadogLogDetailV.render(event)
 	a.pages.SwitchToPage("datadog-log-detail")
 	a.tv.SetFocus(a.pages)
@@ -194,13 +194,13 @@ func (a *App) wireDatadogLogsOpensDetail() {
 		if idx < 0 || idx >= len(a.datadogLogsV.results) {
 			return
 		}
-		a.openDatadogLogDetail(a.datadogLogsV.results[idx])
+		a.OpenDatadogLogDetail(a.datadogLogsV.results[idx])
 	})
 }
 
-// openCodePipelineDetail opens pipelineName's stage-status detail view
+// OpenCodePipelineDetail opens pipelineName's stage-status detail view
 // and starts loading its current state.
-func (a *App) openCodePipelineDetail(pipelineName string) {
+func (a *App) OpenCodePipelineDetail(pipelineName string) {
 	a.codePipelineDetailV.open(pipelineName)
 	a.pages.SwitchToPage("codepipeline-detail")
 	a.tv.SetFocus(a.pages)
@@ -220,6 +220,6 @@ func (a *App) wireCodePipelineListOpensDetail() {
 		if idx < 0 || idx >= len(a.codePipelineListV.filtered) {
 			return
 		}
-		a.openCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
+		a.OpenCodePipelineDetail(a.codePipelineListV.filtered[idx].Name)
 	})
 }

@@ -61,7 +61,7 @@ func newLogViewWithPath(a *App, path string) *logView {
 	return lv
 }
 
-// Activate reloads the log file. Called by switchTo each time the log view
+// Activate reloads the log file. Called by SwitchTo each time the log view
 // becomes active.
 func (lv *logView) Activate() {
 	lv.load()
