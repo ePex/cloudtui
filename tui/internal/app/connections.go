@@ -11,21 +11,21 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// connManager is the AMQ connection manager overlay: lists all configured
+// ConnManager is the AMQ connection manager overlay: lists all configured
 // connections and lets the user activate/add/edit/duplicate/delete them.
-type connManager struct {
+type ConnManager struct {
 	host    ui.Host
-	confirm *confirmDialog
-	editor  *connEditor // set after construction — see New()
+	confirm *ConfirmDialog
+	editor  *ConnEditor // set after construction — see New()
 	flex    *tview.Flex
 	list    *tview.List
 	hints   *tview.TextView
 	visible bool
 }
 
-// newConnManager builds the connection manager overlay's widgets.
-func newConnManager(host ui.Host, confirm *confirmDialog) *connManager {
-	cm := &connManager{host: host, confirm: confirm}
+// NewConnManager builds the connection manager overlay's widgets.
+func NewConnManager(host ui.Host, confirm *ConfirmDialog) *ConnManager {
+	cm := &ConnManager{host: host, confirm: confirm}
 	cm.list = tview.NewList().ShowSecondaryText(false)
 	cm.hints = tview.NewTextView().SetDynamicColors(true)
 	cm.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -39,14 +39,14 @@ func newConnManager(host ui.Host, confirm *confirmDialog) *connManager {
 			cm.close()
 			return nil
 		case event.Rune() == 'n':
-			cm.editor.show(config.Connection{}, true, "")
+			cm.editor.Show(config.Connection{}, true, "")
 			return nil
 		case event.Rune() == 'e':
 			idx := cm.list.GetCurrentItem()
 			conns := cm.host.Config().Connections
 			if idx >= 0 && idx < len(conns) {
 				c := conns[idx]
-				cm.editor.show(c, false, c.Name)
+				cm.editor.Show(c, false, c.Name)
 			}
 			return nil
 		case event.Rune() == 'd':
@@ -55,7 +55,7 @@ func newConnManager(host ui.Host, confirm *confirmDialog) *connManager {
 			if idx >= 0 && idx < len(conns) {
 				dup := conns[idx]
 				dup.Name = dup.Name + "-copy"
-				cm.editor.show(dup, true, "")
+				cm.editor.Show(dup, true, "")
 			}
 			return nil
 		case event.Key() == tcell.KeyDelete || event.Rune() == 'x':
@@ -80,8 +80,8 @@ func newConnManager(host ui.Host, confirm *confirmDialog) *connManager {
 	return cm
 }
 
-// show opens the connection manager overlay.
-func (cm *connManager) show() {
+// Show opens the connection manager overlay.
+func (cm *ConnManager) Show() {
 	cm.populate()
 	ac := cm.host.Config().Colors.Accent
 	cm.hints.SetText(fmt.Sprintf(
@@ -94,14 +94,14 @@ func (cm *connManager) show() {
 }
 
 // close hides the connection manager overlay.
-func (cm *connManager) close() {
+func (cm *ConnManager) close() {
 	cm.host.HidePage("conn-manager")
 	cm.visible = false
 	cm.host.FocusMain()
 }
 
 // ApplyPalette recolors the connection manager overlay for a live theme switch.
-func (cm *connManager) ApplyPalette(p config.Palette) {
+func (cm *ConnManager) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	cm.flex.SetBackgroundColor(bg)
 	cm.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -112,16 +112,16 @@ func (cm *connManager) ApplyPalette(p config.Palette) {
 	cm.hints.SetTextColor(tcell.GetColor(p.Text))
 }
 
-var _ ui.Themeable = (*connManager)(nil)
+var _ ui.Themeable = (*ConnManager)(nil)
 
-// Primitive returns connManager's root widget, for sizing/embedding.
-func (cm *connManager) Primitive() tview.Primitive { return cm.flex }
+// Primitive returns ConnManager's root widget, for sizing/embedding.
+func (cm *ConnManager) Primitive() tview.Primitive { return cm.flex }
 
-// Visible reports whether connManager is currently shown.
-func (cm *connManager) Visible() bool { return cm.visible }
+// Visible reports whether ConnManager is currently shown.
+func (cm *ConnManager) Visible() bool { return cm.visible }
 
 // populate rebuilds the manager list from the current config.
-func (cm *connManager) populate() {
+func (cm *ConnManager) populate() {
 	cm.list.Clear()
 	cfg := cm.host.Config()
 	for _, conn := range cfg.Connections {
@@ -140,7 +140,7 @@ func (cm *connManager) populate() {
 
 // delete confirms and deletes the currently selected connection. Refuses
 // if it is the only connection.
-func (cm *connManager) delete() {
+func (cm *ConnManager) delete() {
 	conns := cm.host.Config().Connections
 	if len(conns) <= 1 {
 		cm.host.SetStatus("[yellow]Cannot delete the only connection[-]")
@@ -151,7 +151,7 @@ func (cm *connManager) delete() {
 		return
 	}
 	toDelete := conns[idx]
-	cm.confirm.show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
+	cm.confirm.Show(fmt.Sprintf("Delete connection %q?", toDelete.Name), func() {
 		if cm.host.DeleteConnection(toDelete.Name) {
 			cm.close()
 		} else {
@@ -161,11 +161,11 @@ func (cm *connManager) delete() {
 	})
 }
 
-// connEditor is the AMQ connection editor overlay, shared by "new",
+// ConnEditor is the AMQ connection editor overlay, shared by "new",
 // "edit", and "duplicate" from the connection manager.
-type connEditor struct {
+type ConnEditor struct {
 	host     ui.Host
-	manager  *connManager
+	manager  *ConnManager
 	form     *tview.Form
 	visible  bool
 	isNew    bool
@@ -177,9 +177,9 @@ type connEditor struct {
 	brokerName string
 }
 
-// newConnEditor builds the connection editor overlay's form.
-func newConnEditor(host ui.Host, manager *connManager) *connEditor {
-	ce := &connEditor{host: host, manager: manager}
+// NewConnEditor builds the connection editor overlay's form.
+func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
+	ce := &ConnEditor{host: host, manager: manager}
 	ce.form = tview.NewForm()
 	ce.form.SetBorder(true).SetTitle(" AMQ Connection ")
 	ce.form.
@@ -230,10 +230,10 @@ func newConnEditor(host ui.Host, manager *connManager) *connEditor {
 	return ce
 }
 
-// show opens the connection editor overlay. conn is pre-filled into the
+// Show opens the connection editor overlay. conn is pre-filled into the
 // form; isNew=true means adding, false=editing. origName is the current
 // name when editing (used for uniqueness validation).
-func (ce *connEditor) show(conn config.Connection, isNew bool, origName string) {
+func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) {
 	ce.isNew = isNew
 	ce.origName = origName
 
@@ -306,7 +306,7 @@ func (ce *connEditor) show(conn config.Connection, isNew bool, origName string) 
 // last form item is always the password-ish field regardless of which
 // one is showing or whether Broker Name is present (see rebuildTail) —
 // hence computing the index instead of assuming a fixed one.
-func (ce *connEditor) setPasswordField(sourceIdx int) {
+func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 	f := ce.form
 	f.RemoveFormItem(f.GetFormItemCount() - 1)
 	if sourceIdx == 1 {
@@ -337,7 +337,7 @@ func (ce *connEditor) setPasswordField(sourceIdx int) {
 // reset it to "". ce.brokerName shadows it across exactly that gap —
 // updated here whenever the field exists, left untouched (and used as the
 // restore value) whenever it doesn't.
-func (ce *connEditor) rebuildTail(backend string) {
+func (ce *ConnEditor) rebuildTail(backend string) {
 	f := ce.form
 
 	var url, username, passwordOrSecret string
@@ -388,7 +388,7 @@ func (ce *connEditor) rebuildTail(backend string) {
 }
 
 // close hides the editor and returns focus to the manager or pages.
-func (ce *connEditor) close() {
+func (ce *ConnEditor) close() {
 	ce.host.HidePage("conn-editor")
 	ce.visible = false
 	if ce.manager.visible {
@@ -399,7 +399,7 @@ func (ce *connEditor) close() {
 }
 
 // ApplyPalette recolors the connection editor overlay for a live theme switch.
-func (ce *connEditor) ApplyPalette(p config.Palette) {
+func (ce *ConnEditor) ApplyPalette(p config.Palette) {
 	ce.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	ce.form.SetBorderColor(tcell.GetColor(p.Border))
 	ce.form.SetTitleColor(tcell.GetColor(p.Border))
@@ -414,16 +414,16 @@ func (ce *connEditor) ApplyPalette(p config.Palette) {
 	}
 }
 
-var _ ui.Themeable = (*connEditor)(nil)
+var _ ui.Themeable = (*ConnEditor)(nil)
 
-// Primitive returns connEditor's root widget, for sizing/embedding.
-func (ce *connEditor) Primitive() tview.Primitive { return ce.form }
+// Primitive returns ConnEditor's root widget, for sizing/embedding.
+func (ce *ConnEditor) Primitive() tview.Primitive { return ce.form }
 
-// Visible reports whether connEditor is currently shown.
-func (ce *connEditor) Visible() bool { return ce.visible }
+// Visible reports whether ConnEditor is currently shown.
+func (ce *ConnEditor) Visible() bool { return ce.visible }
 
 // save validates and persists the editor form, then closes it.
-func (ce *connEditor) save() {
+func (ce *ConnEditor) save() {
 	name := strings.TrimSpace(ce.form.GetFormItem(0).(*tview.InputField).GetText())
 	backendIdx, _ := ce.form.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	backends := []string{"jolokia", "proxy"}

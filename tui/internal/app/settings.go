@@ -32,10 +32,10 @@ func newSettingsView(a *App) ui.View {
 
 	// Items are populated by refreshSettingsList; add placeholders here so
 	// indices are stable.
-	l.AddItem("", "", 0, func() { a.themePicker.show() })
-	l.AddItem("", "", 0, func() { a.connManager.show() })
-	l.AddItem("", "", 0, func() { a.awsProfiles.show() })
-	l.AddItem("", "", 0, func() { a.datadogEditor.show() })
+	l.AddItem("", "", 0, func() { a.themePicker.Show() })
+	l.AddItem("", "", 0, func() { a.connManager.Show() })
+	l.AddItem("", "", 0, func() { a.awsProfiles.Show() })
+	l.AddItem("", "", 0, func() { a.datadogEditor.Show() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -70,10 +70,10 @@ func (a *App) refreshSettingsList() {
 		awsProfile = "(none)"
 	}
 	a.settingsList.Clear()
-	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.themePicker.show() })
-	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.connManager.show() })
-	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.awsProfiles.show() })
-	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.datadogEditor.show() })
+	a.settingsList.AddItem(fmt.Sprintf("Theme: %s", a.cfg.Theme), "", 0, func() { a.themePicker.Show() })
+	a.settingsList.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { a.connManager.Show() })
+	a.settingsList.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { a.awsProfiles.Show() })
+	a.settingsList.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(a.cfg.Datadog)), "", 0, func() { a.datadogEditor.Show() })
 	if cur >= 0 && cur < a.settingsList.GetItemCount() {
 		a.settingsList.SetCurrentItem(cur)
 	}

@@ -8,10 +8,10 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// confirmDialog is the Yes/No confirmation overlay used before destructive
+// ConfirmDialog is the Yes/No confirmation overlay used before destructive
 // actions (delete, purge, ...) across every view. "No" is item 0 (default
 // focus) to prevent accidental actions.
-type confirmDialog struct {
+type ConfirmDialog struct {
 	host    ui.Host
 	flex    *tview.Flex
 	text    *tview.TextView
@@ -19,10 +19,10 @@ type confirmDialog struct {
 	visible bool
 }
 
-// newConfirmDialog builds the confirm overlay's widgets. Shared across
-// every caller of show — its content is rebuilt each time.
-func newConfirmDialog(host ui.Host) *confirmDialog {
-	c := &confirmDialog{host: host}
+// NewConfirmDialog builds the confirm overlay's widgets. Shared across
+// every caller of Show — its content is rebuilt each time.
+func NewConfirmDialog(host ui.Host) *ConfirmDialog {
+	c := &ConfirmDialog{host: host}
 	c.text = tview.NewTextView().SetWrap(true)
 	c.list = tview.NewList().ShowSecondaryText(false)
 	c.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -32,9 +32,9 @@ func newConfirmDialog(host ui.Host) *confirmDialog {
 	return c
 }
 
-// show presents a confirmation dialog with the given question. onConfirm
+// Show presents a confirmation dialog with the given question. onConfirm
 // is called when the user selects "Yes".
-func (c *confirmDialog) show(question string, onConfirm func()) {
+func (c *ConfirmDialog) Show(question string, onConfirm func()) {
 	c.text.SetText(question)
 	c.list.Clear()
 
@@ -60,14 +60,14 @@ func (c *confirmDialog) show(question string, onConfirm func()) {
 }
 
 // close hides the confirmation dialog and restores focus.
-func (c *confirmDialog) close() {
+func (c *ConfirmDialog) close() {
 	c.host.HidePage("confirm")
 	c.host.FocusMain()
 	c.visible = false
 }
 
 // ApplyPalette recolors the confirm dialog for a live theme switch.
-func (c *confirmDialog) ApplyPalette(p config.Palette) {
+func (c *ConfirmDialog) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	c.flex.SetBackgroundColor(bg)
 	c.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -78,10 +78,10 @@ func (c *confirmDialog) ApplyPalette(p config.Palette) {
 	c.list.SetBackgroundColor(bg)
 }
 
-var _ ui.Themeable = (*confirmDialog)(nil)
+var _ ui.Themeable = (*ConfirmDialog)(nil)
 
-// Primitive returns confirmDialog's root widget, for sizing/embedding.
-func (c *confirmDialog) Primitive() tview.Primitive { return c.flex }
+// Primitive returns ConfirmDialog's root widget, for sizing/embedding.
+func (c *ConfirmDialog) Primitive() tview.Primitive { return c.flex }
 
-// Visible reports whether confirmDialog is currently shown.
-func (c *confirmDialog) Visible() bool { return c.visible }
+// Visible reports whether ConfirmDialog is currently shown.
+func (c *ConfirmDialog) Visible() bool { return c.visible }

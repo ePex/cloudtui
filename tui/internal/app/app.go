@@ -59,20 +59,20 @@ type App struct {
 	queuesV        *queuesView
 	messagesV      *messagesView
 	messageDetailV *messageDetailView
-	confirm        *confirmDialog
-	movePicker     *movePicker
-	sendMessage    *sendMessageOverlay
-	connManager    *connManager
-	connEditor     *connEditor
-	messageFilter  *messageFilter
-	timeRangeModal *timeRangeModal
-	datadogEditor  *datadogEditor
+	confirm        *ConfirmDialog
+	movePicker     *MovePicker
+	sendMessage    *SendMessageOverlay
+	connManager    *ConnManager
+	connEditor     *ConnEditor
+	messageFilter  *MessageFilter
+	timeRangeModal *TimeRangeModal
+	datadogEditor  *DatadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
 	// dropped by switchTo if abandoned — see spec/41.
 	pendingCloudWatchPattern string
-	themePicker              *themePicker
-	awsProfiles              *awsProfilesPicker
+	themePicker              *ThemePicker
+	awsProfiles              *AWSProfilesPicker
 	backend                  queue.Backend
 	homeTable                *tview.Table
 	homeSections             []views.SectionInfo
@@ -199,7 +199,7 @@ func New(cfg config.Config) *App {
 	})
 
 	// All shell primitives are constructed; now create the settings view.
-	// Its list callbacks call a.themePicker.show / a.connManager.show, which
+	// Its list callbacks call a.themePicker.Show / a.connManager.Show, which
 	// are safe at this point because all live primitives are set.
 	settingsView := newSettingsView(a)
 	a.logV = newLogView(a)
@@ -267,30 +267,30 @@ func New(cfg config.Config) *App {
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
-	a.confirm = newConfirmDialog(a)
+	a.confirm = NewConfirmDialog(a)
 	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
 
-	a.movePicker = newMovePicker(a)
+	a.movePicker = NewMovePicker(a)
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
 
-	a.sendMessage = newSendMessageOverlay(a)
+	a.sendMessage = NewSendMessageOverlay(a)
 	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
 
-	a.connManager = newConnManager(a, a.confirm)
+	a.connManager = NewConnManager(a, a.confirm)
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
-	a.connEditor = newConnEditor(a, a.connManager)
+	a.connEditor = NewConnEditor(a, a.connManager)
 	a.connManager.editor = a.connEditor
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
 
-	a.messageFilter = newMessageFilter(a)
+	a.messageFilter = NewMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
-	a.timeRangeModal = newTimeRangeModal(a)
+	a.timeRangeModal = NewTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
@@ -299,15 +299,15 @@ func New(cfg config.Config) *App {
 	// spare, matching the "give it one spare row" convention elsewhere.
 	timeRangeOverlay := ui.Centered(a.timeRangeModal.Primitive(), 72, 14)
 
-	a.datadogEditor = newDatadogEditor(a)
+	a.datadogEditor = NewDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
 	datadogEditorOverlay := ui.Centered(a.datadogEditor.Primitive(), 56, 10)
 
-	a.themePicker = newThemePicker(a)
+	a.themePicker = NewThemePicker(a)
 	themePickerOverlay := ui.Centered(a.themePicker.Primitive(), 40, 14)
 
-	a.awsProfiles = newAWSProfilesPicker(a)
+	a.awsProfiles = NewAWSProfilesPicker(a)
 	awsProfilesOverlay := ui.Centered(a.awsProfiles.Primitive(), 64, 20)
 
 	helpOverlay := ui.Centered(ui.NewHelpModal(cfg), ui.HelpModalWidth, ui.HelpModalHeight)
@@ -471,9 +471,9 @@ func (a *App) onPromptDone(key tcell.Key) {
 	case cmd == "s" || cmd == "settings":
 		a.switchTo("settings")
 	case cmd == "aq" || cmd == "connections":
-		a.connManager.show()
+		a.connManager.Show()
 	case cmd == "ap" || cmd == "awsprofiles":
-		a.awsProfiles.show()
+		a.awsProfiles.Show()
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:

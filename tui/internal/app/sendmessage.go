@@ -12,9 +12,9 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// sendMessageOverlay is the "Send Message" overlay: a text area plus
+// SendMessageOverlay is the "Send Message" overlay: a text area plus
 // Submit/Cancel actions for composing a new message on a queue.
-type sendMessageOverlay struct {
+type SendMessageOverlay struct {
 	host    ui.Host
 	flex    *tview.Flex
 	area    *tview.TextArea
@@ -23,9 +23,9 @@ type sendMessageOverlay struct {
 	visible bool
 }
 
-// newSendMessageOverlay builds the send-message overlay's widgets.
-func newSendMessageOverlay(host ui.Host) *sendMessageOverlay {
-	sm := &sendMessageOverlay{host: host}
+// NewSendMessageOverlay builds the send-message overlay's widgets.
+func NewSendMessageOverlay(host ui.Host) *SendMessageOverlay {
+	sm := &SendMessageOverlay{host: host}
 	sm.area = tview.NewTextArea()
 	sm.list = tview.NewList().ShowSecondaryText(false)
 	sm.list.AddItem("Submit", "", 0, nil)
@@ -61,9 +61,9 @@ func newSendMessageOverlay(host ui.Host) *sendMessageOverlay {
 	return sm
 }
 
-// show opens the send-message overlay for the given queue. onClose is
+// Show opens the send-message overlay for the given queue. onClose is
 // called on the UI goroutine when the overlay is dismissed.
-func (sm *sendMessageOverlay) show(queueName string, onClose func()) {
+func (sm *SendMessageOverlay) Show(queueName string, onClose func()) {
 	host := sm.host
 	sm.onClose = onClose
 	sm.area.SetText("", true)
@@ -83,7 +83,7 @@ func (sm *sendMessageOverlay) show(queueName string, onClose func()) {
 
 // doSend reads the body from area, closes the overlay, and sends the
 // message asynchronously, reporting the result in the status bar.
-func (sm *sendMessageOverlay) doSend(queueName string) {
+func (sm *SendMessageOverlay) doSend(queueName string) {
 	host := sm.host
 	body := sm.area.GetText()
 	sm.close()
@@ -103,7 +103,7 @@ func (sm *sendMessageOverlay) doSend(queueName string) {
 
 // close hides the send-message overlay and calls onClose to let the
 // caller restore focus and the context panel.
-func (sm *sendMessageOverlay) close() {
+func (sm *SendMessageOverlay) close() {
 	sm.host.HidePage("send-message")
 	sm.visible = false
 	if sm.onClose != nil {
@@ -112,7 +112,7 @@ func (sm *sendMessageOverlay) close() {
 }
 
 // ApplyPalette recolors the send-message overlay for a live theme switch.
-func (sm *sendMessageOverlay) ApplyPalette(p config.Palette) {
+func (sm *SendMessageOverlay) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	sm.flex.SetBackgroundColor(bg)
 	sm.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -124,10 +124,10 @@ func (sm *sendMessageOverlay) ApplyPalette(p config.Palette) {
 	sm.list.SetBackgroundColor(bg)
 }
 
-var _ ui.Themeable = (*sendMessageOverlay)(nil)
+var _ ui.Themeable = (*SendMessageOverlay)(nil)
 
-// Primitive returns sendMessageOverlay's root widget, for sizing/embedding.
-func (sm *sendMessageOverlay) Primitive() tview.Primitive { return sm.flex }
+// Primitive returns SendMessageOverlay's root widget, for sizing/embedding.
+func (sm *SendMessageOverlay) Primitive() tview.Primitive { return sm.flex }
 
-// Visible reports whether sendMessageOverlay is currently shown.
-func (sm *sendMessageOverlay) Visible() bool { return sm.visible }
+// Visible reports whether SendMessageOverlay is currently shown.
+func (sm *SendMessageOverlay) Visible() bool { return sm.visible }

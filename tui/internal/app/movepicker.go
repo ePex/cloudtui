@@ -14,9 +14,9 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// movePicker is the "Move to Queue" overlay: a searchable list of queues
+// MovePicker is the "Move to Queue" overlay: a searchable list of queues
 // used to pick a target for a message move.
-type movePicker struct {
+type MovePicker struct {
 	host      ui.Host
 	flex      *tview.Flex
 	list      *tview.List
@@ -28,9 +28,9 @@ type movePicker struct {
 	visible   bool
 }
 
-// newMovePicker builds the move-picker overlay's widgets.
-func newMovePicker(host ui.Host) *movePicker {
-	mp := &movePicker{host: host}
+// NewMovePicker builds the move-picker overlay's widgets.
+func NewMovePicker(host ui.Host) *MovePicker {
+	mp := &MovePicker{host: host}
 	mp.list = tview.NewList().ShowSecondaryText(false)
 	mp.search = tview.NewInputField().SetLabel(" / filter: ")
 	mp.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -38,7 +38,7 @@ func newMovePicker(host ui.Host) *movePicker {
 		AddItem(mp.search, 1, 0, false)
 	mp.flex.SetBorder(true).SetTitle(" Move to Queue ")
 
-	// SetChangedFunc is registered in show (needs sourceQueue/msg closure).
+	// SetChangedFunc is registered in Show (needs sourceQueue/msg closure).
 	mp.search.SetDoneFunc(func(_ tcell.Key) {
 		host.SetFocus(mp.list)
 	})
@@ -121,11 +121,11 @@ func sortPickerQueues(sourceQueue string, names []string) []string {
 	return result
 }
 
-// show opens the queue-picker overlay. onSelect is called (in a new
+// Show opens the queue-picker overlay. onSelect is called (in a new
 // goroutine) with the chosen target queue name when the user makes a
 // selection. onClose is called (on the UI goroutine) when the picker is
 // dismissed — the caller uses it to restore focus and the context panel.
-func (mp *movePicker) show(sourceQueue string, onSelect func(string), onClose func()) {
+func (mp *MovePicker) Show(sourceQueue string, onSelect func(string), onClose func()) {
 	host := mp.host
 	mp.onSelect = onSelect
 	mp.onClose = onClose
@@ -193,7 +193,7 @@ func (mp *movePicker) show(sourceQueue string, onSelect func(string), onClose fu
 // fillList repopulates list from queues, keeping only entries whose name
 // contains filter (case-insensitive; empty = show all). Each item's
 // selected func invokes onSelect in a new goroutine.
-func (mp *movePicker) fillList(filter string) {
+func (mp *MovePicker) fillList(filter string) {
 	mp.list.Clear()
 	lower := strings.ToLower(filter)
 	for _, name := range mp.queues {
@@ -221,7 +221,7 @@ func (mp *movePicker) fillList(filter string) {
 
 // close hides the queue-picker overlay and calls onClose to let the
 // caller restore focus and the context panel.
-func (mp *movePicker) close() {
+func (mp *MovePicker) close() {
 	mp.host.HidePage("move-picker")
 	mp.visible = false
 	if mp.onClose != nil {
@@ -230,7 +230,7 @@ func (mp *movePicker) close() {
 }
 
 // ApplyPalette recolors the move-picker overlay for a live theme switch.
-func (mp *movePicker) ApplyPalette(p config.Palette) {
+func (mp *MovePicker) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	mp.flex.SetBackgroundColor(bg)
 	mp.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -243,10 +243,10 @@ func (mp *movePicker) ApplyPalette(p config.Palette) {
 	mp.search.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-var _ ui.Themeable = (*movePicker)(nil)
+var _ ui.Themeable = (*MovePicker)(nil)
 
-// Primitive returns movePicker's root widget, for sizing/embedding.
-func (mp *movePicker) Primitive() tview.Primitive { return mp.flex }
+// Primitive returns MovePicker's root widget, for sizing/embedding.
+func (mp *MovePicker) Primitive() tview.Primitive { return mp.flex }
 
-// Visible reports whether movePicker is currently shown.
-func (mp *movePicker) Visible() bool { return mp.visible }
+// Visible reports whether MovePicker is currently shown.
+func (mp *MovePicker) Visible() bool { return mp.visible }

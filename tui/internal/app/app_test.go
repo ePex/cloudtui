@@ -237,14 +237,14 @@ func TestOnGlobalKeyPassesThroughWhenDatadogEnvFilterFocused(t *testing.T) {
 }
 
 // TestOnGlobalKeyPassesThroughWhenDatadogEditorVisible guards against a
-// real bug found live: unlike the other overlays, datadogEditor.visible
+// real bug found live: unlike the other overlays, DatadogEditor.visible
 // was missing from onGlobalKey's overlay-exemption block, so typing into
 // the Datadog editor's Site/Access Token fields hit global hotkeys
 // instead of being typed — 'q' quit the whole app mid-edit (and pasted
 // text containing "q" did the same).
 func TestOnGlobalKeyPassesThroughWhenDatadogEditorVisible(t *testing.T) {
 	a := New(config.Default())
-	a.datadogEditor.show()
+	a.datadogEditor.Show()
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {

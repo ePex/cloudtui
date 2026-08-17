@@ -13,9 +13,9 @@ import (
 // Cancel button.
 func TestConnEditorEscapeCloses(t *testing.T) {
 	a := New(config.Default())
-	a.connEditor.show(config.Connection{}, true, "")
+	a.connEditor.Show(config.Connection{}, true, "")
 	if !a.connEditor.visible {
-		t.Fatal("connEditor.show() did not open the editor")
+		t.Fatal("connEditor.Show() did not open the editor")
 	}
 
 	capture := a.connEditor.form.GetInputCapture()
@@ -34,7 +34,7 @@ func TestConnEditorEscapeCloses(t *testing.T) {
 // swallow other keys needed for normal form interaction (e.g. typing).
 func TestConnEditorOtherKeysPassThrough(t *testing.T) {
 	a := New(config.Default())
-	a.connEditor.show(config.Connection{}, true, "")
+	a.connEditor.Show(config.Connection{}, true, "")
 
 	capture := a.connEditor.form.GetInputCapture()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
