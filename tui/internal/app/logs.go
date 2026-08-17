@@ -27,7 +27,7 @@ type logsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	app         *App
+	host        ui.ViewHost
 	filter      string
 	all         []awslogs.LogGroup // full unfiltered list from last load
 	filtered    []awslogs.LogGroup // currently displayed subset, row-indexed
@@ -60,13 +60,13 @@ func (lv *logsView) Shortcuts() []ui.Shortcut {
 }
 
 // newLogsView constructs the CloudWatch Logs (log group list) view.
-func newLogsView(a *App, onSelect func(logGroupName string)) *logsView {
+func newLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *logsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" CloudWatch Logs ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
 	filterInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -77,7 +77,7 @@ func newLogsView(a *App, onSelect func(logGroupName string)) *logsView {
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	lv := &logsView{table: table, filterInput: filterInput, flex: flex, app: a}
+	lv := &logsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	lv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -85,12 +85,12 @@ func newLogsView(a *App, onSelect func(logGroupName string)) *logsView {
 	})
 	filterInput.SetDoneFunc(func(_ tcell.Key) {
 		lv.applyFilter(lv.filterInput.GetText())
-		lv.app.tv.SetFocus(lv.table)
+		lv.host.SetFocus(lv.table)
 	})
 	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			lv.applyFilter(lv.filterInput.GetText())
-			lv.app.tv.SetFocus(lv.table)
+			lv.host.SetFocus(lv.table)
 			lv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -104,7 +104,7 @@ func newLogsView(a *App, onSelect func(logGroupName string)) *logsView {
 			return nil
 		case '/':
 			lv.filterInput.SetText(lv.filter)
-			lv.app.tv.SetFocus(lv.filterInput)
+			lv.host.SetFocus(lv.filterInput)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -132,7 +132,7 @@ func (lv *logsView) Activate() {
 }
 
 func (lv *logsView) setHeader() {
-	p := lv.app.cfg.Colors
+	p := lv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "RETENTION", "CREATED"} {
@@ -146,32 +146,32 @@ func (lv *logsView) setHeader() {
 	}
 }
 
-// load fetches log groups from a.listLogGroups in a goroutine (a real
+// load fetches log groups from host.ListLogGroups in a goroutine (a real
 // AWS API call) and repaints via QueueUpdateDraw. Requires an active AWS
 // profile; errors clearly rather than calling into awslogs with an
 // empty one. If the call fails because the profile's cached SSO token is
 // missing/expired, awsauth.WithReauth opens the browser to log in and
 // retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (lv *logsView) load() {
-	profile := lv.app.cfg.ActiveAWSProfile
+	profile := lv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
 	go func() {
 		ctx := context.Background()
-		authType, _ := lv.app.awsAuthTypeFor(ctx, profile)
-		groups, err := awsauth.WithReauth(ctx, profile, authType, lv.app.awsSSOLogin,
+		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
+		groups, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
 			func() {
-				lv.app.tv.QueueUpdateDraw(func() {
+				lv.host.QueueUpdateDraw(func() {
 					lv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
 			func(ctx context.Context) ([]awslogs.LogGroup, error) {
-				return lv.app.listLogGroups(ctx, profile)
+				return lv.host.ListLogGroups(ctx, profile)
 			},
 		)
-		lv.app.tv.QueueUpdateDraw(func() {
+		lv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("cloudwatch logs: failed to list log groups", "error", err)
 				lv.showError(err)
@@ -206,7 +206,7 @@ func (lv *logsView) repaint(groups []awslogs.LogGroup) {
 		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
 	}
 
-	p := lv.app.cfg.Colors
+	p := lv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	for i, g := range filtered {
@@ -265,7 +265,7 @@ func (lv *logsView) showStatus(msg string) {
 	}
 	lv.table.SetCell(1, 0,
 		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(lv.app.cfg.Colors.Accent)).
+			SetTextColor(tcell.GetColor(lv.host.Config().Colors.Accent)).
 			SetExpansion(3),
 	)
 	lv.table.SetTitle(" CloudWatch Logs ")

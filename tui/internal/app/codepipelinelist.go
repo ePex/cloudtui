@@ -28,7 +28,7 @@ type codePipelineListView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	app         *App
+	host        ui.ViewHost
 	filter      string
 	all         []awscodepipeline.Pipeline
 	filtered    []awscodepipeline.Pipeline
@@ -62,13 +62,13 @@ func (lv *codePipelineListView) Shortcuts() []ui.Shortcut {
 }
 
 // newCodePipelineListView constructs the CodePipeline list view.
-func newCodePipelineListView(a *App, onSelect func(pipelineName string)) *codePipelineListView {
+func newCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) *codePipelineListView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" AWS CodePipeline ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
 	filterInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -79,7 +79,7 @@ func newCodePipelineListView(a *App, onSelect func(pipelineName string)) *codePi
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	lv := &codePipelineListView{table: table, filterInput: filterInput, flex: flex, app: a}
+	lv := &codePipelineListView{table: table, filterInput: filterInput, flex: flex, host: a}
 	lv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -87,12 +87,12 @@ func newCodePipelineListView(a *App, onSelect func(pipelineName string)) *codePi
 	})
 	filterInput.SetDoneFunc(func(_ tcell.Key) {
 		lv.applyFilter(lv.filterInput.GetText())
-		lv.app.tv.SetFocus(lv.table)
+		lv.host.SetFocus(lv.table)
 	})
 	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			lv.applyFilter(lv.filterInput.GetText())
-			lv.app.tv.SetFocus(lv.table)
+			lv.host.SetFocus(lv.table)
 			lv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -106,7 +106,7 @@ func newCodePipelineListView(a *App, onSelect func(pipelineName string)) *codePi
 			return nil
 		case '/':
 			lv.filterInput.SetText(lv.filter)
-			lv.app.tv.SetFocus(lv.filterInput)
+			lv.host.SetFocus(lv.filterInput)
 			return nil
 		case 'w':
 			lv.toggleWatchSelected()
@@ -137,7 +137,7 @@ func (lv *codePipelineListView) Activate() {
 }
 
 func (lv *codePipelineListView) setHeader() {
-	p := lv.app.cfg.Colors
+	p := lv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "WATCHING", "UPDATED"} {
@@ -151,32 +151,32 @@ func (lv *codePipelineListView) setHeader() {
 	}
 }
 
-// load fetches pipelines from a.listPipelines in a goroutine (a real AWS
+// load fetches pipelines from host.ListPipelines in a goroutine (a real AWS
 // API call) and repaints via QueueUpdateDraw. Requires an active AWS
 // profile; errors clearly rather than calling into awscodepipeline with
 // an empty one. If the call fails because the profile's cached SSO
 // token is missing/expired, awsauth.WithReauth opens the browser to log
 // in and retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (lv *codePipelineListView) load() {
-	profile := lv.app.cfg.ActiveAWSProfile
+	profile := lv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
 	go func() {
 		ctx := context.Background()
-		authType, _ := lv.app.awsAuthTypeFor(ctx, profile)
-		pipelines, err := awsauth.WithReauth(ctx, profile, authType, lv.app.awsSSOLogin,
+		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
+		pipelines, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
 			func() {
-				lv.app.tv.QueueUpdateDraw(func() {
+				lv.host.QueueUpdateDraw(func() {
 					lv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.Pipeline, error) {
-				return lv.app.listPipelines(ctx, profile)
+				return lv.host.ListPipelines(ctx, profile)
 			},
 		)
-		lv.app.tv.QueueUpdateDraw(func() {
+		lv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("codepipeline: failed to list pipelines", "error", err)
 				lv.showError(err)
@@ -202,10 +202,10 @@ func (lv *codePipelineListView) toggleWatchSelected() {
 		return
 	}
 	name := lv.filtered[idx].Name
-	if lv.app.IsWatchingPipeline(name) {
-		lv.app.StopWatchingPipeline(name)
+	if lv.host.IsWatchingPipeline(name) {
+		lv.host.StopWatchingPipeline(name)
 	} else {
-		lv.app.StartWatchingPipeline(name)
+		lv.host.StartWatchingPipeline(name)
 	}
 	lv.repaint(lv.all)
 }
@@ -229,7 +229,7 @@ func (lv *codePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
 	}
 
-	p := lv.app.cfg.Colors
+	p := lv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	accentColor := tcell.GetColor(p.Accent)
@@ -238,7 +238,7 @@ func (lv *codePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 		lv.table.SetCell(row, 0, tview.NewTableCell(pl.Name).SetTextColor(nameColor).SetExpansion(3))
 		watching := ""
 		watchColor := textColor
-		if lv.app.IsWatchingPipeline(pl.Name) {
+		if lv.host.IsWatchingPipeline(pl.Name) {
 			watching = "▶ watching"
 			watchColor = accentColor
 		}
@@ -291,7 +291,7 @@ func (lv *codePipelineListView) showStatus(msg string) {
 	}
 	lv.table.SetCell(1, 0,
 		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(lv.app.cfg.Colors.Accent)).
+			SetTextColor(tcell.GetColor(lv.host.Config().Colors.Accent)).
 			SetExpansion(3),
 	)
 	lv.table.SetTitle(" AWS CodePipeline ")

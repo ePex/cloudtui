@@ -31,7 +31,7 @@ import (
 // silent 'c' just displays the cached value.
 type paramDetailView struct {
 	textView  *tview.TextView
-	app       *App
+	host      ui.ViewHost
 	param     awsssm.Parameter
 	displayed bool // the value has been rendered on screen; always true for String/StringList
 }
@@ -53,14 +53,14 @@ func (dv *paramDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func newParamDetailView(a *App) *paramDetailView {
+func newParamDetailView(a ui.ViewHost, onBack func()) *paramDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Parameter ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &paramDetailView{textView: tv, app: a}
+	dv := &paramDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -75,9 +75,7 @@ func newParamDetailView(a *App) *paramDetailView {
 			dv.copyValue()
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.SwitchToPage("ssm-parameters")
-			a.tv.SetFocus(a.ssmParamsV.table)
-			a.UpdateContextPanel(a.ssmParamsV)
+			onBack()
 			return nil
 		}
 		return event
@@ -99,7 +97,7 @@ func (dv *paramDetailView) render(param awsssm.Parameter) {
 }
 
 func (dv *paramDetailView) renderBody() {
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
 	var b strings.Builder
@@ -134,9 +132,9 @@ func (dv *paramDetailView) renderBody() {
 func (dv *paramDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
 	}
-	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+	dv.host.SetContextHint(strings.Join(lines, "\n"))
 }
 
 // copyValue writes the parameter's value to the system clipboard —
@@ -155,8 +153,8 @@ func (dv *paramDetailView) copyValue() {
 }
 
 func (dv *paramDetailView) copyFetchedValue() {
-	dv.app.CopyToClipboard(dv.param.Value)
-	dv.app.statusBar.SetText(fmt.Sprintf("Copied %s to clipboard", dv.param.Name))
+	dv.host.CopyToClipboard(dv.param.Value)
+	dv.host.SetStatus(fmt.Sprintf("Copied %s to clipboard", dv.param.Name))
 }
 
 // reveal displays the parameter's value on screen — fetching it first if
@@ -176,11 +174,11 @@ func (dv *paramDetailView) reveal() {
 // fetchThen fetches and decrypts a SecureString parameter's value and
 // hands the outcome to handleFetchResult on the tview event loop.
 func (dv *paramDetailView) fetchThen(onSuccess func()) {
-	profile := dv.app.cfg.ActiveAWSProfile
+	profile := dv.host.Config().ActiveAWSProfile
 	name := dv.param.Name
 	go func() {
-		value, err := dv.app.revealParameter(context.Background(), profile, name)
-		dv.app.tv.QueueUpdateDraw(func() {
+		value, err := dv.host.RevealParameter(context.Background(), profile, name)
+		dv.host.QueueUpdateDraw(func() {
 			dv.handleFetchResult(value, err, onSuccess)
 		})
 	}()
@@ -197,7 +195,7 @@ func (dv *paramDetailView) handleFetchResult(value string, err error, onSuccess 
 	name := dv.param.Name
 	if err != nil {
 		slog.Error("param detail: failed to reveal parameter", "name", name, "error", err)
-		dv.app.statusBar.SetText(fmt.Sprintf("[red]Error revealing %q: %s[-]", name, err))
+		dv.host.SetStatus(fmt.Sprintf("[red]Error revealing %q: %s[-]", name, err))
 		return
 	}
 	dv.param.Value = value
