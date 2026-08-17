@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -21,10 +22,14 @@ import (
 // It is not a registered ui.View; it is opened via App.OpenMessageDetail
 // and returns to "messages" on Esc/Backspace.
 type messageDetailView struct {
-	textView  *tview.TextView
-	app       *App
-	queueName string
-	msg       queue.Message
+	textView   *tview.TextView
+	host       ui.ViewHost
+	movePicker *dialog.MovePicker
+	confirm    *dialog.ConfirmDialog
+	onBack     func()
+	onReload   func()
+	queueName  string
+	msg        queue.Message
 }
 
 var _ ui.Themeable = (*messageDetailView)(nil)
@@ -44,14 +49,14 @@ func (dv *messageDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func newMessageDetailView(a *App) *messageDetailView {
+func newMessageDetailView(a ui.ViewHost, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *messageDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Message Details ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &messageDetailView{textView: tv, app: a}
+	dv := &messageDetailView{textView: tv, host: a, movePicker: movePicker, confirm: confirm, onBack: onBack, onReload: onReload}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -63,65 +68,46 @@ func newMessageDetailView(a *App) *messageDetailView {
 			srcQueue := dv.queueName
 			msgID := dv.msg.ID
 			restoreDetail := func() {
-				a.tv.SetFocus(a.pages)
+				dv.host.SetFocus(dv.textView)
 				lines := make([]string, 0, len(dv.Shortcuts()))
 				for _, sc := range dv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
 				}
-				a.contextPanel.SetText(strings.Join(lines, "\n"))
+				dv.host.SetContextHint(strings.Join(lines, "\n"))
 			}
-			a.movePicker.Show(srcQueue, func(target string) {
-				err := a.backend.MoveMessage(context.Background(), srcQueue, msgID, target)
-				a.tv.QueueUpdateDraw(func() {
+			dv.movePicker.Show(srcQueue, func(target string) {
+				err := dv.host.Backend().MoveMessage(context.Background(), srcQueue, msgID, target)
+				dv.host.QueueUpdateDraw(func() {
 					if err != nil {
 						slog.Error("move: failed", "src", srcQueue, "dst", target, "id", msgID, "error", err)
-						a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+						dv.host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))
 						return
 					}
-					a.pages.SwitchToPage("messages")
-					a.tv.SetFocus(a.messagesV.table)
-					lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-					for _, sc := range a.messagesV.Shortcuts() {
-						lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-					}
-					a.contextPanel.SetText(strings.Join(lines, "\n"))
-					a.messagesV.load()
+					dv.onBack()
+					dv.onReload()
 				})
 			}, restoreDetail)
 			return nil
 		case event.Rune() == 'd':
 			queueName := dv.queueName
 			msgID := dv.msg.ID
-			a.confirm.Show(fmt.Sprintf("Delete message from %q?", queueName), func() {
+			dv.confirm.Show(fmt.Sprintf("Delete message from %q?", queueName), func() {
 				go func() {
-					err := a.backend.RemoveMessage(context.Background(), queueName, msgID)
-					a.tv.QueueUpdateDraw(func() {
+					err := dv.host.Backend().RemoveMessage(context.Background(), queueName, msgID)
+					dv.host.QueueUpdateDraw(func() {
 						if err != nil {
 							slog.Error("message detail: remove failed", "queue", queueName, "id", msgID, "error", err)
-							a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+							dv.host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))
 							return
 						}
-						// Return to messages list and reload.
-						a.pages.SwitchToPage("messages")
-						a.tv.SetFocus(a.messagesV.table)
-						lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-						for _, sc := range a.messagesV.Shortcuts() {
-							lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-						}
-						a.contextPanel.SetText(strings.Join(lines, "\n"))
-						a.messagesV.load()
+						dv.onBack()
+						dv.onReload()
 					})
 				}()
 			})
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.SwitchToPage("messages")
-			a.tv.SetFocus(a.messagesV.table)
-			lines := make([]string, 0, len(a.messagesV.Shortcuts()))
-			for _, sc := range a.messagesV.Shortcuts() {
-				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-			}
-			a.contextPanel.SetText(strings.Join(lines, "\n"))
+			dv.onBack()
 			return nil
 		}
 		return event
@@ -171,7 +157,7 @@ func decodePropertyValue(v any) string {
 func (dv *messageDetailView) render(queueName string, msg queue.Message) {
 	dv.queueName = queueName
 	dv.msg = msg
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	accent := p.Label
 	text := p.Text
 

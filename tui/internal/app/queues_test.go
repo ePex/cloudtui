@@ -56,7 +56,7 @@ func (f *fakeQueueBackend) MoveMessages(_ context.Context, _, _ string, _ queue.
 func newTestQueuesView(t *testing.T) *queuesView {
 	t.Helper()
 	a := New(config.Default())
-	return newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	return newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 }
 
 func TestQueuesViewHeaderLabels(t *testing.T) {
@@ -112,7 +112,7 @@ func TestQueuesViewShortcutFilterPresent(t *testing.T) {
 
 func TestQueuesViewFilterApplied(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	summaries := []queue.Summary{
 		{Name: "foo.queue"},
@@ -130,7 +130,7 @@ func TestQueuesViewFilterApplied(t *testing.T) {
 
 func TestQueuesViewFilterPersistsAfterRepaint(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	qv.applyFilter("foo")
 	qv.repaint([]queue.Summary{{Name: "foo.queue"}, {Name: "bar.queue"}})
@@ -144,7 +144,7 @@ func TestQueuesViewFilterPersistsAfterRepaint(t *testing.T) {
 
 func TestQueuesViewFilterClear(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	summaries := []queue.Summary{
 		{Name: "foo.queue"},
@@ -161,7 +161,7 @@ func TestQueuesViewFilterClear(t *testing.T) {
 
 func TestQueuesViewTitleUpdatesWithFilter(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	qv.applyFilter("foo")
 	if got, want := qv.table.GetTitle(), " Queues (foo) "; got != want {
@@ -265,7 +265,7 @@ func TestQueuesViewSortShortcutsPresent(t *testing.T) {
 
 func TestQueuesViewSortByPendingDescending(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 	qv.sortCol = 1
 	qv.sortAsc = false
 
@@ -289,7 +289,7 @@ func TestQueuesViewSortByPendingDescending(t *testing.T) {
 
 func TestQueuesViewSortDirectionToggle(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	summaries := []queue.Summary{{Name: "b"}, {Name: "a"}}
 	qv.repaint(summaries) // asc by name: a, b
@@ -306,7 +306,7 @@ func TestQueuesViewSortDirectionToggle(t *testing.T) {
 
 func TestQueuesViewSortHeaderMarker(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 	qv.sortCol = 2
 	qv.sortAsc = true
 	qv.setHeader()
@@ -328,7 +328,7 @@ func TestQueuesViewSortHeaderMarker(t *testing.T) {
 
 func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	summaries := []queue.Summary{
 		{Name: "zebra"},
@@ -351,7 +351,7 @@ func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
 
 func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 7, ConsumerCount: 1}})
 
@@ -368,7 +368,7 @@ func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
 
 func TestQueuesViewConsumerAccentWhenZero(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 0, ConsumerCount: 0}})
 
@@ -385,7 +385,7 @@ func TestQueuesViewConsumerAccentWhenZero(t *testing.T) {
 
 func TestQueuesViewPendingTextWhenZero(t *testing.T) {
 	a := New(config.Default())
-	qv := newQueuesView(a, &fakeQueueBackend{}, func(string) {})
+	qv := newQueuesView(a, &fakeQueueBackend{}, a.confirm, a.movePicker, a.sendMessage, func(string) {})
 
 	qv.repaint([]queue.Summary{{Name: "q", PendingCount: 0, ConsumerCount: 1}})
 

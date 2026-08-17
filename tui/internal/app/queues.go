@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -23,8 +24,11 @@ type queuesView struct {
 	table        *tview.Table
 	filterInput  *tview.InputField
 	flex         *tview.Flex
-	app          *App
+	host         ui.ViewHost
 	backend      queue.Backend
+	confirm      *dialog.ConfirmDialog
+	movePicker   *dialog.MovePicker
+	sendMessage  *dialog.SendMessageOverlay
 	filter       string          // active filter (empty = no filter)
 	allSummaries []queue.Summary // full unfiltered list from last load
 	sortCol      int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
@@ -62,13 +66,13 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 }
 
 // newQueuesView constructs the queues view backed by b.
-func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *queuesView {
+func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, onSelect func(queueName string)) *queuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0) // keep header row visible when scrolling
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
 	filterInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -79,7 +83,7 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, app: a, backend: b, sortAsc: true}
+	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, sortAsc: true}
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -87,12 +91,12 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 	})
 	filterInput.SetDoneFunc(func(_ tcell.Key) {
 		qv.applyFilter(qv.filterInput.GetText())
-		qv.app.tv.SetFocus(qv.table)
+		qv.host.SetFocus(qv.table)
 	})
 	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			qv.applyFilter(qv.filterInput.GetText())
-			qv.app.tv.SetFocus(qv.table)
+			qv.host.SetFocus(qv.table)
 			qv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -110,7 +114,7 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case '/':
 			qv.filterInput.SetText(qv.filter)
-			qv.app.tv.SetFocus(qv.filterInput)
+			qv.host.SetFocus(qv.filterInput)
 			return nil
 		case 'o':
 			qv.sortCol = (qv.sortCol + 1) % len(queueColumns)
@@ -127,10 +131,10 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 				return nil
 			}
 			name := cell.Text
-			qv.app.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+			qv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
 				go func() {
 					err := qv.backend.PurgeQueue(context.Background(), name)
-					qv.app.tv.QueueUpdateDraw(func() {
+					qv.host.QueueUpdateDraw(func() {
 						if err != nil {
 							slog.Error("queues: purge failed", "queue", name, "error", err)
 							qv.showError(err)
@@ -149,22 +153,22 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 			}
 			srcQueue := cell.Text
 			restoreQueues := func() {
-				qv.app.tv.SetFocus(qv.table)
+				qv.host.SetFocus(qv.table)
 				lines := make([]string, 0, len(qv.Shortcuts()))
 				for _, sc := range qv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
 				}
-				qv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+				qv.host.SetContextHint(strings.Join(lines, "\n"))
 			}
-			qv.app.movePicker.Show(srcQueue, func(target string) {
+			qv.movePicker.Show(srcQueue, func(target string) {
 				count, err := qv.backend.MoveAllMessages(context.Background(), srcQueue, target)
-				qv.app.tv.QueueUpdateDraw(func() {
+				qv.host.QueueUpdateDraw(func() {
 					if err != nil {
 						slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "error", err)
 						qv.showError(err)
 						return
 					}
-					qv.app.statusBar.SetText(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
+					qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
 					qv.load()
 				})
 			}, restoreQueues)
@@ -176,13 +180,13 @@ func newQueuesView(a *App, b queue.Backend, onSelect func(queueName string)) *qu
 				return nil
 			}
 			name := cell.Text
-			qv.app.sendMessage.Show(name, func() {
-				qv.app.tv.SetFocus(qv.table)
+			qv.sendMessage.Show(name, func() {
+				qv.host.SetFocus(qv.table)
 				lines := make([]string, 0, len(qv.Shortcuts()))
 				for _, sc := range qv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
 				}
-				qv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+				qv.host.SetContextHint(strings.Join(lines, "\n"))
 			})
 			return nil
 		}
@@ -207,7 +211,7 @@ func (qv *queuesView) Activate() {
 }
 
 func (qv *queuesView) setHeader() {
-	p := qv.app.cfg.Colors
+	p := qv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 
@@ -235,7 +239,7 @@ func (qv *queuesView) setHeader() {
 func (qv *queuesView) load() {
 	go func() {
 		summaries, err := qv.backend.List(context.Background())
-		qv.app.tv.QueueUpdateDraw(func() {
+		qv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("queues: failed to list queues", "error", err)
 				qv.showError(err)
@@ -316,7 +320,7 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 		qv.table.RemoveRow(qv.table.GetRowCount() - 1)
 	}
 
-	p := qv.app.cfg.Colors
+	p := qv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	accentColor := tcell.GetColor(p.Accent)

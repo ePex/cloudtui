@@ -284,3 +284,18 @@ func TestLogEventPreview(t *testing.T) {
 		})
 	}
 }
+
+func TestLogSearchViewEscReturnsToCloudWatchLogs(t *testing.T) {
+	a := New(config.Default())
+	a.OpenLogSearch("/aws/lambda/foo")
+
+	capture := a.logSearchV.table.GetInputCapture()
+	if capture == nil {
+		t.Fatal("logSearchV.table has no input capture set")
+	}
+	capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+
+	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
+		t.Errorf("front page after Esc = %q, want %q", name, "cloudwatch-logs")
+	}
+}

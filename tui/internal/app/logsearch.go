@@ -12,6 +12,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -22,15 +23,17 @@ import (
 // Enter, never on keystroke, and results are paginated by AWS but this
 // view never auto-paginates (spec/34-fe-cloudwatch-logs decision 5).
 type logSearchView struct {
-	table        *tview.Table
-	patternInput *tview.InputField
-	flex         *tview.Flex
-	app          *App
-	logGroupName string
-	pattern      string
-	tr           ui.TimeRange
-	results      []awslogs.LogEvent
-	hasMore      bool
+	table          *tview.Table
+	patternInput   *tview.InputField
+	flex           *tview.Flex
+	host           ui.ViewHost
+	timeRangeModal *dialog.TimeRangeModal
+	onBack         func()
+	logGroupName   string
+	pattern        string
+	tr             ui.TimeRange
+	results        []awslogs.LogEvent
+	hasMore        bool
 }
 
 var _ ui.Themeable = (*logSearchView)(nil)
@@ -56,13 +59,13 @@ func (sv *logSearchView) Shortcuts() []ui.Shortcut {
 }
 
 // newLogSearchView constructs the CloudWatch Logs search view.
-func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchView {
+func newLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event awslogs.LogEvent), onBack func()) *logSearchView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	patternInput := tview.NewInputField()
 	patternInput.SetLabel(" / pattern: ")
 	patternInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -73,7 +76,7 @@ func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchV
 		AddItem(table, 0, 1, true).
 		AddItem(patternInput, 1, 0, false)
 
-	sv := &logSearchView{table: table, patternInput: patternInput, flex: flex, app: a, tr: ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}}
+	sv := &logSearchView{table: table, patternInput: patternInput, flex: flex, host: a, timeRangeModal: timeRangeModal, onBack: onBack, tr: ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}}
 	sv.setHeader()
 
 	// Unlike every filter input elsewhere in the app, typing here must
@@ -85,11 +88,11 @@ func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchV
 			sv.pattern = sv.patternInput.GetText()
 			sv.search()
 		}
-		sv.app.tv.SetFocus(sv.table)
+		sv.host.SetFocus(sv.table)
 	})
 	patternInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
-			sv.app.tv.SetFocus(sv.table)
+			sv.host.SetFocus(sv.table)
 			sv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -102,14 +105,14 @@ func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchV
 			sv.search()
 			return nil
 		case 't':
-			a.timeRangeModal.Show(sv.tr, func(tr ui.TimeRange) {
+			timeRangeModal.Show(sv.tr, func(tr ui.TimeRange) {
 				sv.tr = tr
 				sv.search()
 			})
 			return nil
 		case '/':
 			sv.patternInput.SetText(sv.pattern)
-			sv.app.tv.SetFocus(sv.patternInput)
+			sv.host.SetFocus(sv.patternInput)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -118,9 +121,7 @@ func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchV
 		}
 		switch event.Key() {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:
-			a.pages.SwitchToPage("cloudwatch-logs")
-			a.tv.SetFocus(a.logsV.table)
-			a.UpdateContextPanel(a.logsV)
+			sv.onBack()
 			return nil
 		}
 		return event
@@ -138,7 +139,7 @@ func newLogSearchView(a *App, onSelect func(event awslogs.LogEvent)) *logSearchV
 }
 
 func (sv *logSearchView) setHeader() {
-	p := sv.app.cfg.Colors
+	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"TIMESTAMP", "STREAM", "MESSAGE"} {
@@ -177,7 +178,7 @@ func (sv *logSearchView) open(logGroupName, initialPattern string) {
 // Requires an active AWS profile; errors clearly rather than calling
 // into awslogs with an empty one.
 func (sv *logSearchView) search() {
-	profile := sv.app.cfg.ActiveAWSProfile
+	profile := sv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
@@ -186,8 +187,8 @@ func (sv *logSearchView) search() {
 	pattern := sv.pattern
 	start, end := sv.tr.Bounds(time.Now())
 	go func() {
-		events, hasMore, err := sv.app.filterLogEvents(context.Background(), profile, logGroupName, start, end, pattern)
-		sv.app.tv.QueueUpdateDraw(func() {
+		events, hasMore, err := sv.host.FilterLogEvents(context.Background(), profile, logGroupName, start, end, pattern)
+		sv.host.QueueUpdateDraw(func() {
 			sv.handleSearchResult(events, hasMore, err)
 		})
 	}()
@@ -214,7 +215,7 @@ func (sv *logSearchView) repaint() {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
 
-	p := sv.app.cfg.Colors
+	p := sv.host.Config().Colors
 	tsColor := tcell.GetColor(p.Label)
 	textColor := tcell.GetColor(p.Text)
 	for i, e := range sv.results {
