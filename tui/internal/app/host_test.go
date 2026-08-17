@@ -57,7 +57,7 @@ func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	if got := a.infoPanel.GetText(true); !strings.Contains(got, "work") {
 		t.Errorf("info panel = %q, want it to contain %q", got, "work")
 	}
-	if main2, _ := a.settingsList.GetItemText(2); !strings.Contains(main2, "work") {
+	if main2, _ := a.settingsV.List().GetItemText(2); !strings.Contains(main2, "work") {
 		t.Errorf("settings list item 2 = %q, want it to contain %q", main2, "work")
 	}
 	if _, err := config.Load("config.yaml"); err != nil {
