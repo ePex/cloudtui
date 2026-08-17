@@ -42,7 +42,7 @@ type datadogLogsView struct {
 	// rebuildFilterOptions's doc comment for why.
 	knownServices map[string]bool
 	knownEnvs     map[string]bool
-	tr            timeRange
+	tr            ui.TimeRange
 	results       []datadoglogs.LogEvent
 	hasMore       bool
 }
@@ -125,7 +125,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 		queryInput:      queryInput,
 		flex:            flex,
 		app:             a,
-		tr:              timeRange{mode: timeRangeRelative, presetIdx: defaultPresetIdx},
+		tr:              ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx},
 		knownServices:   map[string]bool{},
 		knownEnvs:       map[string]bool{},
 	}
@@ -177,7 +177,7 @@ func newDatadogLogsView(a *App) *datadogLogsView {
 			dv.search()
 			return nil
 		case 't':
-			a.timeRangeModal.Show(dv.tr, func(tr timeRange) {
+			a.timeRangeModal.Show(dv.tr, func(tr ui.TimeRange) {
 				dv.tr = tr
 				dv.search()
 			})
@@ -396,7 +396,7 @@ func sortedKeys(set map[string]bool) []string {
 // hands the outcome to handleSearchResult on the tview event loop.
 func (dv *datadogLogsView) search() {
 	query := dv.effectiveQuery()
-	start, end := dv.tr.bounds(time.Now())
+	start, end := dv.tr.Bounds(time.Now())
 	cfg := dv.app.cfg.Datadog
 	go func() {
 		events, hasMore, err := dv.app.searchDatadogLogs(context.Background(), cfg, query, start, end)
@@ -454,7 +454,7 @@ func (dv *datadogLogsView) repaint() {
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
 func (dv *datadogLogsView) updateTitle() {
-	label := dv.tr.label()
+	label := dv.tr.Label()
 	title := fmt.Sprintf(" Datadog Logs — %s — %d events", label, len(dv.results))
 	if dv.hasMore {
 		title += " (more available — narrow your search)"
