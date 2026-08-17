@@ -97,7 +97,7 @@ func (mf *messageFilter) apply() {
 	to := mf.form.GetFormItem(2).(*tview.InputField).GetText()
 	maxCount := mf.form.GetFormItem(3).(*tview.InputField).GetText()
 
-	filter, err := parseMessageFilterForm(jmsType, from, to, maxCount)
+	filter, err := ui.ParseMessageFilterForm(jmsType, from, to, maxCount)
 	if err != nil {
 		mf.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return

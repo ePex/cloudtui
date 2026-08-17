@@ -22,19 +22,6 @@ func (s *settingsView) Name() string               { return "settings" }
 func (s *settingsView) Title() string              { return "Settings" }
 func (s *settingsView) Primitive() tview.Primitive { return s.list }
 
-// styleDropDown applies palette colors to the dropdown's popup list so
-// unselected items are readable against the theme background.
-func styleDropDown(dd *tview.DropDown, p config.Palette) {
-	dd.SetListStyles(
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.Text)).
-			Background(tcell.GetColor(p.Background)),
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.SelectionText)).
-			Background(tcell.GetColor(p.SelectionBg)),
-	)
-}
-
 // newSettingsView builds the Settings view as a tview.List. Each item opens
 // a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
 // connection manager, item 2 → AWS profiles (read-only), item 3 → Datadog
@@ -60,7 +47,7 @@ func newSettingsView(a *App) ui.View {
 		return event
 	})
 
-	styleList(l, a.cfg.Colors)
+	ui.StyleList(l, a.cfg.Colors)
 	a.settingsList = l
 	a.refreshSettingsList()
 	return &settingsView{list: l}
@@ -180,7 +167,7 @@ func (tp *themePicker) ApplyPalette(p config.Palette) {
 	tp.flex.SetBackgroundColor(bg)
 	tp.flex.SetBorderColor(tcell.GetColor(p.Border))
 	tp.flex.SetTitleColor(tcell.GetColor(p.Border))
-	styleList(tp.list, p)
+	ui.StyleList(tp.list, p)
 	tp.list.SetBackgroundColor(bg)
 }
 
