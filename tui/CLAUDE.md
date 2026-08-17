@@ -26,8 +26,14 @@ this module.
 - `internal/dialog/` — modal overlay types (confirm, connection
   manager/editor, message filter, time range, Datadog/theme/AWS
   profile pickers) implementing internal/ui's Host contract.
-- `internal/ui/` — the `View` interface shared across resource views.
-- `internal/ui/views/` — individual resource view implementations.
+- `internal/ui/` — the `View`/`Host`/`ViewHost` interfaces shared across
+  resource views.
+- `internal/ui/views/` — the home dashboard's table rendering (`home.go`);
+  not to be confused with `internal/view/`.
+- `internal/view/` — the resource views themselves (queues, messages,
+  SSM parameters, Secrets Manager, CloudWatch/Datadog logs, CodePipeline,
+  Settings, Log, and each one's detail view), each depending on
+  `ui.ViewHost` rather than `internal/app`'s concrete `*App`.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
 - `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
 - `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
