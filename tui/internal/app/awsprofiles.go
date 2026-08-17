@@ -13,11 +13,11 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// awsProfilesPicker is the AWS Profiles overlay: a filterable, read-only
+// AWSProfilesPicker is the AWS Profiles overlay: a filterable, read-only
 // list of every discoverable AWS CLI profile, with Enter activating the
-// selected one. Named awsProfilesPicker, not awsProfiles — too easy to
+// selected one. Named AWSProfilesPicker, not AWSProfiles — too easy to
 // confuse with the imported awsprofile package (singular) at a glance.
-type awsProfilesPicker struct {
+type AWSProfilesPicker struct {
 	host        ui.Host
 	flex        *tview.Flex
 	table       *tview.Table
@@ -29,9 +29,9 @@ type awsProfilesPicker struct {
 	filtered    []awsprofile.Profile
 }
 
-// newAWSProfilesPicker builds the AWS Profiles overlay's widgets.
-func newAWSProfilesPicker(host ui.Host) *awsProfilesPicker {
-	ap := &awsProfilesPicker{host: host}
+// NewAWSProfilesPicker builds the AWS Profiles overlay's widgets.
+func NewAWSProfilesPicker(host ui.Host) *AWSProfilesPicker {
+	ap := &AWSProfilesPicker{host: host}
 	colors := host.Config().Colors
 	ap.table = tview.NewTable()
 	ap.table.SetBorder(true).SetTitle(" AWS Profiles ")
@@ -98,7 +98,7 @@ func newAWSProfilesPicker(host ui.Host) *awsProfilesPicker {
 }
 
 // setHeader draws the overlay's column header row.
-func (ap *awsProfilesPicker) setHeader() {
+func (ap *AWSProfilesPicker) setHeader() {
 	p := ap.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -113,12 +113,12 @@ func (ap *awsProfilesPicker) setHeader() {
 	}
 }
 
-// show opens the AWS Profiles overlay, resetting any filter left over
+// Show opens the AWS Profiles overlay, resetting any filter left over
 // from a previous visit. Discovery is local file I/O (~/.aws/config,
 // ~/.aws/credentials), fast enough to run synchronously — unlike the
 // broker-touching views, which use a goroutine + QueueUpdateDraw
 // specifically because they're network calls.
-func (ap *awsProfilesPicker) show() {
+func (ap *AWSProfilesPicker) Show() {
 	ap.filter = ""
 	ap.filterInput.SetText("")
 	ap.populate()
@@ -128,14 +128,14 @@ func (ap *awsProfilesPicker) show() {
 }
 
 // close hides the AWS Profiles overlay and restores focus.
-func (ap *awsProfilesPicker) close() {
+func (ap *AWSProfilesPicker) close() {
 	ap.host.HidePage("aws-profiles")
 	ap.visible = false
 	ap.host.FocusMain()
 }
 
 // ApplyPalette recolors the AWS Profiles overlay for a live theme switch.
-func (ap *awsProfilesPicker) ApplyPalette(p config.Palette) {
+func (ap *AWSProfilesPicker) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	ap.flex.SetBackgroundColor(bg)
 	ap.flex.SetBorderColor(tcell.GetColor(p.Border))
@@ -147,18 +147,18 @@ func (ap *awsProfilesPicker) ApplyPalette(p config.Palette) {
 	ap.hints.SetTextColor(tcell.GetColor(p.Text))
 }
 
-var _ ui.Themeable = (*awsProfilesPicker)(nil)
+var _ ui.Themeable = (*AWSProfilesPicker)(nil)
 
-// Primitive returns awsProfilesPicker's root widget, for sizing/embedding.
-func (ap *awsProfilesPicker) Primitive() tview.Primitive { return ap.flex }
+// Primitive returns AWSProfilesPicker's root widget, for sizing/embedding.
+func (ap *AWSProfilesPicker) Primitive() tview.Primitive { return ap.flex }
 
-// Visible reports whether awsProfilesPicker is currently shown.
-func (ap *awsProfilesPicker) Visible() bool { return ap.visible }
+// Visible reports whether AWSProfilesPicker is currently shown.
+func (ap *AWSProfilesPicker) Visible() bool { return ap.visible }
 
 // populate re-runs discovery via app.listAWSProfiles and redraws the
 // table. Called on open and on 'r' (the files may have changed since
 // cloudtui started, or since the overlay was last opened).
-func (ap *awsProfilesPicker) populate() {
+func (ap *AWSProfilesPicker) populate() {
 	profiles, err := ap.host.ListAWSProfiles(context.Background())
 	if err != nil {
 		ap.all = nil
@@ -181,7 +181,7 @@ func (ap *awsProfilesPicker) populate() {
 
 // applyFilter updates the active filter and repaints from the
 // already-discovered list, without touching disk again.
-func (ap *awsProfilesPicker) applyFilter(s string) {
+func (ap *AWSProfilesPicker) applyFilter(s string) {
 	ap.filter = s
 	ap.repaint()
 }
@@ -190,7 +190,7 @@ func (ap *awsProfilesPicker) applyFilter(s string) {
 // (case-insensitive substring match on name, matching queuesView's
 // filter convention). Marks the active profile with ⭐, same convention
 // as the connection manager.
-func (ap *awsProfilesPicker) repaint() {
+func (ap *AWSProfilesPicker) repaint() {
 	filtered := ap.all
 	if ap.filter != "" {
 		lower := strings.ToLower(ap.filter)
@@ -251,7 +251,7 @@ func (ap *awsProfilesPicker) repaint() {
 // support doesn't do anything else with the selection yet (no backend/
 // broker is wired to it) — see spec/28-fe-aws-profile-discovery's open
 // question.
-func (ap *awsProfilesPicker) activate(name string) {
+func (ap *AWSProfilesPicker) activate(name string) {
 	ap.host.SetActiveAWSProfile(name)
 	ap.close()
 	ap.host.SetStatus(fmt.Sprintf("AWS profile: %s", name))
