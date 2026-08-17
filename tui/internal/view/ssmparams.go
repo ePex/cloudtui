@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -15,13 +15,13 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// ssmParamsView is the SSM Parameters screen: a filterable, read-only
+// SSMParamsView is the SSM Parameters screen: a filterable, read-only
 // tview.Table listing AWS Systems Manager Parameter Store entries under
 // "/" for the currently active AWS profile (config.Config.ActiveAWSProfile
 // — see spec/29-fe-aws-profile-selection). A registered top-level ui.View
 // (Home's "AWS" section), not a Settings entry —
 // this is a primary browsing feature, not app configuration.
-type ssmParamsView struct {
+type SSMParamsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
@@ -31,12 +31,12 @@ type ssmParamsView struct {
 	filtered    []awsssm.Parameter // currently displayed subset, row-indexed
 }
 
-var _ ui.View = (*ssmParamsView)(nil)
-var _ ui.Shortcuttable = (*ssmParamsView)(nil)
-var _ ui.Themeable = (*ssmParamsView)(nil)
+var _ ui.View = (*SSMParamsView)(nil)
+var _ ui.Shortcuttable = (*SSMParamsView)(nil)
+var _ ui.Themeable = (*SSMParamsView)(nil)
 
 // ApplyPalette recolors the SSM parameters view for a live theme switch.
-func (pv *ssmParamsView) ApplyPalette(p config.Palette) {
+func (pv *SSMParamsView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	pv.table.SetBackgroundColor(bg)
 	pv.table.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
@@ -46,19 +46,23 @@ func (pv *ssmParamsView) ApplyPalette(p config.Palette) {
 	pv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (pv *ssmParamsView) Name() string               { return "ssm-parameters" }
-func (pv *ssmParamsView) Title() string              { return "SSM Parameters" }
-func (pv *ssmParamsView) Primitive() tview.Primitive { return pv.flex }
+func (pv *SSMParamsView) Name() string               { return "ssm-parameters" }
+func (pv *SSMParamsView) Title() string              { return "SSM Parameters" }
+func (pv *SSMParamsView) Primitive() tview.Primitive { return pv.flex }
+func (pv *SSMParamsView) Table() *tview.Table        { return pv.table }
+func (pv *SSMParamsView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{pv.filterInput}
+}
 
-func (pv *ssmParamsView) Shortcuts() []ui.Shortcut {
+func (pv *SSMParamsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
 	}
 }
 
-// newSSMParamsView constructs the SSM Parameters view.
-func newSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *ssmParamsView {
+// NewSSMParamsView constructs the SSM Parameters view.
+func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSMParamsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" SSM Parameters ")
 	table.SetSelectable(true, false)
@@ -75,7 +79,7 @@ func newSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *ssm
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	pv := &ssmParamsView{table: table, filterInput: filterInput, flex: flex, host: a}
+	pv := &SSMParamsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	pv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -125,11 +129,11 @@ func newSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *ssm
 
 // Activate reloads the parameter list. Called by SwitchTo each time the
 // view becomes active.
-func (pv *ssmParamsView) Activate() {
+func (pv *SSMParamsView) Activate() {
 	pv.load()
 }
 
-func (pv *ssmParamsView) setHeader() {
+func (pv *SSMParamsView) setHeader() {
 	p := pv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -151,7 +155,7 @@ func (pv *ssmParamsView) setHeader() {
 // the profile's cached SSO token is missing/expired, awsauth.WithReauth
 // opens the browser to log in and retries once before giving up — see
 // spec/36-fe-aws-sso-reauth.
-func (pv *ssmParamsView) load() {
+func (pv *SSMParamsView) load() {
 	profile := pv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		pv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -181,12 +185,12 @@ func (pv *ssmParamsView) load() {
 	}()
 }
 
-func (pv *ssmParamsView) applyFilter(s string) {
+func (pv *SSMParamsView) applyFilter(s string) {
 	pv.filter = s
 	pv.repaint(pv.all)
 }
 
-func (pv *ssmParamsView) repaint(params []awsssm.Parameter) {
+func (pv *SSMParamsView) repaint(params []awsssm.Parameter) {
 	pv.all = params
 
 	filtered := params
@@ -235,7 +239,7 @@ func (pv *ssmParamsView) repaint(params []awsssm.Parameter) {
 	}
 }
 
-func (pv *ssmParamsView) showError(err error) {
+func (pv *SSMParamsView) showError(err error) {
 	pv.all = nil
 	pv.filtered = nil
 	for pv.table.GetRowCount() > 1 {
@@ -252,7 +256,7 @@ func (pv *ssmParamsView) showError(err error) {
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
-func (pv *ssmParamsView) showStatus(msg string) {
+func (pv *SSMParamsView) showStatus(msg string) {
 	pv.all = nil
 	pv.filtered = nil
 	for pv.table.GetRowCount() > 1 {

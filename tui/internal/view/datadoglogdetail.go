@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"fmt"
@@ -13,28 +13,30 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// datadogLogDetailView shows the full detail of a single Datadog log
+// DatadogLogDetailView shows the full detail of a single Datadog log
 // event. Not a registered ui.View; opened via App.OpenDatadogLogDetail
 // and returns to the search view on Esc/Backspace. Nothing here is
 // masked — a log event is never a secret in the AWS-service sense — so
 // 'c' is always available, no reveal-gating needed (same as
 // logDetailView).
-type datadogLogDetailView struct {
+type DatadogLogDetailView struct {
 	textView *tview.TextView
 	host     ui.ViewHost
 	event    datadoglogs.LogEvent
 }
 
-var _ ui.Themeable = (*datadogLogDetailView)(nil)
+var _ ui.Themeable = (*DatadogLogDetailView)(nil)
 
 // ApplyPalette recolors the Datadog log detail view for a live theme switch.
-func (dv *datadogLogDetailView) ApplyPalette(p config.Palette) {
+func (dv *DatadogLogDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("datadog-logs")))
 }
 
-func (dv *datadogLogDetailView) Shortcuts() []ui.Shortcut {
+func (dv *DatadogLogDetailView) Primitive() tview.Primitive { return dv.textView }
+
+func (dv *DatadogLogDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "c", Description: "copy message"},
 		{Key: "g", Description: "go to CloudWatch"},
@@ -59,14 +61,14 @@ func extractCorrelationID(message string) (string, bool) {
 	return m[1], true
 }
 
-func newDatadogLogDetailView(a ui.ViewHost, onBack func()) *datadogLogDetailView {
+func NewDatadogLogDetailView(a ui.ViewHost, onBack func()) *DatadogLogDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Datadog Log Event ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &datadogLogDetailView{textView: tv, host: a}
+	dv := &DatadogLogDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -103,8 +105,8 @@ func newDatadogLogDetailView(a ui.ViewHost, onBack func()) *datadogLogDetailView
 	return dv
 }
 
-// render displays event's detail.
-func (dv *datadogLogDetailView) render(event datadoglogs.LogEvent) {
+// Render displays event's detail.
+func (dv *DatadogLogDetailView) Render(event datadoglogs.LogEvent) {
 	dv.event = event
 	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
@@ -127,7 +129,7 @@ func (dv *datadogLogDetailView) render(event datadoglogs.LogEvent) {
 	dv.refreshContextPanel()
 }
 
-func (dv *datadogLogDetailView) refreshContextPanel() {
+func (dv *DatadogLogDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))

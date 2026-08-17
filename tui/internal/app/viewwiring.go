@@ -24,14 +24,7 @@ import (
 // when switching to a different one — carrying a leftover filter across
 // queues would silently narrow what the user sees without them asking.
 func (a *App) OpenMessages(queueName string) {
-	if a.messagesV.queueName != queueName {
-		a.messagesV.filter = queue.MessageFilter{}
-		a.messagesV.quickSearch = ""
-		a.messagesV.searchInput.SetText("")
-	}
-	a.messagesV.queueName = queueName
-	a.messagesV.updateTitle()
-	a.messagesV.setHeader()
+	a.messagesV.Open(queueName)
 	a.pages.SwitchToPage("messages")
 	a.tv.SetFocus(a.pages)
 	// Show messagesV shortcuts in the context panel.
@@ -40,14 +33,12 @@ func (a *App) OpenMessages(queueName string) {
 		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
 	}
 	a.contextPanel.SetText(strings.Join(lines, "\n"))
-	a.messagesV.load()
 }
 
 // OpenMessageDetail renders the full detail for msg and switches to the
 // message-detail page.
 func (a *App) OpenMessageDetail(queueName string, msg queue.Message) {
-	a.messageDetailV.render(queueName, msg)
-	a.messageDetailV.textView.SetTitle(fmt.Sprintf(" Message Details — %s ", queueName))
+	a.messageDetailV.Render(queueName, msg)
 	a.pages.SwitchToPage("message-detail")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.messageDetailV.Shortcuts()))
@@ -61,15 +52,13 @@ func (a *App) OpenMessageDetail(queueName string, msg queue.Message) {
 // ssm-param-detail page. paramDetailView.render sets the context panel
 // itself (its shortcuts change once a SecureString is revealed).
 func (a *App) OpenParamDetail(param awsssm.Parameter) {
-	a.paramDetailV.render(param)
-	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
+	a.paramDetailV.Render(param)
 	a.pages.SwitchToPage("ssm-param-detail")
 	a.tv.SetFocus(a.pages)
 }
 
 func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
-	a.secretDetailV.render(secret)
-	a.secretDetailV.textView.SetTitle(fmt.Sprintf(" Secret — %s ", secret.Name))
+	a.secretDetailV.Render(secret)
 	a.pages.SwitchToPage("secret-detail")
 	a.tv.SetFocus(a.pages)
 }
@@ -81,7 +70,7 @@ func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
 func (a *App) OpenLogSearch(logGroupName string) {
 	pattern := a.pendingCloudWatchPattern
 	a.pendingCloudWatchPattern = ""
-	a.logSearchV.open(logGroupName, pattern)
+	a.logSearchV.Open(logGroupName, pattern)
 	a.pages.SwitchToPage("log-search")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
@@ -94,7 +83,7 @@ func (a *App) OpenLogSearch(logGroupName string) {
 // OpenLogEventDetail renders the full detail for event and switches to
 // the log-event-detail page.
 func (a *App) OpenLogEventDetail(event awslogs.LogEvent) {
-	a.logDetailV.render(event)
+	a.logDetailV.Render(event)
 	a.pages.SwitchToPage("log-event-detail")
 	a.tv.SetFocus(a.pages)
 }
@@ -102,7 +91,7 @@ func (a *App) OpenLogEventDetail(event awslogs.LogEvent) {
 // OpenDatadogLogDetail renders the full detail for event and switches
 // to the datadog-log-detail page.
 func (a *App) OpenDatadogLogDetail(event datadoglogs.LogEvent) {
-	a.datadogLogDetailV.render(event)
+	a.datadogLogDetailV.Render(event)
 	a.pages.SwitchToPage("datadog-log-detail")
 	a.tv.SetFocus(a.pages)
 }
@@ -110,7 +99,7 @@ func (a *App) OpenDatadogLogDetail(event datadoglogs.LogEvent) {
 // OpenCodePipelineDetail opens pipelineName's stage-status detail view
 // and starts loading its current state.
 func (a *App) OpenCodePipelineDetail(pipelineName string) {
-	a.codePipelineDetailV.open(pipelineName)
+	a.codePipelineDetailV.Open(pipelineName)
 	a.pages.SwitchToPage("codepipeline-detail")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.codePipelineDetailV.Shortcuts()))

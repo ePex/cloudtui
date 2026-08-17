@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"fmt"
@@ -8,28 +8,32 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-func newTestMessagesView(t *testing.T) *messagesView {
+func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *dialog.MovePicker, *MessagesView) {
 	t.Helper()
-	a := New(config.Default())
-	return newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	host := newFakeViewHost()
+	messageFilter := dialog.NewMessageFilter(host)
+	sendMessage := dialog.NewSendMessageOverlay(host)
+	confirm := dialog.NewConfirmDialog(host)
+	movePicker := dialog.NewMovePicker(host)
+	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(string, queue.Message) {})
 }
 
-// newTestMessagesViewWithMsgs builds a messagesView already populated via
+// newTestMessagesViewWithMsgs builds a MessagesView already populated via
 // repaint, as it would be after a real load().
-func newTestMessagesViewWithMsgs(t *testing.T, msgs []queue.Message) *messagesView {
+func newTestMessagesViewWithMsgs(t *testing.T, msgs []queue.Message) *MessagesView {
 	t.Helper()
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.repaint(msgs)
 	return mv
 }
 
 func TestMessagesViewHeaderLabels(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	want := []string{"", "ID", "TYPE", "CORR.ID", "TIMESTAMP", "PREVIEW"}
 	for col, label := range want {
 		cell := mv.table.GetCell(0, col)
@@ -43,14 +47,14 @@ func TestMessagesViewHeaderLabels(t *testing.T) {
 }
 
 func TestMessagesViewColumnCount(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	if got, want := mv.table.GetColumnCount(), 6; got != want {
 		t.Errorf("GetColumnCount() = %d, want %d", got, want)
 	}
 }
 
 func TestMessagesViewShortcutRPresent(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	for _, s := range mv.Shortcuts() {
 		if s.Key == "r" {
 			return
@@ -60,7 +64,7 @@ func TestMessagesViewShortcutRPresent(t *testing.T) {
 }
 
 func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	want := []string{"space", "a", "n", "d", "m"}
 	for _, k := range want {
 		found := false
@@ -83,14 +87,14 @@ func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
 // exactly what happened live when '/' and 'f' were added without bumping
 // ShortcutPanelRows to match (found via manual verification, not tests).
 func TestMessagesViewShortcutsFitTopBar(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	if got := len(mv.Shortcuts()); got > ui.ShortcutPanelRows {
 		t.Errorf("len(Shortcuts()) = %d, want <= %d (ui.ShortcutPanelRows) or entries clip off the context panel", got, ui.ShortcutPanelRows)
 	}
 }
 
 func TestMessagesViewShortcutsIncludeFilterKeys(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	want := []string{"/", "f"}
 	for _, k := range want {
 		found := false
@@ -107,7 +111,7 @@ func TestMessagesViewShortcutsIncludeFilterKeys(t *testing.T) {
 }
 
 func TestMessagesViewQuickSearchFilters(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.applyQuickSearch("order")
 	mv.repaint([]queue.Message{
 		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(2, 0)},
@@ -123,7 +127,7 @@ func TestMessagesViewQuickSearchFilters(t *testing.T) {
 }
 
 func TestMessagesViewQuickSearchMatchesPreview(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.applyQuickSearch("hello")
 	mv.repaint([]queue.Message{
 		{ID: "msg-1", Preview: "hello world", Timestamp: time.Unix(1, 0)},
@@ -136,7 +140,7 @@ func TestMessagesViewQuickSearchMatchesPreview(t *testing.T) {
 }
 
 func TestMessagesViewQuickSearchPersistsAfterRepaint(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.applyQuickSearch("order")
 	mv.repaint([]queue.Message{{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(1, 0)}})
 	// Second repaint with new data — quick search must still apply.
@@ -151,7 +155,7 @@ func TestMessagesViewQuickSearchPersistsAfterRepaint(t *testing.T) {
 }
 
 func TestMessagesViewQuickSearchClear(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.applyQuickSearch("order")
 	mv.repaint([]queue.Message{
 		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(1, 0)},
@@ -165,7 +169,7 @@ func TestMessagesViewQuickSearchClear(t *testing.T) {
 }
 
 func TestMessagesViewMarkAllOnlyMarksSearchFilteredRows(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.applyQuickSearch("order")
 	mv.repaint([]queue.Message{
 		{ID: "msg-1", JMSType: "order-created", Timestamp: time.Unix(2, 0)},
@@ -180,7 +184,7 @@ func TestMessagesViewMarkAllOnlyMarksSearchFilteredRows(t *testing.T) {
 }
 
 func TestMessagesViewTitleUpdatesWithFilterAndSearch(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.updateTitle()
 	if got, want := mv.table.GetTitle(), " Messages — orders (filter: max=500) "; got != want {
@@ -343,67 +347,55 @@ func TestMessagesViewRepaintClearsMarks(t *testing.T) {
 }
 
 func TestMessagesViewDeleteMarkedNoopOnEmptyList(t *testing.T) {
-	a := New(config.Default())
-	backend := &fakeQueueBackend{}
-	a.backend = backend
-	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	_, confirm, _, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.repaint(nil)
 
 	mv.deleteMarked()
 
-	if a.confirm.Visible() {
+	if confirm.Visible() {
 		t.Error("deleteMarked() on an empty list should not open the confirm dialog")
 	}
 }
 
 func TestMessagesViewMoveMarkedNoopOnEmptyList(t *testing.T) {
-	a := New(config.Default())
-	backend := &fakeQueueBackend{}
-	a.backend = backend
-	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	_, _, movePicker, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.repaint(nil)
 
 	mv.moveMarked()
 
-	if a.movePicker.Visible() {
+	if movePicker.Visible() {
 		t.Error("moveMarked() on an empty list should not open the move picker")
 	}
 }
 
 func TestMessagesViewDeleteFallsBackToCursorWhenNothingMarked(t *testing.T) {
-	a := New(config.Default())
-	backend := &fakeQueueBackend{}
-	a.backend = backend
-	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	_, confirm, _, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0) // cursor on the only row; nothing marked
 
 	mv.deleteMarked()
 
-	if !a.confirm.Visible() {
+	if !confirm.Visible() {
 		t.Fatal("deleteMarked() with a cursor row but no marks should open the confirm dialog")
 	}
 	want := `Delete message from "orders"?`
-	if got := renderedScreenText(t, a.confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
+	if got := renderedScreenText(t, confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
 		t.Errorf("rendered confirm dialog = %q, want it to contain %q", got, want)
 	}
 }
 
 func TestMessagesViewMoveFallsBackToCursorWhenNothingMarked(t *testing.T) {
-	a := New(config.Default())
-	backend := &fakeQueueBackend{}
-	a.backend = backend
-	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	_, _, movePicker, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0) // cursor on the only row; nothing marked
 
 	mv.moveMarked()
 
-	if !a.movePicker.Visible() {
+	if !movePicker.Visible() {
 		t.Error("moveMarked() with a cursor row but no marks should open the move picker")
 	}
 }
@@ -423,17 +415,14 @@ func TestMessagesViewTargetIDsPrefersMarkedOverCursor(t *testing.T) {
 }
 
 func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
-	a := New(config.Default())
-	backend := &fakeQueueBackend{}
-	a.backend = backend
-	mv := newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, func(string, queue.Message) {})
+	_, confirm, _, mv := newTestMessagesView(t)
 	mv.queueName = "orders"
 	mv.repaint([]queue.Message{{ID: "", Timestamp: time.Unix(1, 0)}})
 	mv.table.Select(1, 0)
 
 	mv.deleteMarked()
 
-	if a.confirm.Visible() {
+	if confirm.Visible() {
 		t.Error("deleteMarked() should not fall back to a cursor row with no ID")
 	}
 }
@@ -444,7 +433,7 @@ func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
 // first, still-empty draw and stays latched through repaint, scrolling a
 // long list to the bottom instead of the top.
 func TestMessagesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
-	mv := newTestMessagesView(t)
+	_, _, _, mv := newTestMessagesView(t)
 	mv.table.SetRect(0, 0, 60, 15) // fewer visible rows than messages below
 
 	screen := tcell.NewSimulationScreen("")

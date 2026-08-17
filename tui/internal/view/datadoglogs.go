@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -22,13 +22,13 @@ import (
 // spec/42-fe-datadog-logs-service-host-filters.
 const filterAnyOption = "(any)"
 
-// datadogLogsView is the Datadog Logs search screen: a registered
+// DatadogLogsView is the Datadog Logs search screen: a registered
 // top-level ui.View (unlike logSearchView, which is opened per
 // CloudWatch log group) — Datadog Logs is one flat, taggable/queryable
 // stream, not organized into named groups the way CloudWatch is, so
 // there's no separate group-list step first (see
 // spec/39-fe-datadog-logs decision 1).
-type datadogLogsView struct {
+type DatadogLogsView struct {
 	table           *tview.Table
 	serviceFilterDD *tview.DropDown
 	envFilterDD     *tview.DropDown
@@ -49,12 +49,12 @@ type datadogLogsView struct {
 	hasMore       bool
 }
 
-var _ ui.View = (*datadogLogsView)(nil)
-var _ ui.Shortcuttable = (*datadogLogsView)(nil)
-var _ ui.Themeable = (*datadogLogsView)(nil)
+var _ ui.View = (*DatadogLogsView)(nil)
+var _ ui.Shortcuttable = (*DatadogLogsView)(nil)
+var _ ui.Themeable = (*DatadogLogsView)(nil)
 
 // ApplyPalette recolors the Datadog Logs view for a live theme switch.
-func (dv *datadogLogsView) ApplyPalette(p config.Palette) {
+func (dv *DatadogLogsView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	dv.table.SetBackgroundColor(bg)
 	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
@@ -66,11 +66,15 @@ func (dv *datadogLogsView) ApplyPalette(p config.Palette) {
 	ui.StyleDropDown(dv.envFilterDD, p)
 }
 
-func (dv *datadogLogsView) Name() string               { return "datadog-logs" }
-func (dv *datadogLogsView) Title() string              { return "Datadog Logs" }
-func (dv *datadogLogsView) Primitive() tview.Primitive { return dv.flex }
+func (dv *DatadogLogsView) Name() string               { return "datadog-logs" }
+func (dv *DatadogLogsView) Title() string              { return "Datadog Logs" }
+func (dv *DatadogLogsView) Primitive() tview.Primitive { return dv.flex }
+func (dv *DatadogLogsView) Table() *tview.Table        { return dv.table }
+func (dv *DatadogLogsView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{dv.queryInput, dv.serviceFilterDD, dv.envFilterDD}
+}
 
-func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
+func (dv *DatadogLogsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "t", Description: "time range"},
@@ -80,8 +84,8 @@ func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newDatadogLogsView constructs the Datadog Logs search view.
-func newDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event datadoglogs.LogEvent)) *datadogLogsView {
+// NewDatadogLogsView constructs the Datadog Logs search view.
+func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event datadoglogs.LogEvent)) *DatadogLogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Datadog Logs ")
 	table.SetSelectable(true, false)
@@ -120,7 +124,7 @@ func newDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 		AddItem(filterRow, 1, 0, false).
 		AddItem(queryInput, 1, 0, false)
 
-	dv := &datadogLogsView{
+	dv := &DatadogLogsView{
 		table:           table,
 		serviceFilterDD: serviceFilterDD,
 		envFilterDD:     envFilterDD,
@@ -221,12 +225,12 @@ func newDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 // valid: "search everything in range"). Also kicks off facet discovery
 // (spec/52-fe-datadog-logs-facet-listing) — independent of the search
 // above, so it never delays what the user actually sees first.
-func (dv *datadogLogsView) Activate() {
+func (dv *DatadogLogsView) Activate() {
 	dv.search()
 	dv.discoverFacetValues()
 }
 
-func (dv *datadogLogsView) setHeader() {
+func (dv *DatadogLogsView) setHeader() {
 	p := dv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -245,7 +249,7 @@ func (dv *datadogLogsView) setHeader() {
 // query into the actual Datadog query string. Values are quoted for the
 // same reason FE 41's CorrelationID fix quotes its value — Datadog's
 // query tokenizer can split an unquoted term on internal punctuation.
-func (dv *datadogLogsView) effectiveQuery() string {
+func (dv *DatadogLogsView) effectiveQuery() string {
 	var parts []string
 	if dv.serviceFilter != "" {
 		parts = append(parts, fmt.Sprintf("service:%q", dv.serviceFilter))
@@ -270,7 +274,7 @@ func (dv *datadogLogsView) effectiveQuery() string {
 // restoring an unchanged selection recursively call search() again.
 // onSelect is only wired up (via SetSelectedFunc) once reconciliation
 // is done, so it only fires for genuine user-driven selections.
-func (dv *datadogLogsView) applyFilterOptions(dd *tview.DropDown, values []string, current *string, onSelect func(string)) {
+func (dv *DatadogLogsView) applyFilterOptions(dd *tview.DropDown, values []string, current *string, onSelect func(string)) {
 	options := append([]string{filterAnyOption}, values...)
 	idx := 0
 	for i, v := range options {
@@ -304,7 +308,7 @@ func (dv *datadogLogsView) applyFilterOptions(dd *tview.DropDown, values []strin
 // unselectable without resetting to "(any)" first. Accumulating instead
 // means a value discovered once stays offered regardless of how later
 // searches narrow the actual results.
-func (dv *datadogLogsView) rebuildFilterOptions() {
+func (dv *DatadogLogsView) rebuildFilterOptions() {
 	for _, e := range dv.results {
 		if e.Service != "" {
 			dv.knownServices[e.Service] = true
@@ -321,7 +325,7 @@ func (dv *datadogLogsView) rebuildFilterOptions() {
 // facet discovery (see handleFacetDiscoveryResult) can refresh the
 // dropdowns after merging in newly-discovered values without also
 // re-scanning dv.results.
-func (dv *datadogLogsView) refreshFilterDropdowns() {
+func (dv *DatadogLogsView) refreshFilterDropdowns() {
 	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
@@ -345,7 +349,7 @@ const facetDiscoveryWindow = 30 * 24 * time.Hour
 // values that haven't shown up in anything actually searched yet this
 // session (rebuildFilterOptions alone only ever discovers what's been
 // fetched). Two independent calls, one per facet.
-func (dv *datadogLogsView) discoverFacetValues() {
+func (dv *DatadogLogsView) discoverFacetValues() {
 	dv.discoverFacetValuesFor("service", dv.knownServices)
 	dv.discoverFacetValuesFor("env", dv.knownEnvs)
 }
@@ -353,7 +357,7 @@ func (dv *datadogLogsView) discoverFacetValues() {
 // discoverFacetValuesFor runs a single facet-listing call in a goroutine
 // and hands the outcome to handleFacetDiscoveryResult on the tview event
 // loop — same shape as search/handleSearchResult.
-func (dv *datadogLogsView) discoverFacetValuesFor(facet string, known map[string]bool) {
+func (dv *DatadogLogsView) discoverFacetValuesFor(facet string, known map[string]bool) {
 	cfg := dv.host.Config().Datadog
 	end := time.Now()
 	start := end.Add(-facetDiscoveryWindow)
@@ -376,7 +380,7 @@ func (dv *datadogLogsView) discoverFacetValuesFor(facet string, known map[string
 // Split out from discoverFacetValuesFor so it's directly testable
 // without a goroutine or a running tview event loop, same rationale as
 // handleSearchResult.
-func (dv *datadogLogsView) handleFacetDiscoveryResult(known map[string]bool, values []string, err error) {
+func (dv *DatadogLogsView) handleFacetDiscoveryResult(known map[string]bool, values []string, err error) {
 	if err != nil {
 		slog.Warn("datadog logs: facet discovery failed", "error", err)
 		return
@@ -405,7 +409,7 @@ func sortedKeys(set map[string]bool) []string {
 
 // search runs datadoglogs.Search in a goroutine (a real HTTP call) and
 // hands the outcome to handleSearchResult on the tview event loop.
-func (dv *datadogLogsView) search() {
+func (dv *DatadogLogsView) search() {
 	query := dv.effectiveQuery()
 	start, end := dv.tr.Bounds(time.Now())
 	cfg := dv.host.Config().Datadog
@@ -422,7 +426,7 @@ func (dv *datadogLogsView) search() {
 // out from search so this — the part with actual logic — is directly
 // testable without spawning a goroutine or needing a running tview
 // event loop (QueueUpdateDraw blocks forever without one).
-func (dv *datadogLogsView) handleSearchResult(events []datadoglogs.LogEvent, hasMore bool, err error) {
+func (dv *DatadogLogsView) handleSearchResult(events []datadoglogs.LogEvent, hasMore bool, err error) {
 	if err != nil {
 		slog.Error("datadog logs: search failed", "error", err)
 		dv.showError(err)
@@ -434,7 +438,7 @@ func (dv *datadogLogsView) handleSearchResult(events []datadoglogs.LogEvent, has
 	dv.repaint()
 }
 
-func (dv *datadogLogsView) repaint() {
+func (dv *DatadogLogsView) repaint() {
 	for dv.table.GetRowCount() > 1 {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
 	}
@@ -464,7 +468,7 @@ func (dv *datadogLogsView) repaint() {
 // updateTitle never uses "[text]" — see queues.go's updateTitle for why
 // (tview.Box titles run through the same tag-parsing Print() that Table
 // cells do, silently swallowing square brackets).
-func (dv *datadogLogsView) updateTitle() {
+func (dv *DatadogLogsView) updateTitle() {
 	label := dv.tr.Label()
 	title := fmt.Sprintf(" Datadog Logs — %s — %d events", label, len(dv.results))
 	if dv.hasMore {
@@ -473,7 +477,7 @@ func (dv *datadogLogsView) updateTitle() {
 	dv.table.SetTitle(title + " ")
 }
 
-func (dv *datadogLogsView) showError(err error) {
+func (dv *DatadogLogsView) showError(err error) {
 	dv.results = nil
 	dv.hasMore = false
 	for dv.table.GetRowCount() > 1 {

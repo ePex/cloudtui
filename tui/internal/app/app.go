@@ -27,6 +27,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
+	"github.com/ePex/cloudtui/tui/internal/view"
 )
 
 // App is the root of the TUI: it owns the tview.Application and routes
@@ -57,9 +58,9 @@ type App struct {
 	statusBar      *tview.TextView
 	settingsList   *tview.List
 	logV           *logView
-	queuesV        *queuesView
-	messagesV      *messagesView
-	messageDetailV *messageDetailView
+	queuesV        *view.QueuesView
+	messagesV      *view.MessagesView
+	messageDetailV *view.MessageDetailView
 	confirm        *dialog.ConfirmDialog
 	movePicker     *dialog.MovePicker
 	sendMessage    *dialog.SendMessageOverlay
@@ -81,17 +82,17 @@ type App struct {
 	listAWSProfiles          func(context.Context) ([]awsprofile.Profile, error)
 	awsAuthTypeFor           func(ctx context.Context, profile string) (awsprofile.AuthType, error)
 	awsSSOLogin              func(ctx context.Context, profile string) error
-	ssmParamsV               *ssmParamsView
-	secretsV                 *secretsView
-	paramDetailV             *paramDetailView
-	secretDetailV            *secretDetailView
-	logsV                    *logsView
-	logSearchV               *logSearchView
-	logDetailV               *logDetailView
-	datadogLogsV             *datadogLogsView
-	datadogLogDetailV        *datadogLogDetailView
-	codePipelineListV        *codePipelineListView
-	codePipelineDetailV      *codePipelineDetailView
+	ssmParamsV               *view.SSMParamsView
+	secretsV                 *view.SecretsView
+	paramDetailV             *view.ParamDetailView
+	secretDetailV            *view.SecretDetailView
+	logsV                    *view.LogsView
+	logSearchV               *view.LogSearchView
+	logDetailV               *view.LogDetailView
+	datadogLogsV             *view.DatadogLogsView
+	datadogLogDetailV        *view.DatadogLogDetailView
+	codePipelineListV        *view.CodePipelineListView
+	codePipelineDetailV      *view.CodePipelineDetailView
 	// watchedPipelines/lastPipelineStages back the background
 	// CodePipeline watchers — see codepipelinewatch.go.
 	watchedPipelines       map[string]chan struct{}
@@ -217,36 +218,36 @@ func New(cfg config.Config) *App {
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 
-	a.queuesV = newQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
-	a.messagesV = newMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
-	a.messageDetailV = newMessageDetailView(a, a.movePicker, a.confirm,
+	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
+	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
+	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm,
 		func() {
 			a.pages.SwitchToPage("messages")
-			a.tv.SetFocus(a.messagesV.table)
+			a.tv.SetFocus(a.messagesV.Table())
 			lines := make([]string, 0, len(a.messagesV.Shortcuts()))
 			for _, sc := range a.messagesV.Shortcuts() {
 				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
 			}
 			a.SetContextHint(strings.Join(lines, "\n"))
 		},
-		func() { a.messagesV.load() },
+		func() { a.messagesV.Load() },
 	)
-	a.ssmParamsV = newSSMParamsView(a, a.OpenParamDetail)
-	a.paramDetailV = newParamDetailView(a, func() {
+	a.ssmParamsV = view.NewSSMParamsView(a, a.OpenParamDetail)
+	a.paramDetailV = view.NewParamDetailView(a, func() {
 		a.pages.SwitchToPage("ssm-parameters")
-		a.tv.SetFocus(a.ssmParamsV.table)
+		a.tv.SetFocus(a.ssmParamsV.Table())
 		a.UpdateContextPanel(a.ssmParamsV)
 	})
-	a.secretsV = newSecretsView(a, a.OpenSecretDetail)
-	a.logsV = newLogsView(a, a.OpenLogSearch)
-	a.logSearchV = newLogSearchView(a, a.timeRangeModal, a.OpenLogEventDetail, func() {
+	a.secretsV = view.NewSecretsView(a, a.OpenSecretDetail)
+	a.logsV = view.NewLogsView(a, a.OpenLogSearch)
+	a.logSearchV = view.NewLogSearchView(a, a.timeRangeModal, a.OpenLogEventDetail, func() {
 		a.pages.SwitchToPage("cloudwatch-logs")
-		a.tv.SetFocus(a.logsV.table)
+		a.tv.SetFocus(a.logsV.Table())
 		a.UpdateContextPanel(a.logsV)
 	})
-	a.logDetailV = newLogDetailView(a, func() {
+	a.logDetailV = view.NewLogDetailView(a, func() {
 		a.pages.SwitchToPage("log-search")
-		a.tv.SetFocus(a.logSearchV.table)
+		a.tv.SetFocus(a.logSearchV.Table())
 		// logSearchView isn't a registered ui.View (opened directly,
 		// like messagesView), so it can't go through the generic
 		// UpdateContextPanel(ui.View) path — same manual pattern
@@ -257,23 +258,23 @@ func New(cfg config.Config) *App {
 		}
 		a.SetContextHint(strings.Join(lines, "\n"))
 	})
-	a.datadogLogsV = newDatadogLogsView(a, a.timeRangeModal, a.OpenDatadogLogDetail)
-	a.datadogLogDetailV = newDatadogLogDetailView(a, func() {
+	a.datadogLogsV = view.NewDatadogLogsView(a, a.timeRangeModal, a.OpenDatadogLogDetail)
+	a.datadogLogDetailV = view.NewDatadogLogDetailView(a, func() {
 		a.pages.SwitchToPage("datadog-logs")
-		a.tv.SetFocus(a.datadogLogsV.table)
+		a.tv.SetFocus(a.datadogLogsV.Table())
 		a.UpdateContextPanel(a.datadogLogsV)
 	})
 	a.watchedPipelines = map[string]chan struct{}{}
 	a.lastPipelineStages = map[string]map[string]string{}
-	a.codePipelineListV = newCodePipelineListView(a, a.OpenCodePipelineDetail)
-	a.codePipelineDetailV = newCodePipelineDetailView(a, func() {
+	a.codePipelineListV = view.NewCodePipelineListView(a, a.OpenCodePipelineDetail)
+	a.codePipelineDetailV = view.NewCodePipelineDetailView(a, func() {
 		a.pages.SwitchToPage("codepipeline")
-		a.tv.SetFocus(a.codePipelineListV.table)
+		a.tv.SetFocus(a.codePipelineListV.Table())
 		a.UpdateContextPanel(a.codePipelineListV)
 	})
-	a.secretDetailV = newSecretDetailView(a, func() {
+	a.secretDetailV = view.NewSecretDetailView(a, func() {
 		a.pages.SwitchToPage("secrets-manager")
-		a.tv.SetFocus(a.secretsV.table)
+		a.tv.SetFocus(a.secretsV.Table())
 		a.UpdateContextPanel(a.secretsV)
 	})
 
@@ -285,14 +286,14 @@ func New(cfg config.Config) *App {
 	}
 	// messages, message-detail, and param-detail pages: not in a.views (no
 	// home entry / SwitchTo — opened directly via their own open* helper).
-	a.pages.AddPage("messages", a.messagesV.flex, true, false)
-	a.pages.AddPage("message-detail", a.messageDetailV.textView, true, false)
-	a.pages.AddPage("secret-detail", a.secretDetailV.textView, true, false)
-	a.pages.AddPage("log-search", a.logSearchV.flex, true, false)
-	a.pages.AddPage("log-event-detail", a.logDetailV.textView, true, false)
-	a.pages.AddPage("datadog-log-detail", a.datadogLogDetailV.textView, true, false)
-	a.pages.AddPage("codepipeline-detail", a.codePipelineDetailV.table, true, false)
-	a.pages.AddPage("ssm-param-detail", a.paramDetailV.textView, true, false)
+	a.pages.AddPage("messages", a.messagesV.Primitive(), true, false)
+	a.pages.AddPage("message-detail", a.messageDetailV.Primitive(), true, false)
+	a.pages.AddPage("secret-detail", a.secretDetailV.Primitive(), true, false)
+	a.pages.AddPage("log-search", a.logSearchV.Primitive(), true, false)
+	a.pages.AddPage("log-event-detail", a.logDetailV.Primitive(), true, false)
+	a.pages.AddPage("datadog-log-detail", a.datadogLogDetailV.Primitive(), true, false)
+	a.pages.AddPage("codepipeline-detail", a.codePipelineDetailV.Primitive(), true, false)
+	a.pages.AddPage("ssm-param-detail", a.paramDetailV.Primitive(), true, false)
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tb.Root, tb.Height, 0, false).
@@ -360,17 +361,15 @@ func New(cfg config.Config) *App {
 	// per-view/per-overlay checks.
 	a.focusExemptInputs = []tview.Primitive{
 		a.prompt,
-		a.queuesV.filterInput,
-		a.messagesV.searchInput,
-		a.ssmParamsV.filterInput,
-		a.secretsV.filterInput,
-		a.logsV.filterInput,
-		a.logSearchV.patternInput,
-		a.datadogLogsV.queryInput,
-		a.datadogLogsV.serviceFilterDD,
-		a.datadogLogsV.envFilterDD,
-		a.codePipelineListV.filterInput,
 	}
+	a.focusExemptInputs = append(a.focusExemptInputs, a.ssmParamsV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.secretsV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.logsV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.datadogLogsV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.codePipelineListV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.queuesV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.logSearchV.FilterInputs()...)
+	a.focusExemptInputs = append(a.focusExemptInputs, a.messagesV.FilterInputs()...)
 	a.overlayVisible = []visibler{
 		a.confirm,
 		a.movePicker,
@@ -566,7 +565,7 @@ func (a *App) switchConnection(name string) {
 	}
 	a.cfg.ActiveConnection = name
 	a.backend = newBackendForConn(a, conn)
-	a.queuesV.backend = a.backend
+	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.refreshSettingsList()
 	a.SwitchTo("queues")

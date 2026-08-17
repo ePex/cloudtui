@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -15,12 +15,12 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// secretsView is the Secrets Manager screen: a filterable, read-only
+// SecretsView is the Secrets Manager screen: a filterable, read-only
 // tview.Table listing AWS Secrets Manager entries for the currently
 // active AWS profile (config.Config.ActiveAWSProfile — see
 // spec/29-fe-aws-profile-selection). A registered top-level ui.View
 // (Home's "AWS" section, alongside "ssm-parameters").
-type secretsView struct {
+type SecretsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
@@ -30,12 +30,12 @@ type secretsView struct {
 	filtered    []awssecrets.Secret // currently displayed subset, row-indexed
 }
 
-var _ ui.View = (*secretsView)(nil)
-var _ ui.Shortcuttable = (*secretsView)(nil)
-var _ ui.Themeable = (*secretsView)(nil)
+var _ ui.View = (*SecretsView)(nil)
+var _ ui.Shortcuttable = (*SecretsView)(nil)
+var _ ui.Themeable = (*SecretsView)(nil)
 
 // ApplyPalette recolors the secrets manager view for a live theme switch.
-func (sv *secretsView) ApplyPalette(p config.Palette) {
+func (sv *SecretsView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	sv.table.SetBackgroundColor(bg)
 	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
@@ -45,19 +45,23 @@ func (sv *secretsView) ApplyPalette(p config.Palette) {
 	sv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (sv *secretsView) Name() string               { return "secrets-manager" }
-func (sv *secretsView) Title() string              { return "Secrets Manager" }
-func (sv *secretsView) Primitive() tview.Primitive { return sv.flex }
+func (sv *SecretsView) Name() string               { return "secrets-manager" }
+func (sv *SecretsView) Title() string              { return "Secrets Manager" }
+func (sv *SecretsView) Primitive() tview.Primitive { return sv.flex }
+func (sv *SecretsView) Table() *tview.Table        { return sv.table }
+func (sv *SecretsView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{sv.filterInput}
+}
 
-func (sv *secretsView) Shortcuts() []ui.Shortcut {
+func (sv *SecretsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
 	}
 }
 
-// newSecretsView constructs the Secrets Manager view.
-func newSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *secretsView {
+// NewSecretsView constructs the Secrets Manager view.
+func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *SecretsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Secrets Manager ")
 	table.SetSelectable(true, false)
@@ -74,7 +78,7 @@ func newSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *sec
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	sv := &secretsView{table: table, filterInput: filterInput, flex: flex, host: a}
+	sv := &SecretsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	sv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -124,11 +128,11 @@ func newSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *sec
 
 // Activate reloads the secret list. Called by SwitchTo each time the
 // view becomes active.
-func (sv *secretsView) Activate() {
+func (sv *SecretsView) Activate() {
 	sv.load()
 }
 
-func (sv *secretsView) setHeader() {
+func (sv *SecretsView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -149,7 +153,7 @@ func (sv *secretsView) setHeader() {
 // If the call fails because the profile's cached SSO token is
 // missing/expired, awsauth.WithReauth opens the browser to log in and
 // retries once before giving up — see spec/36-fe-aws-sso-reauth.
-func (sv *secretsView) load() {
+func (sv *SecretsView) load() {
 	profile := sv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
@@ -179,12 +183,12 @@ func (sv *secretsView) load() {
 	}()
 }
 
-func (sv *secretsView) applyFilter(s string) {
+func (sv *SecretsView) applyFilter(s string) {
 	sv.filter = s
 	sv.repaint(sv.all)
 }
 
-func (sv *secretsView) repaint(secrets []awssecrets.Secret) {
+func (sv *SecretsView) repaint(secrets []awssecrets.Secret) {
 	sv.all = secrets
 
 	filtered := secrets
@@ -237,7 +241,7 @@ func (sv *secretsView) repaint(secrets []awssecrets.Secret) {
 	}
 }
 
-func (sv *secretsView) showError(err error) {
+func (sv *SecretsView) showError(err error) {
 	sv.all = nil
 	sv.filtered = nil
 	for sv.table.GetRowCount() > 1 {
@@ -254,7 +258,7 @@ func (sv *secretsView) showError(err error) {
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
-func (sv *secretsView) showStatus(msg string) {
+func (sv *SecretsView) showStatus(msg string) {
 	sv.all = nil
 	sv.filtered = nil
 	for sv.table.GetRowCount() > 1 {

@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"context"
@@ -16,11 +16,11 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// queuesView is the Queues screen: a bordered tview.Table showing Name,
+// QueuesView is the Queues screen: a bordered tview.Table showing Name,
 // Pending, Consumers, Enqueued, and Dequeued for each queue on the broker.
 var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
 
-type queuesView struct {
+type QueuesView struct {
 	table        *tview.Table
 	filterInput  *tview.InputField
 	flex         *tview.Flex
@@ -35,12 +35,12 @@ type queuesView struct {
 	sortAsc      bool            // true = ascending
 }
 
-var _ ui.View = (*queuesView)(nil)
-var _ ui.Shortcuttable = (*queuesView)(nil)
-var _ ui.Themeable = (*queuesView)(nil)
+var _ ui.View = (*QueuesView)(nil)
+var _ ui.Shortcuttable = (*QueuesView)(nil)
+var _ ui.Themeable = (*QueuesView)(nil)
 
 // ApplyPalette recolors the queues view for a live theme switch.
-func (qv *queuesView) ApplyPalette(p config.Palette) {
+func (qv *QueuesView) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	qv.table.SetBackgroundColor(bg)
 	qv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
@@ -50,11 +50,19 @@ func (qv *queuesView) ApplyPalette(p config.Palette) {
 	qv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 }
 
-func (qv *queuesView) Name() string               { return "queues" }
-func (qv *queuesView) Title() string              { return "Queues" }
-func (qv *queuesView) Primitive() tview.Primitive { return qv.flex }
+func (qv *QueuesView) Name() string               { return "queues" }
+func (qv *QueuesView) Title() string              { return "Queues" }
+func (qv *QueuesView) Primitive() tview.Primitive { return qv.flex }
+func (qv *QueuesView) Table() *tview.Table        { return qv.table }
+func (qv *QueuesView) FilterInputs() []tview.Primitive {
+	return []tview.Primitive{qv.filterInput}
+}
 
-func (qv *queuesView) Shortcuts() []ui.Shortcut {
+// SetBackend swaps the queue.Backend queries are made against — used by
+// App.switchConnection when the active connection changes.
+func (qv *QueuesView) SetBackend(b queue.Backend) { qv.backend = b }
+
+func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
@@ -65,8 +73,8 @@ func (qv *queuesView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-// newQueuesView constructs the queues view backed by b.
-func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, onSelect func(queueName string)) *queuesView {
+// NewQueuesView constructs the queues view backed by b.
+func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, onSelect func(queueName string)) *QueuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)
@@ -83,7 +91,7 @@ func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	qv := &queuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, sortAsc: true}
+	qv := &QueuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, sortAsc: true}
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -106,7 +114,7 @@ func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'r':
-			qv.load()
+			qv.Load()
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -140,7 +148,7 @@ func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 							qv.showError(err)
 							return
 						}
-						qv.load()
+						qv.Load()
 					})
 				}()
 			})
@@ -169,7 +177,7 @@ func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 						return
 					}
 					qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
-					qv.load()
+					qv.Load()
 				})
 			}, restoreQueues)
 			return nil
@@ -206,11 +214,11 @@ func newQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 
 // Activate reloads the queue list. Called by SwitchTo each time the queues
 // view becomes active.
-func (qv *queuesView) Activate() {
-	qv.load()
+func (qv *QueuesView) Activate() {
+	qv.Load()
 }
 
-func (qv *queuesView) setHeader() {
+func (qv *QueuesView) setHeader() {
 	p := qv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
@@ -236,7 +244,7 @@ func (qv *queuesView) setHeader() {
 
 // load fetches queues from the backend in a goroutine and repaints via
 // QueueUpdateDraw so the update lands on the tview event loop.
-func (qv *queuesView) load() {
+func (qv *QueuesView) Load() {
 	go func() {
 		summaries, err := qv.backend.List(context.Background())
 		qv.host.QueueUpdateDraw(func() {
@@ -250,7 +258,7 @@ func (qv *queuesView) load() {
 	}()
 }
 
-func (qv *queuesView) applyFilter(s string) {
+func (qv *QueuesView) applyFilter(s string) {
 	qv.filter = s
 	qv.updateTitle()
 	qv.repaint(qv.allSummaries)
@@ -265,7 +273,7 @@ func (qv *queuesView) applyFilter(s string) {
 // string (it's just the stored value), so this was invisible to any test
 // that doesn't actually Draw() to a screen and read back the rendered
 // output — see TestQueuesViewFilteredTitleActuallyRenders.
-func (qv *queuesView) updateTitle() {
+func (qv *QueuesView) updateTitle() {
 	if qv.filter == "" {
 		qv.table.SetTitle(" Queues ")
 	} else {
@@ -273,7 +281,7 @@ func (qv *queuesView) updateTitle() {
 	}
 }
 
-func (qv *queuesView) repaint(summaries []queue.Summary) {
+func (qv *QueuesView) repaint(summaries []queue.Summary) {
 	qv.allSummaries = summaries
 
 	// Apply filter.
@@ -356,7 +364,7 @@ func (qv *queuesView) repaint(summaries []queue.Summary) {
 	}
 }
 
-func (qv *queuesView) showError(err error) {
+func (qv *QueuesView) showError(err error) {
 	for qv.table.GetRowCount() > 1 {
 		qv.table.RemoveRow(qv.table.GetRowCount() - 1)
 	}
