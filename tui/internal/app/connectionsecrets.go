@@ -109,7 +109,7 @@ func newBackendForConn(a *App, conn config.Connection) queue.Backend {
 	if secretName == "" {
 		return buildBackend(conn)
 	}
-	return &secretBackend{app: a, conn: conn, secretName: secretName, build: buildBackend}
+	return &secretBackend{app: a, conn: conn, secretName: secretName, profile: a.cfg.ActiveAWSProfile, build: buildBackend}
 }
 
 // secretBackend wraps a queue.Backend whose password comes from AWS
@@ -131,7 +131,15 @@ type secretBackend struct {
 	app        *App
 	conn       config.Connection
 	secretName string
-	build      func(config.Connection) queue.Backend
+	// profile is captured once, at construction, on the main
+	// goroutine — never re-read from a.cfg here, since every
+	// queue.Backend method (List, BrowseMessages, ...) runs on a
+	// background goroutine that would otherwise race the main
+	// goroutine's own writes to a.cfg (profile switch, connection
+	// switch). Same discipline as spec/87's PipelineWatcher capturing
+	// its profile once in StartWatchingPipeline.
+	profile string
+	build   func(config.Connection) queue.Backend
 
 	mu    sync.Mutex
 	inner queue.Backend
@@ -144,7 +152,7 @@ func (b *secretBackend) current(ctx context.Context) (queue.Backend, error) {
 	if b.inner != nil {
 		return b.inner, nil
 	}
-	pw, err := b.app.resolvePassword(ctx, b.app.cfg.ActiveAWSProfile, b.secretName)
+	pw, err := b.app.resolvePassword(ctx, b.profile, b.secretName)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +163,7 @@ func (b *secretBackend) current(ctx context.Context) (queue.Backend, error) {
 // refresh invalidates the cached secret value and forces the next current()
 // call to re-resolve and rebuild the inner backend.
 func (b *secretBackend) refresh() {
-	b.app.secretCache.invalidate(b.app.cfg.ActiveAWSProfile, b.secretName)
+	b.app.secretCache.invalidate(b.profile, b.secretName)
 	b.mu.Lock()
 	b.inner = nil
 	b.mu.Unlock()
