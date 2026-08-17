@@ -23,7 +23,7 @@ import (
 // App.handlePipelinePoll) — see spec/43-fe-codepipeline-monitor.
 type codePipelineDetailView struct {
 	table        *tview.Table
-	app          *App
+	host         ui.ViewHost
 	pipelineName string
 	stages       []awscodepipeline.StageStatus
 }
@@ -48,13 +48,13 @@ func (dv *codePipelineDetailView) Shortcuts() []ui.Shortcut {
 
 // newCodePipelineDetailView constructs the CodePipeline stage-status
 // detail view.
-func newCodePipelineDetailView(a *App) *codePipelineDetailView {
+func newCodePipelineDetailView(a ui.ViewHost, onBack func()) *codePipelineDetailView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	dv := &codePipelineDetailView{table: table, app: a}
+	dv := &codePipelineDetailView{table: table, host: a}
 	dv.setHeader()
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -72,9 +72,7 @@ func newCodePipelineDetailView(a *App) *codePipelineDetailView {
 		}
 		switch event.Key() {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:
-			a.pages.SwitchToPage("codepipeline")
-			a.tv.SetFocus(a.codePipelineListV.table)
-			a.UpdateContextPanel(a.codePipelineListV)
+			onBack()
 			return nil
 		}
 		return event
@@ -84,7 +82,7 @@ func newCodePipelineDetailView(a *App) *codePipelineDetailView {
 }
 
 func (dv *codePipelineDetailView) setHeader() {
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"STAGE", "STATUS"} {
@@ -112,10 +110,10 @@ func (dv *codePipelineDetailView) open(pipelineName string) {
 }
 
 func (dv *codePipelineDetailView) toggleWatch() {
-	if dv.app.IsWatchingPipeline(dv.pipelineName) {
-		dv.app.StopWatchingPipeline(dv.pipelineName)
+	if dv.host.IsWatchingPipeline(dv.pipelineName) {
+		dv.host.StopWatchingPipeline(dv.pipelineName)
 	} else {
-		dv.app.StartWatchingPipeline(dv.pipelineName)
+		dv.host.StartWatchingPipeline(dv.pipelineName)
 	}
 	dv.updateTitle()
 }
@@ -126,7 +124,7 @@ func (dv *codePipelineDetailView) toggleWatch() {
 // awsauth.WithReauth opens the browser to log in and retries once
 // before giving up — see spec/36-fe-aws-sso-reauth.
 func (dv *codePipelineDetailView) load() {
-	profile := dv.app.cfg.ActiveAWSProfile
+	profile := dv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		dv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
@@ -134,18 +132,18 @@ func (dv *codePipelineDetailView) load() {
 	pipelineName := dv.pipelineName
 	go func() {
 		ctx := context.Background()
-		authType, _ := dv.app.awsAuthTypeFor(ctx, profile)
-		stages, err := awsauth.WithReauth(ctx, profile, authType, dv.app.awsSSOLogin,
+		authType, _ := dv.host.AWSAuthTypeFor(ctx, profile)
+		stages, err := awsauth.WithReauth(ctx, profile, authType, dv.host.AWSSSOLogin,
 			func() {
-				dv.app.tv.QueueUpdateDraw(func() {
+				dv.host.QueueUpdateDraw(func() {
 					dv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.StageStatus, error) {
-				return dv.app.getPipelineState(ctx, profile, pipelineName)
+				return dv.host.GetPipelineState(ctx, profile, pipelineName)
 			},
 		)
-		dv.app.tv.QueueUpdateDraw(func() {
+		dv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("codepipeline: failed to get pipeline state", "pipeline", pipelineName, "error", err)
 				dv.showError(err)
@@ -166,7 +164,7 @@ func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
 	}
 
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	for i, s := range stages {
 		row := i + 1
@@ -187,7 +185,7 @@ func (dv *codePipelineDetailView) render(stages []awscodepipeline.StageStatus) {
 // cells do, silently swallowing square brackets).
 func (dv *codePipelineDetailView) updateTitle() {
 	title := " " + dv.pipelineName
-	if dv.app.IsWatchingPipeline(dv.pipelineName) {
+	if dv.host.IsWatchingPipeline(dv.pipelineName) {
 		title += " — ▶ watching"
 	}
 	dv.table.SetTitle(title + " ")
@@ -216,7 +214,7 @@ func (dv *codePipelineDetailView) showStatus(msg string) {
 	}
 	dv.table.SetCell(1, 0,
 		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(dv.app.cfg.Colors.Accent)).
+			SetTextColor(tcell.GetColor(dv.host.Config().Colors.Accent)).
 			SetExpansion(3),
 	)
 	dv.table.SetTitle(fmt.Sprintf(" %s ", dv.pipelineName))

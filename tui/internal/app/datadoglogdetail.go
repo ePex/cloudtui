@@ -21,7 +21,7 @@ import (
 // logDetailView).
 type datadogLogDetailView struct {
 	textView *tview.TextView
-	app      *App
+	host     ui.ViewHost
 	event    datadoglogs.LogEvent
 }
 
@@ -59,14 +59,14 @@ func extractCorrelationID(message string) (string, bool) {
 	return m[1], true
 }
 
-func newDatadogLogDetailView(a *App) *datadogLogDetailView {
+func newDatadogLogDetailView(a ui.ViewHost, onBack func()) *datadogLogDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Datadog Log Event ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &datadogLogDetailView{textView: tv, app: a}
+	dv := &datadogLogDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -75,13 +75,13 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == 'c':
-			dv.app.CopyToClipboard(dv.event.Message)
-			dv.app.statusBar.SetText("Copied log message to clipboard")
+			dv.host.CopyToClipboard(dv.event.Message)
+			dv.host.SetStatus("Copied log message to clipboard")
 			return nil
 		case event.Rune() == 'g':
 			id, ok := extractCorrelationID(dv.event.Message)
 			if !ok {
-				dv.app.statusBar.SetText("[yellow]No CorrelationID found in this log message[-]")
+				dv.host.SetStatus("[yellow]No CorrelationID found in this log message[-]")
 				return nil
 			}
 			// Quoted: CloudWatch's filter-pattern syntax tokenizes an
@@ -90,13 +90,11 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 			// is. Scoped to this programmatically-injected value only —
 			// a user's own typed search pattern is still passed straight
 			// through unmodified (spec/34-fe-cloudwatch-logs decision 3).
-			dv.app.SetPendingCloudWatchPattern(fmt.Sprintf("%q", id))
-			dv.app.SwitchTo("cloudwatch-logs")
+			dv.host.SetPendingCloudWatchPattern(fmt.Sprintf("%q", id))
+			dv.host.SwitchTo("cloudwatch-logs")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.SwitchToPage("datadog-logs")
-			a.tv.SetFocus(a.datadogLogsV.table)
-			a.UpdateContextPanel(a.datadogLogsV)
+			onBack()
 			return nil
 		}
 		return event
@@ -108,7 +106,7 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 // render displays event's detail.
 func (dv *datadogLogDetailView) render(event datadoglogs.LogEvent) {
 	dv.event = event
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
 	var b strings.Builder
@@ -132,7 +130,7 @@ func (dv *datadogLogDetailView) render(event datadoglogs.LogEvent) {
 func (dv *datadogLogDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
 	}
-	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+	dv.host.SetContextHint(strings.Join(lines, "\n"))
 }

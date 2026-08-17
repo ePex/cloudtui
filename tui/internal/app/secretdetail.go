@@ -32,7 +32,7 @@ import (
 // and 'c' after a prior 'r' just copies it again.
 type secretDetailView struct {
 	textView *tview.TextView
-	app      *App
+	host     ui.ViewHost
 	secret   awssecrets.Secret
 
 	fetched      bool   // GetSecretValue has completed successfully at least once
@@ -61,14 +61,14 @@ func (dv *secretDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func newSecretDetailView(a *App) *secretDetailView {
+func newSecretDetailView(a ui.ViewHost, onBack func()) *secretDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Secret ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &secretDetailView{textView: tv, app: a}
+	dv := &secretDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -83,9 +83,7 @@ func newSecretDetailView(a *App) *secretDetailView {
 			dv.copyValue()
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.SwitchToPage("secrets-manager")
-			a.tv.SetFocus(a.secretsV.table)
-			a.UpdateContextPanel(a.secretsV)
+			onBack()
 			return nil
 		}
 		return event
@@ -109,7 +107,7 @@ func (dv *secretDetailView) render(secret awssecrets.Secret) {
 }
 
 func (dv *secretDetailView) renderBody() {
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
 	var b strings.Builder
@@ -151,9 +149,9 @@ func (dv *secretDetailView) renderBody() {
 func (dv *secretDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
 	}
-	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+	dv.host.SetContextHint(strings.Join(lines, "\n"))
 }
 
 // copyValue writes the fetched value to the system clipboard — fetching it
@@ -170,11 +168,11 @@ func (dv *secretDetailView) copyValue() {
 
 func (dv *secretDetailView) copyFetchedValue() {
 	if dv.isBinary {
-		dv.app.statusBar.SetText(fmt.Sprintf("[red]Cannot copy %s: binary secret[-]", dv.secret.Name))
+		dv.host.SetStatus(fmt.Sprintf("[red]Cannot copy %s: binary secret[-]", dv.secret.Name))
 		return
 	}
-	dv.app.CopyToClipboard(dv.displayValue)
-	dv.app.statusBar.SetText(fmt.Sprintf("Copied %s to clipboard", dv.secret.Name))
+	dv.host.CopyToClipboard(dv.displayValue)
+	dv.host.SetStatus(fmt.Sprintf("Copied %s to clipboard", dv.secret.Name))
 }
 
 // reveal displays the fetched value on screen — fetching it first if a
@@ -194,11 +192,11 @@ func (dv *secretDetailView) reveal() {
 // fetchThen fetches and decrypts the secret's current (AWSCURRENT) value
 // and hands the outcome to handleFetchResult on the tview event loop.
 func (dv *secretDetailView) fetchThen(onSuccess func()) {
-	profile := dv.app.cfg.ActiveAWSProfile
+	profile := dv.host.Config().ActiveAWSProfile
 	name := dv.secret.Name
 	go func() {
-		value, isBinary, err := dv.app.revealSecret(context.Background(), profile, name)
-		dv.app.tv.QueueUpdateDraw(func() {
+		value, isBinary, err := dv.host.RevealSecret(context.Background(), profile, name)
+		dv.host.QueueUpdateDraw(func() {
 			dv.handleFetchResult(value, isBinary, err, onSuccess)
 		})
 	}()
@@ -215,7 +213,7 @@ func (dv *secretDetailView) handleFetchResult(value string, isBinary bool, err e
 	name := dv.secret.Name
 	if err != nil {
 		slog.Error("secret detail: failed to reveal secret", "name", name, "error", err)
-		dv.app.statusBar.SetText(fmt.Sprintf("[red]Error revealing %q: %s[-]", name, err))
+		dv.host.SetStatus(fmt.Sprintf("[red]Error revealing %q: %s[-]", name, err))
 		return
 	}
 	dv.fetched = true

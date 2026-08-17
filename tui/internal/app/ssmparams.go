@@ -25,7 +25,7 @@ type ssmParamsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	app         *App
+	host        ui.ViewHost
 	filter      string
 	all         []awsssm.Parameter // full unfiltered list from last load
 	filtered    []awsssm.Parameter // currently displayed subset, row-indexed
@@ -58,13 +58,13 @@ func (pv *ssmParamsView) Shortcuts() []ui.Shortcut {
 }
 
 // newSSMParamsView constructs the SSM Parameters view.
-func newSSMParamsView(a *App, onSelect func(param awsssm.Parameter)) *ssmParamsView {
+func newSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *ssmParamsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" SSM Parameters ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
 	filterInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -75,7 +75,7 @@ func newSSMParamsView(a *App, onSelect func(param awsssm.Parameter)) *ssmParamsV
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	pv := &ssmParamsView{table: table, filterInput: filterInput, flex: flex, app: a}
+	pv := &ssmParamsView{table: table, filterInput: filterInput, flex: flex, host: a}
 	pv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -83,12 +83,12 @@ func newSSMParamsView(a *App, onSelect func(param awsssm.Parameter)) *ssmParamsV
 	})
 	filterInput.SetDoneFunc(func(_ tcell.Key) {
 		pv.applyFilter(pv.filterInput.GetText())
-		pv.app.tv.SetFocus(pv.table)
+		pv.host.SetFocus(pv.table)
 	})
 	filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			pv.applyFilter(pv.filterInput.GetText())
-			pv.app.tv.SetFocus(pv.table)
+			pv.host.SetFocus(pv.table)
 			pv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -102,7 +102,7 @@ func newSSMParamsView(a *App, onSelect func(param awsssm.Parameter)) *ssmParamsV
 			return nil
 		case '/':
 			pv.filterInput.SetText(pv.filter)
-			pv.app.tv.SetFocus(pv.filterInput)
+			pv.host.SetFocus(pv.filterInput)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -130,7 +130,7 @@ func (pv *ssmParamsView) Activate() {
 }
 
 func (pv *ssmParamsView) setHeader() {
-	p := pv.app.cfg.Colors
+	p := pv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "TYPE", "LAST MODIFIED"} {
@@ -144,7 +144,7 @@ func (pv *ssmParamsView) setHeader() {
 	}
 }
 
-// load fetches parameters from a.listParameters in a goroutine (a real AWS
+// load fetches parameters from host.ListParameters in a goroutine (a real AWS
 // API call, unlike awsprofile's local file read) and repaints via
 // QueueUpdateDraw. Requires an active AWS profile; errors clearly rather
 // than calling into awsssm with an empty one. If the call fails because
@@ -152,25 +152,25 @@ func (pv *ssmParamsView) setHeader() {
 // opens the browser to log in and retries once before giving up — see
 // spec/36-fe-aws-sso-reauth.
 func (pv *ssmParamsView) load() {
-	profile := pv.app.cfg.ActiveAWSProfile
+	profile := pv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		pv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
 	go func() {
 		ctx := context.Background()
-		authType, _ := pv.app.awsAuthTypeFor(ctx, profile)
-		params, err := awsauth.WithReauth(ctx, profile, authType, pv.app.awsSSOLogin,
+		authType, _ := pv.host.AWSAuthTypeFor(ctx, profile)
+		params, err := awsauth.WithReauth(ctx, profile, authType, pv.host.AWSSSOLogin,
 			func() {
-				pv.app.tv.QueueUpdateDraw(func() {
+				pv.host.QueueUpdateDraw(func() {
 					pv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
 			func(ctx context.Context) ([]awsssm.Parameter, error) {
-				return pv.app.listParameters(ctx, profile, "/")
+				return pv.host.ListParameters(ctx, profile, "/")
 			},
 		)
-		pv.app.tv.QueueUpdateDraw(func() {
+		pv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("ssm parameters: failed to list parameters", "error", err)
 				pv.showError(err)
@@ -205,7 +205,7 @@ func (pv *ssmParamsView) repaint(params []awsssm.Parameter) {
 		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
 	}
 
-	p := pv.app.cfg.Colors
+	p := pv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	for i, prm := range filtered {
@@ -260,7 +260,7 @@ func (pv *ssmParamsView) showStatus(msg string) {
 	}
 	pv.table.SetCell(1, 0,
 		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(pv.app.cfg.Colors.Accent)).
+			SetTextColor(tcell.GetColor(pv.host.Config().Colors.Accent)).
 			SetExpansion(3),
 	)
 	pv.table.SetTitle(" SSM Parameters ")

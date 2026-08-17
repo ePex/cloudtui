@@ -20,7 +20,7 @@ import (
 // available, no reveal-gating needed.
 type logDetailView struct {
 	textView *tview.TextView
-	app      *App
+	host     ui.ViewHost
 	event    awslogs.LogEvent
 }
 
@@ -40,14 +40,14 @@ func (dv *logDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func newLogDetailView(a *App) *logDetailView {
+func newLogDetailView(a ui.ViewHost, onBack func()) *logDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log Event ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &logDetailView{textView: tv, app: a}
+	dv := &logDetailView{textView: tv, host: a}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -56,21 +56,11 @@ func newLogDetailView(a *App) *logDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == 'c':
-			dv.app.CopyToClipboard(dv.event.Message)
-			dv.app.statusBar.SetText("Copied log message to clipboard")
+			dv.host.CopyToClipboard(dv.event.Message)
+			dv.host.SetStatus("Copied log message to clipboard")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.pages.SwitchToPage("log-search")
-			a.tv.SetFocus(a.logSearchV.table)
-			// logSearchView isn't a registered ui.View (opened directly,
-			// like messagesView), so it can't go through the generic
-			// UpdateContextPanel(ui.View) path — same manual pattern
-			// OpenLogSearch uses.
-			lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
-			for _, sc := range a.logSearchV.Shortcuts() {
-				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
-			}
-			a.contextPanel.SetText(strings.Join(lines, "\n"))
+			onBack()
 			return nil
 		}
 		return event
@@ -82,7 +72,7 @@ func newLogDetailView(a *App) *logDetailView {
 // render displays event's detail.
 func (dv *logDetailView) render(event awslogs.LogEvent) {
 	dv.event = event
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	accent, text := p.Label, p.Text
 
 	var b strings.Builder
@@ -102,7 +92,7 @@ func (dv *logDetailView) render(event awslogs.LogEvent) {
 func (dv *logDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
 	for _, sc := range dv.Shortcuts() {
-		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.app.cfg.Colors.Accent, sc.Key, sc.Description))
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
 	}
-	dv.app.contextPanel.SetText(strings.Join(lines, "\n"))
+	dv.host.SetContextHint(strings.Join(lines, "\n"))
 }
