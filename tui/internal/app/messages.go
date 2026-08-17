@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
@@ -35,16 +36,20 @@ import (
 // target logic only ever sees msgs, the currently-displayed (search-
 // filtered) set.
 type messagesView struct {
-	table       *tview.Table
-	searchInput *tview.InputField
-	flex        *tview.Flex
-	app         *App
-	queueName   string
-	allMsgs     []queue.Message     // full set from the last load, pre-quick-search
-	quickSearch string              // active quick-search text (client-side)
-	filter      queue.MessageFilter // active server-side filter
-	msgs        []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
-	marked      map[string]bool     // message IDs currently marked
+	table         *tview.Table
+	searchInput   *tview.InputField
+	flex          *tview.Flex
+	host          ui.ViewHost
+	messageFilter *dialog.MessageFilter
+	sendMessage   *dialog.SendMessageOverlay
+	confirm       *dialog.ConfirmDialog
+	movePicker    *dialog.MovePicker
+	queueName     string
+	allMsgs       []queue.Message     // full set from the last load, pre-quick-search
+	quickSearch   string              // active quick-search text (client-side)
+	filter        queue.MessageFilter // active server-side filter
+	msgs          []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
+	marked        map[string]bool     // message IDs currently marked
 }
 
 var _ ui.Themeable = (*messagesView)(nil)
@@ -75,13 +80,13 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 
 // newMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message)) *messagesView {
+func newMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *messagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	searchInput := tview.NewInputField()
 	searchInput.SetLabel(" / search: ")
 	searchInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -92,7 +97,7 @@ func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message))
 		AddItem(table, 0, 1, true).
 		AddItem(searchInput, 1, 0, false)
 
-	mv := &messagesView{table: table, searchInput: searchInput, flex: flex, app: a}
+	mv := &messagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
 	mv.setHeader()
 
 	searchInput.SetChangedFunc(func(text string) {
@@ -100,12 +105,12 @@ func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message))
 	})
 	searchInput.SetDoneFunc(func(_ tcell.Key) {
 		mv.applyQuickSearch(mv.searchInput.GetText())
-		mv.app.tv.SetFocus(mv.table)
+		mv.host.SetFocus(mv.table)
 	})
 	searchInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			mv.applyQuickSearch(mv.searchInput.GetText())
-			mv.app.tv.SetFocus(mv.table)
+			mv.host.SetFocus(mv.table)
 			mv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -134,28 +139,28 @@ func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message))
 			return nil
 		case event.Rune() == '/':
 			mv.searchInput.SetText(mv.quickSearch)
-			mv.app.tv.SetFocus(mv.searchInput)
+			mv.host.SetFocus(mv.searchInput)
 			return nil
 		case event.Rune() == 'f':
-			a.messageFilter.Show()
+			mv.messageFilter.Show()
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
-			a.sendMessage.Show(name, func() {
-				a.tv.SetFocus(mv.table)
+			mv.sendMessage.Show(name, func() {
+				a.SetFocus(mv.table)
 				lines := make([]string, 0, len(mv.Shortcuts()))
 				for _, sc := range mv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
 				}
-				a.contextPanel.SetText(strings.Join(lines, "\n"))
+				a.SetContextHint(strings.Join(lines, "\n"))
 			})
 			return nil
 		case event.Rune() == 'p':
 			name := mv.queueName
-			a.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
+			mv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
 				go func() {
-					err := a.backend.PurgeQueue(context.Background(), name)
-					a.tv.QueueUpdateDraw(func() {
+					err := a.Backend().PurgeQueue(context.Background(), name)
+					a.QueueUpdateDraw(func() {
 						if err != nil {
 							slog.Error("messages: purge failed", "queue", name, "error", err)
 							mv.showError(err)
@@ -189,7 +194,7 @@ func newMessagesView(a *App, onSelect func(queueName string, msg queue.Message))
 }
 
 func (mv *messagesView) setHeader() {
-	p := mv.app.cfg.Colors
+	p := mv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 
@@ -225,8 +230,8 @@ func (mv *messagesView) load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	go func() {
-		msgs, err := mv.app.backend.BrowseMessages(context.Background(), queueName, filter)
-		mv.app.tv.QueueUpdateDraw(func() {
+		msgs, err := mv.host.Backend().BrowseMessages(context.Background(), queueName, filter)
+		mv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("messages: failed to browse messages", "queue", queueName, "error", err)
 				mv.showError(err)
@@ -234,7 +239,7 @@ func (mv *messagesView) load() {
 			}
 			mv.repaint(msgs)
 			if len(msgs) > 0 && msgs[0].ID == "" {
-				mv.app.statusBar.SetText("[yellow]Note: limited message info — individual move/delete unavailable[-]")
+				mv.host.SetStatus("[yellow]Note: limited message info — individual move/delete unavailable[-]")
 			}
 		})
 	}()
@@ -311,7 +316,7 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
 	}
 
-	p := mv.app.cfg.Colors
+	p := mv.host.Config().Colors
 	idColor := tcell.GetColor(p.Value)
 	tsColor := tcell.GetColor(p.Label)
 	textColor := tcell.GetColor(p.Text)
@@ -339,7 +344,7 @@ func (mv *messagesView) repaint(msgs []queue.Message) {
 // text doesn't work here: tview.Table always interprets "[...]" in cell text
 // as a color/region tag, so it gets silently swallowed instead of displayed.
 func (mv *messagesView) markerCell(marked bool) *tview.TableCell {
-	p := mv.app.cfg.Colors
+	p := mv.host.Config().Colors
 	text, color := " ", tcell.GetColor(p.Text)
 	if marked {
 		text, color = "✓", tcell.GetColor(p.Accent)
@@ -394,7 +399,7 @@ func (mv *messagesView) toggleMark() {
 	}
 	m := mv.msgs[idx]
 	if m.ID == "" {
-		mv.app.statusBar.SetText("[yellow]Cannot mark: message ID unavailable[-]")
+		mv.host.SetStatus("[yellow]Cannot mark: message ID unavailable[-]")
 		return
 	}
 	if mv.marked == nil {
@@ -426,9 +431,9 @@ func (mv *messagesView) markAll() {
 	}
 	mv.refreshMarkerColumn()
 	if skipped > 0 {
-		mv.app.statusBar.SetText(fmt.Sprintf("Marked %d message(s); %d skipped (no ID)", len(mv.marked), skipped))
+		mv.host.SetStatus(fmt.Sprintf("Marked %d message(s); %d skipped (no ID)", len(mv.marked), skipped))
 	} else {
-		mv.app.statusBar.SetText(fmt.Sprintf("Marked %d message(s)", len(mv.marked)))
+		mv.host.SetStatus(fmt.Sprintf("Marked %d message(s)", len(mv.marked)))
 	}
 }
 
@@ -439,7 +444,7 @@ func (mv *messagesView) clearMarks() {
 	}
 	mv.marked = map[string]bool{}
 	mv.refreshMarkerColumn()
-	mv.app.statusBar.SetText("Cleared marks")
+	mv.host.SetStatus("Cleared marks")
 }
 
 // deleteMarked confirms and deletes every marked message, or — if nothing is
@@ -449,32 +454,32 @@ func (mv *messagesView) clearMarks() {
 func (mv *messagesView) deleteMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
-		mv.app.statusBar.SetText("[yellow]No message marked or selected[-]")
+		mv.host.SetStatus("[yellow]No message marked or selected[-]")
 		return
 	}
-	a := mv.app
+	a := mv.host
 	queueName := mv.queueName
 	question := fmt.Sprintf("Delete message from %q?", queueName)
 	if len(mv.markedIDs()) > 0 {
 		question = fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName)
 	}
-	a.confirm.Show(question, func() {
+	mv.confirm.Show(question, func() {
 		go func() {
 			failed := 0
 			for _, id := range ids {
-				if err := a.backend.RemoveMessage(context.Background(), queueName, id); err != nil {
+				if err := a.Backend().RemoveMessage(context.Background(), queueName, id); err != nil {
 					slog.Error("messages: bulk delete failed", "queue", queueName, "id", id, "error", err)
 					failed++
 				}
 			}
-			a.tv.QueueUpdateDraw(func() {
+			a.QueueUpdateDraw(func() {
 				switch {
 				case failed > 0:
-					a.statusBar.SetText(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
+					a.SetStatus(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
 				case len(ids) == 1:
-					a.statusBar.SetText("Deleted message")
+					a.SetStatus("Deleted message")
 				default:
-					a.statusBar.SetText(fmt.Sprintf("Deleted %d message(s)", len(ids)))
+					a.SetStatus(fmt.Sprintf("Deleted %d message(s)", len(ids)))
 				}
 				mv.load()
 			})
@@ -489,36 +494,36 @@ func (mv *messagesView) deleteMarked() {
 func (mv *messagesView) moveMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
-		mv.app.statusBar.SetText("[yellow]No message marked or selected[-]")
+		mv.host.SetStatus("[yellow]No message marked or selected[-]")
 		return
 	}
-	a := mv.app
+	a := mv.host
 	srcQueue := mv.queueName
 	restore := func() {
-		a.tv.SetFocus(mv.table)
+		a.SetFocus(mv.table)
 		lines := make([]string, 0, len(mv.Shortcuts()))
 		for _, sc := range mv.Shortcuts() {
-			lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))
+			lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
 		}
-		a.contextPanel.SetText(strings.Join(lines, "\n"))
+		a.SetContextHint(strings.Join(lines, "\n"))
 	}
-	a.movePicker.Show(srcQueue, func(target string) {
+	mv.movePicker.Show(srcQueue, func(target string) {
 		go func() {
 			failed := 0
 			for _, id := range ids {
-				if err := a.backend.MoveMessage(context.Background(), srcQueue, id, target); err != nil {
+				if err := a.Backend().MoveMessage(context.Background(), srcQueue, id, target); err != nil {
 					slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
 					failed++
 				}
 			}
-			a.tv.QueueUpdateDraw(func() {
+			a.QueueUpdateDraw(func() {
 				switch {
 				case failed > 0:
-					a.statusBar.SetText(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
+					a.SetStatus(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
 				case len(ids) == 1:
-					a.statusBar.SetText(fmt.Sprintf("Moved message to %q", target))
+					a.SetStatus(fmt.Sprintf("Moved message to %q", target))
 				default:
-					a.statusBar.SetText(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
+					a.SetStatus(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
 				}
 				restore()
 				mv.load()

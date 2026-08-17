@@ -13,6 +13,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -33,7 +34,8 @@ type datadogLogsView struct {
 	envFilterDD     *tview.DropDown
 	queryInput      *tview.InputField
 	flex            *tview.Flex
-	app             *App
+	host            ui.ViewHost
+	timeRangeModal  *dialog.TimeRangeModal
 	query           string
 	serviceFilter   string
 	envFilter       string
@@ -79,13 +81,13 @@ func (dv *datadogLogsView) Shortcuts() []ui.Shortcut {
 }
 
 // newDatadogLogsView constructs the Datadog Logs search view.
-func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *datadogLogsView {
+func newDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event datadoglogs.LogEvent)) *datadogLogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Datadog Logs ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	p := a.cfg.Colors
+	p := a.Config().Colors
 	queryInput := tview.NewInputField()
 	queryInput.SetLabel(" / query: ")
 	queryInput.SetLabelColor(tcell.GetColor(p.Label))
@@ -124,7 +126,8 @@ func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *data
 		envFilterDD:     envFilterDD,
 		queryInput:      queryInput,
 		flex:            flex,
-		app:             a,
+		host:            a,
+		timeRangeModal:  timeRangeModal,
 		tr:              ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx},
 		knownServices:   map[string]bool{},
 		knownEnvs:       map[string]bool{},
@@ -147,11 +150,11 @@ func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *data
 			dv.query = dv.queryInput.GetText()
 			dv.search()
 		}
-		dv.app.tv.SetFocus(dv.table)
+		dv.host.SetFocus(dv.table)
 	})
 	queryInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
-			dv.app.tv.SetFocus(dv.table)
+			dv.host.SetFocus(dv.table)
 			dv.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -163,7 +166,7 @@ func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *data
 	// table.
 	backToTable := func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			dv.app.tv.SetFocus(dv.table)
+			dv.host.SetFocus(dv.table)
 			return nil
 		}
 		return event
@@ -177,20 +180,20 @@ func newDatadogLogsView(a *App, onSelect func(event datadoglogs.LogEvent)) *data
 			dv.search()
 			return nil
 		case 't':
-			a.timeRangeModal.Show(dv.tr, func(tr ui.TimeRange) {
+			timeRangeModal.Show(dv.tr, func(tr ui.TimeRange) {
 				dv.tr = tr
 				dv.search()
 			})
 			return nil
 		case '/':
 			dv.queryInput.SetText(dv.query)
-			dv.app.tv.SetFocus(dv.queryInput)
+			dv.host.SetFocus(dv.queryInput)
 			return nil
 		case 'S':
-			dv.app.tv.SetFocus(dv.serviceFilterDD)
+			dv.host.SetFocus(dv.serviceFilterDD)
 			return nil
 		case 'E':
-			dv.app.tv.SetFocus(dv.envFilterDD)
+			dv.host.SetFocus(dv.envFilterDD)
 			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -224,7 +227,7 @@ func (dv *datadogLogsView) Activate() {
 }
 
 func (dv *datadogLogsView) setHeader() {
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"TIMESTAMP", "SERVICE", "STATUS", "MESSAGE"} {
@@ -322,12 +325,12 @@ func (dv *datadogLogsView) refreshFilterDropdowns() {
 	dv.applyFilterOptions(dv.serviceFilterDD, sortedKeys(dv.knownServices), &dv.serviceFilter, func(v string) {
 		dv.serviceFilter = v
 		dv.search()
-		dv.app.tv.SetFocus(dv.table)
+		dv.host.SetFocus(dv.table)
 	})
 	dv.applyFilterOptions(dv.envFilterDD, sortedKeys(dv.knownEnvs), &dv.envFilter, func(v string) {
 		dv.envFilter = v
 		dv.search()
-		dv.app.tv.SetFocus(dv.table)
+		dv.host.SetFocus(dv.table)
 	})
 }
 
@@ -351,12 +354,12 @@ func (dv *datadogLogsView) discoverFacetValues() {
 // and hands the outcome to handleFacetDiscoveryResult on the tview event
 // loop — same shape as search/handleSearchResult.
 func (dv *datadogLogsView) discoverFacetValuesFor(facet string, known map[string]bool) {
-	cfg := dv.app.cfg.Datadog
+	cfg := dv.host.Config().Datadog
 	end := time.Now()
 	start := end.Add(-facetDiscoveryWindow)
 	go func() {
-		values, err := dv.app.listDatadogFacetValues(context.Background(), cfg, facet, start, end)
-		dv.app.tv.QueueUpdateDraw(func() {
+		values, err := dv.host.ListDatadogFacetValues(context.Background(), cfg, facet, start, end)
+		dv.host.QueueUpdateDraw(func() {
 			dv.handleFacetDiscoveryResult(known, values, err)
 		})
 	}()
@@ -405,10 +408,10 @@ func sortedKeys(set map[string]bool) []string {
 func (dv *datadogLogsView) search() {
 	query := dv.effectiveQuery()
 	start, end := dv.tr.Bounds(time.Now())
-	cfg := dv.app.cfg.Datadog
+	cfg := dv.host.Config().Datadog
 	go func() {
-		events, hasMore, err := dv.app.searchDatadogLogs(context.Background(), cfg, query, start, end)
-		dv.app.tv.QueueUpdateDraw(func() {
+		events, hasMore, err := dv.host.SearchDatadogLogs(context.Background(), cfg, query, start, end)
+		dv.host.QueueUpdateDraw(func() {
 			dv.handleSearchResult(events, hasMore, err)
 		})
 	}()
@@ -436,7 +439,7 @@ func (dv *datadogLogsView) repaint() {
 		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
 	}
 
-	p := dv.app.cfg.Colors
+	p := dv.host.Config().Colors
 	tsColor := tcell.GetColor(p.Label)
 	textColor := tcell.GetColor(p.Text)
 	for i, e := range dv.results {
