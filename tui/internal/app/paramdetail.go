@@ -203,26 +203,3 @@ func (dv *paramDetailView) handleFetchResult(value string, err error, onSuccess 
 	dv.param.Value = value
 	onSuccess()
 }
-
-// openParamDetail renders the full detail for param and switches to the
-// ssm-param-detail page. paramDetailView.render sets the context panel
-// itself (its shortcuts change once a SecureString is revealed).
-func (a *App) openParamDetail(param awsssm.Parameter) {
-	a.paramDetailV.render(param)
-	a.paramDetailV.textView.SetTitle(fmt.Sprintf(" Parameter — %s ", param.Name))
-	a.pages.SwitchToPage("ssm-param-detail")
-	a.tv.SetFocus(a.pages)
-}
-
-// wireSSMParamsOpensDetail wires Enter in the SSM parameters table to
-// open the detail view for the selected parameter. Called from New()
-// once paramDetailV exists.
-func (a *App) wireSSMParamsOpensDetail() {
-	a.ssmParamsV.table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
-		if idx < 0 || idx >= len(a.ssmParamsV.filtered) {
-			return
-		}
-		a.openParamDetail(a.ssmParamsV.filtered[idx])
-	})
-}
