@@ -125,3 +125,9 @@ func (sm *sendMessageOverlay) ApplyPalette(p config.Palette) {
 }
 
 var _ ui.Themeable = (*sendMessageOverlay)(nil)
+
+// Primitive returns sendMessageOverlay's root widget, for sizing/embedding.
+func (sm *sendMessageOverlay) Primitive() tview.Primitive { return sm.flex }
+
+// Visible reports whether sendMessageOverlay is currently shown.
+func (sm *sendMessageOverlay) Visible() bool { return sm.visible }

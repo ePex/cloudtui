@@ -41,9 +41,9 @@ type App struct {
 	// focused (e.g. so typing "s" in a search box doesn't trigger the "s"
 	// hotkey). Populated once in New(), after every view exists.
 	focusExemptInputs []tview.Primitive
-	// overlayVisible holds a pointer to each modal overlay's visible flag;
+	// overlayVisible holds every modal overlay via its Visible() accessor;
 	// anyOverlayVisible loops over it instead of a hand-maintained OR-chain.
-	overlayVisible []*bool
+	overlayVisible []visibler
 	// themables is every view/overlay that recolors itself on a live theme
 	// switch — reapplyTheme loops over this instead of naming each type.
 	themables      []ui.Themeable
@@ -268,27 +268,27 @@ func New(cfg config.Config) *App {
 		AddItem(a.statusBar, 1, 0, false)
 
 	a.confirm = newConfirmDialog(a)
-	confirmOverlay := ui.Centered(a.confirm.flex, 52, 8)
+	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
 
 	a.movePicker = newMovePicker(a)
-	movePickerOverlay := ui.Centered(a.movePicker.flex, 52, 22)
+	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
 
 	a.sendMessage = newSendMessageOverlay(a)
-	sendMessageOverlay := ui.Centered(a.sendMessage.flex, 70, 14)
+	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
 
 	a.connManager = newConnManager(a, a.confirm)
-	connManagerOverlay := ui.Centered(a.connManager.flex, 64, 20)
+	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
 	a.connEditor = newConnEditor(a, a.connManager)
 	a.connManager.editor = a.connEditor
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := ui.Centered(a.connEditor.form, 64, 20)
+	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
 
 	a.messageFilter = newMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
-	messageFilterOverlay := ui.Centered(a.messageFilter.form, 64, 16)
+	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
 	a.timeRangeModal = newTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
@@ -297,18 +297,18 @@ func New(cfg config.Config) *App {
 	// messageFilterOverlay's width, just a longer label this time).
 	// Height: 9 relative presets need 9 content rows; 14 leaves a couple
 	// spare, matching the "give it one spare row" convention elsewhere.
-	timeRangeOverlay := ui.Centered(a.timeRangeModal.flex, 72, 14)
+	timeRangeOverlay := ui.Centered(a.timeRangeModal.Primitive(), 72, 14)
 
 	a.datadogEditor = newDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
-	datadogEditorOverlay := ui.Centered(a.datadogEditor.form, 56, 10)
+	datadogEditorOverlay := ui.Centered(a.datadogEditor.Primitive(), 56, 10)
 
 	a.themePicker = newThemePicker(a)
-	themePickerOverlay := ui.Centered(a.themePicker.flex, 40, 14)
+	themePickerOverlay := ui.Centered(a.themePicker.Primitive(), 40, 14)
 
 	a.awsProfiles = newAWSProfilesPicker(a)
-	awsProfilesOverlay := ui.Centered(a.awsProfiles.flex, 64, 20)
+	awsProfilesOverlay := ui.Centered(a.awsProfiles.Primitive(), 64, 20)
 
 	helpOverlay := ui.Centered(ui.NewHelpModal(cfg), ui.HelpModalWidth, ui.HelpModalHeight)
 	// "confirm" is added last so it always draws on top of any other overlay
@@ -346,17 +346,17 @@ func New(cfg config.Config) *App {
 		a.datadogLogsV.envFilterDD,
 		a.codePipelineListV.filterInput,
 	}
-	a.overlayVisible = []*bool{
-		&a.confirm.visible,
-		&a.movePicker.visible,
-		&a.sendMessage.visible,
-		&a.connManager.visible,
-		&a.connEditor.visible,
-		&a.messageFilter.visible,
-		&a.timeRangeModal.visible,
-		&a.datadogEditor.visible,
-		&a.themePicker.visible,
-		&a.awsProfiles.visible,
+	a.overlayVisible = []visibler{
+		a.confirm,
+		a.movePicker,
+		a.sendMessage,
+		a.connManager,
+		a.connEditor,
+		a.messageFilter,
+		a.timeRangeModal,
+		a.datadogEditor,
+		a.themePicker,
+		a.awsProfiles,
 	}
 	a.themables = []ui.Themeable{
 		a.logV,
@@ -606,7 +606,7 @@ func (a *App) updateContextPanel(v ui.View) {
 // anyOverlayVisible reports whether any modal overlay is currently shown.
 func (a *App) anyOverlayVisible() bool {
 	for _, v := range a.overlayVisible {
-		if *v {
+		if v.Visible() {
 			return true
 		}
 	}
@@ -649,3 +649,9 @@ type bordered interface {
 type activatable interface {
 	Activate()
 }
+
+// visibler is satisfied by every modal overlay via its Visible() accessor —
+// overlayVisible holds these instead of raw *bool pointers so App doesn't
+// need to reach into an overlay's unexported field (blocking once the
+// overlays move to a different package).
+type visibler interface{ Visible() bool }

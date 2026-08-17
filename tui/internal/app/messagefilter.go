@@ -88,6 +88,12 @@ func (mf *messageFilter) ApplyPalette(p config.Palette) {
 
 var _ ui.Themeable = (*messageFilter)(nil)
 
+// Primitive returns messageFilter's root widget, for sizing/embedding.
+func (mf *messageFilter) Primitive() tview.Primitive { return mf.form }
+
+// Visible reports whether messageFilter is currently shown.
+func (mf *messageFilter) Visible() bool { return mf.visible }
+
 // apply parses the form's fields, and — on success — sets it as
 // messagesV's active filter, closes the overlay, and reloads. On a parse
 // error, the status bar reports it and the form stays open for correction.
