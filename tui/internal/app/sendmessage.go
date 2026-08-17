@@ -15,7 +15,7 @@ import (
 // sendMessageOverlay is the "Send Message" overlay: a text area plus
 // Submit/Cancel actions for composing a new message on a queue.
 type sendMessageOverlay struct {
-	app     *App
+	host    ui.Host
 	flex    *tview.Flex
 	area    *tview.TextArea
 	list    *tview.List
@@ -24,8 +24,8 @@ type sendMessageOverlay struct {
 }
 
 // newSendMessageOverlay builds the send-message overlay's widgets.
-func newSendMessageOverlay(a *App) *sendMessageOverlay {
-	sm := &sendMessageOverlay{app: a}
+func newSendMessageOverlay(host ui.Host) *sendMessageOverlay {
+	sm := &sendMessageOverlay{host: host}
 	sm.area = tview.NewTextArea()
 	sm.list = tview.NewList().ShowSecondaryText(false)
 	sm.list.AddItem("Submit", "", 0, nil)
@@ -37,7 +37,7 @@ func newSendMessageOverlay(a *App) *sendMessageOverlay {
 
 	sm.area.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			a.tv.SetFocus(sm.list)
+			host.SetFocus(sm.list)
 			return nil
 		}
 		if event.Key() == tcell.KeyEscape {
@@ -53,7 +53,7 @@ func newSendMessageOverlay(a *App) *sendMessageOverlay {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEscape:
-			a.tv.SetFocus(sm.area)
+			host.SetFocus(sm.area)
 			return nil
 		}
 		return event
@@ -64,7 +64,7 @@ func newSendMessageOverlay(a *App) *sendMessageOverlay {
 // show opens the send-message overlay for the given queue. onClose is
 // called on the UI goroutine when the overlay is dismissed.
 func (sm *sendMessageOverlay) show(queueName string, onClose func()) {
-	a := sm.app
+	host := sm.host
 	sm.onClose = onClose
 	sm.area.SetText("", true)
 	sm.flex.SetTitle(fmt.Sprintf(" Send Message — %s ", queueName))
@@ -74,29 +74,29 @@ func (sm *sendMessageOverlay) show(queueName string, onClose func()) {
 	sm.list.AddItem("Submit", "", 0, func() { sm.doSend(queueName) })
 	sm.list.AddItem("Cancel", "", 0, sm.close)
 
-	a.rootPages.ShowPage("send-message")
-	a.tv.SetFocus(sm.area)
+	host.ShowPage("send-message")
+	host.SetFocus(sm.area)
 	sm.visible = true
-	ac := a.cfg.Colors.Accent
-	a.contextPanel.SetText(fmt.Sprintf("[%s]<Tab>[-] actions  [%s]<Esc>[-] cancel", ac, ac))
+	ac := host.Config().Colors.Accent
+	host.SetContextHint(fmt.Sprintf("[%s]<Tab>[-] actions  [%s]<Esc>[-] cancel", ac, ac))
 }
 
 // doSend reads the body from area, closes the overlay, and sends the
 // message asynchronously, reporting the result in the status bar.
 func (sm *sendMessageOverlay) doSend(queueName string) {
-	a := sm.app
+	host := sm.host
 	body := sm.area.GetText()
 	sm.close()
 	go func() {
-		err := a.backend.SendMessage(context.Background(), queueName, body)
-		a.tv.QueueUpdateDraw(func() {
+		err := host.Backend().SendMessage(context.Background(), queueName, body)
+		host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("send message: failed", "queue", queueName, "error", err)
-				a.statusBar.SetText(fmt.Sprintf("[red]Error: %s[-]", err))
+				host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))
 				return
 			}
-			a.statusBar.SetText(fmt.Sprintf("Message sent to %q", queueName))
-			a.ReloadAfterSend(queueName)
+			host.SetStatus(fmt.Sprintf("Message sent to %q", queueName))
+			host.ReloadAfterSend(queueName)
 		})
 	}()
 }
@@ -104,7 +104,7 @@ func (sm *sendMessageOverlay) doSend(queueName string) {
 // close hides the send-message overlay and calls onClose to let the
 // caller restore focus and the context panel.
 func (sm *sendMessageOverlay) close() {
-	sm.app.rootPages.HidePage("send-message")
+	sm.host.HidePage("send-message")
 	sm.visible = false
 	if sm.onClose != nil {
 		sm.onClose()

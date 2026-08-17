@@ -109,15 +109,15 @@ func datadogSettingsLabel(cfg config.DatadogConfig) string {
 // themePicker is the theme-picker overlay: a list of every embedded theme,
 // with the active one marked ⭐.
 type themePicker struct {
-	app     *App
+	host    ui.Host
 	flex    *tview.Flex
 	list    *tview.List
 	visible bool
 }
 
 // newThemePicker builds the theme-picker overlay's widgets.
-func newThemePicker(a *App) *themePicker {
-	tp := &themePicker{app: a}
+func newThemePicker(host ui.Host) *themePicker {
+	tp := &themePicker{host: host}
 	tp.list = tview.NewList().ShowSecondaryText(false)
 	tp.flex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tp.list, 0, 1, true)
@@ -139,38 +139,39 @@ func newThemePicker(a *App) *themePicker {
 
 // show opens the theme-picker overlay, pre-selecting the current theme.
 func (tp *themePicker) show() {
-	a := tp.app
+	host := tp.host
+	currentTheme := host.Config().Theme
 	themes := config.AvailableThemes()
 	tp.list.Clear()
 	for i, name := range themes {
 		n := name
 		prefix := "   "
-		if n == a.cfg.Theme {
+		if n == currentTheme {
 			prefix = "⭐ "
 			tp.list.SetCurrentItem(i)
 		}
 		tp.list.AddItem(prefix+n, "", 0, func() {
 			tp.close()
-			a.switchTheme(n)
+			host.SwitchTheme(n)
 		})
 	}
 	// SetCurrentItem must be called after all items are added.
 	for i, name := range themes {
-		if name == a.cfg.Theme {
+		if name == currentTheme {
 			tp.list.SetCurrentItem(i)
 			break
 		}
 	}
-	a.rootPages.ShowPage("theme-picker")
-	a.tv.SetFocus(tp.list)
+	host.ShowPage("theme-picker")
+	host.SetFocus(tp.list)
 	tp.visible = true
 }
 
 // close hides the theme-picker overlay and restores focus.
 func (tp *themePicker) close() {
-	tp.app.rootPages.HidePage("theme-picker")
+	tp.host.HidePage("theme-picker")
 	tp.visible = false
-	tp.app.tv.SetFocus(tp.app.pages)
+	tp.host.FocusMain()
 }
 
 // ApplyPalette recolors the theme-picker overlay for a live theme switch.

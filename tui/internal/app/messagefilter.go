@@ -16,14 +16,14 @@ import (
 // counterpart to messagesView's quick search: JMS type + date range + max
 // count, applied by the backend rather than client-side.
 type messageFilter struct {
-	app     *App
+	host    ui.Host
 	form    *tview.Form
 	visible bool
 }
 
 // newMessageFilter builds the message filter overlay's form.
-func newMessageFilter(a *App) *messageFilter {
-	mf := &messageFilter{app: a}
+func newMessageFilter(host ui.Host) *messageFilter {
+	mf := &messageFilter{host: host}
 	mf.form = tview.NewForm()
 	mf.form.SetBorder(true).SetTitle(" Message Filter ")
 	mf.form.
@@ -47,18 +47,18 @@ func newMessageFilter(a *App) *messageFilter {
 // show opens the overlay, prefilled from messagesV's currently-applied
 // filter.
 func (mf *messageFilter) show() {
-	mv := mf.app.messagesV
-	mf.form.GetFormItem(0).(*tview.InputField).SetText(mv.filter.JMSType)
-	mf.form.GetFormItem(1).(*tview.InputField).SetText(formatFilterDate(mv.filter.FromDate))
-	mf.form.GetFormItem(2).(*tview.InputField).SetText(formatFilterDate(mv.filter.ToDate))
+	f := mf.host.MessagesFilter()
+	mf.form.GetFormItem(0).(*tview.InputField).SetText(f.JMSType)
+	mf.form.GetFormItem(1).(*tview.InputField).SetText(formatFilterDate(f.FromDate))
+	mf.form.GetFormItem(2).(*tview.InputField).SetText(formatFilterDate(f.ToDate))
 	maxCount := ""
-	if mv.filter.MaxCount > 0 {
-		maxCount = fmt.Sprintf("%d", mv.filter.MaxCount)
+	if f.MaxCount > 0 {
+		maxCount = fmt.Sprintf("%d", f.MaxCount)
 	}
 	mf.form.GetFormItem(3).(*tview.InputField).SetText(maxCount)
 
-	mf.app.rootPages.ShowPage("message-filter")
-	mf.app.tv.SetFocus(mf.form)
+	mf.host.ShowPage("message-filter")
+	mf.host.SetFocus(mf.form)
 	mf.visible = true
 }
 
@@ -74,9 +74,9 @@ func formatFilterDate(t time.Time) string {
 // close hides the overlay and returns focus to the messages table,
 // without changing the active filter.
 func (mf *messageFilter) close() {
-	mf.app.rootPages.HidePage("message-filter")
+	mf.host.HidePage("message-filter")
 	mf.visible = false
-	mf.app.tv.SetFocus(mf.app.messagesV.table)
+	mf.host.FocusMessages()
 }
 
 // ApplyPalette recolors the message filter overlay for a live theme switch.
@@ -92,7 +92,6 @@ var _ ui.Themeable = (*messageFilter)(nil)
 // messagesV's active filter, closes the overlay, and reloads. On a parse
 // error, the status bar reports it and the form stays open for correction.
 func (mf *messageFilter) apply() {
-	a := mf.app
 	jmsType := mf.form.GetFormItem(0).(*tview.InputField).GetText()
 	from := mf.form.GetFormItem(1).(*tview.InputField).GetText()
 	to := mf.form.GetFormItem(2).(*tview.InputField).GetText()
@@ -100,11 +99,11 @@ func (mf *messageFilter) apply() {
 
 	filter, err := parseMessageFilterForm(jmsType, from, to, maxCount)
 	if err != nil {
-		a.statusBar.SetText(fmt.Sprintf("[red]%s[-]", err))
+		mf.host.SetStatus(fmt.Sprintf("[red]%s[-]", err))
 		return
 	}
 
-	a.ApplyMessagesFilter(filter)
+	mf.host.ApplyMessagesFilter(filter)
 	mf.close()
 }
 
@@ -114,6 +113,6 @@ func (mf *messageFilter) clear() {
 	for i := 0; i < 4; i++ {
 		mf.form.GetFormItem(i).(*tview.InputField).SetText("")
 	}
-	mf.app.ApplyMessagesFilter(queue.MessageFilter{})
+	mf.host.ApplyMessagesFilter(queue.MessageFilter{})
 	mf.close()
 }

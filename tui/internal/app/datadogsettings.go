@@ -17,14 +17,14 @@ import (
 // config.DatadogConfig's doc comment for why this isn't the classic API
 // Key + Application Key pair).
 type datadogEditor struct {
-	app     *App
+	host    ui.Host
 	form    *tview.Form
 	visible bool
 }
 
 // newDatadogEditor builds the Datadog settings overlay's form.
-func newDatadogEditor(a *App) *datadogEditor {
-	de := &datadogEditor{app: a}
+func newDatadogEditor(host ui.Host) *datadogEditor {
+	de := &datadogEditor{host: host}
 	de.form = tview.NewForm()
 	de.form.SetBorder(true).SetTitle(" Datadog ")
 	de.form.
@@ -45,19 +45,20 @@ func newDatadogEditor(a *App) *datadogEditor {
 // show opens the Datadog settings overlay, pre-filled with the current
 // config.
 func (de *datadogEditor) show() {
-	de.form.GetFormItem(0).(*tview.InputField).SetText(de.app.cfg.Datadog.Site)
-	de.form.GetFormItem(1).(*tview.InputField).SetText(de.app.cfg.Datadog.AccessToken)
+	datadog := de.host.Config().Datadog
+	de.form.GetFormItem(0).(*tview.InputField).SetText(datadog.Site)
+	de.form.GetFormItem(1).(*tview.InputField).SetText(datadog.AccessToken)
 
-	de.app.rootPages.ShowPage("datadog-editor")
-	de.app.tv.SetFocus(de.form)
+	de.host.ShowPage("datadog-editor")
+	de.host.SetFocus(de.form)
 	de.visible = true
 }
 
 // close hides the editor without saving.
 func (de *datadogEditor) close() {
-	de.app.rootPages.HidePage("datadog-editor")
+	de.host.HidePage("datadog-editor")
 	de.visible = false
-	de.app.tv.SetFocus(de.app.pages)
+	de.host.FocusMain()
 }
 
 // ApplyPalette recolors the Datadog settings overlay for a live theme switch.
@@ -76,11 +77,10 @@ var _ ui.Themeable = (*datadogEditor)(nil)
 // configured yet" (surfaced as a clear error only if the user actually
 // tries to search).
 func (de *datadogEditor) save() {
-	a := de.app
 	site := strings.TrimSpace(de.form.GetFormItem(0).(*tview.InputField).GetText())
 	token := de.form.GetFormItem(1).(*tview.InputField).GetText()
 
-	a.SaveDatadogConfig(config.DatadogConfig{Site: site, AccessToken: token})
+	de.host.SaveDatadogConfig(config.DatadogConfig{Site: site, AccessToken: token})
 	de.close()
 }
 
