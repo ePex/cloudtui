@@ -156,6 +156,12 @@ func (tm *timeRangeModal) ApplyPalette(p config.Palette) {
 
 var _ ui.Themeable = (*timeRangeModal)(nil)
 
+// Primitive returns timeRangeModal's root widget, for sizing/embedding.
+func (tm *timeRangeModal) Primitive() tview.Primitive { return tm.flex }
+
+// Visible reports whether timeRangeModal is currently shown.
+func (tm *timeRangeModal) Visible() bool { return tm.visible }
+
 // switchTab activates mode's tab: re-renders the tab indicator, switches
 // pages, and focuses the tab's primitive (the relative list or the
 // absolute form). Called both on open and by the 'R'/'A' shortcuts while
