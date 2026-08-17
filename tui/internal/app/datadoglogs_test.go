@@ -12,6 +12,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 func TestEffectiveQuery(t *testing.T) {
@@ -254,7 +255,7 @@ func TestDatadogLogsViewHeaderLabels(t *testing.T) {
 func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 	a := New(config.Default())
 	dv := a.datadogLogsV
-	dv.tr = timeRange{mode: timeRangeRelative, presetIdx: 2}
+	dv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 2}
 
 	capture := dv.table.GetInputCapture()
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
@@ -270,9 +271,9 @@ func TestDatadogLogsViewTKeyOpensTimeRangeModal(t *testing.T) {
 	if a.timeRangeModal.onApply == nil {
 		t.Fatal("'t' did not register an onApply callback")
 	}
-	a.timeRangeModal.onApply(timeRange{mode: timeRangeRelative, presetIdx: 4})
+	a.timeRangeModal.onApply(ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 4})
 
-	if want := (timeRange{mode: timeRangeRelative, presetIdx: 4}); dv.tr != want {
+	if want := (ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 4}); dv.tr != want {
 		t.Errorf("dv.tr = %+v, want %+v after applying from the modal", dv.tr, want)
 	}
 }
