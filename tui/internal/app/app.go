@@ -93,22 +93,19 @@ type App struct {
 	datadogLogDetailV        *view.DatadogLogDetailView
 	codePipelineListV        *view.CodePipelineListView
 	codePipelineDetailV      *view.CodePipelineDetailView
-	// watchedPipelines/lastPipelineStages back the background
-	// CodePipeline watchers — see codepipelinewatch.go.
-	watchedPipelines       map[string]chan struct{}
-	lastPipelineStages     map[string]map[string]string
-	listParameters         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter        func(ctx context.Context, profile, name string) (string, error)
-	listSecrets            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret           func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
-	searchDatadogLogs      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	listDatadogFacetValues func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
-	listPipelines          func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
-	getPipelineState       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
-	notify                 func(title, message string)
-	screen                 tcell.Screen
+	pipelineWatcher          *view.PipelineWatcher
+	listParameters           func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter          func(ctx context.Context, profile, name string) (string, error)
+	listSecrets              func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret             func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listDatadogFacetValues   func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
+	listPipelines            func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState         func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify                   func(title, message string)
+	screen                   tcell.Screen
 	// secretCache backs AWS-Secrets-Manager-resolved connection passwords
 	// (see connectionsecrets.go / spec/56-fe-amq-connection-aws-secret-password).
 	secretCache *secretCache
@@ -267,14 +264,13 @@ func New(cfg config.Config) *App {
 		a.tv.SetFocus(a.datadogLogsV.Table())
 		a.UpdateContextPanel(a.datadogLogsV)
 	})
-	a.watchedPipelines = map[string]chan struct{}{}
-	a.lastPipelineStages = map[string]map[string]string{}
 	a.codePipelineListV = view.NewCodePipelineListView(a, a.OpenCodePipelineDetail)
 	a.codePipelineDetailV = view.NewCodePipelineDetailView(a, func() {
 		a.pages.SwitchToPage("codepipeline")
 		a.tv.SetFocus(a.codePipelineListV.Table())
 		a.UpdateContextPanel(a.codePipelineListV)
 	})
+	a.pipelineWatcher = view.NewPipelineWatcher(a, a.notify, a.codePipelineListV, a.codePipelineDetailV)
 	a.secretDetailV = view.NewSecretDetailView(a, func() {
 		a.pages.SwitchToPage("secrets-manager")
 		a.tv.SetFocus(a.secretsV.Table())
