@@ -57,7 +57,7 @@ type App struct {
 	logoPanel      *tview.TextView
 	statusBar      *tview.TextView
 	settingsV      *view.SettingsView
-	logV           *logView
+	logV           *view.LogView
 	queuesV        *view.QueuesView
 	messagesV      *view.MessagesView
 	messageDetailV *view.MessageDetailView
@@ -201,7 +201,7 @@ func New(cfg config.Config) *App {
 	})
 
 	// All shell primitives are constructed.
-	a.logV = newLogView(a)
+	a.logV = view.NewLogView()
 	a.backend = newBackendForConn(a, cfg.ActiveConn())
 
 	// Dialogs used directly by the views below (rather than through
@@ -669,7 +669,7 @@ type bordered interface {
 }
 
 // activatable is implemented by views that want to refresh their content each
-// time they become active (e.g. logView reloads the log file on SwitchTo).
+// time they become active (e.g. view.LogView reloads the log file on SwitchTo).
 type activatable interface {
 	Activate()
 }

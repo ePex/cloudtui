@@ -1,4 +1,4 @@
-package app
+package view
 
 import (
 	"fmt"
@@ -13,42 +13,41 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// logView is the Log screen: a scrollable read-only tview.TextView that
+// LogView is the Log screen: a scrollable read-only tview.TextView that
 // displays the contents of ~/.cloudtui/cloudtui.log. It reloads on Activate
 // (navigation) and on the 'r' shortcut.
-type logView struct {
+type LogView struct {
 	textView *tview.TextView
-	app      *App
 	path     string
 }
 
-var _ ui.View = (*logView)(nil)
-var _ ui.Shortcuttable = (*logView)(nil)
-var _ ui.Themeable = (*logView)(nil)
+var _ ui.View = (*LogView)(nil)
+var _ ui.Shortcuttable = (*LogView)(nil)
+var _ ui.Themeable = (*LogView)(nil)
 
-func (lv *logView) Name() string               { return "log" }
-func (lv *logView) Title() string              { return "Log" }
-func (lv *logView) Primitive() tview.Primitive { return lv.textView }
+func (lv *LogView) Name() string               { return "log" }
+func (lv *LogView) Title() string              { return "Log" }
+func (lv *LogView) Primitive() tview.Primitive { return lv.textView }
 
-func (lv *logView) Shortcuts() []ui.Shortcut {
+func (lv *LogView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 	}
 }
 
-// newLogView constructs the log view, defaulting to ~/.cloudtui/cloudtui.log.
-func newLogView(a *App) *logView {
+// NewLogView constructs the log view, defaulting to ~/.cloudtui/cloudtui.log.
+func NewLogView() *LogView {
 	home, _ := os.UserHomeDir()
-	return newLogViewWithPath(a, filepath.Join(home, ".cloudtui", "cloudtui.log"))
+	return NewLogViewWithPath(filepath.Join(home, ".cloudtui", "cloudtui.log"))
 }
 
-// newLogViewWithPath constructs the log view reading from path. Used by tests.
-func newLogViewWithPath(a *App, path string) *logView {
+// NewLogViewWithPath constructs the log view reading from path. Used by tests.
+func NewLogViewWithPath(path string) *LogView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log ")
 	tv.SetScrollable(true).SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 
-	lv := &logView{textView: tv, app: a, path: path}
+	lv := &LogView{textView: tv, path: path}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'r' {
@@ -63,13 +62,13 @@ func newLogViewWithPath(a *App, path string) *logView {
 
 // Activate reloads the log file. Called by SwitchTo each time the log view
 // becomes active.
-func (lv *logView) Activate() {
+func (lv *LogView) Activate() {
 	lv.load()
 }
 
 // load reads lv.path and displays its contents, or a fallback message when
 // the file is absent or unreadable.
-func (lv *logView) load() {
+func (lv *LogView) load() {
 	data, err := os.ReadFile(lv.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -105,7 +104,7 @@ func colorizeLog(data string) string {
 }
 
 // ApplyPalette recolors the log view for a live theme switch.
-func (lv *logView) ApplyPalette(p config.Palette) {
+func (lv *LogView) ApplyPalette(p config.Palette) {
 	lv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	lv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("log")))
 	lv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
