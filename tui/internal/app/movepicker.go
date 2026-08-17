@@ -235,7 +235,7 @@ func (mp *movePicker) ApplyPalette(p config.Palette) {
 	mp.flex.SetBackgroundColor(bg)
 	mp.flex.SetBorderColor(tcell.GetColor(p.Border))
 	mp.flex.SetTitleColor(tcell.GetColor(p.Border))
-	styleList(mp.list, p)
+	ui.StyleList(mp.list, p)
 	mp.list.SetBackgroundColor(bg)
 	mp.search.SetBackgroundColor(bg)
 	mp.search.SetLabelColor(tcell.GetColor(p.Label))

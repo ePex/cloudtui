@@ -106,7 +106,7 @@ func (cm *connManager) ApplyPalette(p config.Palette) {
 	cm.flex.SetBackgroundColor(bg)
 	cm.flex.SetBorderColor(tcell.GetColor(p.Border))
 	cm.flex.SetTitleColor(tcell.GetColor(p.Border))
-	styleList(cm.list, p)
+	ui.StyleList(cm.list, p)
 	cm.list.SetBackgroundColor(bg)
 	cm.hints.SetBackgroundColor(bg)
 	cm.hints.SetTextColor(tcell.GetColor(p.Text))
@@ -187,7 +187,7 @@ func newConnEditor(host ui.Host, manager *connManager) *connEditor {
 		AddButton("Save", func() { ce.save() }).
 		AddButton("Cancel", func() { ce.close() })
 	if dd, ok := ce.form.GetFormItem(1).(*tview.DropDown); ok {
-		styleDropDown(dd, host.Config().Colors)
+		ui.StyleDropDown(dd, host.Config().Colors)
 		// Wired via SetSelectedFunc rather than passed to AddDropDown
 		// itself, for the same reason as the Password Source dropdown
 		// below: AddDropDown's initial SetCurrentOption(0) call would
@@ -209,7 +209,7 @@ func newConnEditor(host ui.Host, manager *connManager) *connEditor {
 	// specific point, even though it can move once rebuildTail starts
 	// rebuilding items after a Backend change.
 	if dd, ok := ce.form.GetFormItem(5).(*tview.DropDown); ok {
-		styleDropDown(dd, host.Config().Colors)
+		ui.StyleDropDown(dd, host.Config().Colors)
 		dd.SetSelectedFunc(func(_ string, sourceIdx int) {
 			ce.setPasswordField(sourceIdx)
 		})
@@ -374,7 +374,7 @@ func (ce *connEditor) rebuildTail(backend string) {
 	}
 
 	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
-		styleDropDown(dd, ce.host.Config().Colors)
+		ui.StyleDropDown(dd, ce.host.Config().Colors)
 		dd.SetSelectedFunc(func(_ string, idx int) {
 			ce.setPasswordField(idx)
 		})
@@ -404,7 +404,7 @@ func (ce *connEditor) ApplyPalette(p config.Palette) {
 	// Preserved as-is: fixing it is a behavior change, out of scope for
 	// this structural move.
 	if dd, ok := ce.form.GetFormItem(2).(*tview.DropDown); ok {
-		styleDropDown(dd, p)
+		ui.StyleDropDown(dd, p)
 	}
 }
 

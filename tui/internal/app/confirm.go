@@ -74,7 +74,7 @@ func (c *confirmDialog) ApplyPalette(p config.Palette) {
 	c.flex.SetTitleColor(tcell.GetColor(p.Border))
 	c.text.SetBackgroundColor(bg)
 	c.text.SetTextColor(tcell.GetColor(p.Text))
-	styleList(c.list, p)
+	ui.StyleList(c.list, p)
 	c.list.SetBackgroundColor(bg)
 }
 

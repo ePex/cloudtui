@@ -31,20 +31,6 @@ func applyTheme(p config.Palette) {
 	tview.Styles.ContrastSecondaryTextColor = tcell.GetColor(p.Value)
 }
 
-// styleList applies p's selection colors to l. tview.List's own computed
-// default selection style inverts body text (background/text swapped), which
-// doesn't produce the palette's highlight look — so selection is wired
-// explicitly here rather than riding on applyTheme.
-//
-// Note: tview.List exposes no getter for its selected-item style, so the
-// result cannot be unit-tested directly. Verified manually instead (see
-// plan.md § Testing).
-func styleList(l *tview.List, p config.Palette) *tview.List {
-	return l.
-		SetSelectedBackgroundColor(tcell.GetColor(p.SelectionBg)).
-		SetSelectedTextColor(tcell.GetColor(p.SelectionText))
-}
-
 // reapplyTheme updates tview.Styles and all already-constructed shell
 // primitives to reflect palette p, then calls tv.Draw() to repaint. This is
 // the runtime theme-switch path; applyTheme handles startup.
@@ -92,7 +78,7 @@ func reapplyTheme(a *App, p config.Palette) {
 		a.settingsList.SetBackgroundColor(bg)
 		a.settingsList.SetBorderColor(tcell.GetColor(p.ViewColor("settings")))
 		a.settingsList.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
-		styleList(a.settingsList, p)
+		ui.StyleList(a.settingsList, p)
 	}
 
 	// Every other view/overlay recolors itself via ui.Themeable.
