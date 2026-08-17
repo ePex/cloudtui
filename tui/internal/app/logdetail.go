@@ -13,7 +13,7 @@ import (
 )
 
 // logDetailView shows the full detail of a single CloudWatch Logs event.
-// It is not a registered ui.View; it is opened via App.openLogEventDetail
+// It is not a registered ui.View; it is opened via App.OpenLogEventDetail
 // and returns to the search view on Esc/Backspace. Unlike
 // paramDetailView/secretDetailView, nothing here is masked — a log event
 // is never a secret in the AWS-service sense — so 'c' is always
@@ -56,7 +56,7 @@ func newLogDetailView(a *App) *logDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == 'c':
-			dv.app.copyToClipboard(dv.event.Message)
+			dv.app.CopyToClipboard(dv.event.Message)
 			dv.app.statusBar.SetText("Copied log message to clipboard")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
@@ -64,8 +64,8 @@ func newLogDetailView(a *App) *logDetailView {
 			a.tv.SetFocus(a.logSearchV.table)
 			// logSearchView isn't a registered ui.View (opened directly,
 			// like messagesView), so it can't go through the generic
-			// updateContextPanel(ui.View) path — same manual pattern
-			// openLogSearch uses.
+			// UpdateContextPanel(ui.View) path — same manual pattern
+			// OpenLogSearch uses.
 			lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
 			for _, sc := range a.logSearchV.Shortcuts() {
 				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.cfg.Colors.Accent, sc.Key, sc.Description))

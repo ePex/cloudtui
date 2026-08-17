@@ -16,7 +16,7 @@ import (
 )
 
 // logSearchView is the CloudWatch Logs search screen: opened per log
-// group via App.openLogSearch, not a registered ui.View. Unlike every
+// group via App.OpenLogSearch, not a registered ui.View. Unlike every
 // other list view in this app, its filter (the pattern input) is a real
 // AWS API call, not a local client-side filter — so it only searches on
 // Enter, never on keystroke, and results are paginated by AWS but this
@@ -120,7 +120,7 @@ func newLogSearchView(a *App) *logSearchView {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:
 			a.pages.SwitchToPage("cloudwatch-logs")
 			a.tv.SetFocus(a.logsV.table)
-			a.updateContextPanel(a.logsV)
+			a.UpdateContextPanel(a.logsV)
 			return nil
 		}
 		return event

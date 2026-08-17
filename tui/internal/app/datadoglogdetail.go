@@ -14,7 +14,7 @@ import (
 )
 
 // datadogLogDetailView shows the full detail of a single Datadog log
-// event. Not a registered ui.View; opened via App.openDatadogLogDetail
+// event. Not a registered ui.View; opened via App.OpenDatadogLogDetail
 // and returns to the search view on Esc/Backspace. Nothing here is
 // masked — a log event is never a secret in the AWS-service sense — so
 // 'c' is always available, no reveal-gating needed (same as
@@ -75,7 +75,7 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Rune() == 'c':
-			dv.app.copyToClipboard(dv.event.Message)
+			dv.app.CopyToClipboard(dv.event.Message)
 			dv.app.statusBar.SetText("Copied log message to clipboard")
 			return nil
 		case event.Rune() == 'g':
@@ -91,12 +91,12 @@ func newDatadogLogDetailView(a *App) *datadogLogDetailView {
 			// a user's own typed search pattern is still passed straight
 			// through unmodified (spec/34-fe-cloudwatch-logs decision 3).
 			dv.app.pendingCloudWatchPattern = fmt.Sprintf("%q", id)
-			dv.app.switchTo("cloudwatch-logs")
+			dv.app.SwitchTo("cloudwatch-logs")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.SwitchToPage("datadog-logs")
 			a.tv.SetFocus(a.datadogLogsV.table)
-			a.updateContextPanel(a.datadogLogsV)
+			a.UpdateContextPanel(a.datadogLogsV)
 			return nil
 		}
 		return event

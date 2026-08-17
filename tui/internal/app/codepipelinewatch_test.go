@@ -217,7 +217,7 @@ func TestHandlePipelinePollErrorStopsWatchAndNotifiesOnce(t *testing.T) {
 	if len(fn.calls) != 1 {
 		t.Fatalf("notify called %d times, want 1", len(fn.calls))
 	}
-	if a.isWatchingPipeline("my-pipeline") {
+	if a.IsWatchingPipeline("my-pipeline") {
 		t.Error("still watching after a poll error, want stopped")
 	}
 }
@@ -233,7 +233,7 @@ func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
 		{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
 	}, nil)
 
-	if a.isWatchingPipeline("my-pipeline") {
+	if a.IsWatchingPipeline("my-pipeline") {
 		t.Error("still watching after the pipeline finished, want stopped")
 	}
 	foundFinishedNotice := false
@@ -247,37 +247,37 @@ func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
 	}
 }
 
-// TestStartStopWatchingPipeline calls startWatchingPipeline directly,
+// TestStartStopWatchingPipeline calls StartWatchingPipeline directly,
 // which spawns a real goroutine (pollPipeline) that blocks on its
 // ticker/stop channel — same accepted background-goroutine-in-tests
 // precedent as this app's other tests (e.g.
 // TestDatadogLogsViewCycleTimeRange), but this test only asserts on
-// the synchronous map/channel state startWatchingPipeline itself
+// the synchronous map/channel state StartWatchingPipeline itself
 // mutates before the goroutine's first tick could ever fire (the
 // ticker's first tick is pipelinePollInterval away), never on anything
 // the goroutine does asynchronously.
 func TestStartStopWatchingPipeline(t *testing.T) {
 	a := New(config.Default())
 
-	if a.isWatchingPipeline("my-pipeline") {
-		t.Fatal("isWatchingPipeline() = true before starting, want false")
+	if a.IsWatchingPipeline("my-pipeline") {
+		t.Fatal("IsWatchingPipeline() = true before starting, want false")
 	}
 
-	a.startWatchingPipeline("my-pipeline")
-	if !a.isWatchingPipeline("my-pipeline") {
-		t.Error("isWatchingPipeline() = false after starting, want true")
+	a.StartWatchingPipeline("my-pipeline")
+	if !a.IsWatchingPipeline("my-pipeline") {
+		t.Error("IsWatchingPipeline() = false after starting, want true")
 	}
 
 	// Starting again while already watching must not replace the
 	// existing entry (would leak the original goroutine's stop channel).
 	existing := a.watchedPipelines["my-pipeline"]
-	a.startWatchingPipeline("my-pipeline")
+	a.StartWatchingPipeline("my-pipeline")
 	if a.watchedPipelines["my-pipeline"] != existing {
-		t.Error("startWatchingPipeline() while already watching replaced the stop channel, want no-op")
+		t.Error("StartWatchingPipeline() while already watching replaced the stop channel, want no-op")
 	}
 
-	a.stopWatchingPipeline("my-pipeline")
-	if a.isWatchingPipeline("my-pipeline") {
-		t.Error("isWatchingPipeline() = true after stopping, want false")
+	a.StopWatchingPipeline("my-pipeline")
+	if a.IsWatchingPipeline("my-pipeline") {
+		t.Error("IsWatchingPipeline() = true after stopping, want false")
 	}
 }

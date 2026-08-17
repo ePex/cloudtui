@@ -114,7 +114,7 @@ func newSecretsView(a *App) *secretsView {
 	return sv
 }
 
-// Activate reloads the secret list. Called by switchTo each time the
+// Activate reloads the secret list. Called by SwitchTo each time the
 // view becomes active.
 func (sv *secretsView) Activate() {
 	sv.load()

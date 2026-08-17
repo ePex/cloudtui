@@ -16,8 +16,8 @@ import (
 )
 
 // messagesView shows the messages currently in a specific queue. It is not a
-// registered ui.View (no switchTo / home dashboard entry); it is opened
-// exclusively via App.openMessages and returns to "queues" on Esc/Backspace.
+// registered ui.View (no SwitchTo / home dashboard entry); it is opened
+// exclusively via App.OpenMessages and returns to "queues" on Esc/Backspace.
 //
 // Messages can be multi-selected ("marked", tracked in marked by message ID)
 // independently of the table's cursor: space toggles the mark on the row
@@ -74,7 +74,7 @@ func (mv *messagesView) Shortcuts() []ui.Shortcut {
 }
 
 // newMessagesView constructs the messages view. The queue name is set later
-// via app.openMessages before the view is shown.
+// via app.OpenMessages before the view is shown.
 func newMessagesView(a *App) *messagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
@@ -171,7 +171,7 @@ func newMessagesView(a *App) *messagesView {
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
-			a.switchTo("queues")
+			a.SwitchTo("queues")
 			return nil
 		}
 		return event

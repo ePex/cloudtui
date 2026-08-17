@@ -115,7 +115,7 @@ func newSSMParamsView(a *App) *ssmParamsView {
 	return pv
 }
 
-// Activate reloads the parameter list. Called by switchTo each time the
+// Activate reloads the parameter list. Called by SwitchTo each time the
 // view becomes active.
 func (pv *ssmParamsView) Activate() {
 	pv.load()

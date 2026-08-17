@@ -17,7 +17,7 @@ import (
 
 // secretDetailView shows the full detail of a single Secrets Manager
 // secret. It is not a registered ui.View; it is opened via
-// App.openSecretDetail and returns to "secrets-manager" on Esc/Backspace.
+// App.OpenSecretDetail and returns to "secrets-manager" on Esc/Backspace.
 // Unlike paramDetailView, a Secret never carries a value at all — Secrets
 // Manager's ListSecrets structurally has no value field — so a real,
 // separate GetSecretValue call (see awssecrets.Reveal) is always needed to
@@ -85,7 +85,7 @@ func newSecretDetailView(a *App) *secretDetailView {
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.pages.SwitchToPage("secrets-manager")
 			a.tv.SetFocus(a.secretsV.table)
-			a.updateContextPanel(a.secretsV)
+			a.UpdateContextPanel(a.secretsV)
 			return nil
 		}
 		return event
@@ -146,7 +146,7 @@ func (dv *secretDetailView) renderBody() {
 // which changes as reveal progresses (the "r: reveal" entry drops out,
 // "c: copy value" appears for a non-binary secret). secretDetailView isn't
 // a registered ui.View, so this can't go through the generic
-// updateContextPanel(ui.View) path — same manual pattern paramDetailView
+// UpdateContextPanel(ui.View) path — same manual pattern paramDetailView
 // uses.
 func (dv *secretDetailView) refreshContextPanel() {
 	lines := make([]string, 0, len(dv.Shortcuts()))
@@ -173,7 +173,7 @@ func (dv *secretDetailView) copyFetchedValue() {
 		dv.app.statusBar.SetText(fmt.Sprintf("[red]Cannot copy %s: binary secret[-]", dv.secret.Name))
 		return
 	}
-	dv.app.copyToClipboard(dv.displayValue)
+	dv.app.CopyToClipboard(dv.displayValue)
 	dv.app.statusBar.SetText(fmt.Sprintf("Copied %s to clipboard", dv.secret.Name))
 }
 

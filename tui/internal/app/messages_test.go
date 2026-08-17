@@ -454,7 +454,7 @@ func TestMessagesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 	screen.SetSize(60, 15)
 
 	// First draw while the table is still empty (header only), mirroring
-	// the real sequence: openMessages draws before the async load returns.
+	// the real sequence: OpenMessages draws before the async load returns.
 	mv.table.Draw(screen)
 
 	msgs := make([]queue.Message, 50)

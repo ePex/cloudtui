@@ -117,7 +117,7 @@ func newLogsView(a *App) *logsView {
 	return lv
 }
 
-// Activate reloads the log group list. Called by switchTo each time the
+// Activate reloads the log group list. Called by SwitchTo each time the
 // view becomes active.
 func (lv *logsView) Activate() {
 	lv.load()

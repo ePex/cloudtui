@@ -57,11 +57,11 @@ func reapplyTheme(a *App, p config.Palette) {
 	a.divider.SetText(fmt.Sprintf("[%s]%s[-]", p.Border, strings.Join(lines, "\n")))
 	a.divider.SetBackgroundColor(bg)
 
-	// Context panel — background only; text is managed by switchTo/updateContextPanel
+	// Context panel — background only; text is managed by SwitchTo/UpdateContextPanel
 	a.contextPanel.SetBackgroundColor(bg)
 	// Re-render shortcuts with new accent color if a Shortcuttable view is active.
 	if av := a.activeView(); av != nil {
-		a.updateContextPanel(av)
+		a.UpdateContextPanel(av)
 	}
 
 	// Logo panel

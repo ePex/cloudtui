@@ -15,14 +15,14 @@ import (
 // spec/43-fe-codepipeline-monitor decision 9.
 const pipelinePollInterval = 20 * time.Second
 
-// isWatchingPipeline reports whether name currently has an active
+// IsWatchingPipeline reports whether name currently has an active
 // background watch.
-func (a *App) isWatchingPipeline(name string) bool {
+func (a *App) IsWatchingPipeline(name string) bool {
 	_, ok := a.watchedPipelines[name]
 	return ok
 }
 
-// startWatchingPipeline begins polling name's stage state every
+// StartWatchingPipeline begins polling name's stage state every
 // pipelinePollInterval until it either reaches a terminal state or is
 // explicitly stopped. A no-op if already watching name. Only ever
 // called from the main goroutine (a key handler, or code already
@@ -30,8 +30,8 @@ func (a *App) isWatchingPipeline(name string) bool {
 // lastPipelineStages are otherwise untouched by any other goroutine, so
 // no mutex is needed (see spec/43-fe-codepipeline-monitor's watcher
 // section for the full reasoning).
-func (a *App) startWatchingPipeline(name string) {
-	if a.isWatchingPipeline(name) {
+func (a *App) StartWatchingPipeline(name string) {
+	if a.IsWatchingPipeline(name) {
 		return
 	}
 	stop := make(chan struct{})
@@ -46,9 +46,9 @@ func (a *App) startWatchingPipeline(name string) {
 	go a.pollPipeline(name, profile, stop)
 }
 
-// stopWatchingPipeline stops name's background watch, if any. A no-op
+// StopWatchingPipeline stops name's background watch, if any. A no-op
 // if not currently watching name.
-func (a *App) stopWatchingPipeline(name string) {
+func (a *App) StopWatchingPipeline(name string) {
 	if stop, ok := a.watchedPipelines[name]; ok {
 		close(stop)
 		delete(a.watchedPipelines, name)
@@ -100,7 +100,7 @@ func (a *App) handlePipelinePoll(name string, stages []awscodepipeline.StageStat
 	if err != nil {
 		slog.Error("codepipeline: poll failed", "pipeline", name, "error", err)
 		a.notify("Stopped watching "+name, err.Error())
-		a.stopWatchingPipeline(name)
+		a.StopWatchingPipeline(name)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (a *App) handlePipelinePoll(name string, stages []awscodepipeline.StageStat
 
 	if pipelineFinished(stages) {
 		a.notify(name, "Pipeline finished")
-		a.stopWatchingPipeline(name)
+		a.StopWatchingPipeline(name)
 	}
 
 	if a.codePipelineDetailV != nil && a.codePipelineDetailV.pipelineName == name {

@@ -50,7 +50,7 @@ func TestDatadogLogDetailViewShortcutsAlwaysIncludeCopy(t *testing.T) {
 func TestOpenDatadogLogDetailSwitchesPage(t *testing.T) {
 	a := New(config.Default())
 
-	a.openDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
 
 	if name, _ := a.pages.GetFrontPage(); name != "datadog-log-detail" {
 		t.Errorf("front page = %q, want %q", name, "datadog-log-detail")
@@ -64,7 +64,7 @@ func TestDatadogLogDetailViewCopyWritesMessageToClipboard(t *testing.T) {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	a.screen = screen
-	a.openDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
 
 	capture := a.datadogLogDetailV.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
@@ -76,7 +76,7 @@ func TestDatadogLogDetailViewCopyWritesMessageToClipboard(t *testing.T) {
 
 func TestDatadogLogDetailViewEscReturnsToDatadogLogs(t *testing.T) {
 	a := New(config.Default())
-	a.openDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{Message: "hello"})
 
 	capture := a.datadogLogDetailV.textView.GetInputCapture()
 	if capture == nil {
@@ -148,7 +148,7 @@ func TestExtractCorrelationID(t *testing.T) {
 
 func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 	a := New(config.Default())
-	a.openDatadogLogDetail(datadoglogs.LogEvent{
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{
 		Message: "something happened CorrelationID: 1745d042-94e8-49f0-b223-8900ed9e951e",
 	})
 
@@ -167,7 +167,7 @@ func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 
 func TestDatadogLogDetailViewGoToCloudWatchWithoutCorrelationID(t *testing.T) {
 	a := New(config.Default())
-	a.openDatadogLogDetail(datadoglogs.LogEvent{Message: "no correlation id here"})
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{Message: "no correlation id here"})
 
 	capture := a.datadogLogDetailV.textView.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
