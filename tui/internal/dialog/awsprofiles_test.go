@@ -1,10 +1,9 @@
-package app
+package dialog
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
-	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func newTestAWSProfiles(t *testing.T) (*AWSProfilesPicker, *testHost) {
@@ -185,28 +183,30 @@ func TestShowAWSProfilesResetsFilterFromPreviousVisit(t *testing.T) {
 	}
 }
 
-func TestActivateAWSProfilePersistsAndUpdatesUI(t *testing.T) {
-	t.Chdir(t.TempDir())
-	a := New(config.Default())
-	a.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
-	a.awsProfiles.Show()
+// TestAWSProfilesActivateCallsHostAndCloses confirms activate() hands
+// the right name to host.SetActiveAWSProfile, reports it in the status
+// bar, and closes — the disk-persistence/info-panel/settings-list half
+// of what this test verified before the CR 78 move (App's real
+// SetActiveAWSProfile wiring) is App's own responsibility now, covered
+// by internal/app/host_test.go's
+// TestSetActiveAWSProfilePersistsAndUpdatesUI instead: testHost
+// deliberately only records this call, it doesn't persist or update
+// any other UI.
+func TestAWSProfilesActivateCallsHostAndCloses(t *testing.T) {
+	ap, host := newTestAWSProfiles(t)
+	host.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) { return nil, nil }
+	ap.Show()
 
-	a.awsProfiles.activate("work")
+	ap.activate("work")
 
-	if got := a.cfg.ActiveAWSProfile; got != "work" {
-		t.Errorf("cfg.ActiveAWSProfile = %q, want %q", got, "work")
+	if got := host.activeAWSProfile; got != "work" {
+		t.Errorf("SetActiveAWSProfile called with %q, want %q", got, "work")
 	}
-	if got := a.infoPanel.GetText(true); !strings.Contains(got, "work") {
-		t.Errorf("info panel = %q, want it to contain %q", got, "work")
+	if !strings.Contains(host.status, "work") {
+		t.Errorf("status = %q, want it to contain %q", host.status, "work")
 	}
-	if main2, _ := a.settingsList.GetItemText(2); !strings.Contains(main2, "work") {
-		t.Errorf("settings list item 2 = %q, want it to contain %q", main2, "work")
-	}
-	if a.awsProfiles.visible {
+	if ap.visible {
 		t.Error("overlay should close after activating a profile")
-	}
-	if _, err := os.Stat("config.yaml"); err != nil {
-		t.Errorf("config.yaml not written after awsProfiles.activate: %v", err)
 	}
 }
 

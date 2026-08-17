@@ -110,17 +110,27 @@ func TestLogSearchViewTKeyOpensTimeRangeModal(t *testing.T) {
 	if got := capture(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)); got != nil {
 		t.Errorf("'t' capture returned %v, want nil (event consumed)", got)
 	}
-	if !a.timeRangeModal.visible {
+	if !a.timeRangeModal.Visible() {
 		t.Fatal("'t' did not open the time range modal")
 	}
-	if got := a.timeRangeModal.relativeList.GetCurrentItem(); got != 2 {
+
+	// The modal's internals (relativeList, onApply) live in internal/dialog
+	// and aren't reachable from here — drive the real UI path instead:
+	// Show() focuses the relative list (asserting via the focused
+	// primitive's own exported API, not a dialog-package field), prefilled
+	// to sv.tr's preset; selecting a different preset and pressing Enter
+	// exercises the actual applyRelative -> onApply -> sv.tr write-back
+	// path a real keypress would.
+	list, ok := a.tv.GetFocus().(*tview.List)
+	if !ok {
+		t.Fatalf("focus after 't' = %T, want *tview.List", a.tv.GetFocus())
+	}
+	if got := list.GetCurrentItem(); got != 2 {
 		t.Errorf("relative list current item = %d, want 2 (sv.tr's preset)", got)
 	}
 
-	if a.timeRangeModal.onApply == nil {
-		t.Fatal("'t' did not register an onApply callback")
-	}
-	a.timeRangeModal.onApply(ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 4})
+	list.SetCurrentItem(4)
+	list.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if want := (ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 4}); sv.tr != want {
 		t.Errorf("sv.tr = %+v, want %+v after applying from the modal", sv.tr, want)
