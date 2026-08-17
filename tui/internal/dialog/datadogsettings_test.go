@@ -1,7 +1,6 @@
-package app
+package dialog
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -66,34 +65,27 @@ func TestDatadogEditorPrefillsFromConfig(t *testing.T) {
 	}
 }
 
-// TestSaveDatadogEditorRoundTrip confirms the save path this repo's
-// connEditorForm doesn't have an existing equivalent test for: filling
-// the form and saving should update cfg.Datadog, persist to config.yaml,
-// and close the editor.
-func TestSaveDatadogEditorRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
+// TestDatadogEditorSaveCallsHostAndCloses confirms save() reads the
+// form and hands the right config.DatadogConfig to host.SaveDatadogConfig,
+// then closes — the disk-persistence half of what this test verified
+// before the CR 78 move (host.SaveDatadogConfig actually writing to
+// config.yaml) is App's own responsibility now, covered by
+// internal/app/host_test.go's TestSaveDatadogConfigPersists instead:
+// testHost deliberately only records this call, it doesn't persist
+// anything.
+func TestDatadogEditorSaveCallsHostAndCloses(t *testing.T) {
+	de, host := newTestDatadogEditor(t)
+	de.Show()
+	de.form.GetFormItem(0).(*tview.InputField).SetText("datadoghq.eu")
+	de.form.GetFormItem(1).(*tview.InputField).SetText("tok-456")
 
-	a := New(config.Default())
-	a.datadogEditor.Show()
-	a.datadogEditor.form.GetFormItem(0).(*tview.InputField).SetText("datadoghq.eu")
-	a.datadogEditor.form.GetFormItem(1).(*tview.InputField).SetText("tok-456")
+	de.save()
 
-	a.datadogEditor.save()
-
-	if a.datadogEditor.visible {
-		t.Error("datadogEditor.save() did not close the editor")
+	if de.visible {
+		t.Error("DatadogEditor.save() did not close the editor")
 	}
 	want := config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-456"}
-	if a.cfg.Datadog != want {
-		t.Errorf("cfg.Datadog = %+v, want %+v", a.cfg.Datadog, want)
-	}
-
-	got, err := config.Load(filepath.Join(dir, "config.yaml"))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if got.Datadog != want {
-		t.Errorf("persisted Datadog = %+v, want %+v", got.Datadog, want)
+	if host.savedDatadogConfig == nil || *host.savedDatadogConfig != want {
+		t.Errorf("SaveDatadogConfig called with %+v, want %+v", host.savedDatadogConfig, want)
 	}
 }

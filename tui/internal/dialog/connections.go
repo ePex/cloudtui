@@ -1,4 +1,4 @@
-package app
+package dialog
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 type ConnManager struct {
 	host    ui.Host
 	confirm *ConfirmDialog
-	editor  *ConnEditor // set after construction — see New()
+	editor  *ConnEditor // set after construction — see SetEditor
 	flex    *tview.Flex
 	list    *tview.List
 	hints   *tview.TextView
@@ -78,6 +78,14 @@ func NewConnManager(host ui.Host, confirm *ConfirmDialog) *ConnManager {
 		}
 	})
 	return cm
+}
+
+// SetEditor wires cm to the connection editor it opens for "new"/"edit"/
+// "duplicate". Called once, right after NewConnEditor constructs the
+// editor — ConnEditor doesn't exist yet when NewConnManager runs, so
+// this can't be passed to the constructor itself.
+func (cm *ConnManager) SetEditor(ce *ConnEditor) {
+	cm.editor = ce
 }
 
 // Show opens the connection manager overlay.

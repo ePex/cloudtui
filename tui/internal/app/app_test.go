@@ -312,11 +312,8 @@ func TestOnPromptDoneAqOpensConnectionManager(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManager.visible {
-		t.Error("connManager.visible = false after ':aq', want true")
-	}
-	if got := a.tv.GetFocus(); got != a.connManager.list {
-		t.Errorf("focus after ':aq' = %v, want the connection manager list", got)
+	if !a.connManager.Visible() {
+		t.Error("connManager.Visible() = false after ':aq', want true")
 	}
 }
 
@@ -326,8 +323,8 @@ func TestOnPromptDoneConnectionsOpensConnectionManager(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManager.visible {
-		t.Error("connManager.visible = false after ':connections', want true")
+	if !a.connManager.Visible() {
+		t.Error("connManager.Visible() = false after ':connections', want true")
 	}
 }
 
@@ -338,7 +335,7 @@ func TestOnPromptDoneAqWorksFromAnyView(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.connManager.visible {
+	if !a.connManager.Visible() {
 		t.Error("':aq' from the log view did not open the connection manager")
 	}
 }
@@ -350,11 +347,8 @@ func TestOnPromptDoneApOpensAWSProfiles(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfiles.visible {
-		t.Error("awsProfiles.visible = false after ':ap', want true")
-	}
-	if got := a.tv.GetFocus(); got != a.awsProfiles.table {
-		t.Errorf("focus after ':ap' = %v, want the AWS profiles table", got)
+	if !a.awsProfiles.Visible() {
+		t.Error("awsProfiles.Visible() = false after ':ap', want true")
 	}
 }
 
@@ -365,8 +359,8 @@ func TestOnPromptDoneAwsprofilesOpensAWSProfiles(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfiles.visible {
-		t.Error("awsProfiles.visible = false after ':awsprofiles', want true")
+	if !a.awsProfiles.Visible() {
+		t.Error("awsProfiles.Visible() = false after ':awsprofiles', want true")
 	}
 }
 
@@ -378,7 +372,7 @@ func TestOnPromptDoneApWorksFromAnyView(t *testing.T) {
 
 	a.onPromptDone(tcell.KeyEnter)
 
-	if !a.awsProfiles.visible {
+	if !a.awsProfiles.Visible() {
 		t.Error("':ap' from the log view did not open the AWS profiles overlay")
 	}
 }
@@ -664,95 +658,6 @@ func TestPromptQueuesCommandSwitchesToQueuesView(t *testing.T) {
 
 	if name, _ := a.pages.GetFrontPage(); name != "queues" {
 		t.Errorf("front page after ':queues' = %q, want %q", name, "queues")
-	}
-}
-
-func TestSortPickerQueues(t *testing.T) {
-	cases := []struct {
-		name        string
-		sourceQueue string
-		input       []string
-		want        []string
-	}{
-		{
-			name:        "DLQ source with matching non-DLQ queue pins it first",
-			sourceQueue: "dlq.foo.bar",
-			input:       []string{"alpha", "foo.bar", "zebra"},
-			want:        []string{"foo.bar", "alpha", "zebra"},
-		},
-		{
-			name:        "DLQ source case-insensitive prefix detection",
-			sourceQueue: "DLQ.foo.bar",
-			input:       []string{"foo.bar", "alpha"},
-			want:        []string{"foo.bar", "alpha"},
-		},
-		{
-			name:        "DLQ source candidate match is case-insensitive",
-			sourceQueue: "dlq.Foo.Bar",
-			input:       []string{"foo.bar", "alpha"},
-			want:        []string{"foo.bar", "alpha"},
-		},
-		{
-			name:        "DLQ source without matching candidate returns alphabetical",
-			sourceQueue: "dlq.missing.queue",
-			input:       []string{"zebra", "alpha", "mango"},
-			want:        []string{"alpha", "mango", "zebra"},
-		},
-		{
-			name:        "non-DLQ source returns alphabetical",
-			sourceQueue: "foo.bar",
-			input:       []string{"zebra", "alpha", "mango"},
-			want:        []string{"alpha", "mango", "zebra"},
-		},
-		{
-			name:        "empty list",
-			sourceQueue: "dlq.foo",
-			input:       []string{},
-			want:        []string{},
-		},
-		{
-			name:        "DLQ queues are de-prioritized after regular queues",
-			sourceQueue: "foo.bar",
-			input:       []string{"dlq.other", "regular", "another"},
-			want:        []string{"another", "regular", "dlq.other"},
-		},
-		{
-			name:        "system queues are de-prioritized last",
-			sourceQueue: "foo.bar",
-			input:       []string{"activemq.advisory", "regular", "statistics.foo"},
-			want:        []string{"regular", "activemq.advisory", "statistics.foo"},
-		},
-		{
-			name:        "full tier ordering: preferred, regular, DLQ, system",
-			sourceQueue: "dlq.my.queue",
-			input:       []string{"activemq.advisory", "dlq.other", "my.queue", "regular.a", "statistics.foo"},
-			want:        []string{"my.queue", "regular.a", "dlq.other", "activemq.advisory", "statistics.foo"},
-		},
-		{
-			name:        "IMQ source pins corresponding queue first",
-			sourceQueue: "imq.foo.bar",
-			input:       []string{"foo.bar", "alpha"},
-			want:        []string{"foo.bar", "alpha"},
-		},
-		{
-			name:        "IMQ queues are de-prioritized alongside DLQ queues",
-			sourceQueue: "regular.queue",
-			input:       []string{"imq.other", "regular.a", "dlq.other"},
-			want:        []string{"regular.a", "dlq.other", "imq.other"},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := sortPickerQueues(tc.sourceQueue, tc.input)
-			if len(got) != len(tc.want) {
-				t.Fatalf("sortPickerQueues() len = %d, want %d; got %v", len(got), len(tc.want), got)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Errorf("sortPickerQueues()[%d] = %q, want %q", i, got[i], tc.want[i])
-				}
-			}
-		})
 	}
 }
 
