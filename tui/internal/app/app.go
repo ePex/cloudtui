@@ -23,6 +23,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
@@ -59,20 +60,20 @@ type App struct {
 	queuesV        *queuesView
 	messagesV      *messagesView
 	messageDetailV *messageDetailView
-	confirm        *ConfirmDialog
-	movePicker     *MovePicker
-	sendMessage    *SendMessageOverlay
-	connManager    *ConnManager
-	connEditor     *ConnEditor
-	messageFilter  *MessageFilter
-	timeRangeModal *TimeRangeModal
-	datadogEditor  *DatadogEditor
+	confirm        *dialog.ConfirmDialog
+	movePicker     *dialog.MovePicker
+	sendMessage    *dialog.SendMessageOverlay
+	connManager    *dialog.ConnManager
+	connEditor     *dialog.ConnEditor
+	messageFilter  *dialog.MessageFilter
+	timeRangeModal *dialog.TimeRangeModal
+	datadogEditor  *dialog.DatadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by openLogSearch and
 	// dropped by switchTo if abandoned — see spec/41.
 	pendingCloudWatchPattern string
-	themePicker              *ThemePicker
-	awsProfiles              *AWSProfilesPicker
+	themePicker              *dialog.ThemePicker
+	awsProfiles              *dialog.AWSProfilesPicker
 	backend                  queue.Backend
 	homeTable                *tview.Table
 	homeSections             []views.SectionInfo
@@ -267,30 +268,30 @@ func New(cfg config.Config) *App {
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
-	a.confirm = NewConfirmDialog(a)
+	a.confirm = dialog.NewConfirmDialog(a)
 	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
 
-	a.movePicker = NewMovePicker(a)
+	a.movePicker = dialog.NewMovePicker(a)
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
 
-	a.sendMessage = NewSendMessageOverlay(a)
+	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
 
-	a.connManager = NewConnManager(a, a.confirm)
+	a.connManager = dialog.NewConnManager(a, a.confirm)
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
-	a.connEditor = NewConnEditor(a, a.connManager)
-	a.connManager.editor = a.connEditor
+	a.connEditor = dialog.NewConnEditor(a, a.connManager)
+	a.connManager.SetEditor(a.connEditor)
 	// Height must cover border+padding (4 rows) + 7 items * (field + item
 	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
 	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
 
-	a.messageFilter = NewMessageFilter(a)
+	a.messageFilter = dialog.NewMessageFilter(a)
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
-	a.timeRangeModal = NewTimeRangeModal(a)
+	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
@@ -299,15 +300,15 @@ func New(cfg config.Config) *App {
 	// spare, matching the "give it one spare row" convention elsewhere.
 	timeRangeOverlay := ui.Centered(a.timeRangeModal.Primitive(), 72, 14)
 
-	a.datadogEditor = NewDatadogEditor(a)
+	a.datadogEditor = dialog.NewDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
 	datadogEditorOverlay := ui.Centered(a.datadogEditor.Primitive(), 56, 10)
 
-	a.themePicker = NewThemePicker(a)
+	a.themePicker = dialog.NewThemePicker(a)
 	themePickerOverlay := ui.Centered(a.themePicker.Primitive(), 40, 14)
 
-	a.awsProfiles = NewAWSProfilesPicker(a)
+	a.awsProfiles = dialog.NewAWSProfilesPicker(a)
 	awsProfilesOverlay := ui.Centered(a.awsProfiles.Primitive(), 64, 20)
 
 	helpOverlay := ui.Centered(ui.NewHelpModal(cfg), ui.HelpModalWidth, ui.HelpModalHeight)

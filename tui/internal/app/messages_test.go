@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -351,7 +352,7 @@ func TestMessagesViewDeleteMarkedNoopOnEmptyList(t *testing.T) {
 
 	mv.deleteMarked()
 
-	if a.confirm.visible {
+	if a.confirm.Visible() {
 		t.Error("deleteMarked() on an empty list should not open the confirm dialog")
 	}
 }
@@ -366,7 +367,7 @@ func TestMessagesViewMoveMarkedNoopOnEmptyList(t *testing.T) {
 
 	mv.moveMarked()
 
-	if a.movePicker.visible {
+	if a.movePicker.Visible() {
 		t.Error("moveMarked() on an empty list should not open the move picker")
 	}
 }
@@ -382,12 +383,12 @@ func TestMessagesViewDeleteFallsBackToCursorWhenNothingMarked(t *testing.T) {
 
 	mv.deleteMarked()
 
-	if !a.confirm.visible {
+	if !a.confirm.Visible() {
 		t.Fatal("deleteMarked() with a cursor row but no marks should open the confirm dialog")
 	}
 	want := `Delete message from "orders"?`
-	if got := a.confirm.text.GetText(true); got != want {
-		t.Errorf("confirm text = %q, want %q", got, want)
+	if got := renderedScreenText(t, a.confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
+		t.Errorf("rendered confirm dialog = %q, want it to contain %q", got, want)
 	}
 }
 
@@ -402,7 +403,7 @@ func TestMessagesViewMoveFallsBackToCursorWhenNothingMarked(t *testing.T) {
 
 	mv.moveMarked()
 
-	if !a.movePicker.visible {
+	if !a.movePicker.Visible() {
 		t.Error("moveMarked() with a cursor row but no marks should open the move picker")
 	}
 }
@@ -432,7 +433,7 @@ func TestMessagesViewDeleteFallsBackNoopWhenCursorRowHasNoID(t *testing.T) {
 
 	mv.deleteMarked()
 
-	if a.confirm.visible {
+	if a.confirm.Visible() {
 		t.Error("deleteMarked() should not fall back to a cursor row with no ID")
 	}
 }

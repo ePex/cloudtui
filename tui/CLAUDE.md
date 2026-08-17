@@ -23,6 +23,9 @@ this module.
   remove disposable queues via JMX, start/stop a local mq-proxy instance
   (`task test:queue:add`/`remove`, `task dev:proxy:start`/`stop`).
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
+- `internal/dialog/` — modal overlay types (confirm, connection
+  manager/editor, message filter, time range, Datadog/theme/AWS
+  profile pickers) implementing internal/ui's Host contract.
 - `internal/ui/` — the `View` interface shared across resource views.
 - `internal/ui/views/` — individual resource view implementations.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
