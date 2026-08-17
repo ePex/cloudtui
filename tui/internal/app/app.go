@@ -56,7 +56,7 @@ type App struct {
 	contextPanel   *tview.TextView
 	logoPanel      *tview.TextView
 	statusBar      *tview.TextView
-	settingsList   *tview.List
+	settingsV      *view.SettingsView
 	logV           *logView
 	queuesV        *view.QueuesView
 	messagesV      *view.MessagesView
@@ -200,10 +200,7 @@ func New(cfg config.Config) *App {
 		a.screen = screen
 	})
 
-	// All shell primitives are constructed; now create the settings view.
-	// Its list callbacks call a.themePicker.Show / a.connManager.Show, which
-	// are safe at this point because all live primitives are set.
-	settingsView := newSettingsView(a)
+	// All shell primitives are constructed.
 	a.logV = newLogView(a)
 	a.backend = newBackendForConn(a, cfg.ActiveConn())
 
@@ -217,6 +214,12 @@ func New(cfg config.Config) *App {
 	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
+	a.connManager = dialog.NewConnManager(a, a.confirm)
+	a.datadogEditor = dialog.NewDatadogEditor(a)
+	a.themePicker = dialog.NewThemePicker(a)
+	a.awsProfiles = dialog.NewAWSProfilesPicker(a)
+
+	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
 
 	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
@@ -278,7 +281,7 @@ func New(cfg config.Config) *App {
 		a.UpdateContextPanel(a.secretsV)
 	})
 
-	a.views = []ui.View{homeView, settingsView, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
+	a.views = []ui.View{homeView, a.settingsV, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -304,7 +307,6 @@ func New(cfg config.Config) *App {
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
 	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
 
-	a.connManager = dialog.NewConnManager(a, a.confirm)
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
 	a.connEditor = dialog.NewConnEditor(a, a.connManager)
@@ -325,15 +327,12 @@ func New(cfg config.Config) *App {
 	// spare, matching the "give it one spare row" convention elsewhere.
 	timeRangeOverlay := ui.Centered(a.timeRangeModal.Primitive(), 72, 14)
 
-	a.datadogEditor = dialog.NewDatadogEditor(a)
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
 	datadogEditorOverlay := ui.Centered(a.datadogEditor.Primitive(), 56, 10)
 
-	a.themePicker = dialog.NewThemePicker(a)
 	themePickerOverlay := ui.Centered(a.themePicker.Primitive(), 40, 14)
 
-	a.awsProfiles = dialog.NewAWSProfilesPicker(a)
 	awsProfilesOverlay := ui.Centered(a.awsProfiles.Primitive(), 64, 20)
 
 	helpOverlay := ui.Centered(ui.NewHelpModal(cfg), ui.HelpModalWidth, ui.HelpModalHeight)
@@ -383,6 +382,7 @@ func New(cfg config.Config) *App {
 		a.awsProfiles,
 	}
 	a.themables = []ui.Themeable{
+		a.settingsV,
 		a.logV,
 		a.queuesV,
 		a.messagesV,
@@ -526,7 +526,7 @@ func (a *App) switchTheme(name string) {
 	a.cfg.Theme = name
 	a.cfg.Colors = config.ApplyPaletteOverrides(newBase, userOverrides)
 	reapplyTheme(a, a.cfg.Colors)
-	a.refreshSettingsList()
+	a.settingsV.Refresh()
 
 	// Save only theme name + sparse overrides (not the full derived palette).
 	saveConfig := a.cfg
@@ -567,7 +567,7 @@ func (a *App) switchConnection(name string) {
 	a.backend = newBackendForConn(a, conn)
 	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
-	a.refreshSettingsList()
+	a.settingsV.Refresh()
 	a.SwitchTo("queues")
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("switchConnection: save failed", "error", err)

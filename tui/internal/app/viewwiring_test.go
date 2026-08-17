@@ -6,6 +6,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -201,5 +202,63 @@ func TestLogSearchViewEscReturnsToCloudWatchLogs(t *testing.T) {
 
 	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
 		t.Errorf("front page after Esc = %q, want %q", name, "cloudwatch-logs")
+	}
+}
+
+// TestSwitchThemeRefreshesSettingsList, TestSwitchConnectionRefreshesSettingsList,
+// TestSaveConnectionRefreshesSettingsList, and
+// TestSaveDatadogConfigRefreshesSettingsList confirm each config
+// mutation that the Settings screen displays actually reaches
+// SettingsView.Refresh() — SetActiveAWSProfile's equivalent is
+// TestSetActiveAWSProfilePersistsAndUpdatesUI in host_test.go, which
+// already covered this before the move.
+
+func TestSwitchThemeRefreshesSettingsList(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+
+	a.switchTheme("cyberpunk")
+
+	main0, _ := a.settingsV.List().GetItemText(0)
+	if !strings.Contains(main0, "cyberpunk") {
+		t.Errorf("item 0 after switchTheme = %q, want it to contain 'cyberpunk'", main0)
+	}
+}
+
+func TestSwitchConnectionRefreshesSettingsList(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+	a.cfg.Connections = append(a.cfg.Connections, config.Connection{Name: "other", Backend: "jolokia"})
+
+	a.switchConnection("other")
+
+	main1, _ := a.settingsV.List().GetItemText(1)
+	if !strings.Contains(main1, "other") {
+		t.Errorf("item 1 after switchConnection(\"other\") = %q, want it to contain %q", main1, "other")
+	}
+}
+
+func TestSaveConnectionRefreshesSettingsList(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+
+	a.SaveConnection(config.Connection{Name: "renamed", Backend: "jolokia"}, "default", false)
+
+	main1, _ := a.settingsV.List().GetItemText(1)
+	if !strings.Contains(main1, "renamed") {
+		t.Errorf("item 1 after SaveConnection = %q, want it to contain %q", main1, "renamed")
+	}
+}
+
+func TestSaveDatadogConfigRefreshesSettingsList(t *testing.T) {
+	t.Chdir(t.TempDir())
+	a := New(config.Default())
+
+	a.SaveDatadogConfig(config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok"})
+
+	main3, _ := a.settingsV.List().GetItemText(3)
+	if !strings.Contains(main3, "datadoghq.eu") {
+		t.Errorf("item 3 after SaveDatadogConfig = %q, want it to contain %q", main3, "datadoghq.eu")
 	}
 }

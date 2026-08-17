@@ -73,15 +73,7 @@ func reapplyTheme(a *App, p config.Palette) {
 	a.homeTable.SetBorderColor(tcell.GetColor(p.ViewColor("home")))
 	a.homeTable.SetTitleColor(tcell.GetColor(p.ViewColor("home")))
 
-	// Settings list
-	if a.settingsList != nil {
-		a.settingsList.SetBackgroundColor(bg)
-		a.settingsList.SetBorderColor(tcell.GetColor(p.ViewColor("settings")))
-		a.settingsList.SetTitleColor(tcell.GetColor(p.ViewColor("settings")))
-		ui.StyleList(a.settingsList, p)
-	}
-
-	// Every other view/overlay recolors itself via ui.Themeable.
+	// Every view/overlay recolors itself via ui.Themeable.
 	for _, t := range a.themables {
 		t.ApplyPalette(p)
 	}

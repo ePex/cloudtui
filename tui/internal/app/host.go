@@ -113,7 +113,7 @@ func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("SaveConnection: save failed", "error", err)
 	}
-	a.refreshSettingsList()
+	a.settingsV.Refresh()
 }
 
 // SaveDatadogConfig persists cfg.Datadog and refreshes the settings list.
@@ -122,7 +122,7 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("SaveDatadogConfig: save failed", "error", err)
 	}
-	a.refreshSettingsList()
+	a.settingsV.Refresh()
 }
 
 // SetActiveAWSProfile sets name as the active AWS profile, updates the
@@ -130,7 +130,7 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 func (a *App) SetActiveAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
-	a.refreshSettingsList()
+	a.settingsV.Refresh()
 	if err := config.SaveDefault(a.cfg); err != nil {
 		slog.Error("SetActiveAWSProfile: save failed", "error", err)
 	}
