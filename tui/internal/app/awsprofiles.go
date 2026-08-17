@@ -19,7 +19,7 @@ import (
 // selected one. Named awsProfilesPicker, not awsProfiles — too easy to
 // confuse with the imported awsprofile package (singular) at a glance.
 type awsProfilesPicker struct {
-	app         *App
+	host        ui.Host
 	flex        *tview.Flex
 	table       *tview.Table
 	filterInput *tview.InputField
@@ -31,19 +31,20 @@ type awsProfilesPicker struct {
 }
 
 // newAWSProfilesPicker builds the AWS Profiles overlay's widgets.
-func newAWSProfilesPicker(a *App) *awsProfilesPicker {
-	ap := &awsProfilesPicker{app: a}
+func newAWSProfilesPicker(host ui.Host) *awsProfilesPicker {
+	ap := &awsProfilesPicker{host: host}
+	colors := host.Config().Colors
 	ap.table = tview.NewTable()
 	ap.table.SetBorder(true).SetTitle(" AWS Profiles ")
 	ap.table.SetSelectable(true, false)
 	ap.table.SetFixed(1, 0)
 	ap.filterInput = tview.NewInputField()
 	ap.filterInput.SetLabel(" / filter: ")
-	ap.filterInput.SetLabelColor(tcell.GetColor(a.cfg.Colors.Label))
-	ap.filterInput.SetFieldBackgroundColor(tcell.GetColor(a.cfg.Colors.SelectionBg))
-	ap.filterInput.SetFieldTextColor(tcell.GetColor(a.cfg.Colors.SelectionText))
+	ap.filterInput.SetLabelColor(tcell.GetColor(colors.Label))
+	ap.filterInput.SetFieldBackgroundColor(tcell.GetColor(colors.SelectionBg))
+	ap.filterInput.SetFieldTextColor(tcell.GetColor(colors.SelectionText))
 	ap.hints = tview.NewTextView().SetDynamicColors(true)
-	ac := a.cfg.Colors.Accent
+	ac := colors.Accent
 	ap.hints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
 		ac, ac, ac, ac))
 	ap.flex = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -69,7 +70,7 @@ func newAWSProfilesPicker(a *App) *awsProfilesPicker {
 			return nil
 		case event.Rune() == '/':
 			ap.filterInput.SetText(ap.filter)
-			a.tv.SetFocus(ap.filterInput)
+			host.SetFocus(ap.filterInput)
 			return nil
 		case event.Rune() == 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -83,12 +84,12 @@ func newAWSProfilesPicker(a *App) *awsProfilesPicker {
 	})
 	ap.filterInput.SetDoneFunc(func(_ tcell.Key) {
 		ap.applyFilter(ap.filterInput.GetText())
-		a.tv.SetFocus(ap.table)
+		host.SetFocus(ap.table)
 	})
 	ap.filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
 			ap.applyFilter(ap.filterInput.GetText())
-			a.tv.SetFocus(ap.table)
+			host.SetFocus(ap.table)
 			ap.table.InputHandler()(event, func(tview.Primitive) {})
 			return nil
 		}
@@ -99,7 +100,7 @@ func newAWSProfilesPicker(a *App) *awsProfilesPicker {
 
 // setHeader draws the overlay's column header row.
 func (ap *awsProfilesPicker) setHeader() {
-	p := ap.app.cfg.Colors
+	p := ap.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 	for i, label := range []string{"NAME", "REGION", "AUTH"} {
@@ -122,16 +123,16 @@ func (ap *awsProfilesPicker) show() {
 	ap.filter = ""
 	ap.filterInput.SetText("")
 	ap.populate()
-	ap.app.rootPages.ShowPage("aws-profiles")
-	ap.app.tv.SetFocus(ap.table)
+	ap.host.ShowPage("aws-profiles")
+	ap.host.SetFocus(ap.table)
 	ap.visible = true
 }
 
 // close hides the AWS Profiles overlay and restores focus.
 func (ap *awsProfilesPicker) close() {
-	ap.app.rootPages.HidePage("aws-profiles")
+	ap.host.HidePage("aws-profiles")
 	ap.visible = false
-	ap.app.tv.SetFocus(ap.app.pages)
+	ap.host.FocusMain()
 }
 
 // ApplyPalette recolors the AWS Profiles overlay for a live theme switch.
@@ -153,7 +154,7 @@ var _ ui.Themeable = (*awsProfilesPicker)(nil)
 // table. Called on open and on 'r' (the files may have changed since
 // cloudtui started, or since the overlay was last opened).
 func (ap *awsProfilesPicker) populate() {
-	profiles, err := ap.app.listAWSProfiles(context.Background())
+	profiles, err := ap.host.ListAWSProfiles(context.Background())
 	if err != nil {
 		ap.all = nil
 		ap.filtered = nil
@@ -202,7 +203,8 @@ func (ap *awsProfilesPicker) repaint() {
 		t.RemoveRow(t.GetRowCount() - 1)
 	}
 
-	p := ap.app.cfg.Colors
+	cfg := ap.host.Config()
+	p := cfg.Colors
 	nameColor := tcell.GetColor(p.Value)
 	textColor := tcell.GetColor(p.Text)
 	accentColor := tcell.GetColor(p.Accent)
@@ -210,7 +212,7 @@ func (ap *awsProfilesPicker) repaint() {
 		row := i + 1
 		name := prof.Name
 		nc := nameColor
-		if prof.Name == ap.app.cfg.ActiveAWSProfile {
+		if prof.Name == cfg.ActiveAWSProfile {
 			name = "⭐ " + name
 			nc = accentColor
 		}
@@ -245,10 +247,9 @@ func (ap *awsProfilesPicker) repaint() {
 // broker is wired to it) — see spec/28-fe-aws-profile-discovery's open
 // question.
 func (ap *awsProfilesPicker) activate(name string) {
-	a := ap.app
-	a.SetActiveAWSProfile(name)
+	ap.host.SetActiveAWSProfile(name)
 	ap.close()
-	a.statusBar.SetText(fmt.Sprintf("AWS profile: %s", name))
+	ap.host.SetStatus(fmt.Sprintf("AWS profile: %s", name))
 }
 
 // SetActiveAWSProfile sets name as the active AWS profile, updates the
