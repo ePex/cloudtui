@@ -16,6 +16,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -261,4 +262,36 @@ func TestSaveDatadogConfigRefreshesSettingsList(t *testing.T) {
 	if !strings.Contains(main3, "datadoghq.eu") {
 		t.Errorf("item 3 after SaveDatadogConfig = %q, want it to contain %q", main3, "datadoghq.eu")
 	}
+}
+
+// TestLogViewIsWiredAsLogPage, TestLogViewImplementsShortcuttable, and
+// TestLogViewShortcutsIncludeR moved here from log_test.go (now
+// internal/view/log_test.go) — they exercise app.go's own wiring of
+// the log view (does New() register it, does it come back through
+// a.logV wired to satisfy the right interfaces), not anything
+// LogView's own logic does differently. See spec/86.
+
+func TestLogViewIsWiredAsLogPage(t *testing.T) {
+	a := New(config.Default())
+	if got := a.logV.Name(); got != "log" {
+		t.Errorf("Name() = %q, want %q", got, "log")
+	}
+}
+
+func TestLogViewImplementsShortcuttable(t *testing.T) {
+	a := New(config.Default())
+	_, ok := ui.View(a.logV).(ui.Shortcuttable)
+	if !ok {
+		t.Error("logV does not implement ui.Shortcuttable")
+	}
+}
+
+func TestLogViewShortcutsIncludeR(t *testing.T) {
+	a := New(config.Default())
+	for _, s := range a.logV.Shortcuts() {
+		if s.Key == "r" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"r\"")
 }
