@@ -1,11 +1,10 @@
-package app
+package view
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
-	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func TestStageTransitionsNilPrevReturnsNoMessages(t *testing.T) {
@@ -162,37 +161,42 @@ func (f *fakeNotifier) notify(title, message string) {
 	f.calls = append(f.calls, struct{ title, message string }{title, message})
 }
 
-func TestHandlePipelinePollFirstPollEstablishesSilentBaseline(t *testing.T) {
-	a := New(config.Default())
+func newTestPipelineWatcher(t *testing.T) (*fakeViewHost, *fakeNotifier, *PipelineWatcher) {
+	t.Helper()
+	host := newFakeViewHost()
 	fn := &fakeNotifier{}
-	a.notify = fn.notify
+	listV := NewCodePipelineListView(host, func(string) {})
+	detailV := NewCodePipelineDetailView(host, func() {})
+	return host, fn, NewPipelineWatcher(host, fn.notify, listV, detailV)
+}
+
+func TestHandlePipelinePollFirstPollEstablishesSilentBaseline(t *testing.T) {
+	_, fn, w := newTestPipelineWatcher(t)
 
 	// Source InProgress, not Succeeded/Failed/Stopped as the last stage,
 	// so pipelineFinished doesn't also fire its own notification —
 	// isolating just the "first poll is a silent baseline" behavior.
-	a.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
+	w.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
 		{Name: "Source", Status: "InProgress"},
 	}, nil)
 
 	if len(fn.calls) != 0 {
 		t.Errorf("notify called %d times on the first poll, want 0 (no baseline yet)", len(fn.calls))
 	}
-	if got := a.lastPipelineStages["my-pipeline"]["Source"]; got != "InProgress" {
-		t.Errorf("lastPipelineStages[my-pipeline][Source] = %q, want %q", got, "InProgress")
+	if got := w.lastStages["my-pipeline"]["Source"]; got != "InProgress" {
+		t.Errorf("lastStages[my-pipeline][Source] = %q, want %q", got, "InProgress")
 	}
 }
 
 func TestHandlePipelinePollNotifiesOnChangedStage(t *testing.T) {
-	a := New(config.Default())
-	fn := &fakeNotifier{}
-	a.notify = fn.notify
-	a.lastPipelineStages["my-pipeline"] = map[string]string{"Source": "Succeeded", "Build": "InProgress", "Deploy": "InProgress"}
-	a.watchedPipelines["my-pipeline"] = make(chan struct{})
+	_, fn, w := newTestPipelineWatcher(t)
+	w.lastStages["my-pipeline"] = map[string]string{"Source": "Succeeded", "Build": "InProgress", "Deploy": "InProgress"}
+	w.watched["my-pipeline"] = make(chan struct{})
 
 	// Deploy stays InProgress (as the last stage) so pipelineFinished
 	// doesn't also fire its own notification — isolating just the
 	// Build transition.
-	a.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
+	w.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
 		{Name: "Source", Status: "Succeeded"},
 		{Name: "Build", Status: "Succeeded"},
 		{Name: "Deploy", Status: "InProgress"},
@@ -207,33 +211,29 @@ func TestHandlePipelinePollNotifiesOnChangedStage(t *testing.T) {
 }
 
 func TestHandlePipelinePollErrorStopsWatchAndNotifiesOnce(t *testing.T) {
-	a := New(config.Default())
-	fn := &fakeNotifier{}
-	a.notify = fn.notify
-	a.watchedPipelines["my-pipeline"] = make(chan struct{})
+	_, fn, w := newTestPipelineWatcher(t)
+	w.watched["my-pipeline"] = make(chan struct{})
 
-	a.handlePipelinePoll("my-pipeline", nil, errors.New("boom"))
+	w.handlePipelinePoll("my-pipeline", nil, errors.New("boom"))
 
 	if len(fn.calls) != 1 {
 		t.Fatalf("notify called %d times, want 1", len(fn.calls))
 	}
-	if a.IsWatchingPipeline("my-pipeline") {
+	if w.IsWatchingPipeline("my-pipeline") {
 		t.Error("still watching after a poll error, want stopped")
 	}
 }
 
 func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
-	a := New(config.Default())
-	fn := &fakeNotifier{}
-	a.notify = fn.notify
-	a.lastPipelineStages["my-pipeline"] = map[string]string{"Deploy": "InProgress"}
-	a.watchedPipelines["my-pipeline"] = make(chan struct{})
+	_, fn, w := newTestPipelineWatcher(t)
+	w.lastStages["my-pipeline"] = map[string]string{"Deploy": "InProgress"}
+	w.watched["my-pipeline"] = make(chan struct{})
 
-	a.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
+	w.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
 		{Name: "Deploy", Status: "Succeeded", PipelineExecutionID: "exec-1"},
 	}, nil)
 
-	if a.IsWatchingPipeline("my-pipeline") {
+	if w.IsWatchingPipeline("my-pipeline") {
 		t.Error("still watching after the pipeline finished, want stopped")
 	}
 	foundFinishedNotice := false
@@ -247,6 +247,25 @@ func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
 	}
 }
 
+// TestHandlePipelinePollRendersOpenDetailView closes a gap none of the
+// pre-move tests covered: a poll landing while detailV is open for the
+// polled pipeline must refresh it. detailV.pipelineName is set
+// directly (same-package access) rather than via Open(), which would
+// spawn its own goroutine and real host call — irrelevant to what
+// this test asserts.
+func TestHandlePipelinePollRendersOpenDetailView(t *testing.T) {
+	_, _, w := newTestPipelineWatcher(t)
+	w.detailV.pipelineName = "my-pipeline"
+
+	w.handlePipelinePoll("my-pipeline", []awscodepipeline.StageStatus{
+		{Name: "Deploy", Status: "InProgress"},
+	}, nil)
+
+	if got := w.detailV.table.GetCell(1, 0).Text; got != "Deploy" {
+		t.Errorf("detailV table after poll = %q, want %q", got, "Deploy")
+	}
+}
+
 // TestStartStopWatchingPipeline calls StartWatchingPipeline directly,
 // which spawns a real goroutine (pollPipeline) that blocks on its
 // ticker/stop channel — same accepted background-goroutine-in-tests
@@ -257,27 +276,27 @@ func TestHandlePipelinePollStopsWatchWhenFinished(t *testing.T) {
 // ticker's first tick is pipelinePollInterval away), never on anything
 // the goroutine does asynchronously.
 func TestStartStopWatchingPipeline(t *testing.T) {
-	a := New(config.Default())
+	_, _, w := newTestPipelineWatcher(t)
 
-	if a.IsWatchingPipeline("my-pipeline") {
+	if w.IsWatchingPipeline("my-pipeline") {
 		t.Fatal("IsWatchingPipeline() = true before starting, want false")
 	}
 
-	a.StartWatchingPipeline("my-pipeline")
-	if !a.IsWatchingPipeline("my-pipeline") {
+	w.StartWatchingPipeline("my-pipeline")
+	if !w.IsWatchingPipeline("my-pipeline") {
 		t.Error("IsWatchingPipeline() = false after starting, want true")
 	}
 
 	// Starting again while already watching must not replace the
 	// existing entry (would leak the original goroutine's stop channel).
-	existing := a.watchedPipelines["my-pipeline"]
-	a.StartWatchingPipeline("my-pipeline")
-	if a.watchedPipelines["my-pipeline"] != existing {
+	existing := w.watched["my-pipeline"]
+	w.StartWatchingPipeline("my-pipeline")
+	if w.watched["my-pipeline"] != existing {
 		t.Error("StartWatchingPipeline() while already watching replaced the stop channel, want no-op")
 	}
 
-	a.StopWatchingPipeline("my-pipeline")
-	if a.IsWatchingPipeline("my-pipeline") {
+	w.StopWatchingPipeline("my-pipeline")
+	if w.IsWatchingPipeline("my-pipeline") {
 		t.Error("IsWatchingPipeline() = true after stopping, want false")
 	}
 }

@@ -52,8 +52,9 @@ type ViewHost interface {
 	// and clears it when the jump completes or is abandoned).
 	SetPendingCloudWatchPattern(pattern string)
 
-	// CodePipeline background watcher (implemented by App's
-	// codepipelinewatch.go).
+	// CodePipeline background watcher — App forwards to
+	// view.PipelineWatcher (internal/app/codepipelinewatch.go's 3
+	// trampoline methods), which owns the actual poll loop and state.
 	IsWatchingPipeline(name string) bool
 	StartWatchingPipeline(name string)
 	StopWatchingPipeline(name string)
