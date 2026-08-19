@@ -80,6 +80,29 @@ func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
 	}
 }
 
+func TestMessagesViewWrapShortcutPresent(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	for _, s := range mv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestMessagesViewWrapTogglesAtBottomEdge(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{{ID: "a"}, {ID: "b"}, {ID: "c"}})
+	mv.table.Select(3, 0) // last message row
+
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := mv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first message row)", row)
+	}
+}
+
 // TestMessagesViewShortcutsFitTopBar guards against shortcut entries
 // silently clipping off the bottom of the context panel: the top bar's
 // height is fixed (ui.ShortcutPanelRows), not scrollable, so a

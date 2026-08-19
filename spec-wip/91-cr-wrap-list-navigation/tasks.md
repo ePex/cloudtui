@@ -8,10 +8,10 @@ Each task is implemented and pushed only after being separately approved.
    edge, wrap enabled at top edge, wrap enabled mid-list (normal
    single-step move), empty table (header row only), single-data-row
    table (up/down both stay put).
-2. [ ] Wire wrap-around into `tui/internal/view/queues.go`: `wrapNav`
+2. [x] Wire wrap-around into `tui/internal/view/queues.go`: `wrapNav`
    field, guard clause, `W` case, `Shortcuts()` entry, remove dead `j`/`k`
    cases.
-3. [ ] Wire wrap-around into `tui/internal/view/messages.go` (same
+3. [x] Wire wrap-around into `tui/internal/view/messages.go` (same
    shape as task 2, adapted to its boolean-expression switch style).
 4. [ ] Wire wrap-around into `tui/internal/view/logs.go`.
 5. [ ] Wire wrap-around into `tui/internal/view/logsearch.go`.

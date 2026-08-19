@@ -113,6 +113,30 @@ func TestQueuesViewShortcutFilterPresent(t *testing.T) {
 	t.Error("Shortcuts() missing key \"/\"")
 }
 
+func TestQueuesViewWrapShortcutPresent(t *testing.T) {
+	_, qv := newTestQueuesView(t)
+	for _, s := range qv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestQueuesViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, qv := newTestQueuesView(t)
+	qv.repaint([]queue.Summary{{Name: "a"}, {Name: "b"}, {Name: "c"}})
+	qv.table.Select(3, 0) // last data row
+
+	capture := qv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := qv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first data row)", row)
+	}
+}
+
 func TestQueuesViewFilterApplied(t *testing.T) {
 	_, qv := newTestQueuesView(t)
 

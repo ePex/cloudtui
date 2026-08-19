@@ -33,6 +33,7 @@ type QueuesView struct {
 	allSummaries []queue.Summary // full unfiltered list from last load
 	sortCol      int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
 	sortAsc      bool            // true = ascending
+	wrapNav      ui.TableWrap
 }
 
 var _ ui.View = (*QueuesView)(nil)
@@ -63,6 +64,10 @@ func (qv *QueuesView) FilterInputs() []tview.Primitive {
 func (qv *QueuesView) SetBackend(b queue.Backend) { qv.backend = b }
 
 func (qv *QueuesView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if qv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
@@ -70,6 +75,7 @@ func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 		{Key: "c", Description: "create message"},
 		{Key: "/", Description: "filter"},
 		{Key: "o/O", Description: "sort col/dir"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -112,14 +118,18 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return qv.wrapNav.HandleNav(qv.table, 1, event)
+		}
+		if event.Rune() == 'W' {
+			qv.wrapNav.Toggle()
+			return nil
+		}
 		switch event.Rune() {
 		case 'r':
 			qv.Load()
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case '/':
 			qv.filterInput.SetText(qv.filter)
 			qv.host.SetFocus(qv.filterInput)

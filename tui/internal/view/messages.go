@@ -50,6 +50,7 @@ type MessagesView struct {
 	filter        queue.MessageFilter // active server-side filter
 	msgs          []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
 	marked        map[string]bool     // message IDs currently marked
+	wrapNav       ui.TableWrap
 }
 
 var _ ui.Themeable = (*MessagesView)(nil)
@@ -100,6 +101,10 @@ func (mv *MessagesView) Open(queueName string) {
 }
 
 func (mv *MessagesView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if mv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "space", Description: "mark"},
 		{Key: "a", Description: "mark all"},
@@ -111,6 +116,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 		{Key: "c", Description: "create message"},
 		{Key: "/", Description: "quick search"},
 		{Key: "f", Description: "filter"},
+		{Key: "W", Description: "wrap: " + wrap},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -155,7 +161,14 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return mv.wrapNav.HandleNav(mv.table, 1, event)
+		}
 		switch {
+		case event.Rune() == 'W':
+			mv.wrapNav.Toggle()
+			return nil
 		case event.Rune() == ' ':
 			mv.toggleMark()
 			return nil
@@ -208,10 +221,6 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 				}()
 			})
 			return nil
-		case event.Rune() == 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Rune() == 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:
 			a.SwitchTo("queues")
 			return nil
