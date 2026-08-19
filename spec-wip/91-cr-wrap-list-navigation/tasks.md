@@ -2,7 +2,7 @@
 
 Each task is implemented and pushed only after being separately approved.
 
-1. [ ] Add `ui.TableWrap` (`tui/internal/ui/tablewrap.go`) with `Enabled()`,
+1. [x] Add `ui.TableWrap` (`tui/internal/ui/tablewrap.go`) with `Enabled()`,
    `Toggle()`, and `HandleNav(table, headerRows, event)`, plus
    `tablewrap_test.go` covering: wrap disabled, wrap enabled at bottom
    edge, wrap enabled at top edge, wrap enabled mid-list (normal
