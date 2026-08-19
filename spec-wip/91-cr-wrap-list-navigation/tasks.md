@@ -41,11 +41,25 @@ Each task is implemented and pushed only after being separately approved.
     Cleanup: removed the disposable `cr91.wrap.verify` test queue, the
     scratch `tui/config.yaml` created for this session (none existed
     before), and the scratch binary/tmux session.
-12. [ ] Manual check of the remaining 7 views (logs, log search, SSM
+12. [x] Manual check of the remaining 7 views (logs, log search, SSM
     parameters, Secrets Manager, CodePipeline list/detail, Datadog logs)
-    against whatever backend is configured locally — same wrap-toggle
-    checks as task 11, adapted to each view's data. Record what was
-    checked here.
+    — **live AWS/Datadog verification was not possible in this
+    environment**: the only AWS profiles available are SSO-based and
+    require an interactive browser login this (headless) session can't
+    complete, and no Datadog credentials are configured. Rather than
+    skip verification silently, did the strongest verification available
+    without live credentials: every one of these 7 views got a unit test
+    that drives its *actual production* `SetInputCapture` closure (via
+    `table.GetInputCapture()`, not a mock) through `W` then a wrap at the
+    bottom edge, exactly mirroring the live checks that passed for
+    queues/messages in task 11 — same shared `ui.TableWrap.HandleNav`
+    call, same integration pattern, verbatim. The CodePipeline views'
+    `w`-vs-`W` conflict additionally got a dedicated regression test
+    confirming no cross-trigger. This is not a substitute for a real
+    backend catching a rendering-only bug the way task 11's live pass
+    was written to catch — flagged to the user; a spot check with their
+    own AWS/Datadog credentials before merge is recommended but not done
+    here.
 13. [ ] Merge-back: fold a short note into each touched view's existing
     `spec/<area>/spec.md` (07, 08, 17, 18, 20, plus SSM/Secrets areas)
     describing the `W` wrap toggle as end-state behavior; delete
