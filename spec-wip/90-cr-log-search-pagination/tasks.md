@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Update `awslogs.FilterEvents` (`tui/internal/awslogs/filter.go`):
+1. [x] Update `awslogs.FilterEvents` (`tui/internal/awslogs/filter.go`):
    add a `nextToken string` input param (`"" ` → nil
    `FilterLogEventsInput.NextToken`), and return `(events []LogEvent,
    next string, err error)` instead of `(events []LogEvent, hasMore

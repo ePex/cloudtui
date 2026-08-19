@@ -13,15 +13,16 @@ import (
 // FilterEvents runs a single FilterLogEvents call against logGroupName
 // for the time window [start, end), optionally narrowed by pattern (AWS's
 // own filter-pattern syntax, passed straight through — empty matches
-// everything in range). Returns at most one page of results (Limit:
-// 1000), newest first (StartFromHead: false). hasMore reports whether
-// AWS indicated more results exist (NextToken present) — this function
-// never auto-paginates; the caller decides what to do with hasMore (show
-// it, don't silently fetch more).
-func FilterEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) ([]LogEvent, bool, error) {
+// everything in range). nextToken continues a previous call's page
+// ("" starts from the beginning). Returns at most one page of results
+// (Limit: 1000), newest first (StartFromHead: false), plus the token for
+// the next page ("" if AWS indicated no more results exist) — the caller
+// decides whether/when to fetch further pages (see
+// internal/view/logsearch.go's fetchPages).
+func FilterEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) ([]LogEvent, string, error) {
 	client, err := newClient(ctx, profile)
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 
 	input := &cloudwatchlogs.FilterLogEventsInput{
@@ -34,12 +35,15 @@ func FilterEvents(ctx context.Context, profile, logGroupName string, start, end 
 	if pattern != "" {
 		input.FilterPattern = aws.String(pattern)
 	}
+	if nextToken != "" {
+		input.NextToken = aws.String(nextToken)
+	}
 
 	out, err := client.FilterLogEvents(ctx, input)
 	if err != nil {
-		return nil, false, fmt.Errorf("searching log group %q: %w", logGroupName, err)
+		return nil, "", fmt.Errorf("searching log group %q: %w", logGroupName, err)
 	}
-	return buildLogEvents(out.Events), out.NextToken != nil, nil
+	return buildLogEvents(out.Events), aws.ToString(out.NextToken), nil
 }
 
 // buildLogEvents converts raw AWS filtered log events into LogEvent.
