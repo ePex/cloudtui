@@ -31,9 +31,9 @@ func TestLogSearchViewSearchErrorsWithoutActiveProfile(t *testing.T) {
 	host, _, sv := newTestLogSearchView(t)
 	host.cfg.ActiveAWSProfile = ""
 	calls := 0
-	host.filterLogEventsFn = func(context.Context, string, string, time.Time, time.Time, string) ([]awslogs.LogEvent, bool, error) {
+	host.filterLogEventsFn = func(context.Context, string, string, time.Time, time.Time, string, string) ([]awslogs.LogEvent, string, error) {
 		calls++
-		return nil, false, nil
+		return nil, "", nil
 	}
 	sv.logGroupName = "/aws/lambda/foo"
 
@@ -59,7 +59,7 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	sv.patternInput.SetText("stale-pattern")
 	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: 3}
 	sv.results = []awslogs.LogEvent{{Message: "stale"}}
-	sv.hasMore = true
+	sv.nextToken = "stale-token"
 
 	sv.Open("/aws/lambda/foo", "")
 
@@ -185,7 +185,7 @@ func TestHandleSearchResult(t *testing.T) {
 
 		sv.handleSearchResult([]awslogs.LogEvent{
 			{Timestamp: ts, LogStream: "stream-1", Message: "hello"},
-		}, false, nil)
+		}, "", nil)
 
 		if got := sv.table.GetRowCount(); got != 2 { // header + 1
 			t.Fatalf("row count = %d, want 2", got)
@@ -208,7 +208,7 @@ func TestHandleSearchResult(t *testing.T) {
 		_, _, sv := newTestLogSearchView(t)
 		sv.logGroupName = "/aws/lambda/foo"
 
-		sv.handleSearchResult([]awslogs.LogEvent{{Message: "x"}}, true, nil)
+		sv.handleSearchResult([]awslogs.LogEvent{{Message: "x"}}, "some-token", nil)
 
 		if !strings.Contains(sv.table.GetTitle(), "more available") {
 			t.Errorf("title = %q, want it to mention more results are available", sv.table.GetTitle())
@@ -220,7 +220,7 @@ func TestHandleSearchResult(t *testing.T) {
 		sv.logGroupName = "/aws/lambda/foo"
 		sv.results = []awslogs.LogEvent{{Message: "stale"}}
 
-		sv.handleSearchResult(nil, false, context.DeadlineExceeded)
+		sv.handleSearchResult(nil, "", context.DeadlineExceeded)
 
 		if len(sv.results) != 0 {
 			t.Errorf("results = %+v, want cleared after an error", sv.results)
@@ -249,7 +249,7 @@ func TestLogSearchViewScrollsToTopWithManyRows(t *testing.T) {
 	for i := range events {
 		events[i] = awslogs.LogEvent{Message: fmt.Sprintf("event-%02d", i)}
 	}
-	sv.handleSearchResult(events, false, nil)
+	sv.handleSearchResult(events, "", nil)
 
 	sv.table.Draw(screen)
 

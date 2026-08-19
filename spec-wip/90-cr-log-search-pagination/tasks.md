@@ -19,7 +19,7 @@
    errors on a later page (discards partial results, matches today's
    all-or-nothing error handling), single page (`maxPages=1`).
 
-4. [ ] Rewire `LogSearchView`: rename the `hasMore bool` field to
+4. [x] Rewire `LogSearchView`: rename the `hasMore bool` field to
    `nextToken string`; update `search()` to call `fetchPages`
    (`maxPages` = 10 if `pattern != ""`, else 1); update
    `handleSearchResult` to the new `next string` signature; update
