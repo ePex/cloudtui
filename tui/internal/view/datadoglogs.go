@@ -47,6 +47,7 @@ type DatadogLogsView struct {
 	tr            ui.TimeRange
 	results       []datadoglogs.LogEvent
 	hasMore       bool
+	wrapNav       ui.TableWrap
 }
 
 var _ ui.View = (*DatadogLogsView)(nil)
@@ -75,12 +76,17 @@ func (dv *DatadogLogsView) FilterInputs() []tview.Primitive {
 }
 
 func (dv *DatadogLogsView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if dv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "query"},
 		{Key: "S", Description: "filter service"},
 		{Key: "E", Description: "filter env"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -179,6 +185,10 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 	envFilterDD.SetInputCapture(backToTable)
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return dv.wrapNav.HandleNav(dv.table, 1, event)
+		}
 		switch event.Rune() {
 		case 'r':
 			dv.search()
@@ -199,10 +209,9 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 		case 'E':
 			dv.host.SetFocus(dv.envFilterDD)
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case 'W':
+			dv.wrapNav.Toggle()
+			return nil
 		}
 		return event
 	})

@@ -218,6 +218,30 @@ func TestDatadogLogsViewShortcutsIncludeServiceAndEnvFilters(t *testing.T) {
 	}
 }
 
+func TestDatadogLogsViewWrapShortcutPresent(t *testing.T) {
+	_, _, dv := newTestDatadogLogsView(t)
+	for _, s := range dv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestDatadogLogsViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, _, dv := newTestDatadogLogsView(t)
+	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: "a"}, {Message: "b"}, {Message: "c"}}, false, nil)
+	dv.table.Select(3, 0) // last result row
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := dv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first result row)", row)
+	}
+}
+
 func TestDatadogLogsViewNameAndTitle(t *testing.T) {
 	_, _, dv := newTestDatadogLogsView(t)
 	if got := dv.Name(); got != "datadog-logs" {
