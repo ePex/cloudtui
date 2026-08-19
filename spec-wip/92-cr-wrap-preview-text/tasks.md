@@ -2,7 +2,7 @@
 
 Each task is implemented and pushed only after being separately approved.
 
-1. [ ] Add `tui/internal/view/wraptext.go` (new): `wrapText(s string,
+1. [x] Add `tui/internal/view/wraptext.go` (new): `wrapText(s string,
    width int) []string` (greedy word-wrap, hard-break on an
    over-length single word, always returns ≥1 element) and
    `setContinuationRow(table, rowIdx, numCols, textCol int, text
