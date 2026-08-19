@@ -94,15 +94,15 @@ func (f *fakeViewHost) CopyToClipboard(data string)  { f.copiedData = data }
 // -- ui.ViewHost cross-view navigation: never called by a view under test
 // in isolation (a view invokes its injected onSelect/onBack closure, not
 // host.OpenX) — pure stubs, present only to satisfy the interface. --
-func (f *fakeViewHost) OpenMessages(queueName string)                         {}
-func (f *fakeViewHost) OpenMessageDetail(queueName string, msg queue.Message) {}
-func (f *fakeViewHost) OpenParamDetail(param awsssm.Parameter)                {}
-func (f *fakeViewHost) OpenSecretDetail(secret awssecrets.Secret)             {}
-func (f *fakeViewHost) OpenLogSearch(logGroupName string)                     {}
-func (f *fakeViewHost) OpenLogEventDetail(event awslogs.LogEvent)             {}
-func (f *fakeViewHost) OpenDatadogLogDetail(event datadoglogs.LogEvent)       {}
-func (f *fakeViewHost) OpenCodePipelineDetail(pipelineName string)            {}
-func (f *fakeViewHost) SetPendingCloudWatchPattern(pattern string)            {}
+func (f *fakeViewHost) OpenMessages(queueName string)                                   {}
+func (f *fakeViewHost) OpenMessageDetail(queueName string, msg queue.Message)           {}
+func (f *fakeViewHost) OpenParamDetail(param awsssm.Parameter)                          {}
+func (f *fakeViewHost) OpenSecretDetail(secret awssecrets.Secret)                       {}
+func (f *fakeViewHost) OpenLogSearch(logGroupName string)                               {}
+func (f *fakeViewHost) OpenLogEventDetail(event awslogs.LogEvent)                       {}
+func (f *fakeViewHost) OpenDatadogLogDetail(event datadoglogs.LogEvent)                 {}
+func (f *fakeViewHost) OpenCodePipelineDetail(pipelineName string)                      {}
+func (f *fakeViewHost) SetPendingCloudWatchPattern(pattern string, timestamp time.Time) {}
 
 func (f *fakeViewHost) IsWatchingPipeline(name string) bool { return f.watching[name] }
 func (f *fakeViewHost) StartWatchingPipeline(name string)   { f.watching[name] = true }

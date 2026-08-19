@@ -18,10 +18,12 @@ import (
 // ShowPage/HidePage, which operate on rootPages for modal overlays).
 func (a *App) SwitchToPage(name string) { a.pages.SwitchToPage(name) }
 
-// SetPendingCloudWatchPattern queues a one-shot CorrelationID for FE
-// 41's Datadog->CloudWatch jump.
-func (a *App) SetPendingCloudWatchPattern(pattern string) {
+// SetPendingCloudWatchPattern queues a one-shot CorrelationID (and the
+// originating Datadog event's timestamp) for FE 41's Datadog->CloudWatch
+// jump.
+func (a *App) SetPendingCloudWatchPattern(pattern string, timestamp time.Time) {
 	a.pendingCloudWatchPattern = pattern
+	a.pendingCloudWatchTimestamp = timestamp
 }
 
 func (a *App) ListParameters(ctx context.Context, profile, path string) ([]awsssm.Parameter, error) {

@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Thread a timestamp through the pending-jump queue: update
+1. [x] Thread a timestamp through the pending-jump queue: update
    `ui.ViewHost.SetPendingCloudWatchPattern` to
    `(pattern string, timestamp time.Time)`; add `App.pendingCloudWatchTimestamp
    time.Time`; update `App.SetPendingCloudWatchPattern` to set it;
