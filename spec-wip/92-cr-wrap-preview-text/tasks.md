@@ -12,7 +12,7 @@ Each task is implemented and pushed only after being separately approved.
    exact-width boundary, multi-word wrap, single over-length word,
    leading/trailing whitespace, and `setContinuationRow`'s cell
    text/selectability on a real `tview.Table`.
-2. [ ] Wire wrap into `tui/internal/view/messages.go`: `wrap bool`
+2. [x] Wire wrap into `tui/internal/view/messages.go`: `wrap bool`
    field; extract row-building into `renderRows()` (wrap-aware,
    builds `rowToIdx`/`idxToRow`, preserves current item selection);
    `repaint()` calls `renderRows()` in place of its inline loop, keeps
@@ -30,7 +30,7 @@ Each task is implemented and pushed only after being separately approved.
    next item's primary row when the current item wrapped; `w` in
    `Shortcuts()`; `fakeViewHost.contextHint` reflects `wrap: on/off`
    after a simulated `w` keypress.
-3. [ ] Bump `ui.ShortcutPanelRows` 11→12 (`tui/internal/ui/topbar.go`,
+3. [x] Bump `ui.ShortcutPanelRows` 11→12 (`tui/internal/ui/topbar.go`,
    doc comment included) since task 2 makes messages.go's
    `Shortcuts()` 12 entries; update `topbar_test.go`'s two
    literal-11 assertions to 12.

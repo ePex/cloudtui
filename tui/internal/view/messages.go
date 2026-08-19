@@ -50,6 +50,9 @@ type MessagesView struct {
 	filter        queue.MessageFilter // active server-side filter
 	msgs          []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
 	marked        map[string]bool     // message IDs currently marked
+	wrap          bool                // preview column word-wrap toggle
+	rowToIdx      []int               // row -> index into msgs; index 0 unused (header placeholder)
+	idxToRow      []int               // msgs index -> that item's primary row
 }
 
 var _ ui.Themeable = (*MessagesView)(nil)
@@ -100,6 +103,10 @@ func (mv *MessagesView) Open(queueName string) {
 }
 
 func (mv *MessagesView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if mv.wrap {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "space", Description: "mark"},
 		{Key: "a", Description: "mark all"},
@@ -111,6 +118,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 		{Key: "c", Description: "create message"},
 		{Key: "/", Description: "quick search"},
 		{Key: "f", Description: "filter"},
+		{Key: "w", Description: "wrap: " + wrap},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -181,6 +189,15 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 		case event.Rune() == 'f':
 			mv.messageFilter.Show()
 			return nil
+		case event.Rune() == 'w':
+			mv.wrap = !mv.wrap
+			mv.renderRows()
+			lines := make([]string, 0, len(mv.Shortcuts()))
+			for _, sc := range mv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			a.SetContextHint(strings.Join(lines, "\n"))
+			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
 			mv.sendMessage.Show(name, func() {
@@ -220,7 +237,10 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 	})
 
 	table.SetSelectedFunc(func(row, _ int) {
-		msgIdx := row - 1 // row 0 is the header
+		if row <= 0 || row >= len(mv.rowToIdx) {
+			return
+		}
+		msgIdx := mv.rowToIdx[row]
 		if msgIdx < 0 || msgIdx >= len(mv.msgs) {
 			return
 		}
@@ -349,6 +369,35 @@ func (mv *MessagesView) repaint(msgs []queue.Message) {
 	mv.msgs = filtered
 	mv.marked = map[string]bool{} // a reload may reorder/drop messages; marks don't survive it
 
+	mv.renderRows()
+
+	if mv.table.GetRowCount() > 1 {
+		mv.table.Select(1, 0)
+		// Select alone isn't enough — see queues.go's repaint for why
+		// SetOffset is also needed (tview.Table's "track end" auto-scroll
+		// latches on during the table's first, still-empty draw).
+		mv.table.SetOffset(0, 0)
+	}
+}
+
+// renderRows rebuilds the table body from mv.msgs, wrap-aware, without
+// touching mv.allMsgs/mv.quickSearch/mv.marked or the active filter —
+// unlike repaint (which also re-fetches/re-filters/re-sorts and resets
+// marks on every call), this only redraws. Used both by repaint, after
+// it's done its own data processing, and directly by the wrap toggle,
+// which has no reason to touch any of that — toggling wrap is purely
+// cosmetic and shouldn't silently drop the user's marks.
+//
+// Preserves the currently-selected message across the rebuild (by
+// index, not identity — mv.msgs's order/set doesn't change from a call
+// to this function alone), since row numbers shift once wrapping
+// changes how many rows an item spans.
+func (mv *MessagesView) renderRows() {
+	selectedIdx := -1
+	if row, _ := mv.table.GetSelection(); row > 0 && row < len(mv.rowToIdx) {
+		selectedIdx = mv.rowToIdx[row]
+	}
+
 	for mv.table.GetRowCount() > 1 {
 		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
 	}
@@ -358,22 +407,36 @@ func (mv *MessagesView) repaint(msgs []queue.Message) {
 	tsColor := tcell.GetColor(p.Label)
 	textColor := tcell.GetColor(p.Text)
 
-	for i, m := range filtered {
-		row := i + 1
-		mv.table.SetCell(row, 0, mv.markerCell(false))
+	mv.rowToIdx = make([]int, 1, len(mv.msgs)+1) // index 0 unused (header)
+	mv.idxToRow = make([]int, len(mv.msgs))
+
+	row := 1
+	for i, m := range mv.msgs {
+		mv.idxToRow[i] = row
+		mv.rowToIdx = append(mv.rowToIdx, i)
+
+		lines := []string{m.Preview}
+		if mv.wrap {
+			lines = wrapText(m.Preview, previewWrapWidth)
+		}
+
+		mv.table.SetCell(row, 0, mv.markerCell(mv.marked[m.ID]))
 		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).SetExpansion(2))
 		mv.table.SetCell(row, 2, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).SetExpansion(1))
 		mv.table.SetCell(row, 3, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).SetExpansion(2))
 		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		mv.table.SetCell(row, 5, tview.NewTableCell(m.Preview).SetTextColor(textColor).SetExpansion(3))
+		mv.table.SetCell(row, 5, tview.NewTableCell(lines[0]).SetTextColor(textColor).SetExpansion(3))
+		row++
+
+		for _, extra := range lines[1:] {
+			mv.rowToIdx = append(mv.rowToIdx, i)
+			setContinuationRow(mv.table, row, 6, 5, extra, textColor, 3)
+			row++
+		}
 	}
 
-	if mv.table.GetRowCount() > 1 {
-		mv.table.Select(1, 0)
-		// Select alone isn't enough — see queues.go's repaint for why
-		// SetOffset is also needed (tview.Table's "track end" auto-scroll
-		// latches on during the table's first, still-empty draw).
-		mv.table.SetOffset(0, 0)
+	if selectedIdx >= 0 && selectedIdx < len(mv.idxToRow) {
+		mv.table.Select(mv.idxToRow[selectedIdx], 0)
 	}
 }
 
@@ -390,10 +453,12 @@ func (mv *MessagesView) markerCell(marked bool) *tview.TableCell {
 }
 
 // refreshMarkerColumn redraws column 0 to reflect the current marked set,
-// without re-fetching or resorting messages.
+// without re-fetching, resorting, or rebuilding wrapped rows — mv.idxToRow
+// (not i+1) since an earlier message may have wrapped into more than one
+// row, shifting every row after it.
 func (mv *MessagesView) refreshMarkerColumn() {
 	for i, m := range mv.msgs {
-		mv.table.SetCell(i+1, 0, mv.markerCell(mv.marked[m.ID]))
+		mv.table.SetCell(mv.idxToRow[i], 0, mv.markerCell(mv.marked[m.ID]))
 	}
 }
 
@@ -417,7 +482,10 @@ func (mv *MessagesView) targetIDs() []string {
 		return ids
 	}
 	row, _ := mv.table.GetSelection()
-	idx := row - 1
+	if row <= 0 || row >= len(mv.rowToIdx) {
+		return nil
+	}
+	idx := mv.rowToIdx[row]
 	if idx < 0 || idx >= len(mv.msgs) || mv.msgs[idx].ID == "" {
 		return nil
 	}
@@ -430,7 +498,10 @@ func (mv *MessagesView) targetIDs() []string {
 // restriction on individual move/delete.
 func (mv *MessagesView) toggleMark() {
 	row, _ := mv.table.GetSelection()
-	idx := row - 1
+	if row <= 0 || row >= len(mv.rowToIdx) {
+		return
+	}
+	idx := mv.rowToIdx[row]
 	if idx < 0 || idx >= len(mv.msgs) {
 		return
 	}
@@ -448,9 +519,12 @@ func (mv *MessagesView) toggleMark() {
 		mv.marked[m.ID] = true
 	}
 	mv.refreshMarkerColumn()
-	if row < mv.table.GetRowCount()-1 {
-		mv.table.Select(row+1, 0)
-	}
+	// Forward a synthetic KeyDown through the table's own InputHandler
+	// rather than a raw Select(row+1, 0) — tview.Table's built-in down()
+	// already skips non-selectable rows (see wraptext.go), so this
+	// correctly lands on the next message's primary row even when the
+	// current one wrapped into more than one row, with no extra code.
+	mv.table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
 // markAll marks every message that has an ID.
