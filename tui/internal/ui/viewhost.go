@@ -66,7 +66,7 @@ type ViewHost interface {
 	ListSecrets(ctx context.Context, profile string) ([]awssecrets.Secret, error)
 	RevealSecret(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
 	ListLogGroups(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) (events []awslogs.LogEvent, next string, err error)
 	SearchDatadogLogs(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
 	ListDatadogFacetValues(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
 	ListPipelines(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)

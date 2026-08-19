@@ -33,7 +33,7 @@ type LogSearchView struct {
 	pattern        string
 	tr             ui.TimeRange
 	results        []awslogs.LogEvent
-	hasMore        bool
+	nextToken      string // "" if no further pages are available
 }
 
 var _ ui.Themeable = (*LogSearchView)(nil)
@@ -63,6 +63,7 @@ func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
 		{Key: "r", Description: "refresh"},
+		{Key: "n", Description: "load more"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "filter pattern"},
 	}
@@ -113,6 +114,9 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 		switch event.Rune() {
 		case 'r':
 			sv.search()
+			return nil
+		case 'n':
+			sv.loadMore()
 			return nil
 		case 't':
 			timeRangeModal.Show(sv.tr, func(tr ui.TimeRange) {
@@ -174,7 +178,7 @@ func (sv *LogSearchView) Open(logGroupName, initialPattern string) {
 	sv.patternInput.SetText(initialPattern)
 	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}
 	sv.results = nil
-	sv.hasMore = false
+	sv.nextToken = ""
 	for sv.table.GetRowCount() > 1 {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
@@ -183,10 +187,51 @@ func (sv *LogSearchView) Open(logGroupName, initialPattern string) {
 	sv.search()
 }
 
-// search runs FilterEvents in a goroutine (a real AWS API call) and
-// hands the outcome to handleSearchResult on the tview event loop.
-// Requires an active AWS profile; errors clearly rather than calling
-// into awslogs with an empty one.
+// maxAutoContinuePages bounds how many FilterLogEvents pages search()
+// fetches automatically in one call when a filter pattern is set (see
+// fetchPages) — without a cap, a broad pattern against a very
+// high-volume log group could keep fetching indefinitely.
+const maxAutoContinuePages = 10
+
+// fetchPages calls fetch once per page (chained by nextToken, starting
+// from ""), accumulating events, until either a page's returned token
+// is "" (no more results) or maxPages calls have been made — whichever
+// comes first. Stops immediately on error, discarding any events
+// already accumulated: a partial result set with no indication it's
+// partial would be misleading, so this matches handleSearchResult's
+// existing all-or-nothing error handling.
+//
+// Takes fetch as a plain closure (not a *LogSearchView method) rather
+// than calling host.FilterLogEvents directly, so it has no
+// goroutine/UI dependency and is directly unit-testable with a
+// call-counting stub — same reasoning as buildLogEvents/
+// handleSearchResult being split out from their network-calling
+// callers.
+func fetchPages(fetch func(nextToken string) ([]awslogs.LogEvent, string, error), maxPages int) ([]awslogs.LogEvent, string, error) {
+	var events []awslogs.LogEvent
+	token := ""
+	for i := 0; i < maxPages; i++ {
+		page, next, err := fetch(token)
+		if err != nil {
+			return nil, "", err
+		}
+		events = append(events, page...)
+		token = next
+		if token == "" {
+			break
+		}
+	}
+	return events, token, nil
+}
+
+// search runs FilterEvents (via fetchPages) in a goroutine (real AWS API
+// calls) and hands the outcome to handleSearchResult on the tview event
+// loop. Requires an active AWS profile; errors clearly rather than
+// calling into awslogs with an empty one. If a filter pattern is set,
+// fetches up to maxAutoContinuePages pages automatically rather than
+// stopping at the first — see fetchPages and spec-wip/
+// 90-cr-log-search-pagination for why a pattern shouldn't let the
+// single-page cap hide a matching event.
 func (sv *LogSearchView) search() {
 	profile := sv.host.Config().ActiveAWSProfile
 	if profile == "" {
@@ -196,27 +241,78 @@ func (sv *LogSearchView) search() {
 	logGroupName := sv.logGroupName
 	pattern := sv.pattern
 	start, end := sv.tr.Bounds(time.Now())
+	maxPages := 1
+	if pattern != "" {
+		maxPages = maxAutoContinuePages
+	}
 	go func() {
-		events, hasMore, err := sv.host.FilterLogEvents(context.Background(), profile, logGroupName, start, end, pattern)
+		events, next, err := fetchPages(func(nextToken string) ([]awslogs.LogEvent, string, error) {
+			return sv.host.FilterLogEvents(context.Background(), profile, logGroupName, start, end, pattern, nextToken)
+		}, maxPages)
 		sv.host.QueueUpdateDraw(func() {
-			sv.handleSearchResult(events, hasMore, err)
+			sv.handleSearchResult(events, next, err)
 		})
 	}()
 }
 
-// handleSearchResult processes the outcome of a FilterEvents call: on
+// handleSearchResult processes the outcome of a search() call: on
 // error, logs and shows it; on success, caches the results and repaints.
 // Split out from search so this — the part with actual logic — is
 // directly testable without spawning a goroutine or needing a running
 // tview event loop (QueueUpdateDraw blocks forever without one).
-func (sv *LogSearchView) handleSearchResult(events []awslogs.LogEvent, hasMore bool, err error) {
+func (sv *LogSearchView) handleSearchResult(events []awslogs.LogEvent, next string, err error) {
 	if err != nil {
 		slog.Error("cloudwatch logs: search failed", "logGroup", sv.logGroupName, "error", err)
 		sv.showError(err)
 		return
 	}
 	sv.results = events
-	sv.hasMore = hasMore
+	sv.nextToken = next
+	sv.repaint()
+}
+
+// loadMore fetches exactly one more page beyond the current results,
+// continuing from sv.nextToken, and appends it — unlike search(), which
+// replaces sv.results outright. A no-op if there's no further page to
+// fetch (sv.nextToken == ""), which is also how it's reached whether or
+// not a filter pattern is set: search() only auto-continues past the
+// first page when a pattern is set (see maxAutoContinuePages), so this
+// is what lets a plain browse (or a pattern search that hit the
+// auto-continue cap) go further.
+func (sv *LogSearchView) loadMore() {
+	if sv.nextToken == "" {
+		return
+	}
+	profile := sv.host.Config().ActiveAWSProfile
+	if profile == "" {
+		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
+		return
+	}
+	logGroupName := sv.logGroupName
+	pattern := sv.pattern
+	start, end := sv.tr.Bounds(time.Now())
+	token := sv.nextToken
+	go func() {
+		events, next, err := sv.host.FilterLogEvents(context.Background(), profile, logGroupName, start, end, pattern, token)
+		sv.host.QueueUpdateDraw(func() {
+			sv.handleLoadMoreResult(events, next, err)
+		})
+	}()
+}
+
+// handleLoadMoreResult processes the outcome of a loadMore() call: on
+// error, logs it but leaves the existing results/table untouched —
+// unlike handleSearchResult's error path, loadMore augments an
+// already-successful search, so its failure shouldn't discard what's
+// already there. On success, appends the new page (rather than
+// replacing, see handleSearchResult) and repaints.
+func (sv *LogSearchView) handleLoadMoreResult(events []awslogs.LogEvent, next string, err error) {
+	if err != nil {
+		slog.Error("cloudwatch logs: load more failed", "logGroup", sv.logGroupName, "error", err)
+		return
+	}
+	sv.results = append(sv.results, events...)
+	sv.nextToken = next
 	sv.repaint()
 }
 
@@ -252,15 +348,15 @@ func (sv *LogSearchView) repaint() {
 func (sv *LogSearchView) updateTitle() {
 	label := sv.tr.Label()
 	title := fmt.Sprintf(" %s — %s — %d events", sv.logGroupName, label, len(sv.results))
-	if sv.hasMore {
-		title += " (more available — narrow your search)"
+	if sv.nextToken != "" {
+		title += " (more available — press n to load more, or narrow your search)"
 	}
 	sv.table.SetTitle(title + " ")
 }
 
 func (sv *LogSearchView) showError(err error) {
 	sv.results = nil
-	sv.hasMore = false
+	sv.nextToken = ""
 	for sv.table.GetRowCount() > 1 {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}

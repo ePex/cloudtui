@@ -100,7 +100,7 @@ type App struct {
 	listSecrets              func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
 	revealSecret             func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
 	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error)
+	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) (events []awslogs.LogEvent, next string, err error)
 	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
 	listDatadogFacetValues   func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
 	listPipelines            func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)

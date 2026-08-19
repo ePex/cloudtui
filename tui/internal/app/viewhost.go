@@ -44,8 +44,8 @@ func (a *App) ListLogGroups(ctx context.Context, profile string) ([]awslogs.LogG
 	return a.listLogGroups(ctx, profile)
 }
 
-func (a *App) FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) (events []awslogs.LogEvent, hasMore bool, err error) {
-	return a.filterLogEvents(ctx, profile, logGroupName, start, end, pattern)
+func (a *App) FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) (events []awslogs.LogEvent, next string, err error) {
+	return a.filterLogEvents(ctx, profile, logGroupName, start, end, pattern, nextToken)
 }
 
 func (a *App) SearchDatadogLogs(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error) {
