@@ -34,7 +34,7 @@ Each task is implemented and pushed only after being separately approved.
    doc comment included) since task 2 makes messages.go's
    `Shortcuts()` 12 entries; update `topbar_test.go`'s two
    literal-11 assertions to 12.
-4. [ ] Wire wrap into `tui/internal/view/logsearch.go`: `wrap bool`
+4. [x] Wire wrap into `tui/internal/view/logsearch.go`: `wrap bool`
    field; extract `renderRows()` (wrap-aware, builds `rowToIdx`,
    preserves current item selection); `repaint()` calls it, keeps its
    own scroll-reset; `w` case + context-hint rebuild; `Shortcuts()`
