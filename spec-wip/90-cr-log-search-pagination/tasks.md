@@ -36,7 +36,7 @@
    no-op (no fetch) when `nextToken == ""`, error preserves existing
    results.
 
-6. [ ] Update `updateTitle()`'s hint text (`"(more available — narrow
+6. [x] Update `updateTitle()`'s hint text (`"(more available — narrow
    your search)"` → `"(more available — press n to load more, or
    narrow your search)"`), shown whenever `sv.nextToken != ""`. Update/
    add the corresponding test(s).

@@ -349,7 +349,7 @@ func (sv *LogSearchView) updateTitle() {
 	label := sv.tr.Label()
 	title := fmt.Sprintf(" %s — %s — %d events", sv.logGroupName, label, len(sv.results))
 	if sv.nextToken != "" {
-		title += " (more available — narrow your search)"
+		title += " (more available — press n to load more, or narrow your search)"
 	}
 	sv.table.SetTitle(title + " ")
 }

@@ -204,14 +204,14 @@ func TestHandleSearchResult(t *testing.T) {
 		}
 	})
 
-	t.Run("hasMore is reflected in the title", func(t *testing.T) {
+	t.Run("a non-empty next token is reflected in the title, mentioning n", func(t *testing.T) {
 		_, _, sv := newTestLogSearchView(t)
 		sv.logGroupName = "/aws/lambda/foo"
 
 		sv.handleSearchResult([]awslogs.LogEvent{{Message: "x"}}, "some-token", nil)
 
-		if !strings.Contains(sv.table.GetTitle(), "more available") {
-			t.Errorf("title = %q, want it to mention more results are available", sv.table.GetTitle())
+		if !strings.Contains(sv.table.GetTitle(), "more available — press n to load more, or narrow your search") {
+			t.Errorf("title = %q, want it to mention more results and the n keybinding", sv.table.GetTitle())
 		}
 	})
 
