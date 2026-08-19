@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -53,11 +54,15 @@ func TestSwitchTo(t *testing.T) {
 func TestSwitchToClearsAbandonedPendingCloudWatchPattern(t *testing.T) {
 	a := New(config.Default())
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+	a.pendingCloudWatchTimestamp = time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
 
 	a.SwitchTo("home")
 
 	if a.pendingCloudWatchPattern != "" {
 		t.Errorf("pendingCloudWatchPattern = %q, want cleared after switching away", a.pendingCloudWatchPattern)
+	}
+	if !a.pendingCloudWatchTimestamp.IsZero() {
+		t.Errorf("pendingCloudWatchTimestamp = %v, want cleared after switching away", a.pendingCloudWatchTimestamp)
 	}
 }
 
@@ -67,22 +72,31 @@ func TestSwitchToClearsAbandonedPendingCloudWatchPattern(t *testing.T) {
 func TestSwitchToCloudWatchLogsPreservesPendingPattern(t *testing.T) {
 	a := New(config.Default())
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+	ts := time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
+	a.pendingCloudWatchTimestamp = ts
 
 	a.SwitchTo("cloudwatch-logs")
 
 	if a.pendingCloudWatchPattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("pendingCloudWatchPattern = %q, want it preserved by the jump itself", a.pendingCloudWatchPattern)
 	}
+	if a.pendingCloudWatchTimestamp != ts {
+		t.Errorf("pendingCloudWatchTimestamp = %v, want it preserved by the jump itself (%v)", a.pendingCloudWatchTimestamp, ts)
+	}
 }
 
 // TestOpenLogSearchConsumesPendingCloudWatchPattern covers FE 41's
 // consume-and-clear step: picking a log group after the jump must pass
 // the queued CorrelationID through as the initial search pattern, and
-// must not leave it queued for a later, unrelated group.
+// must not leave it queued for a later, unrelated group. Also covers
+// spec-origin/91: a queued timestamp must produce a ±15m absolute
+// window centered on it.
 func TestOpenLogSearchConsumesPendingCloudWatchPattern(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.ActiveAWSProfile = "" // OpenLogSearch's open() -> search() hits the guard, no goroutine
 	a.pendingCloudWatchPattern = "1745d042-94e8-49f0-b223-8900ed9e951e"
+	ts := time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
+	a.pendingCloudWatchTimestamp = ts
 
 	a.OpenLogSearch("/aws/lambda/foo")
 
@@ -92,11 +106,20 @@ func TestOpenLogSearchConsumesPendingCloudWatchPattern(t *testing.T) {
 	if a.pendingCloudWatchPattern != "" {
 		t.Errorf("pendingCloudWatchPattern = %q, want cleared after being consumed", a.pendingCloudWatchPattern)
 	}
+	if !a.pendingCloudWatchTimestamp.IsZero() {
+		t.Errorf("pendingCloudWatchTimestamp = %v, want cleared after being consumed", a.pendingCloudWatchTimestamp)
+	}
+	wantTR := ui.TimeRange{Mode: ui.TimeRangeAbsolute, From: ts.Add(-15 * time.Minute), To: ts.Add(15 * time.Minute)}
+	if got := a.logSearchV.TimeRange(); got != wantTR {
+		t.Errorf("logSearchV.TimeRange() = %+v, want %+v (±15m around the queued timestamp)", got, wantTR)
+	}
 }
 
 // TestOpenLogSearchWithoutPendingPatternIsUnaffected guards against a
 // regression where every ordinary (non-correlation-jump) log group open
-// would need to keep behaving exactly as before FE 41.
+// would need to keep behaving exactly as before FE 41 (and, per
+// spec-origin/91, still resets to the relative default when no
+// timestamp was queued either).
 func TestOpenLogSearchWithoutPendingPatternIsUnaffected(t *testing.T) {
 	a := New(config.Default())
 	a.cfg.ActiveAWSProfile = ""
@@ -105,6 +128,10 @@ func TestOpenLogSearchWithoutPendingPatternIsUnaffected(t *testing.T) {
 
 	if a.logSearchV.Pattern() != "" {
 		t.Errorf("logSearchV.pattern = %q, want empty when no CorrelationID was queued", a.logSearchV.Pattern())
+	}
+	wantTR := ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}
+	if got := a.logSearchV.TimeRange(); got != wantTR {
+		t.Errorf("logSearchV.TimeRange() = %+v, want the relative default %+v", got, wantTR)
 	}
 }
 

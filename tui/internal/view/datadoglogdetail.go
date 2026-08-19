@@ -92,7 +92,7 @@ func NewDatadogLogDetailView(a ui.ViewHost, onBack func()) *DatadogLogDetailView
 			// is. Scoped to this programmatically-injected value only —
 			// a user's own typed search pattern is still passed straight
 			// through unmodified (spec/34-fe-cloudwatch-logs decision 3).
-			dv.host.SetPendingCloudWatchPattern(fmt.Sprintf("%q", id))
+			dv.host.SetPendingCloudWatchPattern(fmt.Sprintf("%q", id), dv.event.Timestamp)
 			dv.host.SwitchTo("cloudwatch-logs")
 			return nil
 		case event.Key() == tcell.KeyEscape, event.Key() == tcell.KeyBackspace, event.Key() == tcell.KeyBackspace2:

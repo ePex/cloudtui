@@ -1,6 +1,6 @@
 # Log investigation cross-links: correlation jump + shared time-range modal
 
-_Condensed from spec/41, spec/53 — see those folders for the incremental history._
+_Condensed from spec/41, spec/53 — see those folders for the incremental history. CorrelationID jump's time-range behavior updated by spec-origin/91-bugfix-correlation-jump-timerange._
 
 ## Purpose
 
@@ -15,19 +15,33 @@ richer time-range picker that replaced both views' original preset-cycling.
 
 - On the Datadog log detail view (`datadogLogDetailView`), pressing `g`
   extracts a CorrelationID from the log's message text and jumps to
-  CloudWatch Logs with it queued as the search pattern.
+  CloudWatch Logs with it queued as the search pattern, **alongside the
+  Datadog event's own timestamp**.
 - If the message has no CorrelationID, `g` shows a status-bar message
-  ("No CorrelationID found in this log message") and does nothing else.
+  ("No CorrelationID found in this log message") and does nothing else
+  — no pattern or timestamp is queued.
 - The jump lands on the CloudWatch Logs *group list* (there's no
   cross-log-group search — CloudWatch Logs Insights is out of scope, see
-  spec-origin/17) with the CorrelationID queued. Picking a group (the
-  normal Enter-on-a-row flow) opens that group's search **pre-filled**
-  with the CorrelationID as the filter pattern, instead of the normal
-  empty default.
-- The queued value is **one-shot and self-clearing**: if the user
-  navigates away (Home, Settings, another top-level view) without picking
-  a log group, the queued value is dropped rather than silently
-  pre-filling a later, unrelated, manually-opened group's search.
+  spec-origin/17) with the CorrelationID and timestamp queued. Picking a
+  group (the normal Enter-on-a-row flow) opens that group's search
+  **pre-filled** with the CorrelationID as the filter pattern, instead
+  of the normal empty default — **and** on an **absolute time range**
+  centered on the Datadog event's timestamp (±15 minutes), instead of
+  resetting to the relative default. This exists because the relative
+  default is relative to *now*: without it, jumping to an event older
+  than the default window landed on a CloudWatch search that
+  structurally could not contain the event, silently — narrowing the
+  filter pattern or spec-origin/90's pagination couldn't fix it, since
+  the event was outside the queried window entirely, not hidden by a
+  page cap.
+- A normal (non-jump) group open is unaffected — it still resets to the
+  relative default exactly as before; the absolute-window behavior only
+  triggers when a jump actually queued a timestamp.
+- The queued pattern and timestamp are **one-shot and self-clearing,
+  together**: if the user navigates away (Home, Settings, another
+  top-level view) without picking a log group, both are dropped rather
+  than silently pre-filling/re-windowing a later, unrelated,
+  manually-opened group's search.
 - Only this one direction exists (Datadog → CloudWatch); the reverse was
   not requested.
 
@@ -86,6 +100,22 @@ window, `tr.label()` for title-bar display.
   doesn't over-match trailing punctuation/words. Matches only this exact
   `CorrelationID: <uuid>` text shape — no fuzzy matching, no other
   correlation-field labels.
+- `ui.ViewHost.SetPendingCloudWatchPattern(pattern string, timestamp
+  time.Time)` queues both values together; `App.pendingCloudWatchTimestamp
+  time.Time` holds the timestamp alongside `pendingCloudWatchPattern`,
+  cleared/consumed in lockstep with it.
+- `App.OpenLogSearch` builds the absolute window when a timestamp was
+  queued: `correlationJumpWindowBuffer = 15 * time.Minute`, `From:
+  ts.Add(-correlationJumpWindowBuffer)`, `To:
+  ts.Add(correlationJumpWindowBuffer)`. Gated on the timestamp being
+  non-zero (`!ts.IsZero()`), not on the pattern being non-empty — a
+  single source of truth for "this is a jump, not a normal open."
+- `logSearchView.Open(logGroupName, initialPattern string,
+  initialTimeRange *ui.TimeRange)` — `initialTimeRange` is `nil` for a
+  normal open (reset to the relative default, unchanged) or the
+  computed absolute window for a jump. `logSearchView.TimeRange() ui.
+  TimeRange` (mirrors the existing `Pattern()` getter) lets `internal/
+  app` verify the computed range crossed the package boundary.
 
 ## Implementation notes
 
@@ -94,9 +124,10 @@ window, `tr.label()` for title-bar display.
   presets were promoted out of the CloudWatch-specific file to
   `internal/ui` so the dialog package doesn't depend on a resource-view
   file (originally `logsearch.go`).
-- `App.pendingCloudWatchPattern string` (or its current-package
-  equivalent) holds the queued CorrelationID between the jump and the
-  group pick; cleared on navigation to anything other than
+- `App.pendingCloudWatchPattern string` and `App.pendingCloudWatchTimestamp
+  time.Time` (or their current-package equivalents) hold the queued
+  CorrelationID and its event's timestamp between the jump and the
+  group pick; both cleared on navigation to anything other than
   `cloudwatch-logs`.
 
 ## Notable gotchas worth preserving

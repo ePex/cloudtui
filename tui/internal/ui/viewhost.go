@@ -47,10 +47,11 @@ type ViewHost interface {
 	OpenDatadogLogDetail(event datadoglogs.LogEvent)
 	OpenCodePipelineDetail(pipelineName string)
 
-	// SetPendingCloudWatchPattern queues a one-shot CorrelationID for
-	// FE 41's Datadog->CloudWatch jump (write-only — App itself reads
-	// and clears it when the jump completes or is abandoned).
-	SetPendingCloudWatchPattern(pattern string)
+	// SetPendingCloudWatchPattern queues a one-shot CorrelationID and
+	// the originating Datadog event's timestamp for FE 41's
+	// Datadog->CloudWatch jump (write-only — App itself reads and
+	// clears it when the jump completes or is abandoned).
+	SetPendingCloudWatchPattern(pattern string, timestamp time.Time)
 
 	// CodePipeline background watcher — App forwards to
 	// view.PipelineWatcher (internal/app/codepipelinewatch.go's 3

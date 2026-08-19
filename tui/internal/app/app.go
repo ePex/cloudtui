@@ -73,40 +73,44 @@ type App struct {
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by OpenLogSearch and
 	// dropped by SwitchTo if abandoned — see spec/41.
-	pendingCloudWatchPattern string
-	themePicker              *dialog.ThemePicker
-	awsProfiles              *dialog.AWSProfilesPicker
-	backend                  queue.Backend
-	homeTable                *tview.Table
-	homeSections             []views.SectionInfo
-	topBarHeight             int
-	listAWSProfiles          func(context.Context) ([]awsprofile.Profile, error)
-	awsAuthTypeFor           func(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	awsSSOLogin              func(ctx context.Context, profile string) error
-	ssmParamsV               *view.SSMParamsView
-	secretsV                 *view.SecretsView
-	paramDetailV             *view.ParamDetailView
-	secretDetailV            *view.SecretDetailView
-	logsV                    *view.LogsView
-	logSearchV               *view.LogSearchView
-	logDetailV               *view.LogDetailView
-	datadogLogsV             *view.DatadogLogsView
-	datadogLogDetailV        *view.DatadogLogDetailView
-	codePipelineListV        *view.CodePipelineListView
-	codePipelineDetailV      *view.CodePipelineDetailView
-	pipelineWatcher          *view.PipelineWatcher
-	listParameters           func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
-	revealParameter          func(ctx context.Context, profile, name string) (string, error)
-	listSecrets              func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
-	revealSecret             func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
-	listLogGroups            func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEvents          func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) (events []awslogs.LogEvent, next string, err error)
-	searchDatadogLogs        func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
-	listDatadogFacetValues   func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
-	listPipelines            func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
-	getPipelineState         func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
-	notify                   func(title, message string)
-	screen                   tcell.Screen
+	// pendingCloudWatchTimestamp is the originating Datadog event's
+	// timestamp, queued/consumed/dropped alongside it — see
+	// spec-origin/91-bugfix-correlation-jump-timerange.
+	pendingCloudWatchPattern   string
+	pendingCloudWatchTimestamp time.Time
+	themePicker                *dialog.ThemePicker
+	awsProfiles                *dialog.AWSProfilesPicker
+	backend                    queue.Backend
+	homeTable                  *tview.Table
+	homeSections               []views.SectionInfo
+	topBarHeight               int
+	listAWSProfiles            func(context.Context) ([]awsprofile.Profile, error)
+	awsAuthTypeFor             func(ctx context.Context, profile string) (awsprofile.AuthType, error)
+	awsSSOLogin                func(ctx context.Context, profile string) error
+	ssmParamsV                 *view.SSMParamsView
+	secretsV                   *view.SecretsView
+	paramDetailV               *view.ParamDetailView
+	secretDetailV              *view.SecretDetailView
+	logsV                      *view.LogsView
+	logSearchV                 *view.LogSearchView
+	logDetailV                 *view.LogDetailView
+	datadogLogsV               *view.DatadogLogsView
+	datadogLogDetailV          *view.DatadogLogDetailView
+	codePipelineListV          *view.CodePipelineListView
+	codePipelineDetailV        *view.CodePipelineDetailView
+	pipelineWatcher            *view.PipelineWatcher
+	listParameters             func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
+	revealParameter            func(ctx context.Context, profile, name string) (string, error)
+	listSecrets                func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
+	revealSecret               func(ctx context.Context, profile, name string) (value string, isBinary bool, err error)
+	listLogGroups              func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
+	filterLogEvents            func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) (events []awslogs.LogEvent, next string, err error)
+	searchDatadogLogs          func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) (events []datadoglogs.LogEvent, hasMore bool, err error)
+	listDatadogFacetValues     func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
+	listPipelines              func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
+	getPipelineState           func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
+	notify                     func(title, message string)
+	screen                     tcell.Screen
 	// secretResolver resolves AWS-Secrets-Manager-backed connection
 	// passwords (see internal/queue/secretbackend /
 	// spec/56-fe-amq-connection-aws-secret-password).
@@ -589,6 +593,7 @@ func (a *App) SwitchTo(name string) {
 	// since name == "cloudwatch-logs" there.
 	if name != "cloudwatch-logs" {
 		a.pendingCloudWatchPattern = ""
+		a.pendingCloudWatchTimestamp = time.Time{}
 	}
 	for _, v := range a.views {
 		if v.Name() == name {
