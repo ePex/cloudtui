@@ -30,6 +30,11 @@ leaving the app or reaching for the AWS CLI/console.
   `SecureString`, only after `r` has revealed it).
 - Read-only, browse-scoped: no put/delete/create, and no integration with
   `config.Connection` or the connection editor.
+- The list table supports `W`, a per-session (not persisted) wrap-around
+  navigation toggle, off by default: when on, moving down from the last
+  row jumps to the first, and up from the first jumps to the last
+  (spec-origin/91, `ui.TableWrap` — shared by every list view in the app;
+  see spec/07-activemq-queue-list for the helper's details).
 
 ## Data & config
 

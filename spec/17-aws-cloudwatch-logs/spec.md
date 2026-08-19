@@ -52,6 +52,12 @@ this is a query tool over a high-volume, time-ordered event stream.
 - Read-only, browse/search-scoped: no log group creation/deletion, no
   metric/subscription filters, no writing, no live tailing/follow mode,
   no multi-log-group search.
+- Both screens' tables support `W`, a per-session (not persisted)
+  wrap-around navigation toggle, off by default: when on, moving down
+  from the last row jumps to the first, and up from the first jumps to
+  the last (spec-origin/91, `ui.TableWrap` — shared by every list view in
+  the app; see spec/07-activemq-queue-list for the helper's details). The
+  two screens' toggles are independent of each other.
 
 ## Data & config
 

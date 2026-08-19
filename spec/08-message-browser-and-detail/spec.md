@@ -21,6 +21,11 @@ opened by pressing Enter on a queue row.
    chars of the body).
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
+5. **W** toggles wrap-around navigation for this session only (off by
+   default, not persisted): when on, moving down from the last row jumps
+   to the first, and up from the first jumps to the last (spec-origin/91,
+   `ui.TableWrap` — shared by every list view in the app, not specific to
+   this one). Independent of the Queues view's own wrap toggle.
 
 Multi-select, independent of the table cursor:
 
@@ -145,6 +150,8 @@ Backend-specific filter behavior:
   page `"message-detail"` (not in `a.views`).
 - `internal/queue/jolokia/` — `BrowseMessages` implementation and
   `filter.go`'s `filterMessages` helper.
+- The `W` wrap toggle is `ui.TableWrap` (`tui/internal/ui/tablewrap.go`) —
+  see spec/07-activemq-queue-list for the shared helper's details.
 - `internal/queue/proxy/` — `BrowseMessages` implementation (see
   spec-origin/11).
 

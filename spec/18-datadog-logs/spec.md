@@ -72,6 +72,13 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   exempted from the app's global-hotkey handling while open (see gotcha
   below) — every keystroke, including letters that would otherwise be
   global hotkeys, must reach the form fields.
+- The results table supports `W`, a per-session (not persisted)
+  wrap-around navigation toggle, off by default: when on, moving down
+  from the last row jumps to the first, and up from the first jumps to
+  the last (spec-origin/91, `ui.TableWrap` — shared by every list view in
+  the app; see spec/07-activemq-queue-list for the helper's details).
+  Only the results table — the Service/Env filter dropdowns keep their
+  own navigation, unaffected.
 - Read-only: no log deletion/archival, no saved views/monitors, no
   writing.
 

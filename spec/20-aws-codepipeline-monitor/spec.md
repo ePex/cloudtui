@@ -43,6 +43,13 @@ checking the AWS Console.
 - Read-only: no pipeline mutation (retry a stage, approve a manual
   approval, stop an execution) — matches this app's AWS views' read-only
   posture. No CodeBuild-level detail (individual build phases/logs).
+- Both the list and detail tables support `W` (uppercase — `w` was already
+  taken by the watch toggle above), a per-session (not persisted)
+  wrap-around navigation toggle, off by default: when on, moving down
+  from the last row jumps to the first, and up from the first jumps to
+  the last (spec-origin/91, `ui.TableWrap` — shared by every list view in
+  the app; see spec/07-activemq-queue-list for the helper's details). The
+  two screens' toggles are independent of each other.
 
 ## Data & config
 

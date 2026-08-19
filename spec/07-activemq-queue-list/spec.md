@@ -22,7 +22,11 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
   distinct background (label/accent color) with dark foreground text.
 - **Row selection**: cursor navigation with ↑/↓ and j/k; selected row shown
   in the palette's selection colors. Enter on a row opens the Messages view
-  for that queue (spec-origin/08).
+  for that queue (spec-origin/08). `W` toggles wrap-around navigation for
+  this session only (off by default, not persisted): when on, moving down
+  from the last row jumps to the first, and up from the first jumps to the
+  last (spec-origin/91). The context panel's `W` hint reflects the current
+  on/off state.
 - **Sorting**: `o` cycles the active sort column through all 5 columns in
   order (NAME → PENDING → CONSUMERS → ENQUEUED → DEQUEUED → NAME → …);
   `O` (Shift+o) toggles ascending/descending. The active column's header
@@ -74,6 +78,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
 - The Jolokia client (`tui/internal/queue/jolokia/`) reads queue summaries,
   including Enqueue/DequeueCount, from the broker MBean over Jolokia HTTP
   using only `net/http` + `encoding/json` — no JMX library dependency.
+- The `W` wrap toggle is `ui.TableWrap` (`tui/internal/ui/tablewrap.go`), a
+  small shared helper every list-style `tview.Table` view in this app uses
+  (spec-origin/91) — not specific to this view.
 
 ## Notable gotchas worth preserving
 
