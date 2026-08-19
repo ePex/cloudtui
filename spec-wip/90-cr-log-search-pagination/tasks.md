@@ -12,7 +12,7 @@
    `filterLogEvents` field type) to the same new signature. Thin
    passthrough, no logic change.
 
-3. [ ] Add the `fetchPages` pagination helper and
+3. [x] Add the `fetchPages` pagination helper and
    `maxAutoContinuePages = 10` constant to
    `tui/internal/view/logsearch.go` (see plan.md for signature). Unit
    tests: exhausts before the cap, hits the cap with more remaining,

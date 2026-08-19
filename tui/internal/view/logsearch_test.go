@@ -282,3 +282,132 @@ func TestLogEventPreview(t *testing.T) {
 		})
 	}
 }
+
+// pageStub returns a fetchPages-compatible closure serving pages from
+// tokens, plus a pointer to the running call count so tests can assert
+// how many pages were actually fetched. If errAt is >= 0, the call at
+// that index (0-based) returns err and no page.
+func pageStub(t *testing.T, pages [][]awslogs.LogEvent, tokens []string, errAt int, err error) (fetch func(nextToken string) ([]awslogs.LogEvent, string, error), calls *int) {
+	t.Helper()
+	if len(pages) != len(tokens) {
+		t.Fatalf("pageStub: len(pages)=%d != len(tokens)=%d", len(pages), len(tokens))
+	}
+	n := 0
+	return func(nextToken string) ([]awslogs.LogEvent, string, error) {
+		i := n
+		n++
+		if i == errAt {
+			return nil, "", err
+		}
+		if i >= len(pages) {
+			t.Fatalf("pageStub: unexpected call %d (only %d pages configured)", i, len(pages))
+		}
+		return pages[i], tokens[i], nil
+	}, &n
+}
+
+func TestFetchPages(t *testing.T) {
+	t.Run("exhausts before the cap", func(t *testing.T) {
+		fetch, calls := pageStub(t,
+			[][]awslogs.LogEvent{
+				{{Message: "a"}},
+				{{Message: "b"}},
+				{{Message: "c"}},
+			},
+			[]string{"tok-1", "tok-2", ""},
+			-1, nil,
+		)
+
+		events, next, err := fetchPages(fetch, maxAutoContinuePages)
+
+		if err != nil {
+			t.Fatalf("fetchPages() err = %v, want nil", err)
+		}
+		if next != "" {
+			t.Errorf("next = %q, want empty (exhausted)", next)
+		}
+		if *calls != 3 {
+			t.Errorf("calls = %d, want 3 (stopped once a page returned no token)", *calls)
+		}
+		if len(events) != 3 {
+			t.Errorf("events = %+v, want 3 accumulated across all pages", events)
+		}
+	})
+
+	t.Run("hits the cap with more remaining", func(t *testing.T) {
+		fetch, calls := pageStub(t,
+			[][]awslogs.LogEvent{
+				{{Message: "a"}},
+				{{Message: "b"}},
+			},
+			[]string{"tok-1", "tok-2"}, // both pages still report more
+			-1, nil,
+		)
+
+		events, next, err := fetchPages(fetch, 2)
+
+		if err != nil {
+			t.Fatalf("fetchPages() err = %v, want nil", err)
+		}
+		if next != "tok-2" {
+			t.Errorf("next = %q, want %q (cap hit with more remaining)", next, "tok-2")
+		}
+		if *calls != 2 {
+			t.Errorf("calls = %d, want 2 (stopped at maxPages)", *calls)
+		}
+		if len(events) != 2 {
+			t.Errorf("events = %+v, want 2 accumulated before the cap", events)
+		}
+	})
+
+	t.Run("errors on a later page discard everything already fetched", func(t *testing.T) {
+		wantErr := context.DeadlineExceeded
+		fetch, calls := pageStub(t,
+			[][]awslogs.LogEvent{
+				{{Message: "a"}},
+			},
+			[]string{"tok-1"},
+			1, wantErr, // second call (index 1) errors
+		)
+
+		events, next, err := fetchPages(fetch, maxAutoContinuePages)
+
+		if err != wantErr {
+			t.Errorf("err = %v, want %v", err, wantErr)
+		}
+		if events != nil {
+			t.Errorf("events = %+v, want nil (partial results discarded on error)", events)
+		}
+		if next != "" {
+			t.Errorf("next = %q, want empty on error", next)
+		}
+		if *calls != 2 {
+			t.Errorf("calls = %d, want 2 (stopped at the error)", *calls)
+		}
+	})
+
+	t.Run("single page (maxPages=1) fetches exactly one page even with more available", func(t *testing.T) {
+		fetch, calls := pageStub(t,
+			[][]awslogs.LogEvent{
+				{{Message: "a"}, {Message: "b"}},
+			},
+			[]string{"tok-1"}, // more available, but maxPages=1 must not chase it
+			-1, nil,
+		)
+
+		events, next, err := fetchPages(fetch, 1)
+
+		if err != nil {
+			t.Fatalf("fetchPages() err = %v, want nil", err)
+		}
+		if next != "tok-1" {
+			t.Errorf("next = %q, want %q (not fetched further)", next, "tok-1")
+		}
+		if *calls != 1 {
+			t.Errorf("calls = %d, want 1", *calls)
+		}
+		if len(events) != 2 {
+			t.Errorf("events = %+v, want the single page's 2 events", events)
+		}
+	})
+}

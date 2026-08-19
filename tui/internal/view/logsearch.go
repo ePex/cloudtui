@@ -183,6 +183,43 @@ func (sv *LogSearchView) Open(logGroupName, initialPattern string) {
 	sv.search()
 }
 
+// maxAutoContinuePages bounds how many FilterLogEvents pages search()
+// fetches automatically in one call when a filter pattern is set (see
+// fetchPages) — without a cap, a broad pattern against a very
+// high-volume log group could keep fetching indefinitely.
+const maxAutoContinuePages = 10
+
+// fetchPages calls fetch once per page (chained by nextToken, starting
+// from ""), accumulating events, until either a page's returned token
+// is "" (no more results) or maxPages calls have been made — whichever
+// comes first. Stops immediately on error, discarding any events
+// already accumulated: a partial result set with no indication it's
+// partial would be misleading, so this matches handleSearchResult's
+// existing all-or-nothing error handling.
+//
+// Takes fetch as a plain closure (not a *LogSearchView method) rather
+// than calling host.FilterLogEvents directly, so it has no
+// goroutine/UI dependency and is directly unit-testable with a
+// call-counting stub — same reasoning as buildLogEvents/
+// handleSearchResult being split out from their network-calling
+// callers.
+func fetchPages(fetch func(nextToken string) ([]awslogs.LogEvent, string, error), maxPages int) ([]awslogs.LogEvent, string, error) {
+	var events []awslogs.LogEvent
+	token := ""
+	for i := 0; i < maxPages; i++ {
+		page, next, err := fetch(token)
+		if err != nil {
+			return nil, "", err
+		}
+		events = append(events, page...)
+		token = next
+		if token == "" {
+			break
+		}
+	}
+	return events, token, nil
+}
+
 // search runs FilterEvents in a goroutine (a real AWS API call) and
 // hands the outcome to handleSearchResult on the tview event loop.
 // Requires an active AWS profile; errors clearly rather than calling
