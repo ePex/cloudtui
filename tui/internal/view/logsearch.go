@@ -34,6 +34,7 @@ type LogSearchView struct {
 	tr             ui.TimeRange
 	results        []awslogs.LogEvent
 	nextToken      string // "" if no further pages are available
+	wrapNav        ui.TableWrap
 }
 
 var _ ui.Themeable = (*LogSearchView)(nil)
@@ -66,12 +67,17 @@ func (sv *LogSearchView) Pattern() string { return sv.pattern }
 func (sv *LogSearchView) TimeRange() ui.TimeRange { return sv.tr }
 
 func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if sv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
 		{Key: "r", Description: "refresh"},
 		{Key: "n", Description: "load more"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "filter pattern"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -117,6 +123,14 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return sv.wrapNav.HandleNav(sv.table, 1, event)
+		}
+		if event.Rune() == 'W' {
+			sv.wrapNav.Toggle()
+			return nil
+		}
 		switch event.Rune() {
 		case 'r':
 			sv.search()
@@ -134,10 +148,6 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 			sv.patternInput.SetText(sv.pattern)
 			sv.host.SetFocus(sv.patternInput)
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		switch event.Key() {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:

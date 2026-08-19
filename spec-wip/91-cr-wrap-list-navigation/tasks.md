@@ -13,8 +13,8 @@ Each task is implemented and pushed only after being separately approved.
    cases.
 3. [x] Wire wrap-around into `tui/internal/view/messages.go` (same
    shape as task 2, adapted to its boolean-expression switch style).
-4. [ ] Wire wrap-around into `tui/internal/view/logs.go`.
-5. [ ] Wire wrap-around into `tui/internal/view/logsearch.go`.
+4. [x] Wire wrap-around into `tui/internal/view/logs.go`.
+5. [x] Wire wrap-around into `tui/internal/view/logsearch.go`.
 6. [ ] Wire wrap-around into `tui/internal/view/ssmparams.go`.
 7. [ ] Wire wrap-around into `tui/internal/view/secrets.go`.
 8. [ ] Wire wrap-around into `tui/internal/view/codepipelinelist.go`.

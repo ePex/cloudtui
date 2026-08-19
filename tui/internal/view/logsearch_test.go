@@ -257,6 +257,31 @@ func TestHandleSearchResult(t *testing.T) {
 // which is also what makes it safe to drive through the real 'n'
 // keybinding in a test without an event loop (see
 // TestLogSearchViewNKeyLoadMore below).
+func TestLogSearchViewWrapShortcutPresent(t *testing.T) {
+	_, _, sv := newTestLogSearchView(t)
+	for _, s := range sv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestLogSearchViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, _, sv := newTestLogSearchView(t)
+	sv.logGroupName = "/aws/lambda/foo"
+	sv.handleSearchResult([]awslogs.LogEvent{{Message: "a"}, {Message: "b"}, {Message: "c"}}, "", nil)
+	sv.table.Select(3, 0) // last result row
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := sv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first result row)", row)
+	}
+}
+
 func TestLoadMoreNoopWhenNoNextToken(t *testing.T) {
 	host, _, sv := newTestLogSearchView(t)
 	sv.logGroupName = "/aws/lambda/foo"

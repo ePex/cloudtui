@@ -92,6 +92,30 @@ func TestLogsViewRepaintPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestLogsViewWrapShortcutPresent(t *testing.T) {
+	_, lv := newTestLogsView(t)
+	for _, s := range lv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestLogsViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, lv := newTestLogsView(t)
+	lv.repaint([]awslogs.LogGroup{{Name: "/a"}, {Name: "/b"}, {Name: "/c"}})
+	lv.table.Select(3, 0) // last data row
+
+	capture := lv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := lv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first data row)", row)
+	}
+}
+
 func TestLogsViewRepaintShowsDashForNoCreatedAt(t *testing.T) {
 	_, lv := newTestLogsView(t)
 
