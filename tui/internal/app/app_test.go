@@ -744,3 +744,52 @@ func TestCopyToClipboardNoOpWithoutScreen(t *testing.T) {
 
 	a.CopyToClipboard("some-value") // must not panic
 }
+
+// TestPromptAutocompleteFirstOpenIsReadable guards against a regression where
+// the very first time the ':' prompt's autocomplete drop-down opened, its
+// unselected items rendered with foreground == background (invisible text).
+//
+// Root cause: tview.InputField.SetAutocompleteFunc eagerly calls
+// Autocomplete(), which lazily builds and permanently styles the drop-down's
+// internal tview.List using whatever autocompleteStyles are set on the
+// InputField at that exact moment — later Autocomplete() calls only refresh
+// the list's entries, never restyle it. New() used to call
+// SetAutocompleteFunc before StyleInputFieldAutocomplete, so the very first
+// drop-down was built with tview's own (unreadable, unthemed) default
+// styles instead of the palette's colors.
+func TestPromptAutocompleteFirstOpenIsReadable(t *testing.T) {
+	a := New(config.Default())
+	p := a.cfg.Colors
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 20)
+
+	// Same sequence as pressing ':' for the very first time in a session.
+	a.tv.SetFocus(a.pages)
+	event := tcell.NewEventKey(tcell.KeyRune, ':', tcell.ModNone)
+	a.onGlobalKey(event)
+
+	a.prompt.SetRect(0, 0, 40, 1)
+	a.prompt.Draw(screen)
+	screen.Show()
+
+	contents, w, _ := screen.GetContents()
+	wantText := tcell.GetColor(p.Text)
+	wantBackground := tcell.GetColor(p.Background)
+
+	// The drop-down opens directly below the prompt (row 0), so row 1 is
+	// its first (selected-by-default) entry and row 2 is its second,
+	// unselected entry — the one whose readability this test guards.
+	cell := contents[2*w+2]
+	fg, bg, _ := cell.Style.Decompose()
+	if fg == bg {
+		t.Fatalf("unselected autocomplete item at row 2: fg == bg == %v, text is invisible", fg.Hex())
+	}
+	if fg != wantText || bg != wantBackground {
+		t.Errorf("unselected autocomplete item colors = fg:%v bg:%v, want fg:%v (Text) bg:%v (Background)",
+			fg.Hex(), bg.Hex(), wantText.Hex(), wantBackground.Hex())
+	}
+}
