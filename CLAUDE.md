@@ -22,15 +22,21 @@ Instructions for AI assistants (and humans) working in this repository.
 
 ## Feature, bugfix & change-request workflow
 
-When asked to implement a new feature, fix a bug, or change already-
-shipped behavior (not a trivial typo or config tweak), any agent or
-contributor follows this sequence and **stops for feedback at each
-gate** — do not proceed to the next stage until the current one is
-explicitly approved:
+`spec/` is the living documentation of the application — one folder per
+feature *area*, each holding a single `spec.md` describing current,
+end-state behavior (see `spec/README.md`). It is not where active work
+happens, and it is not an incremental log: entries get updated in place
+as behavior changes.
 
-1. **Specification.** Write a short spec (see `spec/README.md`): what the
-   feature/bug/change is, why, scope and explicit out-of-scope. File:
-   `spec/NN-fe-<slug>/spec.md` (or `NN-bugfix-`/`NN-cr-`), noting the
+Active work happens in `spec-wip/` (see `spec-wip/README.md`). When asked
+to implement a new feature, fix a bug, or change already-shipped behavior
+(not a trivial typo or config tweak), any agent or contributor follows
+this sequence and **stops for feedback at each gate** — do not proceed to
+the next stage until the current one is explicitly approved:
+
+1. **Specification.** Write a short spec: what the feature/bug/change is,
+   why, scope and explicit out-of-scope. File:
+   `spec-wip/NN-fe-<slug>/spec.md` (or `NN-bugfix-`/`NN-cr-`), noting the
    date inside `spec.md` itself (not the folder name). Ask for feedback.
    Revise until approved.
 2. **Implementation plan.** Once the spec is approved, write the plan to
@@ -45,31 +51,39 @@ explicitly approved:
    current one is done and the next has been separately approved. Check a
    task's box (`1. [x] ...`) once it's actually been implemented, not
    before.
+4. **Merge-back.** Once every task is implemented and checked off, fold
+   the result into `spec/`: update the relevant `spec/<area>/spec.md` to
+   reflect the new end-state behavior (or add a new `spec/<area>/` for a
+   genuinely new capability), then delete the `spec-wip/NN-type-slug/`
+   folder. Nothing is lost by deleting it — the PR that shipped the
+   change is the permanent record of what was decided and why.
 
 **If anything is unclear** — about scope, approach, or requirements — ask
 the user before proceeding. Do not make assumptions and forge ahead.
 
 **Every code change must be traceable to a spec.** If code changes, the
-relevant specification must be updated too. A code change without a
-corresponding spec entry is not acceptable.
+relevant `spec/` entry must be updated too — via the merge-back step
+above, or immediately for a trivial change that skips the `spec-wip`
+gates. A code change without a corresponding spec update is not
+acceptable.
 
 This gating applies to features, bugfixes, and change requests alike;
-trivial changes can skip straight to implementation.
+trivial changes can skip straight to implementation (but still update
+`spec/` directly).
 
 Three types:
 
 - **`fe`** — new capability.
 - **`bugfix`** — fixing broken behavior.
 - **`cr`** ("change request") — a deliberate change to already-shipped
-  behavior that isn't a bug (e.g. a re-theme, a reworked flow),
-  documented separately from the feature that originally shipped it.
+  behavior that isn't a bug (e.g. a re-theme, a reworked flow).
 
-Every feature/bugfix/change-request gets its own folder under `spec/`,
-named `NN-<type>-<slug>/` (e.g. `spec/02-fe-my-feature/`,
-`spec/03-bugfix-my-fix/`). `NN` is a single running counter shared
-across all three types — never reset, never per-type — so the folder
-listing itself preserves the order things were actually done in (folder
-names carry no date; see `spec/README.md` for why).
+Every feature/bugfix/change-request gets its own folder under
+`spec-wip/`, named `NN-<type>-<slug>/` (e.g. `spec-wip/90-fe-my-feature/`,
+`spec-wip/91-bugfix-my-fix/`). `NN` is a single running counter shared
+across all three types and continuing from `spec/`'s old counter — never
+reset, never per-type, never reused even after a folder is deleted post-
+merge (see `spec-wip/README.md`).
 
 ## Architecture
 
