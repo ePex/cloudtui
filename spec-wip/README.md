@@ -8,7 +8,7 @@ development — work happens here first.
 Naming: `NN-<type>-<slug>/`, where `<type>` is `fe` (feature), `bugfix`,
 or `cr` (change request) — same convention `spec/` used to use. `NN` is a
 single running counter, continuing from the old `spec/` counter's last
-value (**next number: 90**) rather than restarting at 1 — this keeps every
+value (**next number: 91**) rather than restarting at 1 — this keeps every
 folder name that has ever existed in this repo unique, even after a
 `spec-wip/` folder is deleted post-merge. Never reset, never reused.
 
@@ -19,16 +19,22 @@ checked (`1. [x] ...`) once that task is actually implemented, not before.
 
 ## Lifecycle
 
-1. A folder is created here when work starts and moves through
-   spec → plan → tasks, each stage gated on explicit approval.
+1. A branch is created (in an isolated worktree/checkout where the
+   environment supports it) and a folder added here when work starts. As
+   soon as `spec.md` exists, the branch is pushed and a **draft** pull
+   request opened — that PR is the review surface for every gate from
+   then on, not something opened only once work is finished. The folder
+   moves through spec → plan → tasks, each stage gated on explicit
+   approval, pushing again after each gate document lands.
 2. Once every task is implemented and checked off, its content is merged
    back into [`spec/`](../spec/README.md): the relevant `spec/<area>/spec.md`
    is updated to reflect the new end-state behavior, or a new
    `spec/<area>/` is added for a genuinely new capability.
-3. The `spec-wip/NN-type-slug/` folder is then deleted. This is not a
-   loss of history — the PR that shipped the change is the permanent
-   record of what was decided and why; `spec-wip/` only needs to hold
-   what's currently in flight.
+3. The `spec-wip/NN-type-slug/` folder is then deleted and the branch
+   pushed once more. This is not a loss of history — the PR that shipped
+   the change is the permanent record of what was decided and why;
+   `spec-wip/` only needs to hold what's currently in flight. The PR is
+   then marked ready for review (no longer draft).
 
 An empty `spec-wip/` (no subfolders) is the expected steady state between
 changes.
