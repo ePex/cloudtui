@@ -27,7 +27,7 @@
    Update the existing tests that reference `hasMore`/the old
    `filterLogEventsFn` signature (including `fakeViewHost`).
 
-5. [ ] Add manual "load more": `loadMore()` method (no-op if
+5. [x] Add manual "load more": `loadMore()` method (no-op if
    `sv.nextToken == ""`) + `handleLoadMoreResult` (appends to
    `sv.results` rather than replacing, updates `sv.nextToken`, an
    error leaves existing results in place). Wire the `n` keybinding

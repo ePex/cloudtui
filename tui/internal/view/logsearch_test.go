@@ -231,6 +231,95 @@ func TestHandleSearchResult(t *testing.T) {
 	})
 }
 
+// TestLoadMoreNoopWhenNoNextToken proves loadMore() checks
+// sv.nextToken before doing anything else — no fetch, no goroutine —
+// which is also what makes it safe to drive through the real 'n'
+// keybinding in a test without an event loop (see
+// TestLogSearchViewNKeyLoadMore below).
+func TestLoadMoreNoopWhenNoNextToken(t *testing.T) {
+	host, _, sv := newTestLogSearchView(t)
+	sv.logGroupName = "/aws/lambda/foo"
+	sv.nextToken = ""
+	calls := 0
+	host.filterLogEventsFn = func(context.Context, string, string, time.Time, time.Time, string, string) ([]awslogs.LogEvent, string, error) {
+		calls++
+		return nil, "", nil
+	}
+
+	sv.loadMore()
+
+	if calls != 0 {
+		t.Error("loadMore() called FilterLogEvents despite nextToken being empty")
+	}
+}
+
+// TestLogSearchViewNKeyLoadMore drives the real 'n' keybinding, with
+// nextToken left empty so loadMore()'s guard is hit before any
+// goroutine would be spawned (see the no-profile tests elsewhere in
+// this file for why that matters without a running tview event loop).
+func TestLogSearchViewNKeyLoadMore(t *testing.T) {
+	host, _, sv := newTestLogSearchView(t)
+	sv.logGroupName = "/aws/lambda/foo"
+	sv.nextToken = ""
+	calls := 0
+	host.filterLogEventsFn = func(context.Context, string, string, time.Time, time.Time, string, string) ([]awslogs.LogEvent, string, error) {
+		calls++
+		return nil, "", nil
+	}
+
+	capture := sv.table.GetInputCapture()
+	if got := capture(tcell.NewEventKey(tcell.KeyRune, 'n', tcell.ModNone)); got != nil {
+		t.Errorf("'n' capture returned %v, want nil (event consumed)", got)
+	}
+	if calls != 0 {
+		t.Error("'n' triggered a fetch despite nextToken being empty")
+	}
+}
+
+func TestHandleLoadMoreResult(t *testing.T) {
+	t.Run("success appends rather than replaces, and updates nextToken", func(t *testing.T) {
+		_, _, sv := newTestLogSearchView(t)
+		sv.logGroupName = "/aws/lambda/foo"
+		sv.results = []awslogs.LogEvent{{Message: "first"}}
+		sv.nextToken = "tok-1"
+
+		sv.handleLoadMoreResult([]awslogs.LogEvent{{Message: "second"}}, "tok-2", nil)
+
+		if len(sv.results) != 2 {
+			t.Fatalf("results = %+v, want 2 (appended, not replaced)", sv.results)
+		}
+		if sv.results[0].Message != "first" || sv.results[1].Message != "second" {
+			t.Errorf("results = %+v, want [first second]", sv.results)
+		}
+		if sv.nextToken != "tok-2" {
+			t.Errorf("nextToken = %q, want %q", sv.nextToken, "tok-2")
+		}
+		if got := sv.table.GetRowCount(); got != 3 { // header + 2
+			t.Errorf("row count = %d, want 3", got)
+		}
+	})
+
+	t.Run("error preserves existing results and the table", func(t *testing.T) {
+		_, _, sv := newTestLogSearchView(t)
+		sv.logGroupName = "/aws/lambda/foo"
+		sv.results = []awslogs.LogEvent{{Message: "first"}}
+		sv.nextToken = "tok-1"
+		sv.repaint() // populate the table to match sv.results, as a real prior search would have
+
+		sv.handleLoadMoreResult(nil, "", context.DeadlineExceeded)
+
+		if len(sv.results) != 1 || sv.results[0].Message != "first" {
+			t.Errorf("results = %+v, want unchanged after a load-more error", sv.results)
+		}
+		if sv.nextToken != "tok-1" {
+			t.Errorf("nextToken = %q, want unchanged (%q) after a load-more error", sv.nextToken, "tok-1")
+		}
+		if got := sv.table.GetRowCount(); got != 2 { // header + 1, untouched
+			t.Errorf("row count = %d, want 2 (table untouched by the error)", got)
+		}
+	})
+}
+
 // TestLogSearchViewScrollsToTopWithManyRows guards against the same bug
 // fixed for queuesView (spec/11-bugfix-queues-scroll-to-top).
 func TestLogSearchViewScrollsToTopWithManyRows(t *testing.T) {

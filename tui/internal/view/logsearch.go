@@ -63,6 +63,7 @@ func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
 		{Key: "r", Description: "refresh"},
+		{Key: "n", Description: "load more"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "filter pattern"},
 	}
@@ -113,6 +114,9 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 		switch event.Rune() {
 		case 'r':
 			sv.search()
+			return nil
+		case 'n':
+			sv.loadMore()
 			return nil
 		case 't':
 			timeRangeModal.Show(sv.tr, func(tr ui.TimeRange) {
@@ -263,6 +267,51 @@ func (sv *LogSearchView) handleSearchResult(events []awslogs.LogEvent, next stri
 		return
 	}
 	sv.results = events
+	sv.nextToken = next
+	sv.repaint()
+}
+
+// loadMore fetches exactly one more page beyond the current results,
+// continuing from sv.nextToken, and appends it — unlike search(), which
+// replaces sv.results outright. A no-op if there's no further page to
+// fetch (sv.nextToken == ""), which is also how it's reached whether or
+// not a filter pattern is set: search() only auto-continues past the
+// first page when a pattern is set (see maxAutoContinuePages), so this
+// is what lets a plain browse (or a pattern search that hit the
+// auto-continue cap) go further.
+func (sv *LogSearchView) loadMore() {
+	if sv.nextToken == "" {
+		return
+	}
+	profile := sv.host.Config().ActiveAWSProfile
+	if profile == "" {
+		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
+		return
+	}
+	logGroupName := sv.logGroupName
+	pattern := sv.pattern
+	start, end := sv.tr.Bounds(time.Now())
+	token := sv.nextToken
+	go func() {
+		events, next, err := sv.host.FilterLogEvents(context.Background(), profile, logGroupName, start, end, pattern, token)
+		sv.host.QueueUpdateDraw(func() {
+			sv.handleLoadMoreResult(events, next, err)
+		})
+	}()
+}
+
+// handleLoadMoreResult processes the outcome of a loadMore() call: on
+// error, logs it but leaves the existing results/table untouched —
+// unlike handleSearchResult's error path, loadMore augments an
+// already-successful search, so its failure shouldn't discard what's
+// already there. On success, appends the new page (rather than
+// replacing, see handleSearchResult) and repaints.
+func (sv *LogSearchView) handleLoadMoreResult(events []awslogs.LogEvent, next string, err error) {
+	if err != nil {
+		slog.Error("cloudwatch logs: load more failed", "logGroup", sv.logGroupName, "error", err)
+		return
+	}
+	sv.results = append(sv.results, events...)
 	sv.nextToken = next
 	sv.repaint()
 }
