@@ -40,7 +40,7 @@ Each task is implemented and pushed only after being separately approved.
    own scroll-reset; `w` case + context-hint rebuild; `Shortcuts()`
    entry; `SetSelectedFunc` uses `rowToIdx`. Tests mirroring task 2's
    (minus marking, which doesn't apply here).
-5. [ ] Wire wrap into `tui/internal/view/datadoglogs.go`: same shape
+5. [x] Wire wrap into `tui/internal/view/datadoglogs.go`: same shape
    as task 4.
 6. [ ] `verify-live`: drive the real TUI against a real broker,
    toggling `w` in the message browser — confirm continuation rows

@@ -315,6 +315,76 @@ func TestDatadogLogsViewQueryInputEnterSetsQuery(t *testing.T) {
 	}
 }
 
+func TestDatadogLogsViewWrapShortcutPresent(t *testing.T) {
+	_, _, dv := newTestDatadogLogsView(t)
+	for _, s := range dv.Shortcuts() {
+		if s.Key == "w" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"w\"")
+}
+
+func TestDatadogLogsViewWrapProducesContinuationRows(t *testing.T) {
+	_, _, dv := newTestDatadogLogsView(t)
+	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: longPreview}}, false, nil)
+	if got := dv.table.GetRowCount(); got != 2 { // header + 1, wrap off
+		t.Fatalf("row count with wrap off = %d, want 2", got)
+	}
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := dv.table.GetRowCount(); got != 3 { // header + primary + 1 continuation
+		t.Fatalf("row count with wrap on = %d, want 3", got)
+	}
+	cont := dv.table.GetCell(2, 3)
+	if cont.Text == "" {
+		t.Error("continuation row text is empty")
+	}
+	if !cont.NotSelectable {
+		t.Error("continuation row should be non-selectable")
+	}
+}
+
+func TestDatadogLogsViewWrapSelectedFuncOpensCorrectEvent(t *testing.T) {
+	host := newFakeViewHost()
+	timeRangeModal := dialog.NewTimeRangeModal(host)
+	var selected datadoglogs.LogEvent
+	dv := NewDatadogLogsView(host, timeRangeModal, func(e datadoglogs.LogEvent) { selected = e })
+	dv.handleSearchResult([]datadoglogs.LogEvent{
+		{Message: longPreview, Service: "svc-1"},
+		{Message: "short", Service: "svc-2"},
+	}, false, nil)
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	// svc-1's event now spans 2 rows (primary + 1 continuation); svc-2's
+	// primary row must be offset past it.
+	dv.table.Select(3, 0)
+	dv.table.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if selected.Service != "svc-2" {
+		t.Errorf("selected event service = %q, want %q (rowToIdx should offset past the wrapped event)", selected.Service, "svc-2")
+	}
+}
+
+func TestDatadogLogsViewWrapContextHintReflectsState(t *testing.T) {
+	host, _, dv := newTestDatadogLogsView(t)
+	capture := dv.table.GetInputCapture()
+
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	if !strings.Contains(host.contextHint, "wrap: on") {
+		t.Errorf("contextHint after first 'w' = %q, want it to contain \"wrap: on\"", host.contextHint)
+	}
+
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	if !strings.Contains(host.contextHint, "wrap: off") {
+		t.Errorf("contextHint after second 'w' = %q, want it to contain \"wrap: off\"", host.contextHint)
+	}
+}
+
 func TestDatadogLogsViewHandleSearchResult(t *testing.T) {
 	t.Run("success populates rows and title", func(t *testing.T) {
 		_, _, dv := newTestDatadogLogsView(t)

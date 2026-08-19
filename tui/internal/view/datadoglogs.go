@@ -47,6 +47,8 @@ type DatadogLogsView struct {
 	tr            ui.TimeRange
 	results       []datadoglogs.LogEvent
 	hasMore       bool
+	wrap          bool  // message column word-wrap toggle
+	rowToIdx      []int // row -> index into results; index 0 unused (header placeholder)
 }
 
 var _ ui.View = (*DatadogLogsView)(nil)
@@ -75,12 +77,17 @@ func (dv *DatadogLogsView) FilterInputs() []tview.Primitive {
 }
 
 func (dv *DatadogLogsView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if dv.wrap {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "query"},
 		{Key: "S", Description: "filter service"},
 		{Key: "E", Description: "filter env"},
+		{Key: "w", Description: "wrap: " + wrap},
 	}
 }
 
@@ -199,6 +206,15 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 		case 'E':
 			dv.host.SetFocus(dv.envFilterDD)
 			return nil
+		case 'w':
+			dv.wrap = !dv.wrap
+			dv.renderRows()
+			lines := make([]string, 0, len(dv.Shortcuts()))
+			for _, sc := range dv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			a.SetContextHint(strings.Join(lines, "\n"))
+			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
@@ -208,7 +224,10 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 	})
 
 	table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
+		if row <= 0 || row >= len(dv.rowToIdx) {
+			return
+		}
+		idx := dv.rowToIdx[row]
 		if idx < 0 || idx >= len(dv.results) {
 			return
 		}
@@ -439,20 +458,7 @@ func (dv *DatadogLogsView) handleSearchResult(events []datadoglogs.LogEvent, has
 }
 
 func (dv *DatadogLogsView) repaint() {
-	for dv.table.GetRowCount() > 1 {
-		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
-	}
-
-	p := dv.host.Config().Colors
-	tsColor := tcell.GetColor(p.Label)
-	textColor := tcell.GetColor(p.Text)
-	for i, e := range dv.results {
-		row := i + 1
-		dv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		dv.table.SetCell(row, 1, tview.NewTableCell(e.Service).SetTextColor(textColor).SetExpansion(1))
-		dv.table.SetCell(row, 2, tview.NewTableCell(e.Status).SetTextColor(textColor).SetExpansion(1))
-		dv.table.SetCell(row, 3, tview.NewTableCell(logEventPreview(e.Message)).SetTextColor(textColor).SetExpansion(4))
-	}
+	dv.renderRows()
 
 	if dv.table.GetRowCount() > 1 {
 		dv.table.Select(1, 0)
@@ -463,6 +469,60 @@ func (dv *DatadogLogsView) repaint() {
 	}
 
 	dv.updateTitle()
+}
+
+// renderRows rebuilds the table body from dv.results, wrap-aware,
+// without resetting scroll position — unlike repaint (which always
+// jumps to row 1, matching a genuine reload), this is also called
+// directly by the wrap toggle, which has no reason to reset the user's
+// place in the results. Preserves the currently-selected event across
+// the rebuild (by index, not identity — dv.results's order/set doesn't
+// change from a call to this function alone), since row numbers shift
+// once wrapping changes how many rows an item spans.
+func (dv *DatadogLogsView) renderRows() {
+	selectedIdx := -1
+	if row, _ := dv.table.GetSelection(); row > 0 && row < len(dv.rowToIdx) {
+		selectedIdx = dv.rowToIdx[row]
+	}
+
+	for dv.table.GetRowCount() > 1 {
+		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
+	}
+
+	p := dv.host.Config().Colors
+	tsColor := tcell.GetColor(p.Label)
+	textColor := tcell.GetColor(p.Text)
+
+	dv.rowToIdx = make([]int, 1, len(dv.results)+1) // index 0 unused (header)
+	idxToRow := make([]int, len(dv.results))
+
+	row := 1
+	for i, e := range dv.results {
+		idxToRow[i] = row
+		dv.rowToIdx = append(dv.rowToIdx, i)
+
+		preview := logEventPreview(e.Message)
+		lines := []string{preview}
+		if dv.wrap {
+			lines = wrapText(preview, previewWrapWidth)
+		}
+
+		dv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
+		dv.table.SetCell(row, 1, tview.NewTableCell(e.Service).SetTextColor(textColor).SetExpansion(1))
+		dv.table.SetCell(row, 2, tview.NewTableCell(e.Status).SetTextColor(textColor).SetExpansion(1))
+		dv.table.SetCell(row, 3, tview.NewTableCell(lines[0]).SetTextColor(textColor).SetExpansion(4))
+		row++
+
+		for _, extra := range lines[1:] {
+			dv.rowToIdx = append(dv.rowToIdx, i)
+			setContinuationRow(dv.table, row, 4, 3, extra, textColor, 4)
+			row++
+		}
+	}
+
+	if selectedIdx >= 0 && selectedIdx < len(idxToRow) {
+		dv.table.Select(idxToRow[selectedIdx], 0)
+	}
 }
 
 // updateTitle never uses "[text]" — see queues.go's updateTitle for why
