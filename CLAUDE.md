@@ -28,12 +28,27 @@ end-state behavior (see `spec/README.md`). It is not where active work
 happens, and it is not an incremental log: entries get updated in place
 as behavior changes.
 
-Active work happens in `spec-wip/` (see `spec-wip/README.md`). When asked
-to implement a new feature, fix a bug, or change already-shipped behavior
+Active work happens in `spec-wip/` (see `spec-wip/README.md`), on its own
+branch reviewed through a single evolving pull request — opened as a
+**draft** as soon as `spec.md` exists, not held back until everything is
+implemented. This makes each gate document reviewable as a real,
+committed file (via the PR's diff) rather than requiring access to
+wherever the work is physically happening, which matters once work
+happens in an isolated worktree/checkout — e.g. concurrent agents or
+sessions that can't safely share a single working copy. When asked to
+implement a new feature, fix a bug, or change already-shipped behavior
 (not a trivial typo or config tweak), any agent or contributor follows
 this sequence and **stops for feedback at each gate** — do not proceed to
 the next stage until the current one is explicitly approved:
 
+0. **Branch and draft PR.** Create a branch for the change (in an
+   isolated worktree/checkout if the environment supports it — never
+   share a single working copy across concurrent agents/sessions). As
+   soon as `spec.md` (step 1) is written, push the branch and open a
+   **draft** pull request; this is the change's review surface for
+   every remaining gate. Push again after `plan.md` and `tasks.md` land,
+   and after each implementation task, so the PR's diff always reflects
+   the latest approved state.
 1. **Specification.** Write a short spec: what the feature/bug/change is,
    why, scope and explicit out-of-scope. File:
    `spec-wip/NN-fe-<slug>/spec.md` (or `NN-bugfix-`/`NN-cr-`), noting the
@@ -55,8 +70,9 @@ the next stage until the current one is explicitly approved:
    the result into `spec/`: update the relevant `spec/<area>/spec.md` to
    reflect the new end-state behavior (or add a new `spec/<area>/` for a
    genuinely new capability), then delete the `spec-wip/NN-type-slug/`
-   folder. Nothing is lost by deleting it — the PR that shipped the
-   change is the permanent record of what was decided and why.
+   folder and push. Nothing is lost by deleting it — the PR itself is
+   the permanent record of what was decided and why. Mark the PR ready
+   for review (no longer draft) once this is done.
 
 **If anything is unclear** — about scope, approach, or requirements — ask
 the user before proceeding. Do not make assumptions and forge ahead.
