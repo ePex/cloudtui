@@ -20,7 +20,7 @@
    behavior change). Unit test: non-nil `initialTimeRange` sets `sv.tr`
    to that exact value instead of resetting.
 
-3. [ ] Wire it together in `app.OpenLogSearch`: read+clear
+3. [x] Wire it together in `app.OpenLogSearch`: read+clear
    `pendingCloudWatchTimestamp` alongside the pattern, build the
    `±15m` absolute `*ui.TimeRange` when it's non-zero (see plan.md),
    pass it to `logSearchV.Open`. Update/add the app-level tests: seed a
