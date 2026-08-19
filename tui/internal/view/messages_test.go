@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -107,6 +108,186 @@ func TestMessagesViewShortcutsIncludeFilterKeys(t *testing.T) {
 		if !found {
 			t.Errorf("Shortcuts() missing key %q", k)
 		}
+	}
+}
+
+func TestMessagesViewWrapShortcutPresent(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	for _, s := range mv.Shortcuts() {
+		if s.Key == "w" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"w\"")
+}
+
+// longPreview is long enough to wrap into multiple lines regardless of
+// wrap width (these tests never give their table a real SetRect, so
+// dynamicWrapWidth always computes its clamped minimum of 20 here):
+// 20 * len("lorem ") = 120 chars.
+var longPreview = strings.Repeat("lorem ", 20)
+
+func TestMessagesViewWrapProducesContinuationRows(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: longPreview},
+	})
+	if got := mv.table.GetRowCount(); got != 2 { // header + 1, wrap off
+		t.Fatalf("row count with wrap off = %d, want 2", got)
+	}
+
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := mv.table.GetRowCount(); got <= 2 { // header + primary + at least 1 continuation
+		t.Fatalf("row count with wrap on = %d, want > 2 (continuation rows expected)", got)
+	}
+	if got := mv.table.GetCell(1, 5).Text; got == longPreview || got == "" {
+		t.Errorf("primary row preview = %q, want the first (shorter) wrapped line", got)
+	}
+	cont := mv.table.GetCell(2, 5)
+	if got := cont.Text; got == "" {
+		t.Error("continuation row text is empty")
+	}
+	if !cont.NotSelectable {
+		t.Error("continuation row should be non-selectable")
+	}
+	if !mv.table.GetCell(2, 0).NotSelectable {
+		t.Error("continuation row's marker column should also be non-selectable")
+	}
+}
+
+func TestMessagesViewWrapPreservesRealNewlines(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: "first line\nsecond line\nthird line"},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := mv.table.GetCell(1, 5).Text; got != "first line" {
+		t.Errorf("primary row = %q, want %q", got, "first line")
+	}
+	if got := mv.table.GetCell(2, 5).Text; got != "second line" {
+		t.Errorf("continuation row 1 = %q, want %q", got, "second line")
+	}
+	if got := mv.table.GetCell(3, 5).Text; got != "third line" {
+		t.Errorf("continuation row 2 = %q, want %q", got, "third line")
+	}
+}
+
+func TestMessagesViewWrapCapsLinesWithIndicator(t *testing.T) {
+	manyLines := strings.Repeat("line\n", 70)
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: manyLines},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := mv.table.GetRowCount(); got != 1+maxWrapLines { // header + capped lines
+		t.Fatalf("row count = %d, want %d (header + maxWrapLines)", got, 1+maxWrapLines)
+	}
+	lastRow := mv.table.GetCell(maxWrapLines, 5).Text
+	if !strings.Contains(lastRow, "more line(s)") {
+		t.Errorf("last row = %q, want it to contain the truncation indicator", lastRow)
+	}
+}
+
+func TestMessagesViewWrapNavigationSkipsContinuationRows(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(2, 0), Preview: longPreview},
+		{ID: "msg-2", Timestamp: time.Unix(1, 0), Preview: "short"},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	mv.table.Select(1, 0)
+
+	// 'j' must go through InputHandler(), not just the raw capture func:
+	// the capture only remaps 'j' to a KeyDown event: the actual row
+	// movement (and its non-selectable-row-skipping) happens in
+	// tview.Table's own default handling of that KeyDown event, which
+	// GetInputCapture() alone never reaches.
+	mv.table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), func(tview.Primitive) {})
+
+	row, _ := mv.table.GetSelection()
+	if row != mv.idxToRow[1] {
+		t.Errorf("selection after j = %d, want %d (msg-2's primary row, skipping msg-1's continuation row)", row, mv.idxToRow[1])
+	}
+}
+
+func TestMessagesViewWrapSelectedFuncOpensCorrectMessage(t *testing.T) {
+	host := newFakeViewHost()
+	messageFilter := dialog.NewMessageFilter(host)
+	sendMessage := dialog.NewSendMessageOverlay(host)
+	confirm := dialog.NewConfirmDialog(host)
+	movePicker := dialog.NewMovePicker(host)
+	var selected queue.Message
+	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(_ string, m queue.Message) {
+		selected = m
+	})
+	mv.repaint([]queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(2, 0), Preview: longPreview},
+		{ID: "msg-2", Timestamp: time.Unix(1, 0), Preview: "short"},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	mv.table.Select(mv.idxToRow[1], 0)
+	mv.table.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if selected.ID != "msg-2" {
+		t.Errorf("selected message ID = %q, want %q (rowToIdx should offset past msg-1's continuation row)", selected.ID, "msg-2")
+	}
+}
+
+func TestMessagesViewWrapPreservesMarksAcrossToggle(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: longPreview},
+	})
+	mv.table.Select(1, 0)
+	mv.toggleMark()
+	if !mv.marked["msg-1"] {
+		t.Fatal("msg-1 should be marked before toggling wrap")
+	}
+
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if !mv.marked["msg-1"] {
+		t.Error("mark on msg-1 was lost after toggling wrap on")
+	}
+	if got := mv.table.GetCell(1, 0).Text; got != "✓" {
+		t.Errorf("marker cell after wrap toggle = %q, want the mark glyph", got)
+	}
+}
+
+func TestMessagesViewToggleMarkAdvancesPastWrappedItem(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(2, 0), Preview: longPreview},
+		{ID: "msg-2", Timestamp: time.Unix(1, 0), Preview: "short"},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	mv.table.Select(mv.idxToRow[0], 0)
+
+	mv.toggleMark()
+
+	row, _ := mv.table.GetSelection()
+	if row != mv.idxToRow[1] {
+		t.Errorf("selection after marking a wrapped item = %d, want %d (msg-2's primary row)", row, mv.idxToRow[1])
+	}
+}
+
+func TestMessagesViewWrapContextHintReflectsState(t *testing.T) {
+	host, _, _, mv := newTestMessagesView(t)
+	capture := mv.table.GetInputCapture()
+
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	if !strings.Contains(host.contextHint, "wrap: on") {
+		t.Errorf("contextHint after first 'w' = %q, want it to contain \"wrap: on\"", host.contextHint)
+	}
+
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+	if !strings.Contains(host.contextHint, "wrap: off") {
+		t.Errorf("contextHint after second 'w' = %q, want it to contain \"wrap: off\"", host.contextHint)
 	}
 }
 

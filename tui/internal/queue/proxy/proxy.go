@@ -301,6 +301,14 @@ func envelopeErr(errs []apiError) error {
 	return fmt.Errorf("%s: %s", errs[0].Code, errs[0].Message)
 }
 
+// previewMaxLen caps queue.Message.Preview's length — see the Jolokia
+// backend's identical constant (internal/queue/jolokia/messages.go) for
+// why: the full body is already in memory by the time this is applied,
+// so raising it costs nothing per request, and it only needs to be
+// generous enough that the message browser's wrap toggle rarely hits it
+// before its own line cap does.
+const previewMaxLen = 2000
+
 // toQueueMessage converts a proxyMessage into a queue.Message. Prefers
 // the real jmsType mq-proxy reports (the JMS JMSType header) and only
 // falls back to inferring "text"/"other" from body presence when it's
@@ -315,8 +323,8 @@ func toQueueMessage(m proxyMessage) queue.Message {
 	if m.Body != nil {
 		bodyText = *m.Body
 		preview = bodyText
-		if len([]rune(preview)) > 80 {
-			preview = string([]rune(preview)[:80])
+		if len([]rune(preview)) > previewMaxLen {
+			preview = string([]rune(preview)[:previewMaxLen])
 		}
 		if jmsType == "" {
 			jmsType = "text"

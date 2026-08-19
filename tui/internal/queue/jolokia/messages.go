@@ -12,6 +12,16 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
+// previewMaxLen caps queue.Message.Preview's length. The full body is
+// already in memory by the time this is applied — this is a display/
+// memory bound, not a network optimization — so raising it costs
+// nothing per request; it only needs to be generous enough that the
+// message browser's wrap toggle (tui/internal/view, previewWrapWidth /
+// maxWrapLines) rarely hits it before its own line cap does. Found via
+// user feedback (CR 92) that 80 was too aggressive even before wrap
+// existed to reveal more.
+const previewMaxLen = 2000
+
 // BrowseMessages fetches messages from queueName. It tries browseMessages()
 // first (full CompositeData including IDs and timestamps). If that fails (e.g.
 // due to JMX-originated messages whose internal connection ID cannot be
@@ -135,8 +145,8 @@ func (c *Client) browseMessagesFull(ctx context.Context, queueName string) ([]qu
 		preview, _ := m["text"].(string)
 		if preview == "" {
 			preview = "(binary)"
-		} else if len(preview) > 80 {
-			preview = preview[:80]
+		} else if len(preview) > previewMaxLen {
+			preview = preview[:previewMaxLen]
 		}
 
 		messages = append(messages, queue.Message{
@@ -252,8 +262,8 @@ func parseBrowseItem(raw json.RawMessage) queue.Message {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		preview := s
-		if len(preview) > 80 {
-			preview = preview[:80]
+		if len(preview) > previewMaxLen {
+			preview = preview[:previewMaxLen]
 		}
 		return queue.Message{
 			JMSType:   "text",
@@ -289,8 +299,8 @@ func parseBrowseItem(raw json.RawMessage) queue.Message {
 	preview := bodyText
 	if preview == "" {
 		preview = "(binary)"
-	} else if len(preview) > 80 {
-		preview = preview[:80]
+	} else if len(preview) > previewMaxLen {
+		preview = preview[:previewMaxLen]
 	}
 
 	// Merge all typed property maps into one map for the detail view.

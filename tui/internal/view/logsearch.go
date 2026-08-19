@@ -34,6 +34,8 @@ type LogSearchView struct {
 	tr             ui.TimeRange
 	results        []awslogs.LogEvent
 	nextToken      string // "" if no further pages are available
+	wrap           bool   // message column word-wrap toggle
+	rowToIdx       []int  // row -> index into results; index 0 unused (header placeholder)
 }
 
 var _ ui.Themeable = (*LogSearchView)(nil)
@@ -66,12 +68,17 @@ func (sv *LogSearchView) Pattern() string { return sv.pattern }
 func (sv *LogSearchView) TimeRange() ui.TimeRange { return sv.tr }
 
 func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if sv.wrap {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
 		{Key: "r", Description: "refresh"},
 		{Key: "n", Description: "load more"},
 		{Key: "t", Description: "time range"},
 		{Key: "/", Description: "filter pattern"},
+		{Key: "w", Description: "wrap: " + wrap},
 	}
 }
 
@@ -134,6 +141,15 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 			sv.patternInput.SetText(sv.pattern)
 			sv.host.SetFocus(sv.patternInput)
 			return nil
+		case 'w':
+			sv.wrap = !sv.wrap
+			sv.renderRows()
+			lines := make([]string, 0, len(sv.Shortcuts()))
+			for _, sc := range sv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			a.SetContextHint(strings.Join(lines, "\n"))
+			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
@@ -148,7 +164,10 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 	})
 
 	table.SetSelectedFunc(func(row, _ int) {
-		idx := row - 1 // row 0 is the header
+		if row <= 0 || row >= len(sv.rowToIdx) {
+			return
+		}
+		idx := sv.rowToIdx[row]
 		if idx < 0 || idx >= len(sv.results) {
 			return
 		}
@@ -158,17 +177,43 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 	return sv
 }
 
+// logSearchColumns are the results table's columns — see messageColumns'
+// doc comment in messages.go for why header and data cells share this
+// instead of each setting their own Expansion. STREAM's MaxWidth caps a
+// log stream name (frequently a long ARN) from eating space MESSAGE —
+// the actually important column, found live to be visibly too
+// small — needs far more of.
+var logSearchColumns = []struct {
+	label     string
+	expansion int
+	maxWidth  int // 0 = uncapped
+}{
+	{"TIMESTAMP", 1, 0},
+	{"STREAM", 1, 30},
+	{"MESSAGE", 10, 0},
+}
+
+const logSearchMessageColumn = 2 // index into logSearchColumns
+
+// logSearchOtherColumnsWidth estimates every non-MESSAGE column's
+// rendered width — see messagesOtherColumnsWidth in messages.go for
+// what this feeds into (dynamicWrapWidth). TIMESTAMP is never capped
+// since it's always exactly 19 chars ("2006-01-02 15:04:05").
+const logSearchOtherColumnsWidth = 19 /* Timestamp */ +
+	30 /* Stream */ +
+	4 /* inter-column spacing */
+
 func (sv *LogSearchView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
-	for i, label := range []string{"TIMESTAMP", "STREAM", "MESSAGE"} {
+	for i, col := range logSearchColumns {
 		sv.table.SetCell(0, i,
-			tview.NewTableCell(label).
+			tview.NewTableCell(col.label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
 				SetSelectable(false).
-				SetExpansion(1).
+				SetExpansion(col.expansion).
 				SetAlign(tview.AlignCenter))
 	}
 }
@@ -329,19 +374,7 @@ func (sv *LogSearchView) handleLoadMoreResult(events []awslogs.LogEvent, next st
 }
 
 func (sv *LogSearchView) repaint() {
-	for sv.table.GetRowCount() > 1 {
-		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
-	}
-
-	p := sv.host.Config().Colors
-	tsColor := tcell.GetColor(p.Label)
-	textColor := tcell.GetColor(p.Text)
-	for i, e := range sv.results {
-		row := i + 1
-		sv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		sv.table.SetCell(row, 1, tview.NewTableCell(e.LogStream).SetTextColor(textColor).SetExpansion(2))
-		sv.table.SetCell(row, 2, tview.NewTableCell(logEventPreview(e.Message)).SetTextColor(textColor).SetExpansion(4))
-	}
+	sv.renderRows()
 
 	if sv.table.GetRowCount() > 1 {
 		sv.table.Select(1, 0)
@@ -352,6 +385,74 @@ func (sv *LogSearchView) repaint() {
 	}
 
 	sv.updateTitle()
+}
+
+// renderRows rebuilds the table body from sv.results, wrap-aware, without
+// resetting scroll position — unlike repaint (which always jumps to row
+// 1, matching a genuine reload/load-more), this is also called directly
+// by the wrap toggle, which has no reason to reset the user's place in
+// the results. Preserves the currently-selected event across the
+// rebuild (by index, not identity — sv.results's order/set doesn't
+// change from a call to this function alone), since row numbers shift
+// once wrapping changes how many rows an item spans.
+func (sv *LogSearchView) renderRows() {
+	selectedIdx := -1
+	if row, _ := sv.table.GetSelection(); row > 0 && row < len(sv.rowToIdx) {
+		selectedIdx = sv.rowToIdx[row]
+	}
+
+	for sv.table.GetRowCount() > 1 {
+		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
+	}
+
+	p := sv.host.Config().Colors
+	tsColor := tcell.GetColor(p.Label)
+	textColor := tcell.GetColor(p.Text)
+
+	sv.rowToIdx = make([]int, 1, len(sv.results)+1) // index 0 unused (header)
+	idxToRow := make([]int, len(sv.results))
+
+	var wrapWidth int
+	if sv.wrap {
+		wrapWidth = dynamicWrapWidth(sv.table, logSearchOtherColumnsWidth)
+	}
+
+	row := 1
+	for i, e := range sv.results {
+		idxToRow[i] = row
+		sv.rowToIdx = append(sv.rowToIdx, i)
+
+		// Off: logEventPreview's short, single-line, first-line-only
+		// summary. On: wrap the raw, un-truncated event message —
+		// logEventPreview's 200-char/first-line-only cap exists for the
+		// compact off case; wrap's whole purpose is to reveal more than
+		// that, including a multi-line message's later lines (see
+		// wrapMultilineText).
+		var lines []string
+		if sv.wrap {
+			lines = wrapMultilineText(e.Message, wrapWidth, maxWrapLines)
+		} else {
+			lines = []string{logEventPreview(e.Message)}
+		}
+
+		sv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).
+			SetExpansion(logSearchColumns[0].expansion))
+		sv.table.SetCell(row, 1, tview.NewTableCell(e.LogStream).SetTextColor(textColor).
+			SetExpansion(logSearchColumns[1].expansion).SetMaxWidth(logSearchColumns[1].maxWidth))
+		sv.table.SetCell(row, logSearchMessageColumn, tview.NewTableCell(lines[0]).SetTextColor(textColor).
+			SetExpansion(logSearchColumns[logSearchMessageColumn].expansion))
+		row++
+
+		for _, extra := range lines[1:] {
+			sv.rowToIdx = append(sv.rowToIdx, i)
+			setContinuationRow(sv.table, row, len(logSearchColumns), logSearchMessageColumn, extra, textColor, logSearchColumns[logSearchMessageColumn].expansion)
+			row++
+		}
+	}
+
+	if selectedIdx >= 0 && selectedIdx < len(idxToRow) {
+		sv.table.Select(idxToRow[selectedIdx], 0)
+	}
 }
 
 // updateTitle never uses "[text]" — see queues.go's updateTitle for why

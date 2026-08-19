@@ -1,0 +1,146 @@
+package view
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+)
+
+func TestWrapText(t *testing.T) {
+	tests := []struct {
+		name  string
+		s     string
+		width int
+		want  []string
+	}{
+		{"empty string", "", 10, []string{""}},
+		{"all whitespace", "   ", 10, []string{""}},
+		{"fits on one line", "hello world", 20, []string{"hello world"}},
+		{"exact width boundary", "hello world", 11, []string{"hello world"}},
+		{"one char over wraps", "hello world", 10, []string{"hello", "world"}},
+		{"multi-word wrap", "the quick brown fox jumps", 10, []string{"the quick", "brown fox", "jumps"}},
+		{"single word longer than width hard-breaks", "supercalifragilisticexpialidocious", 10, []string{"supercalif", "ragilistic", "expialidoc", "ious"}},
+		{"leading and trailing whitespace trimmed", "  hi there  ", 20, []string{"hi there"}},
+		{"long word mid-stream flushes current line first", "hi supercalifragilisticexpialidocious", 10, []string{"hi", "supercalif", "ragilistic", "expialidoc", "ious"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wrapText(tt.s, tt.width)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("wrapText(%q, %d) = %#v, want %#v", tt.s, tt.width, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWrapTextZeroWidthReturnsUnchanged(t *testing.T) {
+	got := wrapText("hello world", 0)
+	want := []string{"hello world"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("wrapText(_, 0) = %#v, want %#v", got, want)
+	}
+}
+
+func TestWrapMultilineText(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		width    int
+		maxLines int
+		want     []string
+	}{
+		{"single line, no newlines", "hello world", 20, 10, []string{"hello world"}},
+		{
+			"real newlines preserved as separate wrapped lines",
+			"first line\nsecond line here\nthird",
+			10, 10,
+			[]string{"first line", "second", "line here", "third"},
+		},
+		{"\\r\\n normalized to \\n", "one\r\ntwo", 10, 10, []string{"one", "two"}},
+		{"empty line between content preserved", "a\n\nb", 10, 10, []string{"a", "", "b"}},
+		{
+			"truncates at maxLines with an indicator",
+			"one\ntwo\nthree\nfour\nfive",
+			10, 3,
+			[]string{"one", "two", "… 3 more line(s) — see detail for full text"},
+		},
+		{"maxLines <= 0 means unbounded", "one\ntwo\nthree", 10, 0, []string{"one", "two", "three"}},
+		{
+			"exactly maxLines needs no truncation",
+			"one\ntwo\nthree",
+			10, 3,
+			[]string{"one", "two", "three"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wrapMultilineText(tt.s, tt.width, tt.maxLines)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("wrapMultilineText(%q, %d, %d) = %#v, want %#v", tt.s, tt.width, tt.maxLines, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetContinuationRow(t *testing.T) {
+	table := tview.NewTable()
+	setContinuationRow(table, 3, 4, 2, "wrapped text", tcell.ColorWhite, 3)
+
+	for col := 0; col < 4; col++ {
+		if !table.GetCell(3, col).NotSelectable {
+			t.Errorf("column %d: NotSelectable = false, want true", col)
+		}
+	}
+
+	textCell := table.GetCell(3, 2)
+	if got := textCell.Text; got != "wrapped text" {
+		t.Errorf("text column text = %q, want %q", got, "wrapped text")
+	}
+	if got := textCell.Expansion; got != 3 {
+		t.Errorf("text column expansion = %d, want 3", got)
+	}
+
+	for _, col := range []int{0, 1, 3} {
+		if got := table.GetCell(3, col).Text; got != "" {
+			t.Errorf("non-text column %d text = %q, want empty", col, got)
+		}
+	}
+}
+
+func TestDynamicWrapWidth(t *testing.T) {
+	t.Run("clamps to the minimum before the table is laid out", func(t *testing.T) {
+		// A fresh, never-laid-out tview.Box defaults to a small
+		// placeholder size (width 15) — well under any reasonable
+		// otherColumnsWidth, so this exercises the same clamp as a
+		// pathologically narrow real table.
+		table := tview.NewTable()
+		if got := dynamicWrapWidth(table, 50); got != 20 {
+			t.Errorf("dynamicWrapWidth() = %d, want 20 (clamped minimum)", got)
+		}
+	})
+
+	t.Run("computes from the table's real rendered width once laid out", func(t *testing.T) {
+		table := tview.NewTable()
+		table.SetBorder(true)
+		table.SetRect(0, 0, 200, 50)
+		_, _, innerWidth, _ := table.GetInnerRect()
+
+		got := dynamicWrapWidth(table, 50)
+		want := innerWidth - 50
+		if got != want {
+			t.Errorf("dynamicWrapWidth() = %d, want %d (innerWidth %d - otherColumnsWidth 50)", got, want, innerWidth)
+		}
+	})
+
+	t.Run("clamps to a minimum of 20 rather than going unreadably narrow", func(t *testing.T) {
+		table := tview.NewTable()
+		table.SetBorder(true)
+		table.SetRect(0, 0, 60, 50)
+
+		if got := dynamicWrapWidth(table, 1000); got != 20 {
+			t.Errorf("dynamicWrapWidth() = %d, want 20 (clamped minimum)", got)
+		}
+	})
+}
