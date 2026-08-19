@@ -57,7 +57,7 @@ this is a query tool over a high-volume, time-ordered event stream.
   that capped summary — a multi-line event (e.g. a stack trace) wraps
   line-by-line into non-selectable continuation rows below it, each of
   its own lines independently word-wrapped rather than the whole thing
-  flattened into one re-flowed paragraph, up to `maxWrapLines` (15,
+  flattened into one re-flowed paragraph, up to `maxWrapLines` (50,
   `tui/internal/view/wraptext.go`) before a `"… N more line(s)"`
   indicator takes over — protects the list from one very long event
   burying every other result. The wrap width itself is computed from

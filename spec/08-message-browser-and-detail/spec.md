@@ -34,7 +34,7 @@ opened by pressing Enter on a queue row.
    persisted), off by default (spec-origin/92): when on, a preview
    that doesn't fit on one line word-wraps into non-selectable
    continuation rows directly below the message's row, up to
-   `maxWrapLines` (15) — a preview whose wrapping would need more than
+   `maxWrapLines` (50) — a preview whose wrapping would need more than
    that ends with a `"… N more line(s)"` indicator row rather than
    silently truncating with no sign anything was cut, protecting the
    list from one very long preview burying every other message.

@@ -236,7 +236,7 @@ func TestLogSearchViewWrapRevealsContentBeyondLogEventPreviewCap(t *testing.T) {
 }
 
 func TestLogSearchViewWrapCapsLinesWithIndicator(t *testing.T) {
-	manyLines := strings.Repeat("line\n", 30)
+	manyLines := strings.Repeat("line\n", 70)
 	_, _, sv := newTestLogSearchView(t)
 	sv.handleSearchResult([]awslogs.LogEvent{{Message: manyLines}}, "", nil)
 

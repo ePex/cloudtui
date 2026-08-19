@@ -80,7 +80,7 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   (first line only, capped at 200 chars). On, wrapping operates on the
   raw, un-truncated event message — a multi-line event wraps
   line-by-line into non-selectable continuation rows, each of its own
-  lines independently word-wrapped, up to `maxWrapLines` (15) before a
+  lines independently word-wrapped, up to `maxWrapLines` (50) before a
   `"… N more line(s)"` indicator takes over. The wrap width itself is
   computed from the table's actual current rendered width, not a fixed
   number — see `dynamicWrapWidth`'s doc comment / spec/08's

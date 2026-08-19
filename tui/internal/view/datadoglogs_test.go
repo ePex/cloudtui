@@ -387,7 +387,7 @@ func TestDatadogLogsViewWrapRevealsContentBeyondLogEventPreviewCap(t *testing.T)
 }
 
 func TestDatadogLogsViewWrapCapsLinesWithIndicator(t *testing.T) {
-	manyLines := strings.Repeat("line\n", 30)
+	manyLines := strings.Repeat("line\n", 70)
 	_, _, dv := newTestDatadogLogsView(t)
 	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: manyLines}}, false, nil)
 

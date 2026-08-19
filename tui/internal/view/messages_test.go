@@ -175,7 +175,7 @@ func TestMessagesViewWrapPreservesRealNewlines(t *testing.T) {
 }
 
 func TestMessagesViewWrapCapsLinesWithIndicator(t *testing.T) {
-	manyLines := strings.Repeat("line\n", 30)
+	manyLines := strings.Repeat("line\n", 70)
 	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
 		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: manyLines},
 	})

@@ -53,10 +53,15 @@ func dynamicWrapWidth(table *tview.Table, otherColumnsWidth int) int {
 // expand to (see wrapMultilineText) — without this, one very long or
 // heavily multi-line message (a large stack trace, a JSON blob) could
 // produce dozens of continuation rows and bury every other item in the
-// list. 15 is generous enough to show a genuinely useful chunk of a
-// multi-line message while still leaving most of the visible table for
-// other items.
-const maxWrapLines = 15
+// list.
+//
+// 50, not 15: found live (CR 92) against real CloudWatch data that a
+// single HTTP request/response log entry (headers plus a JSON body) is
+// routinely 20-40+ lines on its own — 15 hit the "… N more line(s)"
+// indicator on completely ordinary logging, not just pathological
+// cases. 50 covers that comfortably while still bounding a truly
+// extreme outlier (a multi-KB stack trace or blob).
+const maxWrapLines = 50
 
 // wrapText greedily word-wraps s into lines of at most width runes,
 // breaking on whitespace. A single word longer than width is hard-broken
