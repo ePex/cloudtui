@@ -41,11 +41,14 @@
    narrow your search)"`), shown whenever `sv.nextToken != ""`. Update/
    add the corresponding test(s).
 
-7. [ ] Manual verification against a real AWS CloudWatch log group
+7. [x] Manual verification against a real AWS CloudWatch log group
    (the 3 scenarios in plan.md's "Manual verification" section — no
    pattern still single-page, pattern auto-continues past 1000,
    previously-hidden event is now found without narrowing the time
    range). Record what was actually checked here once done.
+
+   Verified 2026-08-19 by the user against a real AWS profile/log
+   group: confirmed working.
 
 8. [ ] Merge-back: update `spec/17-aws-cloudwatch-logs/spec.md` to
    describe the new end-state pagination behavior (replacing the
