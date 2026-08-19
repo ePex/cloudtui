@@ -31,10 +31,13 @@
    `TestDatadogLogDetailViewGoToCloudWatch*` tests to seed/assert a
    `Timestamp` on the test event.
 
-4. [ ] Manual verification against a real AWS profile + Datadog log
+4. [x] Manual verification against a real AWS profile + Datadog log
    with an old CorrelationID (the 4 scenarios in plan.md's "Manual
    verification" section). Record what was actually checked here once
    done.
+
+   Verified 2026-08-19 by the user against a real AWS profile/Datadog
+   log: confirmed working.
 
 5. [ ] Merge-back: update `spec/19-log-investigation-crosslinks/spec.md`
    to describe the new end-state behavior (timestamp queued alongside
