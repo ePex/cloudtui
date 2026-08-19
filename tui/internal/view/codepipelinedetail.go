@@ -26,6 +26,7 @@ type CodePipelineDetailView struct {
 	host         ui.ViewHost
 	pipelineName string
 	stages       []awscodepipeline.StageStatus
+	wrapNav      ui.TableWrap
 }
 
 var _ ui.Shortcuttable = (*CodePipelineDetailView)(nil)
@@ -42,9 +43,14 @@ func (dv *CodePipelineDetailView) Primitive() tview.Primitive { return dv.table 
 func (dv *CodePipelineDetailView) PipelineName() string       { return dv.pipelineName }
 
 func (dv *CodePipelineDetailView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if dv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "w", Description: "watch/unwatch"},
+		{Key: "W", Description: "wrap: " + wrap},
 		{Key: "Esc", Description: "back"},
 	}
 }
@@ -61,6 +67,10 @@ func NewCodePipelineDetailView(a ui.ViewHost, onBack func()) *CodePipelineDetail
 	dv.setHeader()
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return dv.wrapNav.HandleNav(dv.table, 1, event)
+		}
 		switch event.Rune() {
 		case 'r':
 			dv.load()
@@ -68,10 +78,9 @@ func NewCodePipelineDetailView(a ui.ViewHost, onBack func()) *CodePipelineDetail
 		case 'w':
 			dv.toggleWatch()
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case 'W':
+			dv.wrapNav.Toggle()
+			return nil
 		}
 		switch event.Key() {
 		case tcell.KeyEscape, tcell.KeyBackspace, tcell.KeyBackspace2:

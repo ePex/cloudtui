@@ -17,8 +17,8 @@ Each task is implemented and pushed only after being separately approved.
 5. [x] Wire wrap-around into `tui/internal/view/logsearch.go`.
 6. [x] Wire wrap-around into `tui/internal/view/ssmparams.go`.
 7. [x] Wire wrap-around into `tui/internal/view/secrets.go`.
-8. [ ] Wire wrap-around into `tui/internal/view/codepipelinelist.go`.
-9. [ ] Wire wrap-around into `tui/internal/view/codepipelinedetail.go`.
+8. [x] Wire wrap-around into `tui/internal/view/codepipelinelist.go`.
+9. [x] Wire wrap-around into `tui/internal/view/codepipelinedetail.go`.
 10. [ ] Wire wrap-around into `tui/internal/view/datadoglogs.go` (results
     table only — service/env filter dropdowns are untouched).
 11. [ ] `verify-live`: drive the real TUI against a real broker

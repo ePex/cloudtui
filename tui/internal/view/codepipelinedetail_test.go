@@ -18,7 +18,7 @@ func newTestCodePipelineDetailView(t *testing.T) (*fakeViewHost, *CodePipelineDe
 
 func TestCodePipelineDetailViewShortcuts(t *testing.T) {
 	_, dv := newTestCodePipelineDetailView(t)
-	want := []string{"r", "w", "Esc"}
+	want := []string{"r", "w", "W", "Esc"}
 	got := dv.Shortcuts()
 	if len(got) != len(want) {
 		t.Fatalf("Shortcuts() = %+v, want %d entries", got, len(want))
@@ -62,6 +62,24 @@ func TestCodePipelineDetailViewRenderShowsNeverRunForEmptyStatus(t *testing.T) {
 
 	if got := dv.table.GetCell(1, 1).Text; got != "(never run)" {
 		t.Errorf("status cell = %q, want %q", got, "(never run)")
+	}
+}
+
+func TestCodePipelineDetailViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, dv := newTestCodePipelineDetailView(t)
+	dv.Render([]awscodepipeline.StageStatus{
+		{Name: "Source", Status: "Succeeded"},
+		{Name: "Build", Status: "Succeeded"},
+		{Name: "Deploy", Status: "Succeeded"},
+	})
+	dv.table.Select(3, 0) // last stage row
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := dv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first stage row)", row)
 	}
 }
 

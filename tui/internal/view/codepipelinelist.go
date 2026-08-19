@@ -32,6 +32,7 @@ type CodePipelineListView struct {
 	filter      string
 	all         []awscodepipeline.Pipeline
 	filtered    []awscodepipeline.Pipeline
+	wrapNav     ui.TableWrap
 }
 
 var _ ui.View = (*CodePipelineListView)(nil)
@@ -63,10 +64,15 @@ func (lv *CodePipelineListView) FilterInputs() []tview.Primitive {
 func (lv *CodePipelineListView) Repaint() { lv.repaint(lv.all) }
 
 func (lv *CodePipelineListView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if lv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
 		{Key: "w", Description: "watch/unwatch"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -109,6 +115,10 @@ func NewCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) 
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return lv.wrapNav.HandleNav(lv.table, 1, event)
+		}
 		switch event.Rune() {
 		case 'r':
 			lv.load()
@@ -120,10 +130,9 @@ func NewCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) 
 		case 'w':
 			lv.toggleWatchSelected()
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case 'W':
+			lv.wrapNav.Toggle()
+			return nil
 		}
 		return event
 	})

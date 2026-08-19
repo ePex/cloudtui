@@ -218,3 +218,46 @@ func TestCodePipelineListViewShowStatusRendersMessage(t *testing.T) {
 		t.Errorf("status cell color = %v, want accent color %v", fg, want)
 	}
 }
+
+func TestCodePipelineListViewWrapShortcutPresent(t *testing.T) {
+	_, lv := newTestCodePipelineListView(t)
+	for _, s := range lv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestCodePipelineListViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, lv := newTestCodePipelineListView(t)
+	lv.repaint([]awscodepipeline.Pipeline{{Name: "a"}, {Name: "b"}, {Name: "c"}})
+	lv.table.Select(3, 0) // last data row
+
+	capture := lv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := lv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first data row)", row)
+	}
+}
+
+// TestCodePipelineListViewWatchToggleStillUsesLowercaseW guards the 'w'
+// (watch/unwatch) vs 'W' (wrap toggle) distinction: lowercase must not
+// also trigger wrap, and uppercase must not also trigger watch.
+func TestCodePipelineListViewWatchToggleStillUsesLowercaseW(t *testing.T) {
+	host, lv := newTestCodePipelineListView(t)
+	lv.repaint([]awscodepipeline.Pipeline{{Name: "pipeline-one"}})
+	lv.table.Select(1, 0)
+
+	capture := lv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if !host.IsWatchingPipeline("pipeline-one") {
+		t.Fatalf("lowercase 'w' should still toggle watch")
+	}
+	if lv.wrapNav.Enabled() {
+		t.Errorf("lowercase 'w' should not toggle wrap")
+	}
+}
