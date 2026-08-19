@@ -32,3 +32,18 @@ func StyleDropDown(dd *tview.DropDown, p config.Palette) {
 			Background(tcell.GetColor(p.SelectionBg)),
 	)
 }
+
+// StyleInputFieldAutocomplete applies palette colors to i's autocomplete
+// drop-down so unselected entries are readable against the theme
+// background, matching StyleDropDown's treatment of tview.DropDown.
+func StyleInputFieldAutocomplete(i *tview.InputField, p config.Palette) *tview.InputField {
+	return i.SetAutocompleteStyles(
+		tcell.GetColor(p.Background),
+		tcell.StyleDefault.
+			Foreground(tcell.GetColor(p.Text)).
+			Background(tcell.GetColor(p.Background)),
+		tcell.StyleDefault.
+			Foreground(tcell.GetColor(p.SelectionText)).
+			Background(tcell.GetColor(p.SelectionBg)),
+	)
+}

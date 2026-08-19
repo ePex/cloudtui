@@ -67,6 +67,9 @@ func reapplyTheme(a *App, p config.Palette) {
 	// Logo panel
 	a.logoPanel.SetBackgroundColor(bg)
 
+	// Command prompt's autocomplete drop-down
+	ui.StyleInputFieldAutocomplete(a.prompt, p)
+
 	// Home table
 	views.RepaintHomeTable(a.homeTable, a.homeSections, p.Label, p.Text, p.Border, p.SelectionBg, p.SelectionText)
 	a.homeTable.SetBackgroundColor(bg)
