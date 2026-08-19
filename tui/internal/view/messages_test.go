@@ -121,8 +121,10 @@ func TestMessagesViewWrapShortcutPresent(t *testing.T) {
 	t.Error("Shortcuts() missing key \"w\"")
 }
 
-// longPreview is long enough to wrap into 2 lines at previewWrapWidth (80):
-// 20 * len("lorem ") = 120 chars, wrapping after 13 words (78 chars).
+// longPreview is long enough to wrap into multiple lines regardless of
+// wrap width (these tests never give their table a real SetRect, so
+// dynamicWrapWidth always computes its clamped minimum of 20 here):
+// 20 * len("lorem ") = 120 chars.
 var longPreview = strings.Repeat("lorem ", 20)
 
 func TestMessagesViewWrapProducesContinuationRows(t *testing.T) {

@@ -180,16 +180,30 @@ Backend-specific filter behavior:
   spec-origin/11); its own identical `previewMaxLen` constant (same
   reasoning as the Jolokia backend's).
 - The `w` wrap toggle's helpers (`wrapText`, `wrapMultilineText`,
-  `setContinuationRow`, `previewWrapWidth`, `maxWrapLines`) live in
+  `setContinuationRow`, `dynamicWrapWidth`, `maxWrapLines`) live in
   `tui/internal/view/wraptext.go`, shared with the CloudWatch Logs
   search and Datadog Logs views (spec/17, spec/18) — not specific to
   this view. `wrapMultilineText` is what's actually called when
   wrapping: it splits on the preview's own line breaks first, then
-  word-wraps each of those lines independently to `previewWrapWidth`
-  (fixed at 70, not the table's live rendered column width —
-  recomputing on every terminal resize has no hook in `tview.Table`
-  short of reacting to every `Draw()` call), capping the total at
-  `maxWrapLines`.
+  word-wraps each of those lines independently, capping the total at
+  `maxWrapLines`. The wrap width itself comes from `dynamicWrapWidth`,
+  computed from the table's actual current rendered width
+  (`table.GetInnerRect()`) minus `messagesOtherColumnsWidth` (an
+  estimate of every other column's width, from their `MaxWidth` caps) —
+  not a fixed constant. Two fixed-width constants were tried first (80,
+  then 70) and both eventually proved wrong live: a fixed width can
+  still exceed the *real* remaining space once every other column's
+  actual width is subtracted (this is why `messageColumns`' `TYPE` also
+  got a `MaxWidth` safety cap — otherwise it has no bound at all), and
+  when that happens `tview` silently re-clips individual wrapped lines
+  with its own `…` on top of the intentional line breaks — a confusing
+  double-truncation. This can only be as accurate as `GetInnerRect()` is
+  at the moment `renderRows()` calls it (needs the table laid out by its
+  parent at least once — true in practice by the time a user can press
+  `w` at all), and goes stale relative to a manual terminal resize until
+  the next reload/toggle — the same accepted trade-off a fixed width
+  already had, just tracking the real column far more often now instead
+  of never.
 - Per-column `Expansion`/`MaxWidth` values are defined once, in
   `messageColumns` (`messages.go`) — used by **both** the header row and
   every data row, rather than each setting its own. Found live: with

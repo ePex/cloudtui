@@ -81,9 +81,13 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   raw, un-truncated event message — a multi-line event wraps
   line-by-line into non-selectable continuation rows, each of its own
   lines independently word-wrapped, up to `maxWrapLines` (15) before a
-  `"… N more line(s)"` indicator takes over. The detail view remains
-  the only place with no line cap at all. Only the results table — the
-  Service/Env filter dropdowns keep their own navigation, unaffected.
+  `"… N more line(s)"` indicator takes over. The wrap width itself is
+  computed from the table's actual current rendered width, not a fixed
+  number — see `dynamicWrapWidth`'s doc comment / spec/08's
+  Implementation notes for why a fixed width didn't hold up live. The
+  detail view remains the only place with no line cap at all. Only the
+  results table — the Service/Env filter dropdowns keep their own
+  navigation, unaffected.
 - Column widths aren't equal: **Service** is capped at 20 characters
   (`…` if longer) and gets no extra width on a wider terminal;
   **Message** gets by far the largest share of any extra space — found

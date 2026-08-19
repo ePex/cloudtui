@@ -108,3 +108,39 @@ func TestSetContinuationRow(t *testing.T) {
 		}
 	}
 }
+
+func TestDynamicWrapWidth(t *testing.T) {
+	t.Run("clamps to the minimum before the table is laid out", func(t *testing.T) {
+		// A fresh, never-laid-out tview.Box defaults to a small
+		// placeholder size (width 15) — well under any reasonable
+		// otherColumnsWidth, so this exercises the same clamp as a
+		// pathologically narrow real table.
+		table := tview.NewTable()
+		if got := dynamicWrapWidth(table, 50); got != 20 {
+			t.Errorf("dynamicWrapWidth() = %d, want 20 (clamped minimum)", got)
+		}
+	})
+
+	t.Run("computes from the table's real rendered width once laid out", func(t *testing.T) {
+		table := tview.NewTable()
+		table.SetBorder(true)
+		table.SetRect(0, 0, 200, 50)
+		_, _, innerWidth, _ := table.GetInnerRect()
+
+		got := dynamicWrapWidth(table, 50)
+		want := innerWidth - 50
+		if got != want {
+			t.Errorf("dynamicWrapWidth() = %d, want %d (innerWidth %d - otherColumnsWidth 50)", got, want, innerWidth)
+		}
+	})
+
+	t.Run("clamps to a minimum of 20 rather than going unreadably narrow", func(t *testing.T) {
+		table := tview.NewTable()
+		table.SetBorder(true)
+		table.SetRect(0, 0, 60, 50)
+
+		if got := dynamicWrapWidth(table, 1000); got != 20 {
+			t.Errorf("dynamicWrapWidth() = %d, want 20 (clamped minimum)", got)
+		}
+	})
+}

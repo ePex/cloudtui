@@ -8,33 +8,46 @@ import (
 	"github.com/rivo/tview"
 )
 
-// previewWrapWidth is the fixed line width used to word-wrap a table's
-// free-text column when wrapping is enabled. Fixed rather than derived
-// from the table's live rendered column width, since the latter would
-// need recomputing on every terminal resize — tview.Table gives no hook
-// for that short of reacting to every Draw() call. A fixed width is
-// simpler and resize-safe; the upstream text this wraps is already
-// capped (queue message previews at 80 chars, log message previews at
-// 200 via logEventPreview), so it never produces more than a handful of
-// lines.
+// dynamicWrapWidth computes the wrap width for a table's free-text
+// column from the table's actual current rendered width
+// (table.GetInnerRect()) minus otherColumnsWidth — the caller's best
+// estimate of every other column's width (their known MaxWidth caps, or
+// a fixed content width for an uncapped one like Timestamp) plus a
+// small margin for inter-column spacing.
 //
-// 70, not 80: found live (verify-live, CR 92) that 80 was a no-op for
-// messages.go's PREVIEW column specifically — with every column setting
-// its own Expansion(1) (the bug messageColumns/logSearchColumns/
-// datadogLogsColumns fixed), PREVIEW's actual rendered width was well
-// under 80 in practice (measured ~76 in a 160-column terminal, narrower
-// still at more typical widths), so an exactly 80-char preview against
-// an 80-wide wrap never wrapped — tview kept silently clipping it
-// exactly as before, toggle or not. Once PREVIEW/MESSAGE's own
-// Expansion was raised well above every other column's (see the
-// column-weight tables in messages.go/logsearch.go/datadoglogs.go),
-// the rendered column got wide enough on its own that 70 is a better
-// balance than the narrower 40 first tried: still helps on a narrow
-// terminal, wraps less "unnecessarily" now that the column usually
-// has more room by default. Either way this is a fixed width, so it's
-// never perfectly matched to the live column — that's the accepted
-// resize-safety trade-off, not a bug.
-const previewWrapWidth = 70
+// Earlier attempts used a fixed constant instead (first 80, then 70) —
+// found live (CR 92) that any single fixed number is eventually wrong:
+// too wide and it's a no-op (an exactly-that-length preview never
+// wraps, so tview just keeps clipping it as before); too narrow and it
+// wraps more aggressively than the column actually needs. Worse, a
+// fixed width can still exceed the *real* space left for the free-text
+// column once every other column's actual width is accounted for —
+// tview then silently re-clips individual wrapped lines with its own
+// "…" on top of the intentional line breaks, a confusing
+// double-truncation. Deriving the width from the table's live geometry
+// instead tracks the actual available space directly.
+//
+// This can only be as accurate as GetInnerRect() is at the moment
+// renderRows() calls it, which needs the table to have been laid out by
+// its parent (e.g. a Flex) at least once — in practice this is already
+// true by the time a user can press the wrap key at all, since the view
+// must already be visible (and thus already laid out) to receive that
+// keypress. Since renderRows() only re-runs on a reload or on toggling
+// wrap itself, the computed width can go stale relative to a manual
+// terminal resize until the next one of those — an accepted trade-off,
+// not a bug: tview.Table gives no hook to react to every resize short
+// of every Draw() call. The result is clamped to a minimum of 20 so a
+// pathologically narrow table (or one that hasn't been laid out yet,
+// whose un-laid-out tview.Box defaults to a small placeholder size)
+// never computes something unreadably tiny or negative.
+func dynamicWrapWidth(table *tview.Table, otherColumnsWidth int) int {
+	_, _, tableWidth, _ := table.GetInnerRect()
+	width := tableWidth - otherColumnsWidth
+	if width < 20 {
+		width = 20
+	}
+	return width
+}
 
 // maxWrapLines caps how many lines a single item's wrapped text can
 // expand to (see wrapMultilineText) — without this, one very long or

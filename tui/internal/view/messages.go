@@ -265,7 +265,13 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 // actually trying to read, so — found live — they were consistently
 // eating space PREVIEW needed far more. Expansion alone can't shrink a
 // column below its content's natural width; MaxWidth does (tview clips
-// with the same "…" indicator already used for narrow columns).
+// with the same "…" indicator already used for narrow columns). TYPE's
+// cap (40) is a safety bound rather than a real-world limit — JMS type
+// strings are typically well under it — added only so
+// messagesOtherColumnsWidth (below) has a known worst case to subtract;
+// an uncapped column has no such bound, which is exactly what let
+// PREVIEW's dynamic wrap width still exceed the real available space
+// on messages with a long Type value (found live, CR 92 follow-up).
 var messageColumns = []struct {
 	label     string
 	expansion int
@@ -273,13 +279,26 @@ var messageColumns = []struct {
 }{
 	{"", 0, 0},
 	{"ID", 0, 20},
-	{"TYPE", 1, 0},
+	{"TYPE", 1, 40},
 	{"CORR.ID", 0, 20},
 	{"TIMESTAMP", 1, 0},
 	{"PREVIEW", 10, 0},
 }
 
 const previewColumn = 5 // index into messageColumns
+
+// messagesOtherColumnsWidth estimates every non-PREVIEW column's
+// rendered width — used by dynamicWrapWidth (wraptext.go) to derive how
+// much space is actually left for PREVIEW at render time: each
+// capped column's MaxWidth, plus TIMESTAMP's fixed
+// "2006-01-02 15:04:05" content width (19 — never capped, since it's
+// always exactly that long), plus a margin for inter-column spacing.
+const messagesOtherColumnsWidth = 3 /* marker */ +
+	20 /* ID */ +
+	40 /* Type */ +
+	20 /* Corr.ID */ +
+	19 /* Timestamp */ +
+	8 /* inter-column spacing */
 
 func (mv *MessagesView) setHeader() {
 	p := mv.host.Config().Colors
@@ -441,6 +460,11 @@ func (mv *MessagesView) renderRows() {
 	mv.rowToIdx = make([]int, 1, len(mv.msgs)+1) // index 0 unused (header)
 	mv.idxToRow = make([]int, len(mv.msgs))
 
+	var wrapWidth int
+	if mv.wrap {
+		wrapWidth = dynamicWrapWidth(mv.table, messagesOtherColumnsWidth)
+	}
+
 	row := 1
 	for i, m := range mv.msgs {
 		mv.idxToRow[i] = row
@@ -448,14 +472,14 @@ func (mv *MessagesView) renderRows() {
 
 		lines := []string{m.Preview}
 		if mv.wrap {
-			lines = wrapMultilineText(m.Preview, previewWrapWidth, maxWrapLines)
+			lines = wrapMultilineText(m.Preview, wrapWidth, maxWrapLines)
 		}
 
 		mv.table.SetCell(row, 0, mv.markerCell(mv.marked[m.ID]))
 		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).
 			SetExpansion(messageColumns[1].expansion).SetMaxWidth(messageColumns[1].maxWidth))
 		mv.table.SetCell(row, 2, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).
-			SetExpansion(messageColumns[2].expansion))
+			SetExpansion(messageColumns[2].expansion).SetMaxWidth(messageColumns[2].maxWidth))
 		mv.table.SetCell(row, 3, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).
 			SetExpansion(messageColumns[3].expansion).SetMaxWidth(messageColumns[3].maxWidth))
 		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).

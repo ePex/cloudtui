@@ -195,6 +195,14 @@ var logSearchColumns = []struct {
 
 const logSearchMessageColumn = 2 // index into logSearchColumns
 
+// logSearchOtherColumnsWidth estimates every non-MESSAGE column's
+// rendered width — see messagesOtherColumnsWidth in messages.go for
+// what this feeds into (dynamicWrapWidth). TIMESTAMP is never capped
+// since it's always exactly 19 chars ("2006-01-02 15:04:05").
+const logSearchOtherColumnsWidth = 19 /* Timestamp */ +
+	30 /* Stream */ +
+	4 /* inter-column spacing */
+
 func (sv *LogSearchView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
@@ -404,6 +412,11 @@ func (sv *LogSearchView) renderRows() {
 	sv.rowToIdx = make([]int, 1, len(sv.results)+1) // index 0 unused (header)
 	idxToRow := make([]int, len(sv.results))
 
+	var wrapWidth int
+	if sv.wrap {
+		wrapWidth = dynamicWrapWidth(sv.table, logSearchOtherColumnsWidth)
+	}
+
 	row := 1
 	for i, e := range sv.results {
 		idxToRow[i] = row
@@ -417,7 +430,7 @@ func (sv *LogSearchView) renderRows() {
 		// wrapMultilineText).
 		var lines []string
 		if sv.wrap {
-			lines = wrapMultilineText(e.Message, previewWrapWidth, maxWrapLines)
+			lines = wrapMultilineText(e.Message, wrapWidth, maxWrapLines)
 		} else {
 			lines = []string{logEventPreview(e.Message)}
 		}

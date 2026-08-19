@@ -60,9 +60,12 @@ this is a query tool over a high-volume, time-ordered event stream.
   flattened into one re-flowed paragraph, up to `maxWrapLines` (15,
   `tui/internal/view/wraptext.go`) before a `"… N more line(s)"`
   indicator takes over — protects the list from one very long event
-  burying every other result. The detail view remains the only place
-  with no line cap at all. Not on the log-group list screen (no
-  free-text column there to wrap).
+  burying every other result. The wrap width itself is computed from
+  the table's actual current rendered width, not a fixed number — see
+  `dynamicWrapWidth`'s doc comment / spec/08's Implementation notes for
+  why a fixed width didn't hold up live. The detail view remains the
+  only place with no line cap at all. Not on the log-group list screen
+  (no free-text column there to wrap).
 - Column widths aren't equal: **Stream** is capped at 30 characters
   (`…` if longer — log stream names are frequently long ARNs) and gets
   no extra width on a wider terminal; **Message** gets by far the
