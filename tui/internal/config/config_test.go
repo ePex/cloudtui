@@ -70,11 +70,38 @@ func TestCyberpunkThemePaletteFieldsNonEmpty(t *testing.T) {
 	}
 }
 
+func TestGoforeThemePaletteFieldsNonEmpty(t *testing.T) {
+	p := themeOrFatal(t, "gofore")
+	for _, tc := range []struct{ name, val string }{
+		{"Background", p.Background},
+		{"Border", p.Border},
+		{"Label", p.Label},
+		{"Text", p.Text},
+		{"Value", p.Value},
+		{"Accent", p.Accent},
+		{"SelectionBg", p.SelectionBg},
+		{"SelectionText", p.SelectionText},
+		{"StatusBarBg", p.StatusBarBg},
+		{"StatusBarText", p.StatusBarText},
+	} {
+		if tc.val == "" {
+			t.Errorf("gofore theme palette.%s is empty", tc.name)
+		}
+	}
+}
+
 func TestThemesDiffer(t *testing.T) {
 	dark := themeOrFatal(t, "dark")
 	cp := themeOrFatal(t, "cyberpunk")
+	gf := themeOrFatal(t, "gofore")
 	if reflect.DeepEqual(dark, cp) {
 		t.Error("dark and cyberpunk palettes are identical, want distinct")
+	}
+	if reflect.DeepEqual(dark, gf) {
+		t.Error("dark and gofore palettes are identical, want distinct")
+	}
+	if reflect.DeepEqual(cp, gf) {
+		t.Error("cyberpunk and gofore palettes are identical, want distinct")
 	}
 }
 
@@ -112,7 +139,7 @@ func TestAvailableThemes(t *testing.T) {
 	for _, name := range themes {
 		found[name] = true
 	}
-	for _, want := range []string{"dark", "cyberpunk"} {
+	for _, want := range []string{"dark", "cyberpunk", "gofore"} {
 		if !found[want] {
 			t.Errorf("AvailableThemes() missing %q", want)
 		}
