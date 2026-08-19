@@ -17,17 +17,23 @@ import (
 // 200 via logEventPreview), so it never produces more than a handful of
 // lines.
 //
-// 40, not 80: found live (verify-live, CR 92) that 80 was a no-op for
-// messages.go's PREVIEW column specifically — that column competes with
-// 5 others (marker, ID, Type, Corr.ID, Timestamp), so its actual
-// rendered width is well under 80 in practice (measured ~76 in a
-// 160-column terminal, narrower still at more typical widths).
-// wrapText only wraps text *longer* than the width, so an exactly
-// 80-char preview against an 80-wide wrap never wrapped — tview kept
-// silently clipping it exactly as before, toggle or not. 40 reliably
-// wraps even in a tight column; the cost is wrapping "more than
-// strictly necessary" on a very wide terminal, which is harmless.
-const previewWrapWidth = 40
+// 70, not 80: found live (verify-live, CR 92) that 80 was a no-op for
+// messages.go's PREVIEW column specifically — with every column setting
+// its own Expansion(1) (the bug messageColumns/logSearchColumns/
+// datadogLogsColumns fixed), PREVIEW's actual rendered width was well
+// under 80 in practice (measured ~76 in a 160-column terminal, narrower
+// still at more typical widths), so an exactly 80-char preview against
+// an 80-wide wrap never wrapped — tview kept silently clipping it
+// exactly as before, toggle or not. Once PREVIEW/MESSAGE's own
+// Expansion was raised well above every other column's (see the
+// column-weight tables in messages.go/logsearch.go/datadoglogs.go),
+// the rendered column got wide enough on its own that 70 is a better
+// balance than the narrower 40 first tried: still helps on a narrow
+// terminal, wraps less "unnecessarily" now that the column usually
+// has more room by default. Either way this is a fixed width, so it's
+// never perfectly matched to the live column — that's the accepted
+// resize-safety trade-off, not a bug.
+const previewWrapWidth = 70
 
 // wrapText greedily word-wraps s into lines of at most width runes,
 // breaking on whitespace. A single word longer than width is hard-broken

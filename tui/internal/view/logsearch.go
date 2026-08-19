@@ -177,17 +177,35 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 	return sv
 }
 
+// logSearchColumns are the results table's columns — see messageColumns'
+// doc comment in messages.go for why header and data cells share this
+// instead of each setting their own Expansion. STREAM's MaxWidth caps a
+// log stream name (frequently a long ARN) from eating space MESSAGE —
+// the actually important column, found live to be visibly too
+// small — needs far more of.
+var logSearchColumns = []struct {
+	label     string
+	expansion int
+	maxWidth  int // 0 = uncapped
+}{
+	{"TIMESTAMP", 1, 0},
+	{"STREAM", 1, 30},
+	{"MESSAGE", 10, 0},
+}
+
+const logSearchMessageColumn = 2 // index into logSearchColumns
+
 func (sv *LogSearchView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
-	for i, label := range []string{"TIMESTAMP", "STREAM", "MESSAGE"} {
+	for i, col := range logSearchColumns {
 		sv.table.SetCell(0, i,
-			tview.NewTableCell(label).
+			tview.NewTableCell(col.label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
 				SetSelectable(false).
-				SetExpansion(1).
+				SetExpansion(col.expansion).
 				SetAlign(tview.AlignCenter))
 	}
 }
@@ -397,14 +415,17 @@ func (sv *LogSearchView) renderRows() {
 			lines = wrapText(preview, previewWrapWidth)
 		}
 
-		sv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		sv.table.SetCell(row, 1, tview.NewTableCell(e.LogStream).SetTextColor(textColor).SetExpansion(2))
-		sv.table.SetCell(row, 2, tview.NewTableCell(lines[0]).SetTextColor(textColor).SetExpansion(4))
+		sv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).
+			SetExpansion(logSearchColumns[0].expansion))
+		sv.table.SetCell(row, 1, tview.NewTableCell(e.LogStream).SetTextColor(textColor).
+			SetExpansion(logSearchColumns[1].expansion).SetMaxWidth(logSearchColumns[1].maxWidth))
+		sv.table.SetCell(row, logSearchMessageColumn, tview.NewTableCell(lines[0]).SetTextColor(textColor).
+			SetExpansion(logSearchColumns[logSearchMessageColumn].expansion))
 		row++
 
 		for _, extra := range lines[1:] {
 			sv.rowToIdx = append(sv.rowToIdx, i)
-			setContinuationRow(sv.table, row, 3, 2, extra, textColor, 4)
+			setContinuationRow(sv.table, row, len(logSearchColumns), logSearchMessageColumn, extra, textColor, logSearchColumns[logSearchMessageColumn].expansion)
 			row++
 		}
 	}

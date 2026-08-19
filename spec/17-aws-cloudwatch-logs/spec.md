@@ -58,6 +58,13 @@ this is a query tool over a high-volume, time-ordered event stream.
   detail view is still the only place to see a genuinely multi-line
   event in full. Not on the log-group list screen (no free-text column
   there to wrap).
+- Column widths aren't equal: **Stream** is capped at 30 characters
+  (`…` if longer — log stream names are frequently long ARNs) and gets
+  no extra width on a wider terminal; **Message** gets by far the
+  largest share of any extra space — found live (same issue as
+  spec/08's message browser): with every column claiming equal weight,
+  Message was consistently the most cramped, especially as the
+  terminal widened.
 - Read-only, browse/search-scoped: no log group creation/deletion, no
   metric/subscription filters, no writing, no live tailing/follow mode,
   no multi-log-group search.

@@ -18,7 +18,14 @@ opened by pressing Enter on a queue row.
    loads messages asynchronously.
 2. Table columns: a narrow **mark** column (blank, or `✓` when marked),
    **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first ~80
-   chars of the body).
+   chars of the body). Column widths aren't equal: **ID**/**Corr.ID**
+   are capped at 20 characters (`…` if longer — full values are only
+   ever needed in the Message Detail view, not the list) and get no
+   extra width on a wider terminal; **Preview** gets by far the largest
+   share of any extra space (found live, CR 92: with every column
+   claiming equal weight, **Preview** — the one column actually worth
+   reading in this list — was consistently the most cramped, especially
+   as the terminal widened).
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
 5. **w** toggles word-wrap on the Preview column, per-session (not
@@ -162,12 +169,21 @@ Backend-specific filter behavior:
   `previewWrapWidth`) live in `tui/internal/view/wraptext.go`, shared
   with the CloudWatch Logs search and Datadog Logs views (spec/17,
   spec/18) — not specific to this view. `previewWrapWidth` is fixed at
-  40, not the table's live rendered column width (recomputing on every
+  70, not the table's live rendered column width (recomputing on every
   terminal resize has no hook in `tview.Table` short of reacting to
-  every `Draw()` call) — found live that it needs to be well under a
-  typical rendered column's width to actually trigger: the Preview
-  column here competes with 5 other columns, so its real width is
-  usually much less than the Preview field's own 80-char cap.
+  every `Draw()` call).
+- Per-column `Expansion`/`MaxWidth` values are defined once, in
+  `messageColumns` (`messages.go`) — used by **both** the header row and
+  every data row, rather than each setting its own. Found live: with
+  every column (including the header) independently claiming
+  `Expansion(1)`, `tview.Table` computes a column's effective expansion
+  as the max across every row in it, including the header — so the
+  header's blanket value silently overrode data cells' own (lower, or
+  unset/0) intent. Most visibly, the mark column — which never wants
+  any extra width — grew on resize anyway, since the header row's `""`
+  label cell was still claiming `Expansion(1)`. The equivalent tables
+  live in `logSearchColumns` (`logsearch.go`) and `datadogLogsColumns`
+  (`datadoglogs.go`).
 
 ## Out of scope (deliberate)
 

@@ -250,18 +250,49 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 	return mv
 }
 
+// messageColumns are the messages table's columns, in order — one entry
+// per column index. Header and data cells share this so a column's
+// weight is never set in two places that can drift apart (which is
+// exactly what happened before: the header blanket-set every column to
+// Expansion(1), and since tview.Table computes a column's effective
+// expansion as the max across every row including the header, that
+// silently overrode data cells' own (lower, or unset/0) values — most
+// visibly the marker column, which grew on resize despite never
+// wanting any extra width at all).
+//
+// idColumn/corrIDColumn additionally cap their cells' MaxWidth: a full
+// message ID or correlation UUID is long but rarely what someone's
+// actually trying to read, so — found live — they were consistently
+// eating space PREVIEW needed far more. Expansion alone can't shrink a
+// column below its content's natural width; MaxWidth does (tview clips
+// with the same "…" indicator already used for narrow columns).
+var messageColumns = []struct {
+	label     string
+	expansion int
+	maxWidth  int // 0 = uncapped
+}{
+	{"", 0, 0},
+	{"ID", 0, 20},
+	{"TYPE", 1, 0},
+	{"CORR.ID", 0, 20},
+	{"TIMESTAMP", 1, 0},
+	{"PREVIEW", 10, 0},
+}
+
+const previewColumn = 5 // index into messageColumns
+
 func (mv *MessagesView) setHeader() {
 	p := mv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
 
-	for i, label := range []string{"", "ID", "TYPE", "CORR.ID", "TIMESTAMP", "PREVIEW"} {
+	for i, col := range messageColumns {
 		mv.table.SetCell(0, i,
-			tview.NewTableCell(label).
+			tview.NewTableCell(col.label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
 				SetSelectable(false).
-				SetExpansion(1).
+				SetExpansion(col.expansion).
 				SetAlign(tview.AlignCenter))
 	}
 }
@@ -421,16 +452,21 @@ func (mv *MessagesView) renderRows() {
 		}
 
 		mv.table.SetCell(row, 0, mv.markerCell(mv.marked[m.ID]))
-		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).SetExpansion(2))
-		mv.table.SetCell(row, 2, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).SetExpansion(1))
-		mv.table.SetCell(row, 3, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).SetExpansion(2))
-		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		mv.table.SetCell(row, 5, tview.NewTableCell(lines[0]).SetTextColor(textColor).SetExpansion(3))
+		mv.table.SetCell(row, 1, tview.NewTableCell(m.ID).SetTextColor(idColor).
+			SetExpansion(messageColumns[1].expansion).SetMaxWidth(messageColumns[1].maxWidth))
+		mv.table.SetCell(row, 2, tview.NewTableCell(m.JMSType).SetTextColor(tsColor).
+			SetExpansion(messageColumns[2].expansion))
+		mv.table.SetCell(row, 3, tview.NewTableCell(m.CorrelationID).SetTextColor(idColor).
+			SetExpansion(messageColumns[3].expansion).SetMaxWidth(messageColumns[3].maxWidth))
+		mv.table.SetCell(row, 4, tview.NewTableCell(m.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).
+			SetExpansion(messageColumns[4].expansion))
+		mv.table.SetCell(row, previewColumn, tview.NewTableCell(lines[0]).SetTextColor(textColor).
+			SetExpansion(messageColumns[previewColumn].expansion))
 		row++
 
 		for _, extra := range lines[1:] {
 			mv.rowToIdx = append(mv.rowToIdx, i)
-			setContinuationRow(mv.table, row, 6, 5, extra, textColor, 3)
+			setContinuationRow(mv.table, row, len(messageColumns), previewColumn, extra, textColor, messageColumns[previewColumn].expansion)
 			row++
 		}
 	}

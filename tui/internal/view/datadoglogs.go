@@ -249,17 +249,36 @@ func (dv *DatadogLogsView) Activate() {
 	dv.discoverFacetValues()
 }
 
+// datadogLogsColumns are the results table's columns — see
+// messageColumns' doc comment in messages.go for why header and data
+// cells share this instead of each setting their own Expansion.
+// SERVICE's MaxWidth caps a service name from eating space MESSAGE —
+// the actually important column, found live to be visibly too small
+// with 3 narrow columns competing for it — needs far more of.
+var datadogLogsColumns = []struct {
+	label     string
+	expansion int
+	maxWidth  int // 0 = uncapped
+}{
+	{"TIMESTAMP", 1, 0},
+	{"SERVICE", 1, 20},
+	{"STATUS", 1, 0},
+	{"MESSAGE", 12, 0},
+}
+
+const datadogLogsMessageColumn = 3 // index into datadogLogsColumns
+
 func (dv *DatadogLogsView) setHeader() {
 	p := dv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
-	for i, label := range []string{"TIMESTAMP", "SERVICE", "STATUS", "MESSAGE"} {
+	for i, col := range datadogLogsColumns {
 		dv.table.SetCell(0, i,
-			tview.NewTableCell(label).
+			tview.NewTableCell(col.label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
 				SetSelectable(false).
-				SetExpansion(1).
+				SetExpansion(col.expansion).
 				SetAlign(tview.AlignCenter))
 	}
 }
@@ -507,15 +526,19 @@ func (dv *DatadogLogsView) renderRows() {
 			lines = wrapText(preview, previewWrapWidth)
 		}
 
-		dv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).SetExpansion(1))
-		dv.table.SetCell(row, 1, tview.NewTableCell(e.Service).SetTextColor(textColor).SetExpansion(1))
-		dv.table.SetCell(row, 2, tview.NewTableCell(e.Status).SetTextColor(textColor).SetExpansion(1))
-		dv.table.SetCell(row, 3, tview.NewTableCell(lines[0]).SetTextColor(textColor).SetExpansion(4))
+		dv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).
+			SetExpansion(datadogLogsColumns[0].expansion))
+		dv.table.SetCell(row, 1, tview.NewTableCell(e.Service).SetTextColor(textColor).
+			SetExpansion(datadogLogsColumns[1].expansion).SetMaxWidth(datadogLogsColumns[1].maxWidth))
+		dv.table.SetCell(row, 2, tview.NewTableCell(e.Status).SetTextColor(textColor).
+			SetExpansion(datadogLogsColumns[2].expansion))
+		dv.table.SetCell(row, datadogLogsMessageColumn, tview.NewTableCell(lines[0]).SetTextColor(textColor).
+			SetExpansion(datadogLogsColumns[datadogLogsMessageColumn].expansion))
 		row++
 
 		for _, extra := range lines[1:] {
 			dv.rowToIdx = append(dv.rowToIdx, i)
-			setContinuationRow(dv.table, row, 4, 3, extra, textColor, 4)
+			setContinuationRow(dv.table, row, len(datadogLogsColumns), datadogLogsMessageColumn, extra, textColor, datadogLogsColumns[datadogLogsMessageColumn].expansion)
 			row++
 		}
 	}

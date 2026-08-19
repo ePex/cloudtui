@@ -82,6 +82,13 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   multi-line message — the detail view is still the only place to see
   one in full. Only the results table — the Service/Env filter
   dropdowns keep their own navigation, unaffected.
+- Column widths aren't equal: **Service** is capped at 20 characters
+  (`…` if longer) and gets no extra width on a wider terminal;
+  **Message** gets by far the largest share of any extra space — found
+  live (same issue as spec/08's message browser and spec/17's search
+  screen): with every column claiming equal weight, Message was
+  consistently the most cramped, especially with 3 other columns
+  (Timestamp, Service, Status) competing for the same space.
 - Read-only: no log deletion/archival, no saved views/monitors, no
   writing.
 
