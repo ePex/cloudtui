@@ -164,6 +164,8 @@ func New(cfg config.Config) *App {
 		SetLabel(" :").
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
+	a.prompt.SetAutocompleteFunc(a.promptSuggestions)
+	ui.StyleInputFieldAutocomplete(a.prompt, cfg.Colors)
 
 	tb := ui.NewTopBar(cfg, a.prompt)
 	a.topLeft = tb.Left
@@ -443,6 +445,12 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Rune() {
 	case ':':
 		a.prompt.SetText("")
+		// SetText doesn't itself refresh the autocomplete drop-down (only a
+		// live keystroke does, via InputField's own InputHandler) — without
+		// this, the prompt would show whatever suggestions were current at
+		// SetAutocompleteFunc's wiring time in New() (before a.views was
+		// populated), not the full up-to-date list.
+		a.prompt.Autocomplete()
 		a.topLeft.SwitchToPage("prompt")
 		a.tv.SetFocus(a.prompt)
 		return nil
@@ -485,17 +493,15 @@ func (a *App) onPromptDone(key tcell.Key) {
 	}
 
 	cmd := a.prompt.GetText()
+	for _, pc := range promptCommandTable() {
+		for _, n := range pc.names {
+			if cmd == n {
+				pc.run(a)
+				return
+			}
+		}
+	}
 	switch {
-	case cmd == "q" || cmd == "quit":
-		a.tv.Stop()
-	case cmd == "h" || cmd == "home":
-		a.SwitchTo("home")
-	case cmd == "s" || cmd == "settings":
-		a.SwitchTo("settings")
-	case cmd == "aq" || cmd == "connections":
-		a.connManager.Show()
-	case cmd == "ap" || cmd == "awsprofiles":
-		a.awsProfiles.Show()
 	case strings.HasPrefix(cmd, "theme "):
 		a.switchTheme(strings.TrimPrefix(cmd, "theme "))
 	default:
