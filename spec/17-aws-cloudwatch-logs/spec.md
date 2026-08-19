@@ -1,6 +1,6 @@
 # AWS CloudWatch Logs search
 
-_Condensed from spec/34 — see that folder for the incremental history. Time-range UI superseded by spec/53 — see spec-origin/19-log-investigation-crosslinks for the current shared time-range modal._
+_Condensed from spec/34 — see that folder for the incremental history. Time-range UI superseded by spec/53 — see spec-origin/19-log-investigation-crosslinks for the current shared time-range modal. Pagination behavior updated by spec-origin/90-cr-log-search-pagination._
 
 ## Purpose
 
@@ -28,11 +28,22 @@ this is a query tool over a high-volume, time-ordered event stream.
 - Time range: see spec-origin/19 for the shared time-range modal (`t` key)
   used by this view — Relative presets (15m/1h/4h/1day/2days/3days/7days/
   15days/1month) or an Absolute From/Until range.
-- Results are capped to a single page (a fixed `Limit`, not
-  auto-paginated) — if AWS reports more are available (`NextToken`
-  present), that's surfaced in the title/status rather than silently
-  fetching more pages. Narrowing the pattern or time range is how the
-  user sees fewer, more relevant results.
+- Each `FilterLogEvents` call is capped to a single page (`Limit: 1000`).
+  A **plain browse** (no filter pattern) fetches exactly one page — if
+  AWS reports more are available (`NextToken` present), that's surfaced
+  in the title (`(more available — press n to load more, or narrow your
+  search)`) rather than silently fetching more. A **pattern search**
+  auto-continues fetching further pages itself, up to
+  `maxAutoContinuePages` (10, ~10k events), before falling back to the
+  same title hint — this exists because a specific pattern expresses
+  clear intent to find every match, and silently dropping one behind the
+  1000-event single-page cap defeated that (see
+  spec-origin/90-cr-log-search-pagination for the motivating case: a
+  high-volume window with a pattern match older than the newest 1000
+  events in range). Either way, pressing `n` any time the title shows
+  the hint fetches and appends one more page on top of what's already
+  shown; narrowing the pattern or time range is still the other way to
+  see fewer, more relevant results.
 - Newest events first (`StartFromHead: false`) — investigation starts from
   "what's happening now" and works backward.
 - `Enter` on a result opens a detail view with the full, unwrapped message
@@ -47,8 +58,13 @@ this is a query tool over a high-volume, time-ordered event stream.
 - `tui/internal/awslogs/` (or equivalent): `ListLogGroups(ctx, profile)
   ([]LogGroup, error)` (paginated `DescribeLogGroups`) and
   `FilterEvents(ctx, profile, logGroupName string, start, end time.Time,
-  pattern string) ([]LogEvent, hasMore bool, error)` (single-page
-  `FilterLogEvents`).
+  pattern, nextToken string) ([]LogEvent, next string, error)` (one
+  `FilterLogEvents` page per call; `nextToken`/`next` chain calls
+  together, `next == ""` meaning no further pages).
+- `logSearchView`'s `fetchPages` helper drives `FilterEvents` in a loop
+  (closure-based, no goroutine/UI dependency) to implement both the
+  pattern auto-continue and the `n` manual-load-more paths described
+  above.
 - View type: `logSearchView` (per-log-group search screen) — also the
   jump target for the Datadog correlation-ID lookup, see spec-origin/19.
 

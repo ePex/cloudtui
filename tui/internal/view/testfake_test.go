@@ -40,7 +40,7 @@ type fakeViewHost struct {
 	listSecretsFn            func(ctx context.Context, profile string) ([]awssecrets.Secret, error)
 	revealSecretFn           func(ctx context.Context, profile, name string) (string, bool, error)
 	listLogGroupsFn          func(ctx context.Context, profile string) ([]awslogs.LogGroup, error)
-	filterLogEventsFn        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) ([]awslogs.LogEvent, bool, error)
+	filterLogEventsFn        func(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) ([]awslogs.LogEvent, string, error)
 	searchDatadogLogsFn      func(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) ([]datadoglogs.LogEvent, bool, error)
 	listDatadogFacetValuesFn func(ctx context.Context, cfg config.DatadogConfig, facet string, from, to time.Time) ([]string, error)
 	listPipelinesFn          func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
@@ -144,11 +144,11 @@ func (f *fakeViewHost) ListLogGroups(ctx context.Context, profile string) ([]aws
 	return nil, nil
 }
 
-func (f *fakeViewHost) FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern string) ([]awslogs.LogEvent, bool, error) {
+func (f *fakeViewHost) FilterLogEvents(ctx context.Context, profile, logGroupName string, start, end time.Time, pattern, nextToken string) ([]awslogs.LogEvent, string, error) {
 	if f.filterLogEventsFn != nil {
-		return f.filterLogEventsFn(ctx, profile, logGroupName, start, end, pattern)
+		return f.filterLogEventsFn(ctx, profile, logGroupName, start, end, pattern, nextToken)
 	}
-	return nil, false, nil
+	return nil, "", nil
 }
 
 func (f *fakeViewHost) SearchDatadogLogs(ctx context.Context, cfg config.DatadogConfig, query string, from, to time.Time) ([]datadoglogs.LogEvent, bool, error) {
