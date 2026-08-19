@@ -70,7 +70,7 @@ func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
 func (a *App) OpenLogSearch(logGroupName string) {
 	pattern := a.pendingCloudWatchPattern
 	a.pendingCloudWatchPattern = ""
-	a.logSearchV.Open(logGroupName, pattern)
+	a.logSearchV.Open(logGroupName, pattern, nil)
 	a.pages.SwitchToPage("log-search")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))

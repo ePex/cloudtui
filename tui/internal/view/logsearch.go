@@ -59,6 +59,12 @@ func (sv *LogSearchView) FilterInputs() []tview.Primitive {
 // App.OpenLogSearch consumes a queued CorrelationID jump).
 func (sv *LogSearchView) Pattern() string { return sv.pattern }
 
+// TimeRange returns the currently active time range — exported for the
+// same reason as Pattern: internal/app's tests need to verify a
+// computed range (e.g. spec-origin/91's CorrelationID-jump window)
+// crossed the package boundary correctly.
+func (sv *LogSearchView) TimeRange() ui.TimeRange { return sv.tr }
+
 func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "Esc", Description: "back"},
@@ -168,15 +174,21 @@ func (sv *LogSearchView) setHeader() {
 }
 
 // Open resets the view for a freshly-selected log group and runs the
-// first search with the default time range. initialPattern pre-fills
-// the filter pattern (used when arriving via FE 41's CorrelationID
-// jump from a Datadog log); pass "" for the normal empty-pattern
-// default.
-func (sv *LogSearchView) Open(logGroupName, initialPattern string) {
+// first search. initialPattern pre-fills the filter pattern (used when
+// arriving via FE 41's CorrelationID jump from a Datadog log); pass ""
+// for the normal empty-pattern default. initialTimeRange overrides the
+// usual reset-to-relative-default behavior — pass nil for that default,
+// non-nil (e.g. spec-origin/91's ±15m absolute window centered on the
+// originating Datadog event) to open on that exact range instead.
+func (sv *LogSearchView) Open(logGroupName, initialPattern string, initialTimeRange *ui.TimeRange) {
 	sv.logGroupName = logGroupName
 	sv.pattern = initialPattern
 	sv.patternInput.SetText(initialPattern)
-	sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}
+	if initialTimeRange != nil {
+		sv.tr = *initialTimeRange
+	} else {
+		sv.tr = ui.TimeRange{Mode: ui.TimeRangeRelative, PresetIdx: ui.DefaultPresetIdx}
+	}
 	sv.results = nil
 	sv.nextToken = ""
 	for sv.table.GetRowCount() > 1 {

@@ -12,7 +12,7 @@
    `SetPendingCloudWatchPattern`/seed `pendingCloudWatchPattern`
    directly to also thread a timestamp (even if not yet asserted on).
 
-2. [ ] Give `LogSearchView.Open` a third param, `initialTimeRange
+2. [x] Give `LogSearchView.Open` a third param, `initialTimeRange
    *ui.TimeRange` (`nil` = today's relative-default reset, unchanged);
    add the `TimeRange() ui.TimeRange` exported getter. Update the two
    existing `sv.Open(...)` call sites (`logsearch_test.go`) and the one
