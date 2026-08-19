@@ -168,8 +168,15 @@ func New(cfg config.Config) *App {
 		SetLabel(" :").
 		SetFieldBackgroundColor(tcell.ColorDefault)
 	a.prompt.SetDoneFunc(a.onPromptDone)
-	a.prompt.SetAutocompleteFunc(a.promptSuggestions)
+	// StyleInputFieldAutocomplete must run before SetAutocompleteFunc:
+	// SetAutocompleteFunc eagerly calls Autocomplete(), which lazily builds
+	// and permanently styles the drop-down's internal tview.List using
+	// whatever autocompleteStyles are set at that exact moment — later
+	// Autocomplete() calls only refresh the list's entries, never its
+	// style. Styling first ensures the very first drop-down uses the
+	// theme's colors instead of tview's unreadable built-in defaults.
 	ui.StyleInputFieldAutocomplete(a.prompt, cfg.Colors)
+	a.prompt.SetAutocompleteFunc(a.promptSuggestions)
 
 	tb := ui.NewTopBar(cfg, a.prompt)
 	a.topLeft = tb.Left
