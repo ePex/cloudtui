@@ -294,7 +294,7 @@ func TestBrowseMessagesEmptyJMSTypeWithBodyInfersText(t *testing.T) {
 }
 
 func TestBrowseMessagesPreviewTruncated(t *testing.T) {
-	longBody := strings.Repeat("a", 100)
+	longBody := strings.Repeat("a", previewMaxLen+100)
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"data": []map[string]any{
@@ -309,8 +309,8 @@ func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
-	if len([]rune(msgs[0].Preview)) != 80 {
-		t.Errorf("Preview len = %d, want 80", len([]rune(msgs[0].Preview)))
+	if len([]rune(msgs[0].Preview)) != previewMaxLen {
+		t.Errorf("Preview len = %d, want %d", len([]rune(msgs[0].Preview)), previewMaxLen)
 	}
 }
 

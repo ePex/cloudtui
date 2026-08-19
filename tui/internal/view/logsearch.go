@@ -409,10 +409,17 @@ func (sv *LogSearchView) renderRows() {
 		idxToRow[i] = row
 		sv.rowToIdx = append(sv.rowToIdx, i)
 
-		preview := logEventPreview(e.Message)
-		lines := []string{preview}
+		// Off: logEventPreview's short, single-line, first-line-only
+		// summary. On: wrap the raw, un-truncated event message —
+		// logEventPreview's 200-char/first-line-only cap exists for the
+		// compact off case; wrap's whole purpose is to reveal more than
+		// that, including a multi-line message's later lines (see
+		// wrapMultilineText).
+		var lines []string
 		if sv.wrap {
-			lines = wrapText(preview, previewWrapWidth)
+			lines = wrapMultilineText(e.Message, previewWrapWidth, maxWrapLines)
+		} else {
+			lines = []string{logEventPreview(e.Message)}
 		}
 
 		sv.table.SetCell(row, 0, tview.NewTableCell(e.Timestamp.Local().Format("2006-01-02 15:04:05")).SetTextColor(tsColor).

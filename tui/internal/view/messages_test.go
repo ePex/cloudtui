@@ -154,6 +154,41 @@ func TestMessagesViewWrapProducesContinuationRows(t *testing.T) {
 	}
 }
 
+func TestMessagesViewWrapPreservesRealNewlines(t *testing.T) {
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: "first line\nsecond line\nthird line"},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := mv.table.GetCell(1, 5).Text; got != "first line" {
+		t.Errorf("primary row = %q, want %q", got, "first line")
+	}
+	if got := mv.table.GetCell(2, 5).Text; got != "second line" {
+		t.Errorf("continuation row 1 = %q, want %q", got, "second line")
+	}
+	if got := mv.table.GetCell(3, 5).Text; got != "third line" {
+		t.Errorf("continuation row 2 = %q, want %q", got, "third line")
+	}
+}
+
+func TestMessagesViewWrapCapsLinesWithIndicator(t *testing.T) {
+	manyLines := strings.Repeat("line\n", 30)
+	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
+		{ID: "msg-1", Timestamp: time.Unix(1, 0), Preview: manyLines},
+	})
+	capture := mv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := mv.table.GetRowCount(); got != 1+maxWrapLines { // header + capped lines
+		t.Fatalf("row count = %d, want %d (header + maxWrapLines)", got, 1+maxWrapLines)
+	}
+	lastRow := mv.table.GetCell(maxWrapLines, 5).Text
+	if !strings.Contains(lastRow, "more line(s)") {
+		t.Errorf("last row = %q, want it to contain the truncation indicator", lastRow)
+	}
+}
+
 func TestMessagesViewWrapNavigationSkipsContinuationRows(t *testing.T) {
 	mv := newTestMessagesViewWithMsgs(t, []queue.Message{
 		{ID: "msg-1", Timestamp: time.Unix(2, 0), Preview: longPreview},

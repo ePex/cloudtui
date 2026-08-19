@@ -194,6 +194,64 @@ func TestLogSearchViewWrapProducesContinuationRows(t *testing.T) {
 	}
 }
 
+func TestLogSearchViewWrapPreservesRealNewlines(t *testing.T) {
+	_, _, sv := newTestLogSearchView(t)
+	sv.handleSearchResult([]awslogs.LogEvent{{Message: "first line\nsecond line\nthird line"}}, "", nil)
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := sv.table.GetCell(1, 2).Text; got != "first line" {
+		t.Errorf("primary row = %q, want %q", got, "first line")
+	}
+	if got := sv.table.GetCell(2, 2).Text; got != "second line" {
+		t.Errorf("continuation row 1 = %q, want %q", got, "second line")
+	}
+	if got := sv.table.GetCell(3, 2).Text; got != "third line" {
+		t.Errorf("continuation row 2 = %q, want %q", got, "third line")
+	}
+}
+
+// TestLogSearchViewWrapRevealsContentBeyondLogEventPreviewCap covers
+// the fix behind CR 92's follow-up: wrap now word-wraps the raw event
+// message directly, not logEventPreview's already-200-char-capped,
+// first-line-only summary — so it can reveal a message far longer than
+// that cap once toggled on, which logEventPreview alone (the off-wrap
+// path) never could.
+func TestLogSearchViewWrapRevealsContentBeyondLogEventPreviewCap(t *testing.T) {
+	longMessage := strings.Repeat("word ", 100) // 500 chars, well over logEventPreview's 200-char cap
+	_, _, sv := newTestLogSearchView(t)
+	sv.handleSearchResult([]awslogs.LogEvent{{Message: longMessage}}, "", nil)
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	var combined strings.Builder
+	for row := 1; row < sv.table.GetRowCount(); row++ {
+		combined.WriteString(sv.table.GetCell(row, 2).Text)
+	}
+	if got := combined.Len(); got <= 200 {
+		t.Errorf("combined wrapped text length = %d, want > 200 (logEventPreview's cap)", got)
+	}
+}
+
+func TestLogSearchViewWrapCapsLinesWithIndicator(t *testing.T) {
+	manyLines := strings.Repeat("line\n", 30)
+	_, _, sv := newTestLogSearchView(t)
+	sv.handleSearchResult([]awslogs.LogEvent{{Message: manyLines}}, "", nil)
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := sv.table.GetRowCount(); got != 1+maxWrapLines {
+		t.Fatalf("row count = %d, want %d (header + maxWrapLines)", got, 1+maxWrapLines)
+	}
+	lastRow := sv.table.GetCell(maxWrapLines, 2).Text
+	if !strings.Contains(lastRow, "more line(s)") {
+		t.Errorf("last row = %q, want it to contain the truncation indicator", lastRow)
+	}
+}
+
 func TestLogSearchViewWrapSelectedFuncOpensCorrectEvent(t *testing.T) {
 	host := newFakeViewHost()
 	timeRangeModal := dialog.NewTimeRangeModal(host)

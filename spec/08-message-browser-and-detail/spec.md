@@ -17,22 +17,32 @@ opened by pressing Enter on a queue row.
    **Enter** — the Messages view opens, titled with the queue name, and
    loads messages asynchronously.
 2. Table columns: a narrow **mark** column (blank, or `✓` when marked),
-   **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first ~80
-   chars of the body). Column widths aren't equal: **ID**/**Corr.ID**
-   are capped at 20 characters (`…` if longer — full values are only
-   ever needed in the Message Detail view, not the list) and get no
-   extra width on a wider terminal; **Preview** gets by far the largest
-   share of any extra space (found live, CR 92: with every column
-   claiming equal weight, **Preview** — the one column actually worth
-   reading in this list — was consistently the most cramped, especially
-   as the terminal widened).
+   **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first
+   2000 chars of the body — plenty for the vast majority of messages;
+   the full body is what's already fetched, so this bound is a display/
+   memory cap, not a network one). Column widths aren't equal:
+   **ID**/**Corr.ID** are capped at 20 characters (`…` if longer — full
+   values are only ever needed in the Message Detail view, not the
+   list) and get no extra width on a wider terminal; **Preview** gets
+   by far the largest share of any extra space (found live, CR 92: with
+   every column claiming equal weight, **Preview** — the one column
+   actually worth reading in this list — was consistently the most
+   cramped, especially as the terminal widened).
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
 5. **w** toggles word-wrap on the Preview column, per-session (not
    persisted), off by default (spec-origin/92): when on, a preview
-   that doesn't fit on one line wraps into non-selectable continuation
-   rows directly below the message's row — `tview.Table`'s own
-   up/down navigation already skips non-selectable rows (the same
+   that doesn't fit on one line word-wraps into non-selectable
+   continuation rows directly below the message's row, up to
+   `maxWrapLines` (15) — a preview whose wrapping would need more than
+   that ends with a `"… N more line(s)"` indicator row rather than
+   silently truncating with no sign anything was cut, protecting the
+   list from one very long preview burying every other message.
+   Wrapping preserves the preview's own line breaks — a multi-line body
+   (e.g. formatted XML/JSON, a stack trace pasted into a text message)
+   wraps line-by-line rather than being flattened into one re-flowed
+   paragraph, so it still reads as its original structure. `tview.Table`'s
+   own up/down navigation already skips non-selectable rows (the same
    mechanism the header row uses), so `j`/`k`/arrow navigation, marks,
    and `Enter` all keep landing on the right message with no special
    handling. Unlike a genuine reload, toggling wrap does **not** clear
@@ -162,16 +172,24 @@ Backend-specific filter behavior:
 - `internal/app/message_detail.go` — `messageDetailView`, registered as
   page `"message-detail"` (not in `a.views`).
 - `internal/queue/jolokia/` — `BrowseMessages` implementation and
-  `filter.go`'s `filterMessages` helper.
+  `filter.go`'s `filterMessages` helper. `previewMaxLen` (2000) is the
+  jolokia-package-local constant capping `Preview`'s length — the full
+  body is already in memory by the time it's applied, so this is a
+  display/memory bound, not a network one.
 - `internal/queue/proxy/` — `BrowseMessages` implementation (see
-  spec-origin/11).
-- The `w` wrap toggle's helpers (`wrapText`, `setContinuationRow`,
-  `previewWrapWidth`) live in `tui/internal/view/wraptext.go`, shared
-  with the CloudWatch Logs search and Datadog Logs views (spec/17,
-  spec/18) — not specific to this view. `previewWrapWidth` is fixed at
-  70, not the table's live rendered column width (recomputing on every
-  terminal resize has no hook in `tview.Table` short of reacting to
-  every `Draw()` call).
+  spec-origin/11); its own identical `previewMaxLen` constant (same
+  reasoning as the Jolokia backend's).
+- The `w` wrap toggle's helpers (`wrapText`, `wrapMultilineText`,
+  `setContinuationRow`, `previewWrapWidth`, `maxWrapLines`) live in
+  `tui/internal/view/wraptext.go`, shared with the CloudWatch Logs
+  search and Datadog Logs views (spec/17, spec/18) — not specific to
+  this view. `wrapMultilineText` is what's actually called when
+  wrapping: it splits on the preview's own line breaks first, then
+  word-wraps each of those lines independently to `previewWrapWidth`
+  (fixed at 70, not the table's live rendered column width —
+  recomputing on every terminal resize has no hook in `tview.Table`
+  short of reacting to every `Draw()` call), capping the total at
+  `maxWrapLines`.
 - Per-column `Expansion`/`MaxWidth` values are defined once, in
   `messageColumns` (`messages.go`) — used by **both** the header row and
   every data row, rather than each setting its own. Found live: with

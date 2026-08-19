@@ -347,6 +347,62 @@ func TestDatadogLogsViewWrapProducesContinuationRows(t *testing.T) {
 	}
 }
 
+func TestDatadogLogsViewWrapPreservesRealNewlines(t *testing.T) {
+	_, _, dv := newTestDatadogLogsView(t)
+	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: "first line\nsecond line\nthird line"}}, false, nil)
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := dv.table.GetCell(1, 3).Text; got != "first line" {
+		t.Errorf("primary row = %q, want %q", got, "first line")
+	}
+	if got := dv.table.GetCell(2, 3).Text; got != "second line" {
+		t.Errorf("continuation row 1 = %q, want %q", got, "second line")
+	}
+	if got := dv.table.GetCell(3, 3).Text; got != "third line" {
+		t.Errorf("continuation row 2 = %q, want %q", got, "third line")
+	}
+}
+
+// TestDatadogLogsViewWrapRevealsContentBeyondLogEventPreviewCap covers
+// the fix behind CR 92's follow-up: wrap now word-wraps the raw event
+// message directly, not logEventPreview's already-200-char-capped,
+// first-line-only summary.
+func TestDatadogLogsViewWrapRevealsContentBeyondLogEventPreviewCap(t *testing.T) {
+	longMessage := strings.Repeat("word ", 100) // 500 chars, well over logEventPreview's 200-char cap
+	_, _, dv := newTestDatadogLogsView(t)
+	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: longMessage}}, false, nil)
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	var combined strings.Builder
+	for row := 1; row < dv.table.GetRowCount(); row++ {
+		combined.WriteString(dv.table.GetCell(row, 3).Text)
+	}
+	if got := combined.Len(); got <= 200 {
+		t.Errorf("combined wrapped text length = %d, want > 200 (logEventPreview's cap)", got)
+	}
+}
+
+func TestDatadogLogsViewWrapCapsLinesWithIndicator(t *testing.T) {
+	manyLines := strings.Repeat("line\n", 30)
+	_, _, dv := newTestDatadogLogsView(t)
+	dv.handleSearchResult([]datadoglogs.LogEvent{{Message: manyLines}}, false, nil)
+
+	capture := dv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
+
+	if got := dv.table.GetRowCount(); got != 1+maxWrapLines {
+		t.Fatalf("row count = %d, want %d (header + maxWrapLines)", got, 1+maxWrapLines)
+	}
+	lastRow := dv.table.GetCell(maxWrapLines, 3).Text
+	if !strings.Contains(lastRow, "more line(s)") {
+		t.Errorf("last row = %q, want it to contain the truncation indicator", lastRow)
+	}
+}
+
 func TestDatadogLogsViewWrapSelectedFuncOpensCorrectEvent(t *testing.T) {
 	host := newFakeViewHost()
 	timeRangeModal := dialog.NewTimeRangeModal(host)

@@ -51,13 +51,18 @@ this is a query tool over a high-volume, time-ordered event stream.
   the clipboard (nothing is masked here, so no reveal-gating).
 - The search screen's results table supports `w` (spec-origin/92): a
   per-session (not persisted) word-wrap toggle on the Message column,
-  off by default. The Message column already shows only the first line
-  of a multi-line event, capped at 200 chars (`logEventPreview`) —
-  wrapping doesn't reveal more of a multi-line message, only the part
-  that would otherwise be clipped by the column's rendered width; the
-  detail view is still the only place to see a genuinely multi-line
-  event in full. Not on the log-group list screen (no free-text column
-  there to wrap).
+  off by default. Off, the Message column shows `logEventPreview`'s
+  compact single-line summary — first line only, capped at 200 chars.
+  On, wrapping operates on the **raw, un-truncated** event message, not
+  that capped summary — a multi-line event (e.g. a stack trace) wraps
+  line-by-line into non-selectable continuation rows below it, each of
+  its own lines independently word-wrapped rather than the whole thing
+  flattened into one re-flowed paragraph, up to `maxWrapLines` (15,
+  `tui/internal/view/wraptext.go`) before a `"… N more line(s)"`
+  indicator takes over — protects the list from one very long event
+  burying every other result. The detail view remains the only place
+  with no line cap at all. Not on the log-group list screen (no
+  free-text column there to wrap).
 - Column widths aren't equal: **Stream** is capped at 30 characters
   (`…` if longer — log stream names are frequently long ARNs) and gets
   no extra width on a wider terminal; **Message** gets by far the

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -34,6 +35,15 @@ import (
 // never perfectly matched to the live column — that's the accepted
 // resize-safety trade-off, not a bug.
 const previewWrapWidth = 70
+
+// maxWrapLines caps how many lines a single item's wrapped text can
+// expand to (see wrapMultilineText) — without this, one very long or
+// heavily multi-line message (a large stack trace, a JSON blob) could
+// produce dozens of continuation rows and bury every other item in the
+// list. 15 is generous enough to show a genuinely useful chunk of a
+// multi-line message while still leaving most of the visible table for
+// other items.
+const maxWrapLines = 15
 
 // wrapText greedily word-wraps s into lines of at most width runes,
 // breaking on whitespace. A single word longer than width is hard-broken
@@ -86,6 +96,32 @@ func wrapText(s string, width int) []string {
 	}
 
 	return lines
+}
+
+// wrapMultilineText word-wraps s to width, respecting s's own existing
+// line breaks — each of s's original lines is word-wrapped
+// independently, rather than s being flattened into one continuous
+// paragraph and re-flowed. This matters for genuinely multi-line
+// content (a stack trace, a formatted payload): flattening it would
+// jumble separate lines together, losing exactly the structure that
+// makes it readable. \r\n is normalized to \n first.
+//
+// Returns at most maxLines lines (maxLines <= 0 means unbounded): if
+// wrapping would produce more, the result is truncated to maxLines-1
+// real lines plus a final "… N more line(s)" indicator, rather than
+// silently cutting off content with no sign anything was omitted.
+func wrapMultilineText(s string, width, maxLines int) []string {
+	rawLines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	var all []string
+	for _, rl := range rawLines {
+		all = append(all, wrapText(rl, width)...)
+	}
+	if maxLines <= 0 || len(all) <= maxLines {
+		return all
+	}
+	kept := all[:maxLines-1]
+	remaining := len(all) - len(kept)
+	return append(kept, fmt.Sprintf("… %d more line(s) — see detail for full text", remaining))
 }
 
 // setContinuationRow writes a non-selectable row at rowIdx: text in

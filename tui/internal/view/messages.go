@@ -448,7 +448,7 @@ func (mv *MessagesView) renderRows() {
 
 		lines := []string{m.Preview}
 		if mv.wrap {
-			lines = wrapText(m.Preview, previewWrapWidth)
+			lines = wrapMultilineText(m.Preview, previewWrapWidth, maxWrapLines)
 		}
 
 		mv.table.SetCell(row, 0, mv.markerCell(mv.marked[m.ID]))

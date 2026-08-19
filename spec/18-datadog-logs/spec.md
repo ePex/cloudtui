@@ -75,13 +75,15 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
 - The results table supports `w` (spec-origin/92): a per-session (not
   persisted) word-wrap toggle on the Message column, off by default —
   same shape as CloudWatch Logs search's toggle (spec/17), sharing the
-  same underlying helper (`tui/internal/view/wraptext.go`). The Message
-  column already shows only the first line of a multi-line event,
-  capped at 200 chars (`logEventPreview`); wrapping only reveals what
-  the column's rendered width would otherwise clip, not more of a
-  multi-line message — the detail view is still the only place to see
-  one in full. Only the results table — the Service/Env filter
-  dropdowns keep their own navigation, unaffected.
+  same underlying helpers (`tui/internal/view/wraptext.go`). Off, the
+  Message column shows `logEventPreview`'s compact single-line summary
+  (first line only, capped at 200 chars). On, wrapping operates on the
+  raw, un-truncated event message — a multi-line event wraps
+  line-by-line into non-selectable continuation rows, each of its own
+  lines independently word-wrapped, up to `maxWrapLines` (15) before a
+  `"… N more line(s)"` indicator takes over. The detail view remains
+  the only place with no line cap at all. Only the results table — the
+  Service/Env filter dropdowns keep their own navigation, unaffected.
 - Column widths aren't equal: **Service** is capped at 20 characters
   (`…` if longer) and gets no extra width on a wider terminal;
   **Message** gets by far the largest share of any extra space — found
