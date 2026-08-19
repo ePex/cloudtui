@@ -53,7 +53,7 @@ When switching views, focus goes to `view.Primitive()` (the view's own root prim
 
 ## Theming
 
-A `config.yaml` file (gitignored; `config.example.yaml` documents the schema) controls the active palette. Two built-in themes ship: **dark** (navy background, orange labels, cyan values, pink/magenta key-binding accents, teal list selection, orange status bar) and **cyberpunk** (near-black background, neon yellow `#FFE400` primary accent, neon pink/magenta `#FF003C` secondary, electric cyan `#00D4FF` labels, neon yellow selection highlight). The app runs with no `config.yaml` present at all — built-in defaults apply. See spec-origin/04-theming for the full theme-loading mechanism (themes moved from hardcoded Go functions to embedded YAML files in a later revision).
+A `config.yaml` file (gitignored; `config.example.yaml` documents the schema) controls the active palette. Three built-in themes ship: **dark** (navy background, orange labels, cyan values, pink/magenta key-binding accents, teal list selection, orange status bar), **cyberpunk** (near-black background, neon yellow `#FFE400` primary accent, neon pink/magenta `#FF003C` secondary, electric cyan `#00D4FF` labels, neon yellow selection highlight), and **gofore** (Gofore brand palette: Deep Blue `#0F3D51` background, Gofore Orange `#F7673B` labels, Digital Blue `#00819D` borders/selection, Code Blue `#44C2DE` values, Salmon Byte `#FFA572` accent). The app runs with no `config.yaml` present at all — built-in defaults apply. See spec-origin/04-theming for the full theme-loading mechanism (themes moved from hardcoded Go functions to embedded YAML files in a later revision).
 
 ## Help modal
 
