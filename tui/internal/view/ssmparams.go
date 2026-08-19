@@ -29,6 +29,7 @@ type SSMParamsView struct {
 	filter      string
 	all         []awsssm.Parameter // full unfiltered list from last load
 	filtered    []awsssm.Parameter // currently displayed subset, row-indexed
+	wrapNav     ui.TableWrap
 }
 
 var _ ui.View = (*SSMParamsView)(nil)
@@ -55,9 +56,14 @@ func (pv *SSMParamsView) FilterInputs() []tview.Primitive {
 }
 
 func (pv *SSMParamsView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if pv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -100,6 +106,14 @@ func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSM
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return pv.wrapNav.HandleNav(pv.table, 1, event)
+		}
+		if event.Rune() == 'W' {
+			pv.wrapNav.Toggle()
+			return nil
+		}
 		switch event.Rune() {
 		case 'r':
 			pv.load()
@@ -108,10 +122,6 @@ func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSM
 			pv.filterInput.SetText(pv.filter)
 			pv.host.SetFocus(pv.filterInput)
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
 	})

@@ -92,6 +92,30 @@ func TestSecretsViewRepaintPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestSecretsViewWrapShortcutPresent(t *testing.T) {
+	_, sv := newTestSecretsView(t)
+	for _, s := range sv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestSecretsViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, sv := newTestSecretsView(t)
+	sv.repaint([]awssecrets.Secret{{Name: "/a"}, {Name: "/b"}, {Name: "/c"}})
+	sv.table.Select(3, 0) // last data row
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := sv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first data row)", row)
+	}
+}
+
 func TestSecretsViewRepaintShowsDashForNoLastChanged(t *testing.T) {
 	_, sv := newTestSecretsView(t)
 

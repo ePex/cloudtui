@@ -28,6 +28,7 @@ type SecretsView struct {
 	filter      string
 	all         []awssecrets.Secret // full unfiltered list from last load
 	filtered    []awssecrets.Secret // currently displayed subset, row-indexed
+	wrapNav     ui.TableWrap
 }
 
 var _ ui.View = (*SecretsView)(nil)
@@ -54,9 +55,14 @@ func (sv *SecretsView) FilterInputs() []tview.Primitive {
 }
 
 func (sv *SecretsView) Shortcuts() []ui.Shortcut {
+	wrap := "off"
+	if sv.wrapNav.Enabled() {
+		wrap = "on"
+	}
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "W", Description: "wrap: " + wrap},
 	}
 }
 
@@ -99,6 +105,14 @@ func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *Sec
 	})
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' || event.Rune() == 'k' ||
+			event.Key() == tcell.KeyDown || event.Key() == tcell.KeyUp {
+			return sv.wrapNav.HandleNav(sv.table, 1, event)
+		}
+		if event.Rune() == 'W' {
+			sv.wrapNav.Toggle()
+			return nil
+		}
 		switch event.Rune() {
 		case 'r':
 			sv.load()
@@ -107,10 +121,6 @@ func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *Sec
 			sv.filterInput.SetText(sv.filter)
 			sv.host.SetFocus(sv.filterInput)
 			return nil
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
 	})

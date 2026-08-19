@@ -88,6 +88,30 @@ func TestSSMParamsViewRepaintPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestSSMParamsViewWrapShortcutPresent(t *testing.T) {
+	_, pv := newTestSSMParamsView(t)
+	for _, s := range pv.Shortcuts() {
+		if s.Key == "W" {
+			return
+		}
+	}
+	t.Error("Shortcuts() missing key \"W\"")
+}
+
+func TestSSMParamsViewWrapTogglesAtBottomEdge(t *testing.T) {
+	_, pv := newTestSSMParamsView(t)
+	pv.repaint([]awsssm.Parameter{{Name: "/a"}, {Name: "/b"}, {Name: "/c"}})
+	pv.table.Select(3, 0) // last data row
+
+	capture := pv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'W', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+
+	if row, _ := pv.table.GetSelection(); row != 1 {
+		t.Errorf("selection after wrap = %d, want 1 (wrapped to first data row)", row)
+	}
+}
+
 func TestSSMParamsViewRepaintShowsDashForNoLastModified(t *testing.T) {
 	_, pv := newTestSSMParamsView(t)
 
