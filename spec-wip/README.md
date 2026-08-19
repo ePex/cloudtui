@@ -8,7 +8,7 @@ development — work happens here first.
 Naming: `NN-<type>-<slug>/`, where `<type>` is `fe` (feature), `bugfix`,
 or `cr` (change request) — same convention `spec/` used to use. `NN` is a
 single running counter, continuing from the old `spec/` counter's last
-value (**next number: 92**) rather than restarting at 1 — this keeps every
+value (**next number: 93**) rather than restarting at 1 — this keeps every
 folder name that has ever existed in this repo unique, even after a
 `spec-wip/` folder is deleted post-merge. Never reset, never reused.
 

@@ -13,8 +13,8 @@ import (
 // ShortcutPanelRows is the maximum number of shortcut lines any view shows
 // — bump this whenever a view's Shortcuts() grows past it, or entries
 // silently clip off the bottom of the context panel (the top bar's height
-// is fixed, not scrollable). Currently messagesView, at 11.
-const ShortcutPanelRows = 11
+// is fixed, not scrollable). Currently messagesView, at 12.
+const ShortcutPanelRows = 12
 
 // TopBar is the app's top row: a "info"/"prompt" Pages on the left
 // (connection info, replaced by the command prompt while active),

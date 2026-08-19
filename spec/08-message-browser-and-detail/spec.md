@@ -17,10 +17,38 @@ opened by pressing Enter on a queue row.
    **Enter** — the Messages view opens, titled with the queue name, and
    loads messages asynchronously.
 2. Table columns: a narrow **mark** column (blank, or `✓` when marked),
-   **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first ~80
-   chars of the body).
+   **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first
+   2000 chars of the body — plenty for the vast majority of messages;
+   the full body is what's already fetched, so this bound is a display/
+   memory cap, not a network one). Column widths aren't equal:
+   **ID**/**Corr.ID** are capped at 20 characters (`…` if longer — full
+   values are only ever needed in the Message Detail view, not the
+   list) and get no extra width on a wider terminal; **Preview** gets
+   by far the largest share of any extra space (found live, CR 92: with
+   every column claiming equal weight, **Preview** — the one column
+   actually worth reading in this list — was consistently the most
+   cramped, especially as the terminal widened).
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
+5. **w** toggles word-wrap on the Preview column, per-session (not
+   persisted), off by default (spec-origin/92): when on, a preview
+   that doesn't fit on one line word-wraps into non-selectable
+   continuation rows directly below the message's row, up to
+   `maxWrapLines` (50) — a preview whose wrapping would need more than
+   that ends with a `"… N more line(s)"` indicator row rather than
+   silently truncating with no sign anything was cut, protecting the
+   list from one very long preview burying every other message.
+   Wrapping preserves the preview's own line breaks — a multi-line body
+   (e.g. formatted XML/JSON, a stack trace pasted into a text message)
+   wraps line-by-line rather than being flattened into one re-flowed
+   paragraph, so it still reads as its original structure. `tview.Table`'s
+   own up/down navigation already skips non-selectable rows (the same
+   mechanism the header row uses), so `j`/`k`/arrow navigation, marks,
+   and `Enter` all keep landing on the right message with no special
+   handling. Unlike a genuine reload, toggling wrap does **not** clear
+   marks or reset scroll position — it only re-renders the current
+   rows, since a purely cosmetic toggle has no logical reason to
+   invalidate either.
 
 Multi-select, independent of the table cursor:
 
@@ -144,9 +172,50 @@ Backend-specific filter behavior:
 - `internal/app/message_detail.go` — `messageDetailView`, registered as
   page `"message-detail"` (not in `a.views`).
 - `internal/queue/jolokia/` — `BrowseMessages` implementation and
-  `filter.go`'s `filterMessages` helper.
+  `filter.go`'s `filterMessages` helper. `previewMaxLen` (2000) is the
+  jolokia-package-local constant capping `Preview`'s length — the full
+  body is already in memory by the time it's applied, so this is a
+  display/memory bound, not a network one.
 - `internal/queue/proxy/` — `BrowseMessages` implementation (see
-  spec-origin/11).
+  spec-origin/11); its own identical `previewMaxLen` constant (same
+  reasoning as the Jolokia backend's).
+- The `w` wrap toggle's helpers (`wrapText`, `wrapMultilineText`,
+  `setContinuationRow`, `dynamicWrapWidth`, `maxWrapLines`) live in
+  `tui/internal/view/wraptext.go`, shared with the CloudWatch Logs
+  search and Datadog Logs views (spec/17, spec/18) — not specific to
+  this view. `wrapMultilineText` is what's actually called when
+  wrapping: it splits on the preview's own line breaks first, then
+  word-wraps each of those lines independently, capping the total at
+  `maxWrapLines`. The wrap width itself comes from `dynamicWrapWidth`,
+  computed from the table's actual current rendered width
+  (`table.GetInnerRect()`) minus `messagesOtherColumnsWidth` (an
+  estimate of every other column's width, from their `MaxWidth` caps) —
+  not a fixed constant. Two fixed-width constants were tried first (80,
+  then 70) and both eventually proved wrong live: a fixed width can
+  still exceed the *real* remaining space once every other column's
+  actual width is subtracted (this is why `messageColumns`' `TYPE` also
+  got a `MaxWidth` safety cap — otherwise it has no bound at all), and
+  when that happens `tview` silently re-clips individual wrapped lines
+  with its own `…` on top of the intentional line breaks — a confusing
+  double-truncation. This can only be as accurate as `GetInnerRect()` is
+  at the moment `renderRows()` calls it (needs the table laid out by its
+  parent at least once — true in practice by the time a user can press
+  `w` at all), and goes stale relative to a manual terminal resize until
+  the next reload/toggle — the same accepted trade-off a fixed width
+  already had, just tracking the real column far more often now instead
+  of never.
+- Per-column `Expansion`/`MaxWidth` values are defined once, in
+  `messageColumns` (`messages.go`) — used by **both** the header row and
+  every data row, rather than each setting its own. Found live: with
+  every column (including the header) independently claiming
+  `Expansion(1)`, `tview.Table` computes a column's effective expansion
+  as the max across every row in it, including the header — so the
+  header's blanket value silently overrode data cells' own (lower, or
+  unset/0) intent. Most visibly, the mark column — which never wants
+  any extra width — grew on resize anyway, since the header row's `""`
+  label cell was still claiming `Expansion(1)`. The equivalent tables
+  live in `logSearchColumns` (`logsearch.go`) and `datadogLogsColumns`
+  (`datadoglogs.go`).
 
 ## Out of scope (deliberate)
 

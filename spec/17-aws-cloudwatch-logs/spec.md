@@ -49,6 +49,30 @@ this is a query tool over a high-volume, time-ordered event stream.
 - `Enter` on a result opens a detail view with the full, unwrapped message
   (log lines are frequently long/multi-line). `c` copies the message to
   the clipboard (nothing is masked here, so no reveal-gating).
+- The search screen's results table supports `w` (spec-origin/92): a
+  per-session (not persisted) word-wrap toggle on the Message column,
+  off by default. Off, the Message column shows `logEventPreview`'s
+  compact single-line summary — first line only, capped at 200 chars.
+  On, wrapping operates on the **raw, un-truncated** event message, not
+  that capped summary — a multi-line event (e.g. a stack trace) wraps
+  line-by-line into non-selectable continuation rows below it, each of
+  its own lines independently word-wrapped rather than the whole thing
+  flattened into one re-flowed paragraph, up to `maxWrapLines` (50,
+  `tui/internal/view/wraptext.go`) before a `"… N more line(s)"`
+  indicator takes over — protects the list from one very long event
+  burying every other result. The wrap width itself is computed from
+  the table's actual current rendered width, not a fixed number — see
+  `dynamicWrapWidth`'s doc comment / spec/08's Implementation notes for
+  why a fixed width didn't hold up live. The detail view remains the
+  only place with no line cap at all. Not on the log-group list screen
+  (no free-text column there to wrap).
+- Column widths aren't equal: **Stream** is capped at 30 characters
+  (`…` if longer — log stream names are frequently long ARNs) and gets
+  no extra width on a wider terminal; **Message** gets by far the
+  largest share of any extra space — found live (same issue as
+  spec/08's message browser): with every column claiming equal weight,
+  Message was consistently the most cramped, especially as the
+  terminal widened.
 - Read-only, browse/search-scoped: no log group creation/deletion, no
   metric/subscription filters, no writing, no live tailing/follow mode,
   no multi-log-group search.
