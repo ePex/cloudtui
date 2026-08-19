@@ -211,6 +211,11 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 			return nil
 		case 'W':
 			dv.wrapNav.Toggle()
+			lines := make([]string, 0, len(dv.Shortcuts()))
+			for _, sc := range dv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			dv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		}
 		return event

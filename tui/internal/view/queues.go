@@ -124,6 +124,11 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 		}
 		if event.Rune() == 'W' {
 			qv.wrapNav.Toggle()
+			lines := make([]string, 0, len(qv.Shortcuts()))
+			for _, sc := range qv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			qv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		}
 		switch event.Rune() {

@@ -114,6 +114,11 @@ func NewLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *LogsView {
 		}
 		if event.Rune() == 'W' {
 			lv.wrapNav.Toggle()
+			lines := make([]string, 0, len(lv.Shortcuts()))
+			for _, sc := range lv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", lv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			lv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		}
 		switch event.Rune() {

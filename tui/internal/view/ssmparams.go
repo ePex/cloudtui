@@ -112,6 +112,11 @@ func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSM
 		}
 		if event.Rune() == 'W' {
 			pv.wrapNav.Toggle()
+			lines := make([]string, 0, len(pv.Shortcuts()))
+			for _, sc := range pv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", pv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			pv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		}
 		switch event.Rune() {

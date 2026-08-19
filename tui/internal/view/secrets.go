@@ -111,6 +111,11 @@ func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *Sec
 		}
 		if event.Rune() == 'W' {
 			sv.wrapNav.Toggle()
+			lines := make([]string, 0, len(sv.Shortcuts()))
+			for _, sc := range sv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", sv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			sv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		}
 		switch event.Rune() {

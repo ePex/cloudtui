@@ -168,6 +168,11 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 		switch {
 		case event.Rune() == 'W':
 			mv.wrapNav.Toggle()
+			lines := make([]string, 0, len(mv.Shortcuts()))
+			for _, sc := range mv.Shortcuts() {
+				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", mv.host.Config().Colors.Accent, sc.Key, sc.Description))
+			}
+			mv.host.SetContextHint(strings.Join(lines, "\n"))
 			return nil
 		case event.Rune() == ' ':
 			mv.toggleMark()

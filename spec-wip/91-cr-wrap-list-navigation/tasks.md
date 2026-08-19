@@ -21,11 +21,26 @@ Each task is implemented and pushed only after being separately approved.
 9. [x] Wire wrap-around into `tui/internal/view/codepipelinedetail.go`.
 10. [x] Wire wrap-around into `tui/internal/view/datadoglogs.go` (results
     table only — service/env filter dropdowns are untouched).
-11. [ ] `verify-live`: drive the real TUI against a real broker
-    (`verify-live` skill) covering the queues list and message browser —
-    confirm `W` toggles the context-panel hint, wrap is off by default,
-    wrapping works at both edges once enabled, and toggling wrap on one
-    view doesn't affect another. Record what was checked here.
+11. [x] `verify-live`: drove the real TUI (tmux) against a real ActiveMQ
+    broker, covering the queues list and message browser. Found and fixed
+    a real bug in the process: the `W` handler toggled `wrapNav` but never
+    refreshed the top bar's context panel, so the `wrap: on/off` hint
+    stayed stale until some other action happened to rebuild it — fixed
+    by adding the same "rebuild lines from Shortcuts() + host.SetContextHint"
+    pattern the codebase already uses elsewhere (e.g. queues.go's `M`/`c`
+    handlers) to all 9 views' `W` case. After the fix, verified: (1) wrap
+    off by default on both views: pass. (2) `W` then bottom-row `j` wraps
+    to the top row: pass — confirmed via message-ID identity (bottom row's
+    message opened after wrap-down matched the top row's message ID), not
+    just visual inspection. (3) top-row `k` wraps to the bottom row: pass
+    — confirmed the same way (filtered queues list to 5 items, top-row `k`
+    opened the alphabetically-last one). (4) context hint shows
+    "wrap: on"/"wrap: off" live: pass, after the fix above. (5) toggling
+    wrap on queues left messages' wrap independently off: pass — observed
+    directly (queues had wrap on; opening messages showed wrap off).
+    Cleanup: removed the disposable `cr91.wrap.verify` test queue, the
+    scratch `tui/config.yaml` created for this session (none existed
+    before), and the scratch binary/tmux session.
 12. [ ] Manual check of the remaining 7 views (logs, log search, SSM
     parameters, Secrets Manager, CodePipeline list/detail, Datadog logs)
     against whatever backend is configured locally — same wrap-toggle
