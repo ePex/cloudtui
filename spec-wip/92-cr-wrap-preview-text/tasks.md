@@ -42,13 +42,41 @@ Each task is implemented and pushed only after being separately approved.
    (minus marking, which doesn't apply here).
 5. [x] Wire wrap into `tui/internal/view/datadoglogs.go`: same shape
    as task 4.
-6. [ ] `verify-live`: drive the real TUI against a real broker,
-   toggling `w` in the message browser — confirm continuation rows
-   render correctly, `j`/`k` skip them, marking still works and
-   survives the toggle, and the context-panel hint reflects state.
-   Not strictly required by `tui/CLAUDE.md` (rendering-only, no
-   backend behavior change) but cheap insurance given CR 91's history.
-   Record what was checked here.
+6. [x] `verify-live`: drove the real TUI (tmux) against a real ActiveMQ
+   broker, message browser only (CloudWatch/Datadog need AWS SSO/
+   Datadog credentials this environment doesn't have — same gap CR 91
+   hit; the wrap mechanism is shared and already covered by
+   production-closure unit tests for those two views).
+
+   Found and fixed a real design bug in the process: `previewWrapWidth`
+   was set to 80, matching `queue.Message.Preview`'s own 80-char
+   upstream cap — but the messages table's rendered PREVIEW column is
+   well under 80 chars in practice (it competes with 5 other columns;
+   measured ~76 in a 160-column terminal, narrower at typical widths).
+   Since `wrapText` only wraps text *longer* than the width, an exactly
+   80-char preview against an 80-wide wrap never triggered — toggling
+   `w` flipped the context hint to "on" but the row looked identical,
+   still silently clipped by `tview` itself, defeating the feature's
+   purpose. Fixed by dropping `previewWrapWidth` to 40 (user's call,
+   asked directly rather than silently repicking a number) — reliably
+   wraps even in a narrow column. Updated the three views' "produces
+   continuation rows" tests to assert `rowCount > 2` instead of a
+   width-specific exact count, and the two log views' "selected func"
+   tests to locate the second item's row via `rowToIdx` instead of a
+   hardcoded row number — both were accidentally coupled to the old
+   width's exact wrap-line count.
+
+   After the fix, verified in the message browser: wrap off by default
+   (pass); `w` toggle wraps the full 80-char preview across multiple
+   rows, revealing text `tview` was clipping before (pass); `j`
+   navigation with a wrapped item present doesn't misbehave (pass);
+   `space` places the mark glyph on the correct (primary) row, not a
+   continuation row (pass); toggling `w` off returns to a single
+   truncated line, and the mark from before the toggle is still there
+   (pass, confirms marks-survive-toggle live not just in the unit
+   test). Cleanup: removed the disposable `cr92.wrap.verify` test
+   queue, the scratch `tui/config.yaml` (none existed before), and the
+   scratch binary/tmux session.
 7. [ ] Merge-back: fold the `w` wrap toggle into
    `spec/08-message-browser-and-detail/spec.md`,
    `spec/17-aws-cloudwatch-logs/spec.md`, and

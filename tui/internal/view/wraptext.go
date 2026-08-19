@@ -12,11 +12,22 @@ import (
 // from the table's live rendered column width, since the latter would
 // need recomputing on every terminal resize — tview.Table gives no hook
 // for that short of reacting to every Draw() call. A fixed width is
-// simpler and resize-safe; it isn't perfectly edge-to-edge on a very wide
-// terminal, but the upstream text this wraps is already capped (queue
-// message previews at 80 chars, log message previews at 200 via
-// logEventPreview), so it never produces more than a handful of lines.
-const previewWrapWidth = 80
+// simpler and resize-safe; the upstream text this wraps is already
+// capped (queue message previews at 80 chars, log message previews at
+// 200 via logEventPreview), so it never produces more than a handful of
+// lines.
+//
+// 40, not 80: found live (verify-live, CR 92) that 80 was a no-op for
+// messages.go's PREVIEW column specifically — that column competes with
+// 5 others (marker, ID, Type, Corr.ID, Timestamp), so its actual
+// rendered width is well under 80 in practice (measured ~76 in a
+// 160-column terminal, narrower still at more typical widths).
+// wrapText only wraps text *longer* than the width, so an exactly
+// 80-char preview against an 80-wide wrap never wrapped — tview kept
+// silently clipping it exactly as before, toggle or not. 40 reliably
+// wraps even in a tight column; the cost is wrapping "more than
+// strictly necessary" on a very wide terminal, which is harmless.
+const previewWrapWidth = 40
 
 // wrapText greedily word-wraps s into lines of at most width runes,
 // breaking on whitespace. A single word longer than width is hard-broken

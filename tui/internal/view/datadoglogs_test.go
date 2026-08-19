@@ -335,8 +335,8 @@ func TestDatadogLogsViewWrapProducesContinuationRows(t *testing.T) {
 	capture := dv.table.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
 
-	if got := dv.table.GetRowCount(); got != 3 { // header + primary + 1 continuation
-		t.Fatalf("row count with wrap on = %d, want 3", got)
+	if got := dv.table.GetRowCount(); got <= 2 { // header + primary + at least 1 continuation
+		t.Fatalf("row count with wrap on = %d, want > 2 (continuation rows expected)", got)
 	}
 	cont := dv.table.GetCell(2, 3)
 	if cont.Text == "" {
@@ -360,9 +360,21 @@ func TestDatadogLogsViewWrapSelectedFuncOpensCorrectEvent(t *testing.T) {
 	capture := dv.table.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone))
 
-	// svc-1's event now spans 2 rows (primary + 1 continuation); svc-2's
-	// primary row must be offset past it.
-	dv.table.Select(3, 0)
+	// svc-1's event now spans multiple rows (primary + continuation
+	// rows); find svc-2's (index 1) primary row via rowToIdx rather than
+	// assuming a fixed row number, since that depends on how many lines
+	// svc-1 wrapped into.
+	secondRow := -1
+	for row, idx := range dv.rowToIdx {
+		if idx == 1 {
+			secondRow = row
+			break
+		}
+	}
+	if secondRow < 0 {
+		t.Fatal("could not find svc-2's row in rowToIdx")
+	}
+	dv.table.Select(secondRow, 0)
 	dv.table.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if selected.Service != "svc-2" {
