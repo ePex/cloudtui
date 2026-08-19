@@ -306,6 +306,28 @@ func TestOnPromptDoneShortAliasS(t *testing.T) {
 	}
 }
 
+func TestOnPromptDoneShortAliasL(t *testing.T) {
+	a := New(config.Default())
+	a.prompt.SetText("l")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if name, _ := a.pages.GetFrontPage(); name != "log" {
+		t.Errorf("front page after ':l' = %q, want %q", name, "log")
+	}
+}
+
+func TestOnPromptDoneLog(t *testing.T) {
+	a := New(config.Default())
+	a.prompt.SetText("log")
+
+	a.onPromptDone(tcell.KeyEnter)
+
+	if name, _ := a.pages.GetFrontPage(); name != "log" {
+		t.Errorf("front page after ':log' = %q, want %q", name, "log")
+	}
+}
+
 func TestOnPromptDoneAqOpensConnectionManager(t *testing.T) {
 	a := New(config.Default())
 	a.prompt.SetText("aq")

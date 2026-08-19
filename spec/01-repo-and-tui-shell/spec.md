@@ -42,7 +42,13 @@ A fixed three-row layout:
 Two complementary mechanisms:
 
 - **Single-key hotkeys** (active whenever no prompt/filter/form field is focused): `h` → home, `s` → settings, `l` → log, `q` → quit, `?` → help modal, `:` → command prompt.
-- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, plus later features add their own shortcuts (`:aq`, `:ap`, ...).
+- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, plus later features add their own shortcuts (`:aq`, `:ap`, ...), and the name of any registered view (`:queues`, `:settings`, `:log`, ...). The special commands and their aliases live in a single table (`promptCommandTable()` in `internal/app`) shared by both execution and autocomplete, so the two can't drift out of sync.
+
+### Command prompt autocomplete
+
+While typing in the `:` prompt, a drop-down filters to matching entries as you type (prefix match), built from every special command name, `theme ` (see below), and every registered view's name. Pressing `:` with an empty prompt shows the full list immediately. Once the typed text starts with `theme `, the drop-down switches to matching built-in theme names instead of commands. The drop-down is styled to match the active theme and recolors on a live theme switch.
+
+This uses `tview.InputField`'s built-in `SetAutocompleteFunc`/`SetAutocompleteStyles`, so its interaction model follows tview's own conventions: `↑`/`↓` navigates and live-updates the field text, `Enter`/`Tab` accepts the highlighted entry into the field and closes the drop-down (without yet submitting), and `Esc` closes the drop-down (without yet canceling the prompt) — a *second* `Enter`/`Esc` press (now with no drop-down open) submits or cancels, same as before this drop-down existed.
 
 When switching views, focus goes to `view.Primitive()` (the view's own root primitive), not the `Pages` container — tview does not cascade keyboard events from `Pages` into a child `Form`/`List`, so focusing the container leaves interactive widgets (dropdowns, forms) unable to receive Enter/arrow-key input.
 
@@ -66,6 +72,7 @@ Current locations (post package-split — see spec-origin/03-architecture-and-pa
 - `tui/internal/ui/view.go` — `View` interface (`Name`, `Title`, `Primitive`).
 - `tui/internal/ui/shortcuttable.go` — `Shortcuttable` interface (`Shortcuts() []Shortcut`).
 - `tui/internal/app/app.go` — shell composition root: three-row layout, top bar, status bar, global hotkey routing, help modal, view registration/switching.
+- `tui/internal/app/promptcommands.go` — the `:` prompt's special-command table and its autocomplete suggestion function.
 - `tui/internal/ui/views/home.go` — the Home view (moved out of `internal/app` as part of the later package split; originally lived at `internal/app/home.go`).
 - `tui/internal/config/` — `Config`/`Palette` schema, load/save/defaults, `config.example.yaml`.
 
@@ -73,3 +80,4 @@ Current locations (post package-split — see spec-origin/03-architecture-and-pa
 
 - **`tview.Pages.SwitchToPage` vs `ShowPage`**: always use `SwitchToPage` when navigating between top-level views — `ShowPage` leaves prior pages visible underneath in z-order, which causes stray Esc/input handling on the wrong page (see spec-origin/08-message-browser-and-detail's Esc-navigation note for a concrete case this caused).
 - **Focus target on view switch**: focus `view.Primitive()`, never the `Pages` container itself — see spec-origin/04-theming for the bug this caused with the settings dropdown.
+- **`tview.InputField.SetText` does not refresh an active `SetAutocompleteFunc` drop-down** — only a live keystroke does (via the field's own `InputHandler`). Reopening the `:` prompt (`prompt.SetText("")`) must be followed by an explicit `prompt.Autocomplete()` call, or the drop-down shows whatever suggestions were current the last time a keystroke triggered a refresh — in practice, the stale set captured at `SetAutocompleteFunc`'s own wiring time in `New()`, before view registration.

@@ -23,3 +23,22 @@ func TestStyleListAppliesSelectionColors(t *testing.T) {
 		t.Errorf("GetItemCount() = %d, want 0 for a fresh list", l.GetItemCount())
 	}
 }
+
+func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {
+	p := config.Palette{
+		Background:    "#1a1b26",
+		Text:          "#c0caf5",
+		SelectionBg:   "#2ac3de",
+		SelectionText: "#1a1b26",
+	}
+	i := StyleInputFieldAutocomplete(tview.NewInputField(), p)
+
+	// tview.InputField exposes no getter for its autocomplete styles, so
+	// the resulting colors can't be asserted directly here; this at least
+	// confirms StyleInputFieldAutocomplete returns the same field (for
+	// chaining) rather than panicking or discarding it. Visual
+	// verification is manual.
+	if i == nil {
+		t.Fatal("StyleInputFieldAutocomplete() returned nil")
+	}
+}
