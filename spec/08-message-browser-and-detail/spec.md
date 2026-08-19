@@ -21,6 +21,17 @@ opened by pressing Enter on a queue row.
    chars of the body).
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
+5. **w** toggles word-wrap on the Preview column, per-session (not
+   persisted), off by default (spec-origin/92): when on, a preview
+   that doesn't fit on one line wraps into non-selectable continuation
+   rows directly below the message's row — `tview.Table`'s own
+   up/down navigation already skips non-selectable rows (the same
+   mechanism the header row uses), so `j`/`k`/arrow navigation, marks,
+   and `Enter` all keep landing on the right message with no special
+   handling. Unlike a genuine reload, toggling wrap does **not** clear
+   marks or reset scroll position — it only re-renders the current
+   rows, since a purely cosmetic toggle has no logical reason to
+   invalidate either.
 
 Multi-select, independent of the table cursor:
 
@@ -147,6 +158,16 @@ Backend-specific filter behavior:
   `filter.go`'s `filterMessages` helper.
 - `internal/queue/proxy/` — `BrowseMessages` implementation (see
   spec-origin/11).
+- The `w` wrap toggle's helpers (`wrapText`, `setContinuationRow`,
+  `previewWrapWidth`) live in `tui/internal/view/wraptext.go`, shared
+  with the CloudWatch Logs search and Datadog Logs views (spec/17,
+  spec/18) — not specific to this view. `previewWrapWidth` is fixed at
+  40, not the table's live rendered column width (recomputing on every
+  terminal resize has no hook in `tview.Table` short of reacting to
+  every `Draw()` call) — found live that it needs to be well under a
+  typical rendered column's width to actually trigger: the Preview
+  column here competes with 5 other columns, so its real width is
+  usually much less than the Preview field's own 80-char cap.
 
 ## Out of scope (deliberate)
 

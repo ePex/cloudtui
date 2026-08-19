@@ -72,6 +72,16 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   exempted from the app's global-hotkey handling while open (see gotcha
   below) — every keystroke, including letters that would otherwise be
   global hotkeys, must reach the form fields.
+- The results table supports `w` (spec-origin/92): a per-session (not
+  persisted) word-wrap toggle on the Message column, off by default —
+  same shape as CloudWatch Logs search's toggle (spec/17), sharing the
+  same underlying helper (`tui/internal/view/wraptext.go`). The Message
+  column already shows only the first line of a multi-line event,
+  capped at 200 chars (`logEventPreview`); wrapping only reveals what
+  the column's rendered width would otherwise clip, not more of a
+  multi-line message — the detail view is still the only place to see
+  one in full. Only the results table — the Service/Env filter
+  dropdowns keep their own navigation, unaffected.
 - Read-only: no log deletion/archival, no saved views/monitors, no
   writing.
 

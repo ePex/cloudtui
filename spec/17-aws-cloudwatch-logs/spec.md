@@ -49,6 +49,15 @@ this is a query tool over a high-volume, time-ordered event stream.
 - `Enter` on a result opens a detail view with the full, unwrapped message
   (log lines are frequently long/multi-line). `c` copies the message to
   the clipboard (nothing is masked here, so no reveal-gating).
+- The search screen's results table supports `w` (spec-origin/92): a
+  per-session (not persisted) word-wrap toggle on the Message column,
+  off by default. The Message column already shows only the first line
+  of a multi-line event, capped at 200 chars (`logEventPreview`) —
+  wrapping doesn't reveal more of a multi-line message, only the part
+  that would otherwise be clipped by the column's rendered width; the
+  detail view is still the only place to see a genuinely multi-line
+  event in full. Not on the log-group list screen (no free-text column
+  there to wrap).
 - Read-only, browse/search-scoped: no log group creation/deletion, no
   metric/subscription filters, no writing, no live tailing/follow mode,
   no multi-log-group search.
