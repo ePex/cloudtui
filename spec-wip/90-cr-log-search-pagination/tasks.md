@@ -6,7 +6,7 @@
    next string, err error)` instead of `(events []LogEvent, hasMore
    bool, err error)`. Update the doc comment.
 
-2. [ ] Update `ui.ViewHost.FilterLogEvents` (`tui/internal/ui/viewhost.go`)
+2. [x] Update `ui.ViewHost.FilterLogEvents` (`tui/internal/ui/viewhost.go`)
    and its implementation (`tui/internal/app/viewhost.go`'s
    `App.FilterLogEvents`, `tui/internal/app/app.go`'s
    `filterLogEvents` field type) to the same new signature. Thin
