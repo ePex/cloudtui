@@ -1,0 +1,64 @@
+# AWS CloudWatch Logs search
+
+_Condensed from spec/34 — see that folder for the incremental history. Time-range UI superseded by spec/53 — see spec-origin/19-log-investigation-crosslinks for the current shared time-range modal._
+
+## Purpose
+
+Search CloudWatch Logs from inside cloudtui — e.g. checking a Lambda/ECS
+service's recent errors without reaching for the AWS Console. Unlike the
+Parameter Store / Secrets Manager browsers (a small set of named entries),
+this is a query tool over a high-volume, time-ordered event stream.
+
+## Behavior / user flow
+
+- A top-level app (`cloudwatch-logs`), its own `ui.View`, listed in Home's
+  "Apps" section. Uses `cfg.ActiveAWSProfile` for credentials; errors
+  clearly if none is selected.
+- **Two screens**:
+  1. Log-group list — browse, filterable by name (`/`, same convention as
+     the other AWS list views).
+  2. Search screen, entered per log group — filter pattern + time range →
+     matching events.
+- Search uses `FilterLogEvents` (not CloudWatch Logs Insights — Insights
+  is async, costs per GB scanned, and is substantially more work;
+  deliberately deferred). The filter-pattern string is passed straight
+  through to AWS with no client-side reinterpretation, against a single
+  log group at a time. The query round-trips to AWS on submit — not
+  live-filtered like the local-data views.
+- Time range: see spec-origin/19 for the shared time-range modal (`t` key)
+  used by this view — Relative presets (15m/1h/4h/1day/2days/3days/7days/
+  15days/1month) or an Absolute From/Until range.
+- Results are capped to a single page (a fixed `Limit`, not
+  auto-paginated) — if AWS reports more are available (`NextToken`
+  present), that's surfaced in the title/status rather than silently
+  fetching more pages. Narrowing the pattern or time range is how the
+  user sees fewer, more relevant results.
+- Newest events first (`StartFromHead: false`) — investigation starts from
+  "what's happening now" and works backward.
+- `Enter` on a result opens a detail view with the full, unwrapped message
+  (log lines are frequently long/multi-line). `c` copies the message to
+  the clipboard (nothing is masked here, so no reveal-gating).
+- Read-only, browse/search-scoped: no log group creation/deletion, no
+  metric/subscription filters, no writing, no live tailing/follow mode,
+  no multi-log-group search.
+
+## Data & config
+
+- `tui/internal/awslogs/` (or equivalent): `ListLogGroups(ctx, profile)
+  ([]LogGroup, error)` (paginated `DescribeLogGroups`) and
+  `FilterEvents(ctx, profile, logGroupName string, start, end time.Time,
+  pattern string) ([]LogEvent, hasMore bool, error)` (single-page
+  `FilterLogEvents`).
+- View type: `logSearchView` (per-log-group search screen) — also the
+  jump target for the Datadog correlation-ID lookup, see spec-origin/19.
+
+## Notable gotchas worth preserving
+
+- CloudWatch Logs Insights (the SQL-like query language, async
+  `StartQuery`/`GetQueryResults`) is a plausible later feature, not
+  implemented — `FilterLogEvents` is what's here today.
+- The filter-pattern syntax is CloudWatch's own — notably, a term
+  containing hyphens (e.g. a UUID) must be double-quoted or it gets
+  tokenized on the internal hyphens and fails to match as a whole term
+  (relevant when constructing a pattern programmatically — see
+  spec-origin/19's correlation-jump feature).

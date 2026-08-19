@@ -1,0 +1,60 @@
+# AWS Systems Manager Parameter Store browser
+
+_Condensed from spec/32 — see that folder for the incremental history._
+
+## Purpose
+
+Browse AWS Systems Manager Parameter Store values from inside cloudtui —
+e.g. confirming a broker endpoint or credential stored there — without
+leaving the app or reaching for the AWS CLI/console.
+
+## Behavior / user flow
+
+- A top-level app (`ssm-parameters`), registered as a real `ui.View` in
+  Home's "Apps" section and switchable via the command prompt — not tucked
+  under Settings, since browsing is a primary feature, not configuration.
+- Uses `cfg.ActiveAWSProfile` (spec-origin/14) for credentials; errors
+  clearly if none is selected rather than falling back to the SDK's
+  default credential chain.
+- List view (table, same shape as `queuesView`): parameters fetched
+  recursively from the root path (`/` via `GetParametersByPath`), showing
+  name/type/last-modified. `/` filters by substring on name, same
+  convention as the queues list and AWS Profiles.
+- `Enter` on a `String`/`StringList` row opens a detail view showing the
+  value immediately.
+- `Enter` on a `SecureString` (KMS-encrypted) row opens a detail view
+  showing only metadata, masked — `r` explicitly reveals it (a second
+  `GetParameter` call with decryption). List/metadata calls never decrypt.
+- `c` in the detail view copies the currently-shown value to the system
+  clipboard — available as soon as a value is on screen (for a
+  `SecureString`, only after `r` has revealed it).
+- Read-only, browse-scoped: no put/delete/create, and no integration with
+  `config.Connection` or the connection editor.
+
+## Data & config
+
+- `tui/internal/awsssm/` (or equivalent): `ListParameters(ctx, profile,
+  path) ([]Parameter, error)` and `GetParameterValue(ctx, profile, name
+  string, decrypt bool) (string, error)`.
+- Credentials resolved via `config.LoadDefaultConfig(ctx,
+  config.WithSharedConfigProfile(name))` — this genuinely authenticates
+  (unlike `awsprofile`'s config-file-only reads), so SSO/credential_process
+  resolution actually executes. An expired SSO token does not itself
+  trigger a browser login — see spec-origin/14's auto-reauth behavior,
+  which wraps this view's `load()`.
+- Always fetches the whole parameter tree from `/` and filters
+  client-side (same approach as the AWS Profiles overlay) — no
+  path-scoped server-side fetching in this slice.
+
+## Implementation notes
+
+- Registered alongside `queues` in Home's "Apps" section (see
+  spec-origin/05 for the current section grouping).
+- Detail view reuses the existing message-detail-view rendering pattern.
+
+## Notable gotchas worth preserving
+
+- Secrets Manager was deliberately **not** folded into this view despite
+  the similar "browse a secret store" shape — it has a structurally
+  different value-retrieval API (`ListSecrets` never returns a value at
+  all) and ships as its own app; see spec-origin/16.
