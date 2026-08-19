@@ -65,8 +65,10 @@ func TestDatadogLogDetailViewEscReturnsToDatadogLogs(t *testing.T) {
 
 func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 	a := New(config.Default())
+	ts := time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
 	a.OpenDatadogLogDetail(datadoglogs.LogEvent{
-		Message: "something happened CorrelationID: 1745d042-94e8-49f0-b223-8900ed9e951e",
+		Message:   "something happened CorrelationID: 1745d042-94e8-49f0-b223-8900ed9e951e",
+		Timestamp: ts,
 	})
 
 	capture := a.datadogLogDetailV.Primitive().(*tview.TextView).GetInputCapture()
@@ -77,6 +79,11 @@ func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 	if want := `"1745d042-94e8-49f0-b223-8900ed9e951e"`; a.pendingCloudWatchPattern != want {
 		t.Errorf("pendingCloudWatchPattern = %q, want %q", a.pendingCloudWatchPattern, want)
 	}
+	// spec-origin/91: the event's own timestamp is queued alongside the
+	// pattern, so the CloudWatch search can center an absolute window on it.
+	if a.pendingCloudWatchTimestamp != ts {
+		t.Errorf("pendingCloudWatchTimestamp = %v, want the event's timestamp %v", a.pendingCloudWatchTimestamp, ts)
+	}
 	if name, _ := a.pages.GetFrontPage(); name != "cloudwatch-logs" {
 		t.Errorf("front page after 'g' = %q, want %q", name, "cloudwatch-logs")
 	}
@@ -84,13 +91,21 @@ func TestDatadogLogDetailViewGoToCloudWatchWithCorrelationID(t *testing.T) {
 
 func TestDatadogLogDetailViewGoToCloudWatchWithoutCorrelationID(t *testing.T) {
 	a := New(config.Default())
-	a.OpenDatadogLogDetail(datadoglogs.LogEvent{Message: "no correlation id here"})
+	a.OpenDatadogLogDetail(datadoglogs.LogEvent{
+		Message:   "no correlation id here",
+		Timestamp: time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC),
+	})
 
 	capture := a.datadogLogDetailV.Primitive().(*tview.TextView).GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 
 	if a.pendingCloudWatchPattern != "" {
 		t.Errorf("pendingCloudWatchPattern = %q, want empty", a.pendingCloudWatchPattern)
+	}
+	// The handler returns before queuing anything when there's no
+	// CorrelationID match — the event having a timestamp doesn't matter.
+	if !a.pendingCloudWatchTimestamp.IsZero() {
+		t.Errorf("pendingCloudWatchTimestamp = %v, want zero (nothing queued without a CorrelationID)", a.pendingCloudWatchTimestamp)
 	}
 	if name, _ := a.pages.GetFrontPage(); name != "datadog-log-detail" {
 		t.Errorf("front page after 'g' with no CorrelationID = %q, want unchanged %q", name, "datadog-log-detail")

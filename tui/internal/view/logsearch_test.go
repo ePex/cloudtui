@@ -61,7 +61,7 @@ func TestLogSearchViewOpenResetsStateAndSearches(t *testing.T) {
 	sv.results = []awslogs.LogEvent{{Message: "stale"}}
 	sv.nextToken = "stale-token"
 
-	sv.Open("/aws/lambda/foo", "")
+	sv.Open("/aws/lambda/foo", "", nil)
 
 	if sv.pattern != "" {
 		t.Errorf("pattern = %q, want empty after open()", sv.pattern)
@@ -91,13 +91,34 @@ func TestLogSearchViewOpenWithInitialPatternPreFillsIt(t *testing.T) {
 	host, _, sv := newTestLogSearchView(t)
 	host.cfg.ActiveAWSProfile = "" // open()'s internal search() hits the guard, no goroutine
 
-	sv.Open("/aws/lambda/foo", "1745d042-94e8-49f0-b223-8900ed9e951e")
+	sv.Open("/aws/lambda/foo", "1745d042-94e8-49f0-b223-8900ed9e951e", nil)
 
 	if sv.pattern != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("pattern = %q, want the pre-filled CorrelationID", sv.pattern)
 	}
 	if got := sv.patternInput.GetText(); got != "1745d042-94e8-49f0-b223-8900ed9e951e" {
 		t.Errorf("patternInput text = %q, want the pre-filled CorrelationID", got)
+	}
+}
+
+// TestLogSearchViewOpenWithInitialTimeRangeOverridesDefault covers
+// spec-origin/91: a non-nil initialTimeRange (e.g. the CorrelationID
+// jump's computed absolute window) must be used exactly as given,
+// instead of Open()'s usual reset to the relative default.
+func TestLogSearchViewOpenWithInitialTimeRangeOverridesDefault(t *testing.T) {
+	host, _, sv := newTestLogSearchView(t)
+	host.cfg.ActiveAWSProfile = "" // open()'s internal search() hits the guard, no goroutine
+	from := time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 1, 2, 3, 30, 0, 0, time.UTC)
+	override := ui.TimeRange{Mode: ui.TimeRangeAbsolute, From: from, To: to}
+
+	sv.Open("/aws/lambda/foo", "some-pattern", &override)
+
+	if sv.tr != override {
+		t.Errorf("tr = %+v, want the override %+v (not the relative default)", sv.tr, override)
+	}
+	if got := sv.TimeRange(); got != override {
+		t.Errorf("TimeRange() = %+v, want %+v", got, override)
 	}
 }
 

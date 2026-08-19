@@ -10,12 +10,14 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // OpenMessages switches to the messages page for the given queue, sets the
@@ -63,14 +65,39 @@ func (a *App) OpenSecretDetail(secret awssecrets.Secret) {
 	a.tv.SetFocus(a.pages)
 }
 
+// correlationJumpWindowBuffer is how far before/after the originating
+// Datadog event's timestamp the CorrelationID jump's absolute CloudWatch
+// search window extends — see spec-origin/91-bugfix-correlation-jump-timerange.
+// Generous enough to absorb normal cross-system delay/clock skew,
+// tight enough to avoid reintroducing the high-volume problem CR 90
+// addressed.
+const correlationJumpWindowBuffer = 15 * time.Minute
+
 // OpenLogSearch opens the search view for logGroupName and runs the
 // first search immediately (see logSearchView.open). logSearchView isn't
 // a registered ui.View, so its context panel is populated manually here
 // — same pattern as OpenMessages.
+//
+// If a CorrelationID jump queued a timestamp alongside its pattern, the
+// search opens on an absolute window centered on it
+// (correlationJumpWindowBuffer either side) instead of the usual
+// relative default — otherwise the jump could land on a CloudWatch
+// search that structurally cannot contain the event it's looking for.
 func (a *App) OpenLogSearch(logGroupName string) {
 	pattern := a.pendingCloudWatchPattern
+	ts := a.pendingCloudWatchTimestamp
 	a.pendingCloudWatchPattern = ""
-	a.logSearchV.Open(logGroupName, pattern)
+	a.pendingCloudWatchTimestamp = time.Time{}
+
+	var tr *ui.TimeRange
+	if !ts.IsZero() {
+		tr = &ui.TimeRange{
+			Mode: ui.TimeRangeAbsolute,
+			From: ts.Add(-correlationJumpWindowBuffer),
+			To:   ts.Add(correlationJumpWindowBuffer),
+		}
+	}
+	a.logSearchV.Open(logGroupName, pattern, tr)
 	a.pages.SwitchToPage("log-search")
 	a.tv.SetFocus(a.pages)
 	lines := make([]string, 0, len(a.logSearchV.Shortcuts()))
