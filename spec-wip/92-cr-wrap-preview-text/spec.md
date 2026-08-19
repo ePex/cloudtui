@@ -4,7 +4,7 @@ Date: 2026-08-19
 
 ## What
 
-Add a `W` toggle to the views whose table has a long, truncated
+Add a `w` toggle to the views whose table has a long, truncated
 free-text column, so the full text is readable in place instead of only
 via the detail view:
 
@@ -27,10 +27,13 @@ queue messages or log lines in a row to find the one you want.
 
 ## Proposed behavior
 
-- `W` toggles wrapping on/off for that view's table, per-session (not
+- `w` toggles wrapping on/off for that view's table, per-session (not
   persisted), off by default — same shape as spec-origin/91's toggle,
   minus the part that was wrong. Independent per view (three separate
-  toggles, one per view above).
+  toggles, one per view above). Lowercase, not uppercase — unlike
+  spec-origin/91, this CR never touches the CodePipeline views, so there's
+  no clash with CodePipeline's `w` (watch/unwatch); confirmed `w` is
+  unused in `messages.go`/`logsearch.go`/`datadoglogs.go` today.
 - When on: each row whose free-text column doesn't fit on one line is
   word-wrapped into as many additional **continuation rows** as needed,
   directly below it. The item's other columns (ID, timestamp, etc.) only
