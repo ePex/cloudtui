@@ -18,12 +18,13 @@ checked (`1. [x] ...`) once that task is actually implemented, not before.
 ## Lifecycle
 
 1. A branch is created (in an isolated worktree/checkout where the
-   environment supports it) and a folder added here when work starts. As
-   soon as `spec.md` exists, the branch is pushed and a **draft** pull
-   request opened — that PR is the review surface for every gate from
-   then on, not something opened only once work is finished. The folder
-   moves through spec → plan → tasks, each stage gated on explicit
-   approval, pushing again after each gate document lands.
+   environment supports it) and a folder added here when work starts.
+   `spec.md`, `plan.md`, and `tasks.md` are drafted and revised locally,
+   each gated on explicit approval — no commit yet. Once `tasks.md` is
+   approved, all three files are committed together in a single commit,
+   the branch is pushed, and a **draft** pull request opened; that PR is
+   the review surface for the implementation stage that follows, pushed
+   again after each implemented task.
 2. Once every task is implemented and checked off, its content is merged
    back into [`spec/`](../spec/README.md): the relevant `spec/<area>/spec.md`
    is updated to reflect the new end-state behavior, or a new

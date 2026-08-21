@@ -41,14 +41,11 @@ implement a new feature, fix a bug, or change already-shipped behavior
 this sequence and **stops for feedback at each gate** — do not proceed to
 the next stage until the current one is explicitly approved:
 
-0. **Branch and draft PR.** Create a branch for the change (in an
-   isolated worktree/checkout if the environment supports it — never
-   share a single working copy across concurrent agents/sessions). As
-   soon as `spec.md` (step 1) is written, push the branch and open a
-   **draft** pull request; this is the change's review surface for
-   every remaining gate. Push again after `plan.md` and `tasks.md` land,
-   and after each implementation task, so the PR's diff always reflects
-   the latest approved state.
+0. **Branch.** Create a branch for the change (in an isolated
+   worktree/checkout if the environment supports it — never share a
+   single working copy across concurrent agents/sessions). No commit or
+   PR yet — `spec.md`, `plan.md`, and `tasks.md` are drafted and revised
+   locally through their approval gates below first.
 1. **Specification.** Write a short spec: what the feature/bug/change is,
    why, scope and explicit out-of-scope. File:
    `spec-wip/fe-<slug>/spec.md` (or `bugfix-<slug>`/`cr-<slug>`), noting the
@@ -60,19 +57,27 @@ the next stage until the current one is explicitly approved:
    approved.
 3. **Task breakdown.** Once the plan is approved, write the breakdown to
    `tasks.md` in that same folder — a numbered checkbox list (`1. [ ]
-   ...`) of discrete, reviewable steps. Each task requires explicit manual
-   approval before it is implemented — do not implement several tasks and
-   present them together, and do not move to the next task until the
-   current one is done and the next has been separately approved. Check a
-   task's box (`1. [x] ...`) once it's actually been implemented, not
-   before.
+   ...`) of discrete, reviewable steps. Ask for feedback. Once approved,
+   commit `spec.md` + `plan.md` + `tasks.md` together (this approval is
+   standing permission for that one commit — no separate commit prompt),
+   push the branch, and open a **draft** pull request; this is the
+   change's review surface for the implementation stage that follows.
+   Each task then requires its own explicit manual approval before it is
+   implemented — do not implement several tasks and present them
+   together, and do not move to the next task until the current one is
+   done and the next has been separately approved. Check a task's box
+   (`1. [x] ...`) once it's actually been implemented, not before, and
+   push after each implemented task so the PR's diff stays current.
 4. **Merge-back.** Once every task is implemented and checked off, fold
    the result into `spec/`: update the relevant `spec/<area>/spec.md` to
    reflect the new end-state behavior (or add a new `spec/<area>/` for a
    genuinely new capability), then delete the `spec-wip/type-slug/`
-   folder and push. Nothing is lost by deleting it — the PR itself is
-   the permanent record of what was decided and why. Mark the PR ready
-   for review (no longer draft) once this is done.
+   folder. Unlike the tasks.md commit above, this final commit is
+   **not** pre-approved — wait for the user's explicit go-ahead, per the
+   "never commit without explicit permission" rule, before committing
+   and pushing it. Nothing is lost by deleting the folder — the PR
+   itself is the permanent record of what was decided and why. Mark the
+   PR ready for review (no longer draft) once this is done.
 
 **If anything is unclear** — about scope, approach, or requirements — ask
 the user before proceeding. Do not make assumptions and forge ahead.
