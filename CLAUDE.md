@@ -51,7 +51,7 @@ the next stage until the current one is explicitly approved:
    the latest approved state.
 1. **Specification.** Write a short spec: what the feature/bug/change is,
    why, scope and explicit out-of-scope. File:
-   `spec-wip/NN-fe-<slug>/spec.md` (or `NN-bugfix-`/`NN-cr-`), noting the
+   `spec-wip/fe-<slug>/spec.md` (or `bugfix-<slug>`/`cr-<slug>`), noting the
    date inside `spec.md` itself (not the folder name). Ask for feedback.
    Revise until approved.
 2. **Implementation plan.** Once the spec is approved, write the plan to
@@ -69,7 +69,7 @@ the next stage until the current one is explicitly approved:
 4. **Merge-back.** Once every task is implemented and checked off, fold
    the result into `spec/`: update the relevant `spec/<area>/spec.md` to
    reflect the new end-state behavior (or add a new `spec/<area>/` for a
-   genuinely new capability), then delete the `spec-wip/NN-type-slug/`
+   genuinely new capability), then delete the `spec-wip/type-slug/`
    folder and push. Nothing is lost by deleting it — the PR itself is
    the permanent record of what was decided and why. Mark the PR ready
    for review (no longer draft) once this is done.
@@ -95,11 +95,10 @@ Three types:
   behavior that isn't a bug (e.g. a re-theme, a reworked flow).
 
 Every feature/bugfix/change-request gets its own folder under
-`spec-wip/`, named `NN-<type>-<slug>/` (e.g. `spec-wip/90-fe-my-feature/`,
-`spec-wip/91-bugfix-my-fix/`). `NN` is a single running counter shared
-across all three types and continuing from `spec/`'s old counter — never
-reset, never per-type, never reused even after a folder is deleted post-
-merge (see `spec-wip/README.md`).
+`spec-wip/`, named `<type>-<slug>/` (e.g. `spec-wip/fe-my-feature/`,
+`spec-wip/bugfix-my-fix/`). If a folder of that name already existed at
+some point (even if since deleted post-merge), pick a more specific slug
+rather than reusing it (see `spec-wip/README.md`).
 
 ## Architecture
 
