@@ -78,6 +78,11 @@ the next stage until the current one is explicitly approved:
    and pushing it. Nothing is lost by deleting the folder — the PR
    itself is the permanent record of what was decided and why. Mark the
    PR ready for review (no longer draft) once this is done.
+5. **Merge and clean up.** Once CI is green, merge the PR and delete its
+   branch — both locally and on the remote. The repo has "Automatically
+   delete head branches" enabled on GitHub, so merging via `gh pr merge`
+   deletes the remote branch automatically; delete the local branch
+   yourself (`git branch -d <branch>`) after switching back to `main`.
 
 **If anything is unclear** — about scope, approach, or requirements — ask
 the user before proceeding. Do not make assumptions and forge ahead.
