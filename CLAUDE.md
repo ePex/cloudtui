@@ -95,7 +95,11 @@ acceptable.
 
 This gating applies to features, bugfixes, and change requests alike;
 trivial changes can skip straight to implementation (but still update
-`spec/` directly).
+`spec/` directly). A trivial change may also skip the branch-and-PR
+step entirely and commit straight to `main` — a typo, a config tweak, a
+doc-only fix, a one-line change with no behavioral ambiguity. Anything
+that changes application behavior, however small, still gets its own
+branch and PR per the gated workflow above; when in doubt, use a PR.
 
 Three types:
 
