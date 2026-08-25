@@ -57,6 +57,7 @@ func (sv *SecretsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "f", Description: "favorite"},
 	}
 }
 
@@ -107,6 +108,15 @@ func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *Sec
 			sv.filterInput.SetText(sv.filter)
 			sv.host.SetFocus(sv.filterInput)
 			return nil
+		case 'f':
+			row, _ := sv.table.GetSelection()
+			idx := row - 1
+			if idx < 0 || idx >= len(sv.filtered) {
+				return nil
+			}
+			sv.host.ToggleFavorite(config.FavoriteSecret, sv.host.Config().ActiveAWSProfile, sv.filtered[idx].Name)
+			sv.repaint(sv.all)
+			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
@@ -136,8 +146,13 @@ func (sv *SecretsView) setHeader() {
 	p := sv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
+	sv.table.SetCell(0, 0,
+		tview.NewTableCell("").
+			SetBackgroundColor(bg).
+			SetSelectable(false).
+			SetExpansion(0))
 	for i, label := range []string{"NAME", "ROTATION", "LAST CHANGED"} {
-		sv.table.SetCell(0, i,
+		sv.table.SetCell(0, i+1,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
@@ -201,6 +216,12 @@ func (sv *SecretsView) repaint(secrets []awssecrets.Secret) {
 			}
 		}
 	}
+	profile := sv.host.Config().ActiveAWSProfile
+	favorites := sv.host.Config().AWSFavorites
+	isFavorite := func(s awssecrets.Secret) bool {
+		return favorites.IsFavorite(config.FavoriteSecret, profile, s.Name)
+	}
+	filtered = sortFavoritesFirst(filtered, isFavorite)
 	sv.filtered = filtered
 
 	for sv.table.GetRowCount() > 1 {
@@ -216,13 +237,14 @@ func (sv *SecretsView) repaint(secrets []awssecrets.Secret) {
 		if s.RotationEnabled {
 			rotation = "yes"
 		}
-		sv.table.SetCell(row, 0, tview.NewTableCell(s.Name).SetTextColor(nameColor).SetExpansion(3))
-		sv.table.SetCell(row, 1, tview.NewTableCell(rotation).SetTextColor(textColor).SetExpansion(1))
+		sv.table.SetCell(row, 0, favoriteCell(isFavorite(s), p))
+		sv.table.SetCell(row, 1, tview.NewTableCell(s.Name).SetTextColor(nameColor).SetExpansion(3))
+		sv.table.SetCell(row, 2, tview.NewTableCell(rotation).SetTextColor(textColor).SetExpansion(1))
 		lc := "-"
 		if !s.LastChanged.IsZero() {
 			lc = s.LastChanged.Local().Format("2006-01-02 15:04:05")
 		}
-		sv.table.SetCell(row, 2, tview.NewTableCell(lc).SetTextColor(textColor).SetExpansion(2))
+		sv.table.SetCell(row, 3, tview.NewTableCell(lc).SetTextColor(textColor).SetExpansion(2))
 	}
 
 	if sv.table.GetRowCount() > 1 {
@@ -247,7 +269,7 @@ func (sv *SecretsView) showError(err error) {
 	for sv.table.GetRowCount() > 1 {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
-	sv.table.SetCell(1, 0,
+	sv.table.SetCell(1, 1,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
 			SetExpansion(3),
@@ -264,7 +286,7 @@ func (sv *SecretsView) showStatus(msg string) {
 	for sv.table.GetRowCount() > 1 {
 		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
 	}
-	sv.table.SetCell(1, 0,
+	sv.table.SetCell(1, 1,
 		tview.NewTableCell(msg).
 			SetTextColor(tcell.GetColor(sv.host.Config().Colors.Accent)).
 			SetExpansion(3),
