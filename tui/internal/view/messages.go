@@ -77,6 +77,12 @@ func (mv *MessagesView) QueueName() string { return mv.queueName }
 // Filter returns the active server-side filter.
 func (mv *MessagesView) Filter() queue.MessageFilter { return mv.filter }
 
+// AllMessages returns the full set from the last load, pre-quick-search
+// (see allMsgs's own doc comment) — used by the message filter overlay's
+// JMS Type autocomplete to suggest types already visible without a fresh
+// fetch.
+func (mv *MessagesView) AllMessages() []queue.Message { return mv.allMsgs }
+
 // ApplyFilter sets f as the active server-side filter, updates the title,
 // and reloads.
 func (mv *MessagesView) ApplyFilter(f queue.MessageFilter) {
