@@ -234,3 +234,13 @@ already did before this change), same as before.
   change to a brand-new (this-session) method with one existing caller,
   not a public/stable API — acceptable churn, not a compatibility
   concern.
+- Every `p`/`M` press now costs one network round-trip (the automatic
+  scan, `jmsTypeAutoScanCount` = 500) even for the common "I just want
+  to skip filtering" case — revised into the design after live feedback
+  that the original opt-in-only design wasn't discoverable (see
+  `tasks.md`'s implementation record for the full account, including a
+  real `-race` bug this revision surfaced and fixed in the test suite).
+  Accepted because the scan is fire-and-forget from the user's
+  perspective — blank+Enter proceeds immediately regardless of whether
+  it's finished — so the cost is latency-hidden for anyone not waiting
+  on suggestions, not a blocking one.

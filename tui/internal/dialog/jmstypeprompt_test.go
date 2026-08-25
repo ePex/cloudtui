@@ -15,6 +15,17 @@ func newTestJMSTypePrompt(t *testing.T) (*JMSTypePrompt, *testHost) {
 	return NewJMSTypePrompt(host), host
 }
 
+// blockForever is a scanJMSTypesFn that never returns — used whenever a
+// test calls Show() (which now starts an automatic scan synchronously,
+// see jmsTypeAutoScanCount) but doesn't want that scan to actually
+// complete during the test. Without this, the real goroutine Show()
+// spawns races the test's own assertions on jp's fields, which -race
+// would (correctly) flag even on runs where the race happens not to
+// change the asserted values.
+func blockForever(context.Context, string, int) ([]string, error) {
+	select {}
+}
+
 // TestJMSTypePromptShowRefreshesStaleAutocomplete is a regression test, same root
 // cause and fix as MessageFilter's own version of this test (see its
 // doc comment) — SetAutocompleteFunc eagerly caches the drop-down once
@@ -22,8 +33,9 @@ func newTestJMSTypePrompt(t *testing.T) (*JMSTypePrompt, *testHost) {
 // refresh it. Without Show() calling Autocomplete() explicitly, opening
 // the prompt fresh would render only the sentinel.
 func TestJMSTypePromptShowRefreshesStaleAutocomplete(t *testing.T) {
-	jp, _ := newTestJMSTypePrompt(t)
+	jp, host := newTestJMSTypePrompt(t)
 	jp.scanned = []string{"OrderCreated"} // simulate a completed scan from a prior Show()... but Show() resets it
+	host.scanJMSTypesFn = blockForever    // freeze state at what Show() sets synchronously
 
 	jp.Show("Purge", "orders", nil, nil)
 	jp.field.Focus(func(tview.Primitive) {})
@@ -87,9 +99,7 @@ func TestJMSTypePromptSuggestionsFiltersByPrefix(t *testing.T) {
 func TestJMSTypePromptOnJMSTypeChangedTriggersScan(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
 	jp.queueName = "orders"
-	host.scanJMSTypesFn = func(_ context.Context, _ string, _ int) ([]string, error) {
-		select {} // never returns; this test only checks the synchronous part
-	}
+	host.scanJMSTypesFn = blockForever
 
 	jp.onJMSTypeChanged(jmsTypeScanSentinel)
 
@@ -115,20 +125,20 @@ func TestJMSTypePromptStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	entered := make(chan struct{})
 	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
 		calls++
-		close(entered)
+		close(entered) // happens-after calls++, so the test's read below is race-free
 		select {}
 	}
 
-	jp.startScan()
+	jp.startScan(jmsTypeScanCount)
 	<-entered
-	jp.startScan()
+	jp.startScan(jmsTypeScanCount)
 
 	if calls != 1 {
 		t.Errorf("ScanJMSTypes calls = %d, want 1 (second startScan should have no-opped)", calls)
 	}
 }
 
-func TestJMSTypePromptStartScanUsesQueueName(t *testing.T) {
+func TestJMSTypePromptStartScanUsesQueueNameAndMaxCount(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
 	jp.queueName = "orders"
 	done := make(chan struct{})
@@ -140,7 +150,7 @@ func TestJMSTypePromptStartScanUsesQueueName(t *testing.T) {
 		return nil, nil
 	}
 
-	jp.startScan()
+	jp.startScan(jmsTypeScanCount)
 	<-done
 
 	if gotQueue != "orders" {
@@ -151,10 +161,38 @@ func TestJMSTypePromptStartScanUsesQueueName(t *testing.T) {
 	}
 }
 
+// TestJMSTypePromptShowStartsAutomaticScan confirms Show() itself kicks
+// off a scan (capped at jmsTypeAutoScanCount, smaller than the sentinel's
+// opt-in jmsTypeScanCount) without any user action — the fix for the
+// live report that the prompt looked empty/pointless on open, since
+// selecting the always-present sentinel wasn't obviously an action to a
+// user who hadn't used it before.
+func TestJMSTypePromptShowStartsAutomaticScan(t *testing.T) {
+	jp, host := newTestJMSTypePrompt(t)
+	done := make(chan struct{})
+	var gotQueue string
+	var gotMax int
+	host.scanJMSTypesFn = func(_ context.Context, queueName string, maxCount int) ([]string, error) {
+		gotQueue, gotMax = queueName, maxCount
+		close(done)
+		return []string{"OrderCreated"}, nil
+	}
+
+	jp.Show("Purge", "orders", nil, nil)
+	<-done
+
+	if gotQueue != "orders" {
+		t.Errorf("queue passed to the automatic scan = %q, want %q", gotQueue, "orders")
+	}
+	if gotMax != jmsTypeAutoScanCount {
+		t.Errorf("maxCount passed to the automatic scan = %d, want %d (jmsTypeAutoScanCount)", gotMax, jmsTypeAutoScanCount)
+	}
+}
+
 func TestJMSTypePromptHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	jp, _ := newTestJMSTypePrompt(t)
 	jp.scanning = true
-	jp.field.SetText(jmsTypeScanSentinel)
+	jp.field.SetText(jmsTypeScanSentinel) // left there by onJMSTypeChanged in the real flow
 
 	jp.handleScanResult([]string{"ScannedType"}, nil)
 
@@ -189,37 +227,77 @@ func TestJMSTypePromptHandleScanResultErrorClearsFlag(t *testing.T) {
 	}
 }
 
+// TestJMSTypePromptShowResetsState also confirms Show() leaves scanning
+// == true — it starts the automatic scan synchronously (jp.scanning is
+// set before the scan's own goroutine is even spawned), unlike before
+// this feature existed, when Show() left scanning alone.
 func TestJMSTypePromptShowResetsState(t *testing.T) {
-	jp, _ := newTestJMSTypePrompt(t)
+	jp, host := newTestJMSTypePrompt(t)
 	jp.scanned = []string{"Stale"}
-	jp.scanning = true
+	host.scanJMSTypesFn = blockForever
 
 	jp.Show("Purge", "orders", nil, nil)
 
 	if jp.scanned != nil {
 		t.Errorf("scanned after Show() = %v, want nil", jp.scanned)
 	}
-	if jp.scanning {
-		t.Error("scanning after Show() = true, want false")
+	if !jp.scanning {
+		t.Error("scanning after Show() = false, want true (the automatic scan should already be in flight)")
 	}
 	if jp.queueName != "orders" {
 		t.Errorf("queueName after Show() = %q, want %q", jp.queueName, "orders")
 	}
 }
 
-func TestJMSTypePromptContinueNowRefusesWhileScanning(t *testing.T) {
+// TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel guards
+// against applying the JMS Type field's literal sentinel text as a
+// filter value: while the sentinel's own opt-in scan is in flight, the
+// field still holds that literal text (see onJMSTypeChanged's doc
+// comment for why it can't be cleared synchronously).
+//
+// SetText on the sentinel's own literal text fires the field's real
+// SetChangedFunc wiring — same as a live keystroke would — which starts
+// a real scan via onJMSTypeChanged/startScan. blockForever keeps that
+// scan from ever completing and touching jp.host concurrently with this
+// test's own continueNow() call below (found via -race: both would call
+// SetStatus without synchronization otherwise).
+func TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
-	jp.scanning = true
+	jp.queueName = "orders"
+	host.scanJMSTypesFn = blockForever
+	jp.field.SetText(jmsTypeScanSentinel)
 	continued := false
 	jp.onContinue = func(string) { continued = true }
 
 	jp.continueNow()
 
 	if continued {
-		t.Error("onContinue was called while scanning")
+		t.Error("onContinue was called while the field held the scan-trigger sentinel")
 	}
 	if !strings.Contains(host.status, "scanning") {
 		t.Errorf("status = %q, want it to mention the in-progress scan", host.status)
+	}
+}
+
+// TestJMSTypePromptContinueNowProceedsWhileAutoScanInFlight is the
+// counterpart to the test above: jp.scanning alone (the automatic scan
+// from Show(), not the sentinel-triggered one) must NOT block
+// continueNow — only the field literally holding the sentinel's text
+// does. Without this distinction, "leave blank + Enter proceeds
+// immediately" would be broken for the entire, often-non-trivial
+// duration of the automatic scan, since Show() itself sets jp.scanning
+// synchronously.
+func TestJMSTypePromptContinueNowProceedsWhileAutoScanInFlight(t *testing.T) {
+	jp, _ := newTestJMSTypePrompt(t)
+	jp.scanning = true // simulating the automatic scan still in flight; field never touched
+	var got string
+	called := false
+	jp.onContinue = func(jmsType string) { called, got = true, jmsType }
+
+	jp.continueNow()
+
+	if !called || got != "" {
+		t.Errorf("onContinue called=%v jmsType=%q, want called=true jmsType=\"\" even while a scan is in flight", called, got)
 	}
 }
 
@@ -240,34 +318,36 @@ func TestJMSTypePromptContinueNowCallsOnContinueWithFieldText(t *testing.T) {
 	}
 }
 
-// TestJMSTypePromptEnterOnBlankFieldContinuesWithoutScanning is a
-// regression test found live (verify-live): with no free suggestion
-// tier, the sentinel is the sole, already-highlighted autocomplete entry
-// on an untouched field — tview.InputField's own Enter handling accepts
-// whatever's highlighted in an open drop-down before ever reaching
-// SetDoneFunc, so without the SetInputCapture guard added alongside this
-// test, pressing Enter on a blank, fresh-from-Show() field would always
-// accept the sentinel and kick off an unwanted scan instead of
-// continuing with no filter, as Show's contract promises.
-func TestJMSTypePromptEnterOnBlankFieldContinuesWithoutScanning(t *testing.T) {
+// TestJMSTypePromptEnterOnBlankFieldContinuesEvenWhileAutoScanInFlight is
+// a regression test found live (verify-live): with no free suggestion
+// tier, the sentinel used to be the sole, already-highlighted
+// autocomplete entry on an untouched field — tview.InputField's own
+// Enter handling accepts whatever's highlighted in an open drop-down
+// before ever reaching SetDoneFunc, so without the SetInputCapture guard
+// this test exercises, pressing Enter on a blank, fresh-from-Show()
+// field would accept the sentinel instead of continuing with no filter.
+// Now that Show() also starts an automatic scan synchronously (jmsTypeAutoScanCount),
+// this additionally confirms that scan being in flight doesn't block the
+// blank-field Enter either — only the field literally holding the
+// sentinel text does (see TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel).
+func TestJMSTypePromptEnterOnBlankFieldContinuesEvenWhileAutoScanInFlight(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
-	scanCalled := false
-	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
-		scanCalled = true
-		return nil, nil
-	}
+	host.scanJMSTypesFn = blockForever // keeps the automatic scan "in flight" for the whole test
 	var got string
 	called := false
 	jp.Show("Purge", "orders", func(jmsType string) { called, got = true, jmsType }, nil)
 
+	if !jp.scanning {
+		t.Fatal("scanning after Show() = false, want true (the automatic scan should already be in flight)")
+	}
+
 	// Show() already opens the drop-down (its own eager Autocomplete()
-	// call) with the sentinel as the sole, highlighted entry — this is
-	// exactly the state a real "just press Enter" user hits.
+	// call) with the sentinel as the sole entry (scanned is nil at this
+	// point — the automatic scan is still in flight) — this is exactly
+	// the state a real "just press Enter" user hits immediately after
+	// pressing 'p'/'M'.
 	jp.field.GetInputCapture()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
-	if scanCalled {
-		t.Error("ScanJMSTypes was called for Enter on a blank field, want no scan")
-	}
 	if !called {
 		t.Fatal("onContinue was not called")
 	}

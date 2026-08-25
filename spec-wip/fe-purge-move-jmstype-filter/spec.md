@@ -29,26 +29,44 @@ one new small overlay.
    "Move All — JMS Type (optional)"). Enter continues, Esc cancels the
    whole operation (same as pressing Esc today skips purge/move
    entirely).
-2. The field has autocomplete, styled and behaving like the message
-   filter overlay's JMS Type field (spec/08) — **but only the opt-in scan
-   tier**, no free tier: unlike the Messages view, no messages for this
-   queue have necessarily been browsed yet from the Queues view, so
-   there's no already-loaded set to suggest from for free. The
-   always-present "↻ Scan up to 5,000 messages for JMS types" entry
-   browses *this* queue on demand.
+2. The field has autocomplete, styled like the message filter overlay's
+   JMS Type field (spec/08). **Revised after a second round of live
+   feedback** from the originally-planned "opt-in scan only" design (see
+   `tasks.md`'s implementation record for the full account): `Show()`
+   now automatically runs a scan the moment the prompt opens, capped at
+   `jmsTypeAutoScanCount` (500) — real type names populate the drop-down
+   without any action, which is what a user opening this prompt actually
+   expects to see. The always-present "↻ Scan up to 5,000 messages for
+   JMS types" entry remains as an opt-in way to widen the search further
+   (a bigger cap) if the automatic pass didn't surface the type wanted —
+   this is the closest this prompt gets to `MessageFilter`'s free/scan
+   two-tier shape (spec/08), except tier 1 here still costs a network
+   call (unlike `MessageFilter`, the Queues view has no already-loaded
+   messages to draw a genuinely free tier from).
 3. Leaving the field blank and pressing Enter proceeds exactly as today
    (no filter) — this is the common case and must stay exactly as fast
    and robust as it already is (see "Preserving the existing unfiltered
-   path" below). **Found live (see `tasks.md`'s implementation record):**
-   since this prompt has no free suggestion tier, the scan-trigger
-   sentinel is unavoidably the *only* autocomplete entry on a fresh,
-   untouched field — and tview's `InputField` intercepts Enter to accept
-   whatever's highlighted in an open drop-down before the field's own
-   "I'm done" handler ever runs. Without an explicit fix
-   (`field.SetInputCapture` intercepting Enter-on-empty-field to bypass
-   that drop-down-accept logic entirely), a single Enter on a blank
-   field would always trigger an unwanted scan instead of proceeding
-   unfiltered, contradicting this exact requirement.
+   path" below), **regardless of whether the automatic scan from step 2
+   has finished yet** — a user who just wants to skip filtering should
+   never have to wait on it. **Found live (see `tasks.md`'s
+   implementation record for the full account, across two separate
+   rounds of feedback):** first, before the automatic-scan design
+   existed, tview's `InputField` intercepted Enter to accept whatever
+   was highlighted in an open drop-down (unavoidably the scan-trigger
+   sentinel itself, the only entry on an untouched field) before the
+   field's own "I'm done" handler ever ran — fixed with
+   `field.SetInputCapture` bypassing that for a genuinely empty field.
+   Second, once the automatic scan was added, that fix alone wasn't
+   enough on its own to reason about safely: `Show()` now sets an
+   in-flight "scanning" flag *synchronously*, before it even returns —
+   so continuing to gate submission on "is any scan in flight" (as
+   originally implemented for the opt-in-only design) would have made
+   blank+Enter block for the *entire* automatic scan every single time
+   the prompt opened. The fix's real condition is narrower: refuse only
+   when the field is literally showing the scan-trigger sentinel's own
+   text (meaning the *opt-in* wider scan was just triggered and hasn't
+   cleared it yet) — the automatic scan never puts that text in the
+   field at all, so it never blocks this path.
 4. Entering/selecting a JMS Type and pressing Enter proceeds with that
    filter:
    - **Purge**: the existing confirmation dialog still appears next,
@@ -104,8 +122,8 @@ follow-up if filtered purge/move turns out to be common on large queues.
 
 - In scope: the JMS Type filter prompt (new, shared by both actions);
   routing purge/move-all through `DeleteMessages`/`MoveMessages` only
-  when a filter is actually entered; the scan-only autocomplete tier for
-  this new prompt.
+  when a filter is actually entered; the prompt's autocomplete
+  (automatic scan on open, plus the opt-in wider scan).
 - Out of scope: the native-selector optimization above; any filter
   field besides JMS Type (From/To date, Max Count are not exposed here
   — this mirrors the message filter overlay's own JMS-Type-only
@@ -116,11 +134,24 @@ follow-up if filtered purge/move turns out to be common on large queues.
 
 ## Manual verification
 
-Unit-testable for the prompt's suggestion/routing logic (scan-only
-suggestions; blank input calls the unfiltered path; a filled-in type
-calls the filtered path with the right arguments) via a fake backend.
-Given this touches real destructive queue operations, use the
-`verify-live` skill against a real broker (both backends): purge/move-all
-with no filter still behaves exactly as before; purge/move-all with a
-JMS Type filter only affects matching messages, leaving others in place
-(and, for move, correctly arriving at the target queue).
+Unit-testable for the prompt's suggestion/routing logic (suggestions
+before/after a scan completes; blank input calls the unfiltered path
+regardless of scan state; a filled-in type calls the filtered path with
+the right arguments) via a fake backend and synchronization around the
+now-always-present automatic-scan goroutine Show() starts (`-race`
+matters here — found a real, `-race`-flagged synchronization bug of our
+own in the test suite while updating it for the automatic-scan design;
+see `tasks.md`). Given this touches real destructive queue operations,
+use the `verify-live` skill against a real broker (both backends):
+purge/move-all with no filter still behaves exactly as before;
+purge/move-all with a JMS Type filter only affects matching messages,
+leaving others in place (and, for move, correctly arriving at the target
+queue); the prompt shows real type names immediately on open, without
+requiring the user to already know to select the scan-trigger entry.
+
+**Outcome**: two more rounds of live feedback happened at this step,
+after this feature's own earlier `verify-live` pass had already found
+and fixed one bug (the overlay-clipping issue) — see `tasks.md`'s
+implementation record for the full account of both. Both are the kind of
+UI-correctness/UX-clarity issue this section exists to catch that unit
+tests alone can't.

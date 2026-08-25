@@ -12,19 +12,36 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
+// jmsTypeAutoScanCount is how many messages Show() scans automatically,
+// every time the prompt opens, to populate real JMS Type suggestions
+// without requiring any action from the user. Smaller than
+// jmsTypeScanCount (the opt-in "widen the search" scan triggered by
+// selecting the sentinel) since this one runs unconditionally on every
+// 'p'/'M' press — even when the user only wants to skip filtering
+// entirely — so it's sized to be cheap and fast rather than exhaustive.
+const jmsTypeAutoScanCount = 500
+
 // JMSTypePrompt is the optional JMS Type filter step shown before purge
 // and move-all in the Queues view (spec/09) — a single bordered
 // tview.InputField, reused by both actions since they differ only in
 // what happens once a type (or none) is chosen.
 //
 // Its autocomplete mirrors MessageFilter's JMS Type field (spec/08)
-// almost exactly (same styling, same scan-trigger sentinel, same
-// SetChangedFunc-based handling to avoid the reentrant-SetText buffer
-// corruption found there), but with only the scan tier: unlike the
-// Messages view, no messages for the queue being purged/moved have
-// necessarily been browsed yet, so there is no free, already-loaded set
-// to suggest from — jmsTypeScanSentinel is always the only entry until a
-// scan completes.
+// closely (same styling, same `SetChangedFunc`-based scan handling to
+// avoid the reentrant-`SetText` buffer corruption found there), but with
+// no free tier: unlike the Messages view, no messages for the queue
+// being purged/moved have necessarily been browsed yet, so there is
+// nothing already-loaded to suggest from without a network call. Instead,
+// Show() kicks off a small, automatic scan every time the prompt opens
+// (see jmsTypeAutoScanCount) — found live: without this, the only
+// visible suggestion on a fresh field was the scan-trigger sentinel
+// itself, and it wasn't obvious that selecting it was the way to see any
+// real type names at all, reading as "nothing is here" rather than "type
+// something, or press Enter to skip." The sentinel (jmsTypeScanSentinel,
+// shared with MessageFilter) still appears in the suggestion list as an
+// opt-in way to widen the search further (jmsTypeScanCount, larger than
+// the automatic scan's cap) if the automatic pass didn't surface the
+// type wanted.
 type JMSTypePrompt struct {
 	host       ui.Host
 	field      *tview.InputField
@@ -63,18 +80,18 @@ func NewJMSTypePrompt(host ui.Host) *JMSTypePrompt {
 	// Unlike MessageFilter's JMS Type field (which submits via a separate
 	// Apply button, never through the field's own Enter key) or the ':'
 	// prompt (whose suggestion list is never just a single always-present
-	// action item), this field's suggestion list is *only* the sentinel
-	// until a scan completes — so on a truly untouched field, the
-	// sentinel is unavoidably the sole, already-highlighted entry.
-	// tview.InputField's own Enter handling accepts whatever's
-	// highlighted in an open drop-down before ever reaching SetDoneFunc
-	// at all, so pressing Enter on a blank field
-	// would otherwise always accept the sentinel and kick off a scan the
-	// user never asked for — never actually reaching continueNow() with
-	// an empty jmsType, contrary to Show's documented "blank + Enter
-	// proceeds with no filter" contract. Found live (verify-live): with
-	// no free suggestion tier here, this collision is unavoidable
-	// without intercepting Enter explicitly. SetInputCapture runs before
+	// action item), an untouched field here can have the scan-trigger
+	// sentinel as its sole, already-highlighted drop-down entry (e.g.
+	// before Show()'s auto-scan — see below — has completed, or if it
+	// found nothing). tview.InputField's own Enter handling accepts
+	// whatever's highlighted in an open drop-down before ever reaching
+	// SetDoneFunc at all, so pressing Enter on a blank field would
+	// otherwise risk accepting that sentinel and kicking off the wider
+	// scan instead of continuing with no filter, contrary to Show's
+	// documented "blank + Enter proceeds with no filter" contract.
+	// Found live (verify-live): with no free, always-available
+	// suggestion tier here, this collision is unavoidable without
+	// intercepting Enter explicitly. SetInputCapture runs before
 	// InputField's own InputHandler (Box's own doc comment), so this
 	// only fires when the field is genuinely empty — typing (even just
 	// enough to filter suggestions) or navigating into the drop-down
@@ -114,12 +131,16 @@ func (jp *JMSTypePrompt) Show(action, queueName string, onContinue func(jmsType 
 	jp.host.ShowPage("jmstype-prompt")
 	jp.host.SetFocus(jp.field)
 	jp.visible = true
+
+	jp.startScan(jmsTypeAutoScanCount)
 }
 
-// jmsTypeSuggestions returns the scan-trigger sentinel, plus any types a
-// completed scan found (see jmstypeprompt's own doc comment for why
-// there's no free tier here). Merges/prefix-filters the same way
-// MessageFilter's do.
+// jmsTypeSuggestions returns any types a completed scan found
+// (auto-triggered by Show, or the opt-in wider one — see
+// jmstypeprompt's own doc comment), prefix-filtered by currentText,
+// followed by the scan-trigger sentinel — which is always present
+// regardless of currentText, since it's an action (widen the search),
+// not a data suggestion.
 func (jp *JMSTypePrompt) jmsTypeSuggestions(currentText string) []string {
 	seen := make(map[string]bool)
 	var matches []string
@@ -138,27 +159,31 @@ func (jp *JMSTypePrompt) jmsTypeSuggestions(currentText string) []string {
 	return matches
 }
 
-// onJMSTypeChanged detects the scan-trigger sentinel and starts a scan.
-// It deliberately does not clear the field's text here — see
-// MessageFilter.onJMSTypeChanged's doc comment for why that would
-// reentrantly corrupt tview's text buffer; handleScanResult clears it
-// instead, from a safe, non-reentrant context.
+// onJMSTypeChanged detects the scan-trigger sentinel and starts the
+// wider, opt-in scan. It deliberately does not clear the field's text
+// here — see MessageFilter.onJMSTypeChanged's doc comment for why that
+// would reentrantly corrupt tview's text buffer; handleScanResult clears
+// it instead, from a safe, non-reentrant context.
 func (jp *JMSTypePrompt) onJMSTypeChanged(text string) {
 	if text == jmsTypeScanSentinel {
-		jp.startScan()
+		jp.startScan(jmsTypeScanCount)
 	}
 }
 
-// startScan runs the opt-in JMS Type scan against queueName. No-ops if a
-// scan is already in flight.
-func (jp *JMSTypePrompt) startScan() {
+// startScan runs a JMS Type scan against queueName capped at maxCount —
+// either Show's automatic pass (jmsTypeAutoScanCount) or the sentinel's
+// opt-in wider one (jmsTypeScanCount). No-ops if a scan is already in
+// flight, so selecting the sentinel while the automatic scan is still
+// running (a narrow timing window in practice) just waits for whichever
+// scan is already in progress rather than piling up a second request.
+func (jp *JMSTypePrompt) startScan(maxCount int) {
 	if jp.scanning {
 		return
 	}
 	jp.scanning = true
-	jp.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", jmsTypeScanCount))
+	jp.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", maxCount))
 	go func() {
-		types, err := jp.host.ScanJMSTypes(context.Background(), jp.queueName, jmsTypeScanCount)
+		types, err := jp.host.ScanJMSTypes(context.Background(), jp.queueName, maxCount)
 		jp.host.QueueUpdateDraw(func() {
 			jp.handleScanResult(types, err)
 		})
@@ -167,9 +192,16 @@ func (jp *JMSTypePrompt) startScan() {
 
 // handleScanResult applies a completed scan's outcome — split out from
 // startScan's goroutine so it can be called directly in a test, the same
-// way MessageFilter's is (see its doc comment).
+// way MessageFilter's is (see its doc comment). Applies equally whether
+// the completed scan was Show's automatic one or the sentinel's opt-in
+// wider one — the caller doesn't need to distinguish which.
 func (jp *JMSTypePrompt) handleScanResult(types []string, err error) {
 	jp.scanning = false
+	// Clears whatever the field was showing when the scan that just
+	// completed was started — "" if it was the automatic scan (the
+	// field was never touched), or the sentinel's own literal text if it
+	// was the opt-in one (see onJMSTypeChanged's doc comment for why
+	// that text can only be cleared here, not synchronously).
 	jp.field.SetText("")
 	if err != nil {
 		jp.host.SetStatus(fmt.Sprintf("[red]JMS type scan failed: %s[-]", err))
@@ -181,12 +213,14 @@ func (jp *JMSTypePrompt) handleScanResult(types []string, err error) {
 }
 
 // continueNow reads the field, closes the prompt, and calls onContinue.
-// Refuses while a scan is in flight — the field still holds the
-// scan-trigger sentinel's own text for that whole window (see
-// onJMSTypeChanged's doc comment), which must never be read as a real
-// JMS type.
+// Refuses only while the field is literally showing the scan-trigger
+// sentinel's own text (i.e. the opt-in wider scan was just triggered and
+// hasn't completed/cleared the field yet) — that text must never be read
+// as a real JMS type. Show's automatic scan never puts the sentinel into
+// the field, so it never blocks a blank "continue with no filter" this
+// way, however long it's still running.
 func (jp *JMSTypePrompt) continueNow() {
-	if jp.scanning {
+	if jp.field.GetText() == jmsTypeScanSentinel {
 		jp.host.SetStatus("[yellow]Still scanning for JMS types — wait for it to finish[-]")
 		return
 	}
