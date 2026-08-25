@@ -4,7 +4,7 @@
    `StyleInputFieldAutocomplete` (`tui/internal/ui/style.go`), plus
    `TestBlendColors` and an `Accent`-bearing fixture update to
    `TestStyleInputFieldAutocompleteReturnsField` (`tui/internal/ui/style_test.go`).
-2. [ ] Add `globalHotkeyAliases` and filter it out of `promptSuggestions`
+2. [x] Add `globalHotkeyAliases` and filter it out of `promptSuggestions`
    (`tui/internal/app/promptcommands.go`), plus table-driven tests for the
    filtering behavior in `tui/internal/app/app_test.go`.
 3. [ ] Manual verification: build and run the TUI, check the `:` prompt's

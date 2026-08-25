@@ -79,10 +79,10 @@ func TestBlendColors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := blendColors(tt.a, tt.b, tt.t); got != tt.want {
+			if got := BlendColors(tt.a, tt.b, tt.t); got != tt.want {
 				gr, gg, gb := got.RGB()
 				wr, wg, wb := tt.want.RGB()
-				t.Errorf("blendColors() = rgb(%d,%d,%d), want rgb(%d,%d,%d)", gr, gg, gb, wr, wg, wb)
+				t.Errorf("BlendColors() = rgb(%d,%d,%d), want rgb(%d,%d,%d)", gr, gg, gb, wr, wg, wb)
 			}
 		})
 	}
