@@ -6,7 +6,7 @@
    (`internal/app/host_test.go`, `internal/dialog/hosttest_test.go`,
    `internal/dialog/messagefilter_test.go`,
    `internal/view/testfake_test.go`).
-2. [ ] New `JMSTypePrompt` dialog (`tui/internal/dialog/jmstypeprompt.go`)
+2. [x] New `JMSTypePrompt` dialog (`tui/internal/dialog/jmstypeprompt.go`)
    plus `jmstypeprompt_test.go`.
 3. [ ] Wire `JMSTypePrompt` into `app.go` (construction + page
    registration) and `queues.go` (new constructor parameter; `p`/`M`
