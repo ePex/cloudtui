@@ -34,6 +34,7 @@ type testHost struct {
 	deletedConnection  string
 	savedDatadogConfig *config.DatadogConfig
 	activeAWSProfile   string
+	toggledFavorite    *toggledFavoriteCall
 	reloadedQueue      string
 	appliedFilter      *queue.MessageFilter
 	focusMessagesCalls int
@@ -43,6 +44,12 @@ type savedConnectionCall struct {
 	conn     config.Connection
 	origName string
 	isNew    bool
+}
+
+type toggledFavoriteCall struct {
+	kind    config.FavoriteKind
+	profile string
+	name    string
 }
 
 // newTestHost builds a testHost with config.Default() and a
@@ -78,6 +85,9 @@ func (h *testHost) ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, e
 		return nil, nil
 	}
 	return h.listAWSProfiles(ctx)
+}
+func (h *testHost) ToggleFavorite(kind config.FavoriteKind, profile, name string) {
+	h.toggledFavorite = &toggledFavoriteCall{kind: kind, profile: profile, name: name}
 }
 
 func (h *testHost) Backend() queue.Backend           { return h.backend }

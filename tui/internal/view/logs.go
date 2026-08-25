@@ -60,6 +60,7 @@ func (lv *LogsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "f", Description: "favorite"},
 	}
 }
 
@@ -110,6 +111,15 @@ func NewLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *LogsView {
 			lv.filterInput.SetText(lv.filter)
 			lv.host.SetFocus(lv.filterInput)
 			return nil
+		case 'f':
+			row, _ := lv.table.GetSelection()
+			idx := row - 1
+			if idx < 0 || idx >= len(lv.filtered) {
+				return nil
+			}
+			lv.host.ToggleFavorite(config.FavoriteLogGroup, lv.host.Config().ActiveAWSProfile, lv.filtered[idx].Name)
+			lv.repaint(lv.all)
+			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
@@ -139,8 +149,13 @@ func (lv *LogsView) setHeader() {
 	p := lv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
+	lv.table.SetCell(0, 0,
+		tview.NewTableCell("").
+			SetBackgroundColor(bg).
+			SetSelectable(false).
+			SetExpansion(0))
 	for i, label := range []string{"NAME", "RETENTION", "CREATED"} {
-		lv.table.SetCell(0, i,
+		lv.table.SetCell(0, i+1,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
@@ -204,6 +219,12 @@ func (lv *LogsView) repaint(groups []awslogs.LogGroup) {
 			}
 		}
 	}
+	profile := lv.host.Config().ActiveAWSProfile
+	favorites := lv.host.Config().AWSFavorites
+	isFavorite := func(g awslogs.LogGroup) bool {
+		return favorites.IsFavorite(config.FavoriteLogGroup, profile, g.Name)
+	}
+	filtered = sortFavoritesFirst(filtered, isFavorite)
 	lv.filtered = filtered
 
 	for lv.table.GetRowCount() > 1 {
@@ -219,13 +240,14 @@ func (lv *LogsView) repaint(groups []awslogs.LogGroup) {
 		if g.RetentionDays > 0 {
 			retention = fmt.Sprintf("%d days", g.RetentionDays)
 		}
-		lv.table.SetCell(row, 0, tview.NewTableCell(g.Name).SetTextColor(nameColor).SetExpansion(3))
-		lv.table.SetCell(row, 1, tview.NewTableCell(retention).SetTextColor(textColor).SetExpansion(1))
+		lv.table.SetCell(row, 0, favoriteCell(isFavorite(g), p))
+		lv.table.SetCell(row, 1, tview.NewTableCell(g.Name).SetTextColor(nameColor).SetExpansion(3))
+		lv.table.SetCell(row, 2, tview.NewTableCell(retention).SetTextColor(textColor).SetExpansion(1))
 		created := "-"
 		if !g.CreatedAt.IsZero() {
 			created = g.CreatedAt.Local().Format("2006-01-02 15:04:05")
 		}
-		lv.table.SetCell(row, 2, tview.NewTableCell(created).SetTextColor(textColor).SetExpansion(2))
+		lv.table.SetCell(row, 3, tview.NewTableCell(created).SetTextColor(textColor).SetExpansion(2))
 	}
 
 	if lv.table.GetRowCount() > 1 {
@@ -250,7 +272,7 @@ func (lv *LogsView) showError(err error) {
 	for lv.table.GetRowCount() > 1 {
 		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
 	}
-	lv.table.SetCell(1, 0,
+	lv.table.SetCell(1, 1,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
 			SetExpansion(3),
@@ -267,7 +289,7 @@ func (lv *LogsView) showStatus(msg string) {
 	for lv.table.GetRowCount() > 1 {
 		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
 	}
-	lv.table.SetCell(1, 0,
+	lv.table.SetCell(1, 1,
 		tview.NewTableCell(msg).
 			SetTextColor(tcell.GetColor(lv.host.Config().Colors.Accent)).
 			SetExpansion(3),

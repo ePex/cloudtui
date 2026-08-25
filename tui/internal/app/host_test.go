@@ -66,6 +66,30 @@ func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	}
 }
 
+// TestToggleFavoritePersists confirms App's real ToggleFavorite (the
+// ui.Host method the SSM Parameters/Secrets Manager/CloudWatch Logs
+// views call) updates cfg.AWSFavorites and persists it to config.yaml.
+func TestToggleFavoritePersists(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	a := New(config.Default())
+
+	a.ToggleFavorite(config.FavoriteSSMParameter, "work", "/app/db/password")
+
+	if !a.cfg.AWSFavorites.IsFavorite(config.FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Error("cfg.AWSFavorites does not have the favorite after ToggleFavorite")
+	}
+
+	got, err := config.Load(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !got.AWSFavorites.IsFavorite(config.FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Error("persisted AWSFavorites does not have the favorite")
+	}
+}
+
 // TestSetActiveAWSProfileRebuildsSecretBackedBackend is a regression
 // test for spec/88: switching AWS profile must rebuild a
 // Secrets-Manager-backed connection's backend, not leave it resolving
