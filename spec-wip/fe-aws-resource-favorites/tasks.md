@@ -15,11 +15,21 @@
    `Shortcuts()` entry, tests.
 5. [x] Secrets Manager view: same as task 4.
 6. [x] CloudWatch Logs view: same as task 4.
-7. [ ] Manual verification: real AWS profile(s) — favorite an item in
+7. [x] Manual verification: real AWS profile(s) — favorite an item in
    each of the three views, confirm star + top-sort, switch AWS profile
    and confirm favorites don't leak across profiles, switch back and
    confirm persistence, confirm `config.yaml` reflects each toggle
    (record what was checked here).
+
+   Verified by the user against their own configured AWS profile(s),
+   driving the built binary directly (not by the agent, to avoid making
+   live AWS calls against the user's account without a separate
+   check-in — see the conversation for that decision): favoriting in
+   each of the three views shows the star and sorts the row to the top,
+   un-favoriting removes both, switching AWS profile shows that
+   profile's own favorites (not the previous profile's), switching back
+   restores the original favorite, and `config.yaml`'s `awsFavorites:`
+   section reflects each toggle. Confirmed working.
 8. [ ] Merge-back: update `spec/15-aws-parameter-store/spec.md`,
    `spec/16-aws-secrets-manager/spec.md`, and
    `spec/17-aws-cloudwatch-logs/spec.md` to document the favorite/star
