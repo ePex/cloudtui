@@ -34,16 +34,37 @@ func StyleDropDown(dd *tview.DropDown, p config.Palette) {
 }
 
 // StyleInputFieldAutocomplete applies palette colors to i's autocomplete
-// drop-down so unselected entries are readable against the theme
-// background, matching StyleDropDown's treatment of tview.DropDown.
+// drop-down. tview's InputField sizes the drop-down's popup to exactly fit
+// its entries and gives no way to draw a real border around it (see
+// tui/CLAUDE.md's tview gotchas), so unselected rows use a background tinted
+// toward the palette's accent color rather than a flat copy of the screen
+// background — otherwise the popup has no visible edge and reads as loose
+// text floating over whatever else is on screen.
 func StyleInputFieldAutocomplete(i *tview.InputField, p config.Palette) *tview.InputField {
+	panelBg := blendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), 0.15)
 	return i.SetAutocompleteStyles(
-		tcell.GetColor(p.Background),
+		panelBg,
 		tcell.StyleDefault.
 			Foreground(tcell.GetColor(p.Text)).
-			Background(tcell.GetColor(p.Background)),
+			Background(panelBg),
 		tcell.StyleDefault.
 			Foreground(tcell.GetColor(p.SelectionText)).
 			Background(tcell.GetColor(p.SelectionBg)),
 	)
+}
+
+// blendColors linearly interpolates from a toward b by t (0 keeps a, 1
+// yields b). If either color can't be broken into RGB components (e.g. an
+// unset palette field), a is returned unchanged rather than blending toward
+// garbage.
+func blendColors(a, b tcell.Color, t float64) tcell.Color {
+	ar, ag, ab := a.RGB()
+	br, bg, bb := b.RGB()
+	if ar < 0 || br < 0 {
+		return a
+	}
+	lerp := func(x, y int32) int32 {
+		return x + int32(float64(y-x)*t)
+	}
+	return tcell.NewRGBColor(lerp(ar, br), lerp(ag, bg), lerp(ab, bb))
 }

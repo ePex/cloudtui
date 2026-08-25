@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Add `blendColors` helper and wire it into
+1. [x] Add `blendColors` helper and wire it into
    `StyleInputFieldAutocomplete` (`tui/internal/ui/style.go`), plus
    `TestBlendColors` and an `Accent`-bearing fixture update to
    `TestStyleInputFieldAutocompleteReturnsField` (`tui/internal/ui/style_test.go`).
