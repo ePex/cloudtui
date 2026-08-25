@@ -37,5 +37,6 @@ func favoriteCell(favorited bool, p config.Palette) *tview.TableCell {
 	}
 	return tview.NewTableCell(text).
 		SetTextColor(tcell.GetColor(p.Accent)).
-		SetAlign(tview.AlignCenter)
+		SetAlign(tview.AlignCenter).
+		SetExpansion(0)
 }

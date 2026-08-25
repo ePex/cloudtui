@@ -58,6 +58,7 @@ func (pv *SSMParamsView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
 		{Key: "/", Description: "filter"},
+		{Key: "f", Description: "favorite"},
 	}
 }
 
@@ -108,6 +109,15 @@ func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSM
 			pv.filterInput.SetText(pv.filter)
 			pv.host.SetFocus(pv.filterInput)
 			return nil
+		case 'f':
+			row, _ := pv.table.GetSelection()
+			idx := row - 1
+			if idx < 0 || idx >= len(pv.filtered) {
+				return nil
+			}
+			pv.host.ToggleFavorite(config.FavoriteSSMParameter, pv.host.Config().ActiveAWSProfile, pv.filtered[idx].Name)
+			pv.repaint(pv.all)
+			return nil
 		case 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case 'k':
@@ -137,8 +147,13 @@ func (pv *SSMParamsView) setHeader() {
 	p := pv.host.Config().Colors
 	bg := tcell.GetColor(p.Label)
 	fg := tcell.GetColor(p.Background)
+	pv.table.SetCell(0, 0,
+		tview.NewTableCell("").
+			SetBackgroundColor(bg).
+			SetSelectable(false).
+			SetExpansion(0))
 	for i, label := range []string{"NAME", "TYPE", "LAST MODIFIED"} {
-		pv.table.SetCell(0, i,
+		pv.table.SetCell(0, i+1,
 			tview.NewTableCell(label).
 				SetTextColor(fg).
 				SetBackgroundColor(bg).
@@ -203,6 +218,12 @@ func (pv *SSMParamsView) repaint(params []awsssm.Parameter) {
 			}
 		}
 	}
+	profile := pv.host.Config().ActiveAWSProfile
+	favorites := pv.host.Config().AWSFavorites
+	isFavorite := func(prm awsssm.Parameter) bool {
+		return favorites.IsFavorite(config.FavoriteSSMParameter, profile, prm.Name)
+	}
+	filtered = sortFavoritesFirst(filtered, isFavorite)
 	pv.filtered = filtered
 
 	for pv.table.GetRowCount() > 1 {
@@ -214,13 +235,14 @@ func (pv *SSMParamsView) repaint(params []awsssm.Parameter) {
 	textColor := tcell.GetColor(p.Text)
 	for i, prm := range filtered {
 		row := i + 1
-		pv.table.SetCell(row, 0, tview.NewTableCell(prm.Name).SetTextColor(nameColor).SetExpansion(3))
-		pv.table.SetCell(row, 1, tview.NewTableCell(string(prm.Type)).SetTextColor(textColor).SetExpansion(1))
+		pv.table.SetCell(row, 0, favoriteCell(isFavorite(prm), p))
+		pv.table.SetCell(row, 1, tview.NewTableCell(prm.Name).SetTextColor(nameColor).SetExpansion(3))
+		pv.table.SetCell(row, 2, tview.NewTableCell(string(prm.Type)).SetTextColor(textColor).SetExpansion(1))
 		lm := "-"
 		if !prm.LastModified.IsZero() {
 			lm = prm.LastModified.Local().Format("2006-01-02 15:04:05")
 		}
-		pv.table.SetCell(row, 2, tview.NewTableCell(lm).SetTextColor(textColor).SetExpansion(2))
+		pv.table.SetCell(row, 3, tview.NewTableCell(lm).SetTextColor(textColor).SetExpansion(2))
 	}
 
 	if pv.table.GetRowCount() > 1 {
@@ -245,7 +267,7 @@ func (pv *SSMParamsView) showError(err error) {
 	for pv.table.GetRowCount() > 1 {
 		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
 	}
-	pv.table.SetCell(1, 0,
+	pv.table.SetCell(1, 1,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
 			SetExpansion(3),
@@ -262,7 +284,7 @@ func (pv *SSMParamsView) showStatus(msg string) {
 	for pv.table.GetRowCount() > 1 {
 		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
 	}
-	pv.table.SetCell(1, 0,
+	pv.table.SetCell(1, 1,
 		tview.NewTableCell(msg).
 			SetTextColor(tcell.GetColor(pv.host.Config().Colors.Accent)).
 			SetExpansion(3),
