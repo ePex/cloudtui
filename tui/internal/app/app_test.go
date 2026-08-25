@@ -236,6 +236,20 @@ func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
 	}
 }
 
+// openDropDownPopup drives dd's own InputHandler with KeyEnter, the same
+// way a real Enter press or click would, so the dropdown's popup list
+// actually opens and Application.focus delegates to its private,
+// internal *tview.List — reproducing the exact state that broke the
+// focusExemptInputs identity check (see onGlobalKey's doc comment).
+// SetFocus(dd) alone is not enough: that only reaches the closed-popup
+// state, which never exercised the bug this regression test guards
+// against (found live, see spec/18's gotcha entry).
+func openDropDownPopup(t *testing.T, tv *tview.Application, dd *tview.DropDown) {
+	t.Helper()
+	setFocus := func(p tview.Primitive) { tv.SetFocus(p) }
+	dd.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
+}
+
 // TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused is
 // datadogLogsV.serviceFilterDD's counterpart to the other per-view
 // input exemptions (spec/42) — typing to jump to an option inside the
@@ -243,11 +257,13 @@ func TestOnGlobalKeyPassesThroughWhenLogSearchPatternFocused(t *testing.T) {
 // navigate away mid-selection.
 func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.datadogLogsV.FilterInputs()[1])
+	dd := a.datadogLogsV.FilterInputs()[1].(*tview.DropDown)
+	a.tv.SetFocus(dd)
+	openDropDownPopup(t, a.tv, dd)
 
 	event := tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
-		t.Errorf("onGlobalKey('h') while datadogLogsV service filter focused = %v, want event passed through unchanged", got)
+		t.Errorf("onGlobalKey('h') while datadogLogsV service filter's popup is open = %v, want event passed through unchanged", got)
 	}
 }
 
@@ -255,11 +271,13 @@ func TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused(t *testing.T) {
 // serviceFilterDD's test above's counterpart for envFilterDD.
 func TestOnGlobalKeyPassesThroughWhenDatadogEnvFilterFocused(t *testing.T) {
 	a := New(config.Default())
-	a.tv.SetFocus(a.datadogLogsV.FilterInputs()[2])
+	dd := a.datadogLogsV.FilterInputs()[2].(*tview.DropDown)
+	a.tv.SetFocus(dd)
+	openDropDownPopup(t, a.tv, dd)
 
 	event := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)
 	if got := a.onGlobalKey(event); got != event {
-		t.Errorf("onGlobalKey('s') while datadogLogsV env filter focused = %v, want event passed through unchanged", got)
+		t.Errorf("onGlobalKey('s') while datadogLogsV env filter's popup is open = %v, want event passed through unchanged", got)
 	}
 }
 

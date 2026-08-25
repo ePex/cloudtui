@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Fix `onGlobalKey`'s `focusExemptInputs` check
+1. [x] Fix `onGlobalKey`'s `focusExemptInputs` check
    (`tui/internal/app/app.go`) to use `HasFocus()` instead of identity
    comparison; correct the two existing Datadog dropdown regression
    tests (`tui/internal/app/app_test.go`) to open the popup before

@@ -456,9 +456,21 @@ func (a *App) Run() error {
 // onGlobalKey handles the app's hotkeys (h/s/q/?) and the ':' command
 // prompt, all inert while the prompt or any input field has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
-	focus := a.tv.GetFocus()
+	// HasFocus(), not an a.tv.GetFocus() identity check: tview.DropDown
+	// delegates focus to a private, internal *tview.List once its popup
+	// is open (Focus(delegate) calls delegate(d.list), not d.Box.Focus),
+	// so Application.GetFocus() no longer equals the *DropDown itself at
+	// that point — the identity check silently stopped matching for
+	// every keystroke typed into an open dropdown (found live:
+	// DatadogLogsView's Service/Env filter dropdowns, 'q' quit the whole
+	// app while a dropdown's popup was open). DropDown.HasFocus()
+	// correctly delegates through (returns d.list.HasFocus() while
+	// open), and every other focusExemptInputs entry is a plain
+	// *tview.InputField, for which HasFocus() is identity-equivalent —
+	// so this closes the gap with no behavior change for the
+	// non-dropdown cases.
 	for _, in := range a.focusExemptInputs {
-		if focus == in {
+		if in.HasFocus() {
 			return event
 		}
 	}
