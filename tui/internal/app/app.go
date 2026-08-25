@@ -68,6 +68,7 @@ type App struct {
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
+	jmsTypePrompt  *dialog.JMSTypePrompt
 	timeRangeModal *dialog.TimeRangeModal
 	datadogEditor  *dialog.DatadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
@@ -225,6 +226,7 @@ func New(cfg config.Config) *App {
 	a.movePicker = dialog.NewMovePicker(a)
 	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	a.messageFilter = dialog.NewMessageFilter(a)
+	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 	a.connManager = dialog.NewConnManager(a, a.confirm)
 	a.datadogEditor = dialog.NewDatadogEditor(a)
@@ -233,7 +235,7 @@ func New(cfg config.Config) *App {
 
 	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
 
-	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
+	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
 	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm,
 		func() {
@@ -330,6 +332,22 @@ func New(cfg config.Config) *App {
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
+	// Border top+bottom (2 rows) + content (1 row) + spare rows below the
+	// field for the autocomplete drop-down. tview.InputField draws that
+	// drop-down starting exactly one row below the field's own content
+	// row (InputField.Draw's ly := y+1), regardless of the box's declared
+	// height — with too little height, that row lands on the box's own
+	// bottom border, drawing the drop-down's first entry directly on top
+	// of the border line (found live: the sentinel's "Scan up to 5000..."
+	// text rendered smashed into "╚═══...═══╝", unreadable). 12 leaves 9
+	// spare rows, comfortably covering a typical scanned-types list (the
+	// sentinel plus a handful of real types) without touching the
+	// border — unlike messageFilterOverlay above (which gets its spare
+	// vertical space for free from its own sibling form fields/buttons
+	// below the JMS Type field), this is a single field with nothing
+	// else in the box to borrow room from.
+	jmsTypePromptOverlay := ui.Centered(a.jmsTypePrompt.Primitive(), 64, 12)
+
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
@@ -358,6 +376,7 @@ func New(cfg config.Config) *App {
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
+		AddPage("jmstype-prompt", jmsTypePromptOverlay, true, false).
 		AddPage("time-range", timeRangeOverlay, true, false).
 		AddPage("datadog-editor", datadogEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
@@ -387,6 +406,7 @@ func New(cfg config.Config) *App {
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
+		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
 		a.themePicker,
@@ -415,6 +435,7 @@ func New(cfg config.Config) *App {
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
+		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
 		a.themePicker,

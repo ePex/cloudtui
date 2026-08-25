@@ -48,7 +48,8 @@ type fakeViewHost struct {
 	awsAuthTypeForFn         func(ctx context.Context, profile string) (awsprofile.AuthType, error)
 	awsSSOLoginFn            func(ctx context.Context, profile string) error
 	loadedJMSTypes           []string
-	scanJMSTypesFn           func(ctx context.Context, maxCount int) ([]string, error)
+	messagesQueueName        string
+	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) ([]string, error)
 }
 
 // newFakeViewHost defaults backend to a no-op fakeQueueBackend (never nil)
@@ -90,11 +91,12 @@ func (f *fakeViewHost) MessagesFilter() queue.MessageFilter        { return queu
 func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}
 func (f *fakeViewHost) FocusMessages()                             {}
 func (f *fakeViewHost) LoadedJMSTypes() []string                   { return f.loadedJMSTypes }
-func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
+func (f *fakeViewHost) MessagesQueueName() string                  { return f.messagesQueueName }
+func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
 	if f.scanJMSTypesFn == nil {
 		return nil, nil
 	}
-	return f.scanJMSTypesFn(ctx, maxCount)
+	return f.scanJMSTypesFn(ctx, queueName, maxCount)
 }
 
 // -- ui.ViewHost chrome --

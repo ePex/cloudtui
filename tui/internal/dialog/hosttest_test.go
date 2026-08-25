@@ -36,7 +36,8 @@ type testHost struct {
 	activeAWSProfile   string
 	toggledFavorite    *toggledFavoriteCall
 	loadedJMSTypes     []string
-	scanJMSTypesFn     func(ctx context.Context, maxCount int) ([]string, error)
+	messagesQueueName  string
+	scanJMSTypesFn     func(ctx context.Context, queueName string, maxCount int) ([]string, error)
 	reloadedQueue      string
 	appliedFilter      *queue.MessageFilter
 	focusMessagesCalls int
@@ -99,12 +100,13 @@ func (h *testHost) MessagesFilter() queue.MessageFilter       { return h.message
 func (h *testHost) ApplyMessagesFilter(f queue.MessageFilter) { h.appliedFilter = &f }
 func (h *testHost) FocusMessages()                            { h.focusMessagesCalls++ }
 
-func (h *testHost) LoadedJMSTypes() []string { return h.loadedJMSTypes }
-func (h *testHost) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
+func (h *testHost) LoadedJMSTypes() []string  { return h.loadedJMSTypes }
+func (h *testHost) MessagesQueueName() string { return h.messagesQueueName }
+func (h *testHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
 	if h.scanJMSTypesFn == nil {
 		return nil, nil
 	}
-	return h.scanJMSTypesFn(ctx, maxCount)
+	return h.scanJMSTypesFn(ctx, queueName, maxCount)
 }
 
 var _ ui.Host = (*testHost)(nil)

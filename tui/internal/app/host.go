@@ -76,11 +76,19 @@ func (a *App) LoadedJMSTypes() []string {
 	return distinctJMSTypes(a.messagesV.AllMessages())
 }
 
-// ScanJMSTypes runs a fresh, unfiltered browse capped at maxCount purely
-// to widen the JMS Type suggestion set — it does not touch the messages
-// view's displayed list.
-func (a *App) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
-	msgs, err := a.backend.BrowseMessages(ctx, a.messagesV.QueueName(), queue.MessageFilter{MaxCount: maxCount})
+// MessagesQueueName returns the queue the Messages view currently shows —
+// MessageFilter's own way to learn which queue to scan (it has no queue
+// name of its own).
+func (a *App) MessagesQueueName() string {
+	return a.messagesV.QueueName()
+}
+
+// ScanJMSTypes runs a fresh, unfiltered browse of queueName capped at
+// maxCount purely to widen the JMS Type suggestion set — it does not
+// touch the messages view's displayed list, regardless of which queue
+// queueName names.
+func (a *App) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
+	msgs, err := a.backend.BrowseMessages(ctx, queueName, queue.MessageFilter{MaxCount: maxCount})
 	if err != nil {
 		return nil, err
 	}
