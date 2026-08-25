@@ -110,6 +110,29 @@ reloads and are reflected in the table title):
   filter. This is the one that bounds how much is fetched for large
   backlogs.
 
+  The **JMS Type** field has two-tier autocomplete (styled via
+  `ui.StyleInputFieldAutocomplete`, same accent-tinted panel as the `:`
+  command prompt): typing prefix-filters distinct `JMSType` values seen
+  among the messages already loaded (`Host.LoadedJMSTypes()`, free — no
+  network call), and a permanent, always-present entry ("↻ Scan up to
+  5,000 messages for JMS types", regardless of what's typed — it's an
+  action, not a data suggestion) triggers an opt-in wider browse
+  (`Host.ScanJMSTypes`) with no `JMSType` filter and `MaxCount: 5000`,
+  purely to surface types the already-loaded set might be missing
+  (`Message.JMSType` values are only ever what fits under the currently
+  loaded/filtered set). **Neither tier is a
+  guaranteed-complete list of every JMS type on the queue**: mq-proxy's
+  `list-messages` endpoint requires a positive `maxCount` on every call
+  (spec/11), so an unbounded browse isn't possible there, and an
+  unbounded Jolokia fetch risks real latency on a very large queue — the
+  scan can only ever widen the sample. The scanned set is dialog-local,
+  merged into suggestions only for the rest of that dialog session, and
+  reset on every `Show()` (never persisted or cached across queues/opens).
+  While a scan is in flight, the field visibly holds the sentinel's own
+  text (clearing it immediately on selection was tried and reverted —
+  see the gotcha below) and `apply()` refuses to submit until it
+  completes.
+
 Both hotkeys appear in `MessagesView.Shortcuts()`/the context panel.
 
 ## Data & config
@@ -207,6 +230,39 @@ Backend-specific filter behavior:
   the next reload/toggle — the same accepted trade-off a fixed width
   already had, just tracking the real column far more often now instead
   of never.
+- `tui/internal/dialog/messagefilter.go` — `MessageFilter`, including the
+  JMS Type autocomplete wiring described above. `Host.LoadedJMSTypes`/
+  `Host.ScanJMSTypes` (implemented in `internal/app/host.go`, backed by
+  `MessagesView.AllMessages()` for the former) supply the two tiers —
+  `internal/dialog` can't import `internal/view` directly to read
+  `allMsgs` itself (the reverse import already exists, for `MessageFilter`
+  and friends).
+- **`SetAutocompleteFunc` eagerly caches the drop-down once, at wiring
+  time — found live, same root cause as the `:` prompt's documented
+  gotcha (see spec/01).** `NewMessageFilter` wires the JMS Type field's
+  autocomplete before `a.messagesV` exists (`App.New()` builds
+  `a.messageFilter` first — `NewMessagesView` takes the already-built
+  filter as a constructor argument, so this can't simply reorder), so
+  the eager call needed a nil guard in `LoadedJMSTypes`. Separately, and
+  more visibly: `Show()`'s `SetText` to prefill the field does *not*
+  itself refresh that cached drop-down (only a live keystroke does) —
+  without an explicit `field.Autocomplete()` call in `Show()`, opening
+  the dialog fresh showed only the scan sentinel, never the real loaded
+  types, until the user typed something.
+- **Reentrant `SetText` on the same field, called from inside its own
+  change-notification callback, corrupts tview's text buffer — found
+  live as garbled/duplicated rendered text.** The JMS Type field's
+  `SetChangedFunc` originally cleared the field back to `""` immediately
+  upon detecting the scan-trigger sentinel — but that detection runs
+  *from inside* the very `SetText` call that put the sentinel there
+  (accepting it via Enter calls `SetText(sentinel)`, which synchronously
+  invokes `SetChangedFunc`, from which the code called `SetText` again on
+  the same field). The fix moved the clear to run once the scan
+  completes (from a background goroutine's `QueueUpdateDraw` — genuinely
+  outside the original input handler's call stack) instead of
+  immediately — meaning the field visibly holds the sentinel's own text
+  for the whole scan, not just an instant, so `apply()` now also refuses
+  to submit while a scan is in flight.
 - Per-column `Expansion`/`MaxWidth` values are defined once, in
   `messageColumns` (`messages.go`) — used by **both** the header row and
   every data row, rather than each setting its own. Found live: with
