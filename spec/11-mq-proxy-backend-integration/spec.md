@@ -156,11 +156,6 @@ tooling. Manual/on-demand only — not wired into CI (needs a live broker).
 
 ## Out of scope (deliberate)
 
-- No TUI UI (screens/keybindings) for the filtered bulk delete/move
-  `queue.Backend` methods that exist for API-contract parity — they're
-  implemented and unit-tested on both backends but nothing in
-  `internal/app`/`internal/view` calls them; exposing bulk-filtered
-  delete/move to the user would be a future feature.
 - No pagination/"load more" — `maxCount` caps what's fetched; no follow-up
   affordance to fetch the next batch, and no in-UI indication that more
   messages exist beyond the cap.
