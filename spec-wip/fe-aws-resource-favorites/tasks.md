@@ -9,7 +9,7 @@
    mirroring `SetActiveAWSProfile`), stub methods in
    `tui/internal/app/host_test.go`, `tui/internal/dialog/hosttest_test.go`,
    and `tui/internal/view/testfake_test.go`.
-3. [ ] `internal/view` favorite-sort helper (package-level, reused by all
+3. [x] `internal/view` favorite-sort helper (package-level, reused by all
    three views below) plus its own unit test.
 4. [ ] SSM Parameters view: star column, `f` toggle, favorite-first sort,
    `Shortcuts()` entry, tests.
