@@ -18,8 +18,14 @@ leaving the app or reaching for the AWS CLI/console.
   default credential chain.
 - List view (table, same shape as `queuesView`): parameters fetched
   recursively from the root path (`/` via `GetParametersByPath`), showing
-  name/type/last-modified. `/` filters by substring on name, same
-  convention as the queues list and AWS Profiles.
+  a leftmost star column plus name/type/last-modified. `/` filters by
+  substring on name, same convention as the queues list and AWS Profiles.
+- `f` toggles the selected row's favorite status, scoped to the current
+  AWS profile (see "Data & config" below) — favorited rows always sort
+  above non-favorited ones (a stable partition on top of the loaded
+  order, not a second column-sort mode), and show a `★` in the star
+  column. Same mechanism, key, and display as Secrets Manager (spec/16)
+  and CloudWatch Logs (spec/17).
 - `Enter` on a `String`/`StringList` row opens a detail view showing the
   value immediately.
 - `Enter` on a `SecureString` (KMS-encrypted) row opens a detail view
@@ -45,6 +51,11 @@ leaving the app or reaching for the AWS CLI/console.
 - Always fetches the whole parameter tree from `/` and filters
   client-side (same approach as the AWS Profiles overlay) — no
   path-scoped server-side fetching in this slice.
+- Favorited parameter names are stored in `config.Config.AWSFavorites`
+  (`SSMParameters map[string][]string`, keyed by AWS profile name — see
+  spec/16 for why favorites are per-profile and why the three item kinds
+  are independent namespaces). Persisted immediately on toggle via
+  `Host.ToggleFavorite`.
 
 ## Implementation notes
 

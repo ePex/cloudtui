@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
+	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func newTestLogsView(t *testing.T) (*fakeViewHost, *LogsView) {
@@ -31,8 +32,10 @@ func TestLogsViewNameAndTitle(t *testing.T) {
 func TestLogsViewHeaderLabels(t *testing.T) {
 	_, lv := newTestLogsView(t)
 
+	// Column 0 is the star column (blank header, checked separately).
 	want := []string{"NAME", "RETENTION", "CREATED"}
-	for col, label := range want {
+	for i, label := range want {
+		col := i + 1
 		cell := lv.table.GetCell(0, col)
 		if cell == nil {
 			t.Fatalf("header cell at column %d is nil", col)
@@ -62,7 +65,7 @@ func TestLogsViewLoadErrorsWithoutActiveProfile(t *testing.T) {
 	if calls != 0 {
 		t.Error("listLogGroups was called despite no active AWS profile")
 	}
-	if got := lv.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
+	if got := lv.table.GetCell(1, 1).Text; !strings.Contains(got, "no AWS profile selected") {
 		t.Errorf("error cell = %q, want it to mention no profile selected", got)
 	}
 }
@@ -78,13 +81,13 @@ func TestLogsViewRepaintPopulatesRows(t *testing.T) {
 	if got := lv.table.GetRowCount(); got != 3 { // header + 2
 		t.Fatalf("row count = %d, want 3", got)
 	}
-	if got := lv.table.GetCell(1, 0).Text; got != "/aws/lambda/one" {
+	if got := lv.table.GetCell(1, 1).Text; got != "/aws/lambda/one" {
 		t.Errorf("row 1 name = %q, want %q", got, "/aws/lambda/one")
 	}
-	if got := lv.table.GetCell(1, 1).Text; got != "14 days" {
+	if got := lv.table.GetCell(1, 2).Text; got != "14 days" {
 		t.Errorf("row 1 retention = %q, want %q", got, "14 days")
 	}
-	if got := lv.table.GetCell(2, 1).Text; got != "never" {
+	if got := lv.table.GetCell(2, 2).Text; got != "never" {
 		t.Errorf("row 2 retention = %q, want %q", got, "never")
 	}
 	if got := lv.table.GetTitle(); got != " CloudWatch Logs (2) " {
@@ -97,7 +100,7 @@ func TestLogsViewRepaintShowsDashForNoCreatedAt(t *testing.T) {
 
 	lv.repaint([]awslogs.LogGroup{{Name: "/x"}})
 
-	if got := lv.table.GetCell(1, 2).Text; got != "-" {
+	if got := lv.table.GetCell(1, 3).Text; got != "-" {
 		t.Errorf("created cell = %q, want %q", got, "-")
 	}
 }
@@ -171,7 +174,7 @@ func TestLogsViewShowErrorRendersMessage(t *testing.T) {
 
 	lv.showError(context.DeadlineExceeded)
 
-	if got := lv.table.GetCell(1, 0).Text; !strings.Contains(got, "deadline exceeded") {
+	if got := lv.table.GetCell(1, 1).Text; !strings.Contains(got, "deadline exceeded") {
 		t.Errorf("error cell = %q, want it to contain the error", got)
 	}
 }
@@ -185,12 +188,74 @@ func TestLogsViewShowStatusRendersMessage(t *testing.T) {
 
 	lv.showStatus("AWS SSO session expired — opening browser to log in...")
 
-	if got := lv.table.GetCell(1, 0).Text; !strings.Contains(got, "opening browser") {
+	if got := lv.table.GetCell(1, 1).Text; !strings.Contains(got, "opening browser") {
 		t.Errorf("status cell = %q, want it to contain the status message", got)
 	}
-	fg, _, _ := lv.table.GetCell(1, 0).Style.Decompose()
+	fg, _, _ := lv.table.GetCell(1, 1).Style.Decompose()
 	if want := tcell.GetColor(host.cfg.Colors.Accent); fg != want {
 		t.Errorf("status cell color = %v, want accent color %v", fg, want)
+	}
+}
+
+func TestLogsViewFavoriteTogglePersistsAndShowsStar(t *testing.T) {
+	host, lv := newTestLogsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	lv.repaint([]awslogs.LogGroup{{Name: "/aws/lambda/one"}, {Name: "/aws/lambda/two"}})
+	lv.table.Select(1, 0) // "/aws/lambda/one"
+
+	lv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if !host.cfg.AWSFavorites.IsFavorite(config.FavoriteLogGroup, "work", "/aws/lambda/one") {
+		t.Error("host.ToggleFavorite was not called for the selected row")
+	}
+	if got := lv.table.GetCell(1, 0).Text; got != favoriteStar {
+		t.Errorf("star cell = %q, want %q", got, favoriteStar)
+	}
+}
+
+func TestLogsViewFavoriteSortsToTop(t *testing.T) {
+	host, lv := newTestLogsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteLogGroup, "work", "/aws/lambda/two")
+
+	lv.repaint([]awslogs.LogGroup{{Name: "/aws/lambda/one"}, {Name: "/aws/lambda/two"}})
+
+	if got := lv.table.GetCell(1, 1).Text; got != "/aws/lambda/two" {
+		t.Errorf("row 1 (favorited) = %q, want %q", got, "/aws/lambda/two")
+	}
+	if got := lv.table.GetCell(2, 1).Text; got != "/aws/lambda/one" {
+		t.Errorf("row 2 = %q, want %q", got, "/aws/lambda/one")
+	}
+}
+
+func TestLogsViewFavoriteToggleTwiceRemovesStar(t *testing.T) {
+	host, lv := newTestLogsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	lv.repaint([]awslogs.LogGroup{{Name: "/aws/lambda/one"}})
+	lv.table.Select(1, 0)
+
+	capture := lv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if host.cfg.AWSFavorites.IsFavorite(config.FavoriteLogGroup, "work", "/aws/lambda/one") {
+		t.Error("favorite still set after toggling twice")
+	}
+	if got := lv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell = %q, want empty", got)
+	}
+}
+
+func TestLogsViewFavoritesDoNotLeakAcrossProfiles(t *testing.T) {
+	host, lv := newTestLogsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteLogGroup, "work", "/aws/lambda/one")
+
+	host.cfg.ActiveAWSProfile = "personal"
+	lv.repaint([]awslogs.LogGroup{{Name: "/aws/lambda/one"}})
+
+	if got := lv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell under a different profile = %q, want empty (favorite shouldn't leak)", got)
 	}
 }
 

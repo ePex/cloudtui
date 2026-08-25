@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
+	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func newTestSecretsView(t *testing.T) (*fakeViewHost, *SecretsView) {
@@ -31,8 +32,10 @@ func TestSecretsViewNameAndTitle(t *testing.T) {
 func TestSecretsViewHeaderLabels(t *testing.T) {
 	_, sv := newTestSecretsView(t)
 
+	// Column 0 is the star column (blank header, checked separately).
 	want := []string{"NAME", "ROTATION", "LAST CHANGED"}
-	for col, label := range want {
+	for i, label := range want {
+		col := i + 1
 		cell := sv.table.GetCell(0, col)
 		if cell == nil {
 			t.Fatalf("header cell at column %d is nil", col)
@@ -62,7 +65,7 @@ func TestSecretsViewLoadErrorsWithoutActiveProfile(t *testing.T) {
 	if calls != 0 {
 		t.Error("listSecrets was called despite no active AWS profile")
 	}
-	if got := sv.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
+	if got := sv.table.GetCell(1, 1).Text; !strings.Contains(got, "no AWS profile selected") {
 		t.Errorf("error cell = %q, want it to mention no profile selected", got)
 	}
 }
@@ -78,13 +81,13 @@ func TestSecretsViewRepaintPopulatesRows(t *testing.T) {
 	if got := sv.table.GetRowCount(); got != 3 { // header + 2
 		t.Fatalf("row count = %d, want 3", got)
 	}
-	if got := sv.table.GetCell(1, 0).Text; got != "/app/one" {
+	if got := sv.table.GetCell(1, 1).Text; got != "/app/one" {
 		t.Errorf("row 1 name = %q, want %q", got, "/app/one")
 	}
-	if got := sv.table.GetCell(1, 1).Text; got != "yes" {
+	if got := sv.table.GetCell(1, 2).Text; got != "yes" {
 		t.Errorf("row 1 rotation = %q, want %q", got, "yes")
 	}
-	if got := sv.table.GetCell(2, 1).Text; got != "no" {
+	if got := sv.table.GetCell(2, 2).Text; got != "no" {
 		t.Errorf("row 2 rotation = %q, want %q", got, "no")
 	}
 	if got := sv.table.GetTitle(); got != " Secrets Manager (2) " {
@@ -97,7 +100,7 @@ func TestSecretsViewRepaintShowsDashForNoLastChanged(t *testing.T) {
 
 	sv.repaint([]awssecrets.Secret{{Name: "/x"}})
 
-	if got := sv.table.GetCell(1, 2).Text; got != "-" {
+	if got := sv.table.GetCell(1, 3).Text; got != "-" {
 		t.Errorf("last-changed cell = %q, want %q", got, "-")
 	}
 }
@@ -171,7 +174,7 @@ func TestSecretsViewShowErrorRendersMessage(t *testing.T) {
 
 	sv.showError(context.DeadlineExceeded)
 
-	if got := sv.table.GetCell(1, 0).Text; !strings.Contains(got, "deadline exceeded") {
+	if got := sv.table.GetCell(1, 1).Text; !strings.Contains(got, "deadline exceeded") {
 		t.Errorf("error cell = %q, want it to contain the error", got)
 	}
 }
@@ -185,12 +188,74 @@ func TestSecretsViewShowStatusRendersMessage(t *testing.T) {
 
 	sv.showStatus("AWS SSO session expired — opening browser to log in...")
 
-	if got := sv.table.GetCell(1, 0).Text; !strings.Contains(got, "opening browser") {
+	if got := sv.table.GetCell(1, 1).Text; !strings.Contains(got, "opening browser") {
 		t.Errorf("status cell = %q, want it to contain the status message", got)
 	}
-	fg, _, _ := sv.table.GetCell(1, 0).Style.Decompose()
+	fg, _, _ := sv.table.GetCell(1, 1).Style.Decompose()
 	if want := tcell.GetColor(host.cfg.Colors.Accent); fg != want {
 		t.Errorf("status cell color = %v, want accent color %v", fg, want)
+	}
+}
+
+func TestSecretsViewFavoriteTogglePersistsAndShowsStar(t *testing.T) {
+	host, sv := newTestSecretsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	sv.repaint([]awssecrets.Secret{{Name: "/app/one"}, {Name: "/app/two"}})
+	sv.table.Select(1, 0) // "/app/one"
+
+	sv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if !host.cfg.AWSFavorites.IsFavorite(config.FavoriteSecret, "work", "/app/one") {
+		t.Error("host.ToggleFavorite was not called for the selected row")
+	}
+	if got := sv.table.GetCell(1, 0).Text; got != favoriteStar {
+		t.Errorf("star cell = %q, want %q", got, favoriteStar)
+	}
+}
+
+func TestSecretsViewFavoriteSortsToTop(t *testing.T) {
+	host, sv := newTestSecretsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteSecret, "work", "/app/two")
+
+	sv.repaint([]awssecrets.Secret{{Name: "/app/one"}, {Name: "/app/two"}})
+
+	if got := sv.table.GetCell(1, 1).Text; got != "/app/two" {
+		t.Errorf("row 1 (favorited) = %q, want %q", got, "/app/two")
+	}
+	if got := sv.table.GetCell(2, 1).Text; got != "/app/one" {
+		t.Errorf("row 2 = %q, want %q", got, "/app/one")
+	}
+}
+
+func TestSecretsViewFavoriteToggleTwiceRemovesStar(t *testing.T) {
+	host, sv := newTestSecretsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	sv.repaint([]awssecrets.Secret{{Name: "/app/one"}})
+	sv.table.Select(1, 0)
+
+	capture := sv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if host.cfg.AWSFavorites.IsFavorite(config.FavoriteSecret, "work", "/app/one") {
+		t.Error("favorite still set after toggling twice")
+	}
+	if got := sv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell = %q, want empty", got)
+	}
+}
+
+func TestSecretsViewFavoritesDoNotLeakAcrossProfiles(t *testing.T) {
+	host, sv := newTestSecretsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteSecret, "work", "/app/one")
+
+	host.cfg.ActiveAWSProfile = "personal"
+	sv.repaint([]awssecrets.Secret{{Name: "/app/one"}})
+
+	if got := sv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell under a different profile = %q, want empty (favorite shouldn't leak)", got)
 	}
 }
 

@@ -16,9 +16,20 @@ CLI/console.
 - Uses `cfg.ActiveAWSProfile` for credentials; errors clearly if none is
   selected.
 - List view (table): secrets fetched via paginated `ListSecrets`, showing
-  name/last-changed/rotation-enabled — **metadata only**, since
-  `ListSecrets` structurally never returns a value. `/` filters by
-  substring on name.
+  a leftmost star column plus name/last-changed/rotation-enabled —
+  **metadata only**, since `ListSecrets` structurally never returns a
+  value. `/` filters by substring on name.
+- `f` toggles the selected row's favorite status, scoped to the current
+  AWS profile — favoriting is per profile because a secret name is only
+  meaningful within the account a profile points at, and each AWS CLI
+  profile already pins its own region (`~/.aws/config`), so profile alone
+  is sufficient scoping with no separate region axis needed. Favorited
+  rows always sort above non-favorited ones (a stable partition, not a
+  second column-sort mode) and show a `★` in the star column. Same
+  mechanism, key, and display as SSM Parameters (spec/15) and CloudWatch
+  Logs (spec/17) — each of the three item kinds is its own independent
+  namespace (favoriting a secret named `x` has no bearing on a parameter
+  or log group also named `x`).
 - `Enter` opens a detail view showing metadata plus "(encrypted — press `r`
   to reveal)".
 - `r` reveals the value: an async `GetSecretValue` call (`AWSCURRENT` only
@@ -46,6 +57,15 @@ CLI/console.
   secret; there is no `Secret`-typed return here).
 - Also used by spec/12 (named connections) to resolve a
   Secrets-Manager-backed connection password via `Reveal`.
+- Favorited secret names are stored in `config.Config.AWSFavorites`
+  (`Secrets map[string][]string`, keyed by AWS profile name; `FavoriteKind
+  = FavoriteSecret`). `AWSFavorites` also holds the equivalent maps for
+  SSM Parameters and CloudWatch Logs (spec/15, spec/17) — one map per
+  item kind, since favorites don't cross namespaces. Persisted
+  immediately on toggle via `Host.ToggleFavorite(kind, profile, name)`; a
+  view reads its own favorites straight off `Host.Config().AWSFavorites`
+  rather than through a dedicated getter, consistent with how every
+  other view already reads config fields directly.
 
 ## Notable gotchas worth preserving
 

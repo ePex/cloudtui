@@ -16,7 +16,12 @@ this is a query tool over a high-volume, time-ordered event stream.
   clearly if none is selected.
 - **Two screens**:
   1. Log-group list — browse, filterable by name (`/`, same convention as
-     the other AWS list views).
+     the other AWS list views), with a leftmost star column. `f` toggles
+     the selected log group's favorite status, scoped to the current AWS
+     profile — favorited rows sort above non-favorited ones. Same
+     mechanism, key, and display as SSM Parameters (spec/15) and Secrets
+     Manager (spec/16); not present on the search screen below, which has
+     no persistent list of its own items to favorite.
   2. Search screen, entered per log group — filter pattern + time range →
      matching events.
 - Search uses `FilterLogEvents` (not CloudWatch Logs Insights — Insights
@@ -91,6 +96,10 @@ this is a query tool over a high-volume, time-ordered event stream.
   above.
 - View type: `logSearchView` (per-log-group search screen) — also the
   jump target for the Datadog correlation-ID lookup, see spec/19.
+- Favorited log group names are stored in `config.Config.AWSFavorites`
+  (`LogGroups map[string][]string`, keyed by AWS profile name;
+  `FavoriteKind = FavoriteLogGroup` — see spec/16 for the full
+  `AWSFavorites` shape and why favorites are per-profile).
 
 ## Notable gotchas worth preserving
 

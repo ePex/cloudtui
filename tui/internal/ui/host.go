@@ -33,6 +33,7 @@ type Host interface {
 	SaveDatadogConfig(cfg config.DatadogConfig)
 	SetActiveAWSProfile(name string)
 	ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error)
+	ToggleFavorite(kind config.FavoriteKind, profile, name string)
 
 	// Backend / queue data
 	Backend() queue.Backend
