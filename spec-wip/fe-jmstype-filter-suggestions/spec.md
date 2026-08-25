@@ -23,25 +23,30 @@ Add autocomplete to the "JMS Type" field, with two tiers:
    best-effort sample, not guaranteed to include every type on the queue
    — see "Known limitation" below.
 2. **Opt-in: a special, always-present, visually distinct suggestion
-   entry — "Scan up to 5,000 messages for JMS types" (exact wording
-   decided during implementation) — that triggers a one-off, larger
-   browse purely to widen the suggestion sample.** Selecting it does
-   *not* insert text into the field or submit the form: it clears back to
-   the current text, shows a loading status
-   (`mf.host.SetStatus("Scanning for JMS types...")`), and kicks off an
-   async `BrowseMessages` call with **no `JMSType` filter** (we're
-   discovering types, not narrowing by one) and `MaxCount: 5000`. The
-   scan's result populates a separate, dialog-local "expanded types" set
-   — merged into future suggestion lookups for as long as the dialog
-   stays open — **without touching `MessagesView.allMsgs` or the visible
-   message table**: this is a suggestions-only fetch, not a change to
-   what's displayed. Available on both backends: Jolokia can fetch
-   unbounded from JMX and would cap client-side anyway; mq-proxy's
-   `list-messages` endpoint requires a positive `maxCount` on every call
-   regardless of whether other filter fields (like `jmsType`) are also
-   set (checked against `internal/queue/proxy/proxy.go`'s `browseQuery`
-   and spec/11) — so a fixed, honest, bounded number is required either
-   way, not just a proxy-backend workaround.
+   entry — "↻ Scan up to 5,000 messages for JMS types" — that triggers a
+   one-off, larger browse purely to widen the suggestion sample.**
+   Selecting it does not submit the form; it shows a loading status
+   (`mf.host.SetStatus("Scanning up to 5000 messages for JMS
+   types...")`) and kicks off an async `BrowseMessages` call with **no
+   `JMSType` filter** (we're discovering types, not narrowing by one) and
+   `MaxCount: 5000`. The field visibly holds the sentinel's own literal
+   text for the entire scan (not just an instant) — found during manual
+   verification that clearing it immediately upon selection reentrantly
+   corrupted tview's text buffer (visibly garbled/duplicated text), so
+   the clear happens once the scan completes instead; `apply()` refuses
+   to submit while a scan is in flight so that sentinel text can never be
+   read as a real filter value. The scan's result populates a separate,
+   dialog-local "expanded types" set — merged into future suggestion
+   lookups for as long as the dialog stays open — **without touching
+   `MessagesView.allMsgs` or the visible message table**: this is a
+   suggestions-only fetch, not a change to what's displayed. Verified
+   working on both backends: Jolokia can fetch unbounded from JMX and
+   would cap client-side anyway; mq-proxy's `list-messages` endpoint
+   requires a positive `maxCount` on every call regardless of whether
+   other filter fields (like `jmsType`) are also set (checked against
+   `internal/queue/proxy/proxy.go`'s `browseQuery` and spec/11) — so a
+   fixed, honest, bounded number is required either way, not just a
+   proxy-backend workaround.
 - Typing filters suggestions by prefix, same interaction model as the
   `:` command prompt's autocomplete (`↑`/`↓` navigate and live-update the
   field, `Enter`/`Tab` accepts the highlighted entry without submitting
@@ -95,3 +100,13 @@ already loaded; typing narrows the list; selecting the scan entry shows
 a loading status, then widens the suggestions without changing the
 underlying message table; accepting a suggestion and applying actually
 filters correctly.
+
+**Outcome**: this manual pass against a real broker (both backends) is
+what actually caught two real bugs the unit tests alone had missed — a
+stale-suggestions issue on first open (same class as the `:` prompt's
+documented gotcha) and a reentrant-`SetText` buffer corruption when
+clearing the sentinel. Both are fixed, with regression tests added
+specifically because they were caught this way; see `tasks.md` for the
+full account. This is exactly the category of bug this "Manual
+verification" section exists to catch — logic-correct, still visibly
+broken.

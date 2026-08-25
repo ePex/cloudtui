@@ -94,34 +94,41 @@ type MessageFilter struct {
 
 - `Show()` additionally resets `scanned = nil` and `scanning = false`
   (each time the dialog opens fresh, same as the existing form-field
-  reset already there) and wires the JMS Type field's autocomplete:
-  `ui.StyleInputFieldAutocomplete(field, p)` then
-  `field.SetAutocompleteFunc(mf.jmsTypeSuggestions)` (style-before-func
-  ordering matters — see this session's earlier
+  reset already there), wires the JMS Type field's autocomplete
+  (`ui.StyleInputFieldAutocomplete(field, p)` then
+  `field.SetAutocompleteFunc(mf.jmsTypeSuggestions)` — style-before-func
+  ordering matters, see this session's earlier
   `TestPromptAutocompleteFirstOpenIsReadable` gotcha, same rule applies
-  here).
+  here), and **also calls `field.Autocomplete()` explicitly after
+  prefilling the field's text** — found necessary during manual
+  verification (see below): `SetText` doesn't itself refresh an active
+  drop-down, so without this, opening the dialog fresh showed only the
+  scan sentinel (the suggestion list cached from `SetAutocompleteFunc`'s
+  eager call at construction time, before any real messages were loaded),
+  never the real loaded types, until a keystroke forced a refresh — same
+  gotcha as the `:` prompt (spec/01) and its identical fix.
 - `jmsTypeSuggestions(currentText string) []string`: prefix-filters
   `mf.host.LoadedJMSTypes()` deduped with `mf.scanned`, then always
-  appends the sentinel string (`scanSentinel` constant) regardless of
+  appends the sentinel string (`jmsTypeScanSentinel`) regardless of
   `currentText` — it's an action, not a data suggestion, so it shouldn't
   disappear just because the user has typed something.
-- The field's `SetChangedFunc` (not currently used on this field) checks
-  `if text == scanSentinel`: if so, `SetText("")` (guarded against
-  re-entrant firing — see Testing) and calls `mf.startScan()`; otherwise
-  no-ops (the field's normal text just changed, nothing special to do —
-  suggestions refresh automatically via tview's own
-  `Autocomplete()`-on-text-change behavior).
+- `onJMSTypeChanged` (the field's `SetChangedFunc`) checks
+  `if text == jmsTypeScanSentinel`: if so, calls `mf.startScan()` — and
+  **does not** clear the field's text itself (see "Key decisions" below
+  for why that turned out to be unsafe); otherwise no-ops.
 - `startScan()`: no-ops if `mf.scanning` already true (avoid piling up
   duplicate requests if the user selects the sentinel twice quickly).
   Sets `mf.scanning = true`, `mf.host.SetStatus("Scanning up to 5,000
   messages for JMS types...")`, and runs `mf.host.ScanJMSTypes(ctx,
-  5000)` in a goroutine; on completion (via `QueueUpdateDraw`), sets
-  `mf.scanned` to the result (deduped against what tier 1 already
-  offered — cosmetic only, `jmsTypeSuggestions` already dedupes),
-  `mf.scanning = false`, clears the status, and calls
-  `field.Autocomplete()` to refresh the open drop-down immediately. An
-  error is shown via `mf.host.SetStatus` the same way `apply()`'s parse
-  errors already are.
+  5000)` in a goroutine; on completion (via `QueueUpdateDraw`),
+  `handleScanResult` sets `mf.scanning = false`, **clears the field's
+  text back to empty (this is where that actually happens — see below)**,
+  and on success sets `mf.scanned` and calls `field.Autocomplete()` to
+  refresh the open drop-down immediately, or on error shows it via
+  `mf.host.SetStatus` the same way `apply()`'s parse errors already do.
+  `apply()` additionally refuses to submit while `mf.scanning` is true,
+  since the field visibly holds the sentinel text for that entire window
+  now (see below).
 
 ### Key decisions
 
@@ -134,10 +141,27 @@ type MessageFilter struct {
   collapsing to a near-empty set after the first arrow press. Detecting
   the sentinel via the field's existing `SetChangedFunc` (already the
   mechanism other filter inputs in this codebase use for live behavior)
-  sidesteps that risk entirely, at the cost of a brief visible moment
-  where the field literally contains the sentinel text before it's
-  cleared back — an accepted, minor UX blip in exchange for not risking
-  the navigation bug.
+  sidesteps that risk entirely.
+- **The field's text is cleared in `handleScanResult`, not in
+  `onJMSTypeChanged` — found the hard way.** The original plan (as
+  written above until manual verification caught this) called
+  `mf.jmsTypeItem.SetText("")` directly inside `onJMSTypeChanged`. That
+  detection runs *from inside* `tview.InputField`'s own
+  `SetText`-triggered change notification (accepting the sentinel via
+  Enter calls `SetText(sentinel)`, which invokes `SetChangedFunc`
+  synchronously, from which the code then called `SetText` again on the
+  *same* field) — a reentrant call into the field's own text buffer while
+  its own change callback is still running. Observed live as visibly
+  garbled, duplicated text
+  (`"...for JMS typesfor JMS typesfor JMS types..."`) — tview's
+  underlying buffer isn't safe to mutate reentrantly this way. Moving the
+  clear into `handleScanResult` (which runs from a *completed* goroutine's
+  `QueueUpdateDraw` — genuinely outside the original input handler's call
+  stack, a fresh top-level call) fixes it. The trade-off this creates: the
+  field visibly holds the sentinel text for the *entire scan duration*
+  now, not just an instant — `apply()`'s new in-flight guard exists
+  specifically because of this wider window, not the original "brief
+  flash."
 - **`scanned` is dialog-local and reset on every `Show()`, not
   persisted or cached across dialog opens.** A stale scan result from
   five minutes ago (possibly a different queue, since the dialog is
@@ -151,30 +175,58 @@ type MessageFilter struct {
   visually, matching how other async loads in this codebase — e.g. SSM
   Parameters' `load()` — already don't guard against the view having
   navigated away mid-fetch).
+- **`apply()` refuses to submit while `mf.scanning` is true**, with a
+  status message rather than silently doing nothing — added once the
+  clear-on-completion design (above) meant the field genuinely holds the
+  sentinel text for the whole scan window, not just an instant; without
+  this, pressing Apply mid-scan would filter by that literal sentinel
+  string as if it were a real JMS type.
 
 ## Testing
 
 - `internal/app`: unit tests for `distinctJMSTypes` (dedup, sort, empty
   strings excluded), `LoadedJMSTypes` (reads through
-  `messagesV.AllMessages()`), and `ScanJMSTypes` (calls
+  `messagesV.AllMessages()`, plus a dedicated nil-`messagesV` regression
+  test — see "Bugs found" below), and `ScanJMSTypes` (calls
   `Backend().BrowseMessages` with the given queue/maxCount and no
-  `JMSType`, via the existing fake backend pattern already used for
-  other `Host`-method tests).
+  `JMSType`, via a small local fake `queue.Backend`, since
+  `messagesV.Open()`'s async `Load()`+`QueueUpdateDraw` path can't safely
+  run against a `*tview.Application` with no running event loop — no
+  other test in this package exercises it either).
 - `internal/dialog/messagefilter_test.go` (new): `jmsTypeSuggestions`
-  returns tier-1 types prefix-filtered plus the sentinel always present;
-  simulating the sentinel's `SetChangedFunc` firing triggers a scan
-  (fake `Host.ScanJMSTypes`) and the result is reflected in subsequent
-  suggestions; a second sentinel trigger while `scanning` is a no-op
-  (fake records call count).
+  returns tier-1 types (plus any scanned) prefix-filtered with the
+  sentinel always present; `onJMSTypeChanged`/`startScan` cover the
+  synchronous trigger and duplicate-scan guard directly, without ever
+  running the real goroutine (same reasoning as `internal/view`'s
+  `load()` tests); `handleScanResult` is called directly to cover the
+  completion path (success, error, and that it clears the field);
+  `TestShowRefreshesStaleAutocomplete` renders to a `tcell.SimulationScreen`
+  to catch the stale-cache bug (a plain call-and-check test wouldn't —
+  see "Bugs found" below); `TestApplyRefusesWhileScanning` covers the new
+  guard.
 - Manual verification via the `verify-live` skill against a real broker
   (both backends): confirms the two-tier suggestion behavior end-to-end,
-  as described in `spec.md`'s "Manual verification".
+  as described in `spec.md`'s "Manual verification" — this is what
+  actually caught both bugs in "Bugs found" below; neither was visible
+  from the unit tests alone until written afterward specifically to
+  pin them.
+
+## Bugs found during implementation (see tasks.md for the full account)
+
+1. `LoadedJMSTypes` initially panicked on a nil `a.messagesV` —
+   `NewMessageFilter` is built before `a.messagesV` in `App.New()`, and
+   `SetAutocompleteFunc` eagerly calls `Autocomplete()` once immediately.
+   Fixed with a nil guard (same pattern `ReloadAfterSend` already uses in
+   the same file).
+2. Stale autocomplete cache on first open, and reentrant `SetText`
+   corruption when clearing the sentinel — both described in detail
+   under "Key decisions" above.
 
 ## Trade-offs / risks accepted
 
-- The brief visible sentinel-text flash when accepting it (see "Key
-  decisions" above) is a minor, accepted cosmetic quirk, not fixed, to
-  avoid a worse (navigation-breaking) risk.
+- The field visibly holds the sentinel text for the whole scan duration
+  (not just a brief flash, as originally planned — see "Key decisions"),
+  guarded by `apply()`'s refusal to submit mid-scan.
 - 5,000 is a fixed constant, not user-configurable — consistent with
   `defaultBrowseMaxCount` (500) already being a fixed constant, not a
   setting.
