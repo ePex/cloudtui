@@ -38,6 +38,103 @@ type Config struct {
 	Theme            string        `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
 	Logo             []string      `yaml:"logo"`
 	Colors           Palette       `yaml:"colors"`
+	AWSFavorites     AWSFavorites  `yaml:"awsFavorites,omitempty"`
+}
+
+// FavoriteKind identifies which of AWSFavorites' three namespaces a
+// favorite belongs to. Parameters, secrets, and log groups are
+// independent namespaces — the same name can be favorited in one and not
+// another.
+type FavoriteKind string
+
+const (
+	FavoriteSSMParameter FavoriteKind = "ssmParameter"
+	FavoriteSecret       FavoriteKind = "secret"
+	FavoriteLogGroup     FavoriteKind = "logGroup"
+)
+
+// AWSFavorites holds favorited item names per AWS profile, one map per
+// FavoriteKind — a parameter/secret/log-group name is only meaningful
+// within the account a profile points at, so favorites don't apply
+// globally. Sparse: an unlisted profile or name means "not favorited",
+// not an error.
+type AWSFavorites struct {
+	SSMParameters map[string][]string `yaml:"ssmParameters,omitempty"` // profile -> favorited parameter names
+	Secrets       map[string][]string `yaml:"secrets,omitempty"`       // profile -> favorited secret names
+	LogGroups     map[string][]string `yaml:"logGroups,omitempty"`     // profile -> favorited log group names
+}
+
+// mapFor returns the map for kind, or nil for an unrecognized kind.
+func (f AWSFavorites) mapFor(kind FavoriteKind) map[string][]string {
+	switch kind {
+	case FavoriteSSMParameter:
+		return f.SSMParameters
+	case FavoriteSecret:
+		return f.Secrets
+	case FavoriteLogGroup:
+		return f.LogGroups
+	default:
+		return nil
+	}
+}
+
+// IsFavorite reports whether name is favorited under kind/profile.
+func (f AWSFavorites) IsFavorite(kind FavoriteKind, profile, name string) bool {
+	for _, n := range f.mapFor(kind)[profile] {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Toggle returns a copy of f with name's favorite status in kind/profile
+// flipped (favorited -> unfavorited or vice versa).
+func (f AWSFavorites) Toggle(kind FavoriteKind, profile, name string) AWSFavorites {
+	out := AWSFavorites{
+		SSMParameters: cloneFavoritesMap(f.SSMParameters),
+		Secrets:       cloneFavoritesMap(f.Secrets),
+		LogGroups:     cloneFavoritesMap(f.LogGroups),
+	}
+
+	var target *map[string][]string
+	switch kind {
+	case FavoriteSSMParameter:
+		target = &out.SSMParameters
+	case FavoriteSecret:
+		target = &out.Secrets
+	case FavoriteLogGroup:
+		target = &out.LogGroups
+	default:
+		return out
+	}
+	if *target == nil {
+		*target = make(map[string][]string)
+	}
+
+	names := (*target)[profile]
+	for i, n := range names {
+		if n == name {
+			(*target)[profile] = append(names[:i:i], names[i+1:]...)
+			if len((*target)[profile]) == 0 {
+				delete(*target, profile)
+			}
+			return out
+		}
+	}
+	(*target)[profile] = append(names, name)
+	return out
+}
+
+func cloneFavoritesMap(m map[string][]string) map[string][]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(m))
+	for k, v := range m {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
 }
 
 // DatadogConfig holds the settings for the Datadog Logs view (see

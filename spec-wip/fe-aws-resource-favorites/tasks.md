@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Config schema: `AWSFavorites`, `FavoriteKind`, `IsFavorite`,
+1. [x] Config schema: `AWSFavorites`, `FavoriteKind`, `IsFavorite`,
    `Toggle` in `tui/internal/config/config.go`, wired into `Config`; unit
    tests in `tui/internal/config/config_test.go` (toggle on/off,
    independent kinds, independent profiles, YAML round-trip).
