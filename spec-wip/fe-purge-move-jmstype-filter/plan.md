@@ -133,49 +133,67 @@ session already found and fixed there) — the only real differences:
 
 The `p` and `M` handlers each gain a step: instead of going straight to
 `qv.confirm.Show(...)` / `qv.movePicker.Show(...)`, they first call
-`qv.jmsTypePrompt.Show(name, onContinue, restoreQueues)`, where
-`onContinue(jmsType string)` contains what the handler does today, plus
-a branch on whether `jmsType == ""`:
+`qv.jmsTypePrompt.Show(action, name, onContinue, qv.restoreShortcuts)`.
+**Revised during implementation** from the originally-planned single
+inline closure: `onContinue` calls a small named method
+(`confirmPurge`/`pickMoveAllTarget`), which in turn calls a pure
+backend-dispatch method (`doPurge`/`doMoveAll`) — extracted specifically
+so the routing decision (`PurgeQueue` vs. `DeleteMessages`,
+`MoveAllMessages` vs. `MoveMessages`) is unit-testable on its own,
+without needing to drive the confirm dialog / move-picker's async
+selection flow (which this codebase has no existing precedent for unit
+testing at all — `ConfirmDialog`/`SendMessageOverlay` have no dedicated
+test files either; that layer is `verify-live`-tested instead, per
+`tui/CLAUDE.md`).
 
 ```go
-// purge ('p')
-qv.jmsTypePrompt.Show(name, func(jmsType string) {
+func (qv *QueuesView) confirmPurge(name, jmsType string) {
 	question := fmt.Sprintf("Purge %q? All messages will be deleted.", name)
 	if jmsType != "" {
 		question = fmt.Sprintf("Purge %q? All %s messages will be deleted.", name, jmsType)
 	}
 	qv.confirm.Show(question, func() {
 		go func() {
-			var err error
-			if jmsType == "" {
-				err = qv.backend.PurgeQueue(context.Background(), name)
-			} else {
-				_, err = qv.backend.DeleteMessages(context.Background(), name, queue.MessageFilter{JMSType: jmsType})
-			}
+			err := qv.doPurge(context.Background(), name, jmsType)
 			qv.host.QueueUpdateDraw(func() { /* unchanged error/reload handling */ })
 		}()
 	})
-}, restoreQueues)
+}
+
+func (qv *QueuesView) doPurge(ctx context.Context, name, jmsType string) error {
+	if jmsType == "" {
+		return qv.backend.PurgeQueue(ctx, name)
+	}
+	_, err := qv.backend.DeleteMessages(ctx, name, queue.MessageFilter{JMSType: jmsType})
+	return err
+}
 ```
 
-Move-all follows the same shape: `jmsTypePrompt.Show` → (unchanged)
-`movePicker.Show` → branch on `jmsType == ""` between
-`MoveAllMessages`/`MoveMessages` in the existing `onSelect` callback.
-`restoreQueues` (the existing focus/context-panel restore closure
-already defined for `M`'s move-picker `onClose`, and needed newly for
-`p`'s prompt too — purge's current code has no equivalent today since it
-goes straight to a page-managed `ConfirmDialog`) is passed as
-`JMSTypePrompt.Show`'s `onClose`.
+`pickMoveAllTarget`/`doMoveAll` follow the identical shape for move-all
+(`movePicker.Show` unchanged; the branch is in `doMoveAll`). Both
+`confirmPurge`/`pickMoveAllTarget` are passed `qv.restoreShortcuts` as
+the *inner* dialog's `onClose` (`confirm.Show`'s onConfirm path doesn't
+need one — it doesn't take an onClose parameter at all; `movePicker.Show`
+already did before this change), same as before.
+`qv.restoreShortcuts` (a small extracted method — see below) is what
+`JMSTypePrompt.Show`'s own `onClose` uses too.
 
 ### Key decisions
 
-- **Branch inline in `onContinue`, not two separate code paths
-  duplicated for filtered/unfiltered.** The two backend calls
-  (`PurgeQueue` vs. `DeleteMessages`, `MoveAllMessages` vs.
-  `MoveMessages`) differ only in that one line; everything around them
-  (confirm wording minus the type mention, error handling, reload,
-  status message) is identical, so a single `if jmsType == ""` branch
-  reads more clearly than two near-duplicate closures.
+- **Branch inside a small named dispatch method (`doPurge`/`doMoveAll`),
+  not inline in the `onContinue` closure as originally planned.** The
+  two backend calls per action differ only in that one line, so a single
+  `if jmsType == ""` branch was always going to read more clearly than
+  two near-duplicate closures — but pulling that branch out to its own
+  named method (rather than leaving it inline inside `onContinue`) is
+  what actually makes it unit-testable in isolation. This is the one
+  place this plan's original design changed during implementation.
+- **`restoreShortcuts` extracted as its own `QueuesView` method.** It
+  already existed as an inline closure duplicated between `'M'`'s
+  move-picker `onClose` and `'c'`'s send-message `onClose` before this
+  change; adding two more call sites (`'p'`'s confirm/prompt, `'M'`'s
+  prompt) made the duplication clearly worth naming once rather than
+  copy-pasting a third and fourth time.
 
 ## Testing
 
@@ -190,13 +208,19 @@ goes straight to a page-managed `ConfirmDialog`) is passed as
   test for the eager-autocomplete-cache gotcha, `handleScanResult`
   tested directly rather than through the real goroutine) proven in the
   Messages view's filter dialog.
-- `internal/view/queues_test.go`: `onContinue("")` calls
-  `PurgeQueue`/`MoveAllMessages`; `onContinue("SomeType")` calls
-  `DeleteMessages`/`MoveMessages` with the right filter — via the
-  existing `fakeQueueBackend` pattern, extended with injectable
-  functions for the methods under test (mirroring how
+- `internal/view/queues_test.go`: `doPurge`/`doMoveAll` called directly
+  with an empty `jmsType` assert `PurgeQueue`/`MoveAllMessages` are
+  called and `DeleteMessages`/`MoveMessages` are not (and vice versa for
+  a non-empty `jmsType`, asserting the filter's `JMSType` field and that
+  the *other* pair of methods stays uncalled) — via `fakeQueueBackend`,
+  extended with injectable per-method functions (mirroring how
   `fakeViewHost`/`testHost` already inject functions per-test for
-  data-fetcher methods).
+  data-fetcher methods). Two further tests confirm pressing `p`/`M`
+  actually shows `jmsTypePrompt` before either `confirm`/`movePicker`
+  becomes visible, closing the gap between "the dispatch logic is
+  correct" and "it's actually reachable from the keybinding" without
+  needing to drive the prompt's own field interaction (already covered
+  by `jmstypeprompt_test.go`).
 - Manual verification via the `verify-live` skill against a real broker
   (both backends): as described in `spec.md`'s "Manual verification" —
   unfiltered purge/move-all behave exactly as before; filtered

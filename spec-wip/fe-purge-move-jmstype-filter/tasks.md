@@ -8,7 +8,7 @@
    `internal/view/testfake_test.go`).
 2. [x] New `JMSTypePrompt` dialog (`tui/internal/dialog/jmstypeprompt.go`)
    plus `jmstypeprompt_test.go`.
-3. [ ] Wire `JMSTypePrompt` into `app.go` (construction + page
+3. [x] Wire `JMSTypePrompt` into `app.go` (construction + page
    registration) and `queues.go` (new constructor parameter; `p`/`M`
    handlers route through it, branching on filtered vs. unfiltered);
    update `queues_test.go`.
