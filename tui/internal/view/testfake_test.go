@@ -80,6 +80,9 @@ func (f *fakeViewHost) SetActiveAWSProfile(name string)               { f.cfg.Ac
 func (f *fakeViewHost) ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error) {
 	return nil, nil
 }
+func (f *fakeViewHost) ToggleFavorite(kind config.FavoriteKind, profile, name string) {
+	f.cfg.AWSFavorites = f.cfg.AWSFavorites.Toggle(kind, profile, name)
+}
 func (f *fakeViewHost) ReloadAfterSend(queueName string)           {}
 func (f *fakeViewHost) MessagesFilter() queue.MessageFilter        { return queue.MessageFilter{} }
 func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}

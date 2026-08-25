@@ -141,3 +141,14 @@ func (a *App) SetActiveAWSProfile(name string) {
 		slog.Error("SetActiveAWSProfile: save failed", "error", err)
 	}
 }
+
+// ToggleFavorite flips name's favorite status under kind/profile and
+// persists. The calling view is responsible for repainting itself; unlike
+// SetActiveAWSProfile this doesn't change what's active anywhere else in
+// the shell.
+func (a *App) ToggleFavorite(kind config.FavoriteKind, profile, name string) {
+	a.cfg.AWSFavorites = a.cfg.AWSFavorites.Toggle(kind, profile, name)
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("ToggleFavorite: save failed", "error", err)
+	}
+}
