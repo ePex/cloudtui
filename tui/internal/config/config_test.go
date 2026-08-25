@@ -670,3 +670,96 @@ func TestSaveLoadRoundTripWithDatadogConfig(t *testing.T) {
 		t.Errorf("Datadog = %+v, want %+v", got.Datadog, cfg.Datadog)
 	}
 }
+
+func TestAWSFavoritesToggleAddsThenRemoves(t *testing.T) {
+	var f AWSFavorites
+
+	f = f.Toggle(FavoriteSSMParameter, "work", "/app/db/password")
+	if !f.IsFavorite(FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Fatal("IsFavorite() = false after Toggle(), want true")
+	}
+
+	f = f.Toggle(FavoriteSSMParameter, "work", "/app/db/password")
+	if f.IsFavorite(FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Fatal("IsFavorite() = true after second Toggle(), want false")
+	}
+	if len(f.SSMParameters) != 0 {
+		t.Errorf("SSMParameters = %+v, want empty map entry removed", f.SSMParameters)
+	}
+}
+
+func TestAWSFavoritesIndependentKinds(t *testing.T) {
+	var f AWSFavorites
+
+	f = f.Toggle(FavoriteSSMParameter, "work", "shared-name")
+
+	if !f.IsFavorite(FavoriteSSMParameter, "work", "shared-name") {
+		t.Error("IsFavorite(FavoriteSSMParameter) = false, want true")
+	}
+	if f.IsFavorite(FavoriteSecret, "work", "shared-name") {
+		t.Error("IsFavorite(FavoriteSecret) = true, want false (independent namespace)")
+	}
+	if f.IsFavorite(FavoriteLogGroup, "work", "shared-name") {
+		t.Error("IsFavorite(FavoriteLogGroup) = true, want false (independent namespace)")
+	}
+}
+
+func TestAWSFavoritesIndependentProfiles(t *testing.T) {
+	var f AWSFavorites
+
+	f = f.Toggle(FavoriteSecret, "work", "prod/db")
+
+	if !f.IsFavorite(FavoriteSecret, "work", "prod/db") {
+		t.Error("IsFavorite(profile=work) = false, want true")
+	}
+	if f.IsFavorite(FavoriteSecret, "personal", "prod/db") {
+		t.Error("IsFavorite(profile=personal) = true, want false (different profile)")
+	}
+}
+
+func TestAWSFavoritesToggleDoesNotMutateReceiver(t *testing.T) {
+	before := AWSFavorites{}
+
+	after := before.Toggle(FavoriteLogGroup, "work", "/aws/lambda/my-fn")
+
+	if before.IsFavorite(FavoriteLogGroup, "work", "/aws/lambda/my-fn") {
+		t.Error("original AWSFavorites was mutated by Toggle()")
+	}
+	if !after.IsFavorite(FavoriteLogGroup, "work", "/aws/lambda/my-fn") {
+		t.Error("Toggle() result does not have the favorite")
+	}
+}
+
+func TestSaveLoadRoundTripWithAWSFavorites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+
+	cfg := Default()
+	cfg.AWSFavorites = cfg.AWSFavorites.
+		Toggle(FavoriteSSMParameter, "work", "/app/db/password").
+		Toggle(FavoriteSecret, "work", "prod/db").
+		Toggle(FavoriteLogGroup, "personal", "/aws/lambda/my-fn")
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !got.AWSFavorites.IsFavorite(FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Error("SSM parameter favorite not preserved across round-trip")
+	}
+	if !got.AWSFavorites.IsFavorite(FavoriteSecret, "work", "prod/db") {
+		t.Error("secret favorite not preserved across round-trip")
+	}
+	if !got.AWSFavorites.IsFavorite(FavoriteLogGroup, "personal", "/aws/lambda/my-fn") {
+		t.Error("log group favorite not preserved across round-trip")
+	}
+}
+
+func TestDefaultAWSFavoritesEmpty(t *testing.T) {
+	f := Default().AWSFavorites
+	if f.IsFavorite(FavoriteSSMParameter, "work", "anything") {
+		t.Error("Default().AWSFavorites has a favorite, want none")
+	}
+}
