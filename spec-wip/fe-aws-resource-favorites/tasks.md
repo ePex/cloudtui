@@ -14,7 +14,7 @@
 4. [x] SSM Parameters view: star column, `f` toggle, favorite-first sort,
    `Shortcuts()` entry, tests.
 5. [x] Secrets Manager view: same as task 4.
-6. [ ] CloudWatch Logs view: same as task 4.
+6. [x] CloudWatch Logs view: same as task 4.
 7. [ ] Manual verification: real AWS profile(s) — favorite an item in
    each of the three views, confirm star + top-sort, switch AWS profile
    and confirm favorites don't leak across profiles, switch back and
