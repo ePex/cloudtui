@@ -60,6 +60,33 @@ func NewJMSTypePrompt(host ui.Host) *JMSTypePrompt {
 			jp.close()
 		}
 	})
+	// Unlike MessageFilter's JMS Type field (which submits via a separate
+	// Apply button, never through the field's own Enter key) or the ':'
+	// prompt (whose suggestion list is never just a single always-present
+	// action item), this field's suggestion list is *only* the sentinel
+	// until a scan completes — so on a truly untouched field, the
+	// sentinel is unavoidably the sole, already-highlighted entry.
+	// tview.InputField's own Enter handling accepts whatever's
+	// highlighted in an open drop-down before ever reaching SetDoneFunc
+	// at all, so pressing Enter on a blank field
+	// would otherwise always accept the sentinel and kick off a scan the
+	// user never asked for — never actually reaching continueNow() with
+	// an empty jmsType, contrary to Show's documented "blank + Enter
+	// proceeds with no filter" contract. Found live (verify-live): with
+	// no free suggestion tier here, this collision is unavoidable
+	// without intercepting Enter explicitly. SetInputCapture runs before
+	// InputField's own InputHandler (Box's own doc comment), so this
+	// only fires when the field is genuinely empty — typing (even just
+	// enough to filter suggestions) or navigating into the drop-down
+	// with arrows still uses tview's normal accept-then-second-Enter
+	// flow, same as every other autocomplete field in this app.
+	jp.field.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter && jp.field.GetText() == "" {
+			jp.continueNow()
+			return nil
+		}
+		return event
+	})
 	return jp
 }
 

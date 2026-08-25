@@ -39,7 +39,16 @@ one new small overlay.
 3. Leaving the field blank and pressing Enter proceeds exactly as today
    (no filter) — this is the common case and must stay exactly as fast
    and robust as it already is (see "Preserving the existing unfiltered
-   path" below).
+   path" below). **Found live (see `tasks.md`'s implementation record):**
+   since this prompt has no free suggestion tier, the scan-trigger
+   sentinel is unavoidably the *only* autocomplete entry on a fresh,
+   untouched field — and tview's `InputField` intercepts Enter to accept
+   whatever's highlighted in an open drop-down before the field's own
+   "I'm done" handler ever runs. Without an explicit fix
+   (`field.SetInputCapture` intercepting Enter-on-empty-field to bypass
+   that drop-down-accept logic entirely), a single Enter on a blank
+   field would always trigger an unwanted scan instead of proceeding
+   unfiltered, contradicting this exact requirement.
 4. Entering/selecting a JMS Type and pressing Enter proceeds with that
    filter:
    - **Purge**: the existing confirmation dialog still appears next,
