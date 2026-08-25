@@ -1,7 +1,7 @@
 # Tasks
 
 1. [x] `MessagesView.AllMessages()` getter (`tui/internal/view/messages.go`).
-2. [ ] `Host.LoadedJMSTypes`/`Host.ScanJMSTypes` — interface methods in
+2. [x] `Host.LoadedJMSTypes`/`Host.ScanJMSTypes` — interface methods in
    `tui/internal/ui/host.go`, implementations + `distinctJMSTypes` helper
    in `tui/internal/app/host.go`, unit tests in
    `tui/internal/app/host_test.go`, stub/fake methods in

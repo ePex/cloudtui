@@ -47,6 +47,8 @@ type fakeViewHost struct {
 	getPipelineStateFn       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	awsAuthTypeForFn         func(ctx context.Context, profile string) (awsprofile.AuthType, error)
 	awsSSOLoginFn            func(ctx context.Context, profile string) error
+	loadedJMSTypes           []string
+	scanJMSTypesFn           func(ctx context.Context, maxCount int) ([]string, error)
 }
 
 // newFakeViewHost defaults backend to a no-op fakeQueueBackend (never nil)
@@ -87,6 +89,13 @@ func (f *fakeViewHost) ReloadAfterSend(queueName string)           {}
 func (f *fakeViewHost) MessagesFilter() queue.MessageFilter        { return queue.MessageFilter{} }
 func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}
 func (f *fakeViewHost) FocusMessages()                             {}
+func (f *fakeViewHost) LoadedJMSTypes() []string                   { return f.loadedJMSTypes }
+func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
+	if f.scanJMSTypesFn == nil {
+		return nil, nil
+	}
+	return f.scanJMSTypesFn(ctx, maxCount)
+}
 
 // -- ui.ViewHost chrome --
 func (f *fakeViewHost) SwitchToPage(name string)     { f.shownPage = name }
