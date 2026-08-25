@@ -11,7 +11,7 @@
    and `tui/internal/view/testfake_test.go`.
 3. [x] `internal/view` favorite-sort helper (package-level, reused by all
    three views below) plus its own unit test.
-4. [ ] SSM Parameters view: star column, `f` toggle, favorite-first sort,
+4. [x] SSM Parameters view: star column, `f` toggle, favorite-first sort,
    `Shortcuts()` entry, tests.
 5. [ ] Secrets Manager view: same as task 4.
 6. [ ] CloudWatch Logs view: same as task 4.

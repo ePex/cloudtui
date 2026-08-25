@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
+	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func newTestSSMParamsView(t *testing.T) (*fakeViewHost, *SSMParamsView) {
@@ -29,8 +30,10 @@ func TestSSMParamsViewNameAndTitle(t *testing.T) {
 
 func TestSSMParamsViewHeaderLabels(t *testing.T) {
 	_, pv := newTestSSMParamsView(t)
+	// Column 0 is the star column (blank header, checked separately).
 	want := []string{"NAME", "TYPE", "LAST MODIFIED"}
-	for col, label := range want {
+	for i, label := range want {
+		col := i + 1
 		cell := pv.table.GetCell(0, col)
 		if cell == nil {
 			t.Fatalf("header cell at column %d is nil", col)
@@ -61,7 +64,7 @@ func TestSSMParamsViewLoadErrorsWithoutActiveProfile(t *testing.T) {
 	if calls != 0 {
 		t.Error("listParameters was called despite no active AWS profile")
 	}
-	if got := pv.table.GetCell(1, 0).Text; !strings.Contains(got, "no AWS profile selected") {
+	if got := pv.table.GetCell(1, 1).Text; !strings.Contains(got, "no AWS profile selected") {
 		t.Errorf("error cell = %q, want it to mention no profile selected", got)
 	}
 }
@@ -77,10 +80,10 @@ func TestSSMParamsViewRepaintPopulatesRows(t *testing.T) {
 	if got := pv.table.GetRowCount(); got != 3 { // header + 2
 		t.Fatalf("row count = %d, want 3", got)
 	}
-	if got := pv.table.GetCell(1, 0).Text; got != "/app/one" {
+	if got := pv.table.GetCell(1, 1).Text; got != "/app/one" {
 		t.Errorf("row 1 name = %q, want %q", got, "/app/one")
 	}
-	if got := pv.table.GetCell(1, 1).Text; got != string(awsssm.TypeString) {
+	if got := pv.table.GetCell(1, 2).Text; got != string(awsssm.TypeString) {
 		t.Errorf("row 1 type = %q, want %q", got, awsssm.TypeString)
 	}
 	if got := pv.table.GetTitle(); got != " SSM Parameters (2) " {
@@ -93,7 +96,7 @@ func TestSSMParamsViewRepaintShowsDashForNoLastModified(t *testing.T) {
 
 	pv.repaint([]awsssm.Parameter{{Name: "/x", Type: awsssm.TypeString}})
 
-	if got := pv.table.GetCell(1, 2).Text; got != "-" {
+	if got := pv.table.GetCell(1, 3).Text; got != "-" {
 		t.Errorf("last-modified cell = %q, want %q", got, "-")
 	}
 }
@@ -163,11 +166,12 @@ func TestSSMParamsViewSecureStringValueNeverInTable(t *testing.T) {
 		{Name: "/app/secret", Type: awsssm.TypeSecureString, Value: ""},
 	})
 
-	// The table only ever shows NAME/TYPE/LAST MODIFIED columns — this
-	// locks in that a SecureString's value is structurally never rendered
-	// in the list, only ever in the opt-in detail view after reveal.
-	if got := pv.table.GetColumnCount(); got != 3 {
-		t.Errorf("column count = %d, want 3 (no value column)", got)
+	// The table only ever shows star/NAME/TYPE/LAST MODIFIED columns —
+	// this locks in that a SecureString's value is structurally never
+	// rendered in the list, only ever in the opt-in detail view after
+	// reveal.
+	if got := pv.table.GetColumnCount(); got != 4 {
+		t.Errorf("column count = %d, want 4 (no value column)", got)
 	}
 }
 
@@ -176,7 +180,7 @@ func TestSSMParamsViewShowErrorRendersMessage(t *testing.T) {
 
 	pv.showError(context.DeadlineExceeded)
 
-	if got := pv.table.GetCell(1, 0).Text; !strings.Contains(got, "deadline exceeded") {
+	if got := pv.table.GetCell(1, 1).Text; !strings.Contains(got, "deadline exceeded") {
 		t.Errorf("error cell = %q, want it to contain the error", got)
 	}
 }
@@ -193,12 +197,77 @@ func TestSSMParamsViewShowStatusRendersMessage(t *testing.T) {
 
 	pv.showStatus("AWS SSO session expired — opening browser to log in...")
 
-	if got := pv.table.GetCell(1, 0).Text; !strings.Contains(got, "opening browser") {
+	if got := pv.table.GetCell(1, 1).Text; !strings.Contains(got, "opening browser") {
 		t.Errorf("status cell = %q, want it to contain the status message", got)
 	}
-	fg, _, _ := pv.table.GetCell(1, 0).Style.Decompose()
+	fg, _, _ := pv.table.GetCell(1, 1).Style.Decompose()
 	if want := tcell.GetColor(host.cfg.Colors.Accent); fg != want {
 		t.Errorf("status cell color = %v, want accent color %v", fg, want)
+	}
+}
+
+func TestSSMParamsViewFavoriteTogglePersistsAndShowsStar(t *testing.T) {
+	host, pv := newTestSSMParamsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	pv.repaint([]awsssm.Parameter{{Name: "/app/one"}, {Name: "/app/two"}})
+	pv.table.Select(1, 0) // "/app/one"
+
+	pv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if !host.cfg.AWSFavorites.IsFavorite(config.FavoriteSSMParameter, "work", "/app/one") {
+		t.Error("host.ToggleFavorite was not called for the selected row")
+	}
+	if got := pv.table.GetCell(1, 0).Text; got != favoriteStar {
+		t.Errorf("star cell = %q, want %q", got, favoriteStar)
+	}
+}
+
+func TestSSMParamsViewFavoriteSortsToTop(t *testing.T) {
+	host, pv := newTestSSMParamsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteSSMParameter, "work", "/app/two")
+
+	pv.repaint([]awsssm.Parameter{{Name: "/app/one"}, {Name: "/app/two"}})
+
+	if got := pv.table.GetCell(1, 1).Text; got != "/app/two" {
+		t.Errorf("row 1 (favorited) = %q, want %q", got, "/app/two")
+	}
+	if got := pv.table.GetCell(2, 1).Text; got != "/app/one" {
+		t.Errorf("row 2 = %q, want %q", got, "/app/one")
+	}
+	if len(pv.filtered) != 2 || pv.filtered[0].Name != "/app/two" {
+		t.Errorf("filtered = %+v, want favorited item first", pv.filtered)
+	}
+}
+
+func TestSSMParamsViewFavoriteToggleTwiceRemovesStar(t *testing.T) {
+	host, pv := newTestSSMParamsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	pv.repaint([]awsssm.Parameter{{Name: "/app/one"}})
+	pv.table.Select(1, 0)
+
+	capture := pv.table.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone))
+
+	if host.cfg.AWSFavorites.IsFavorite(config.FavoriteSSMParameter, "work", "/app/one") {
+		t.Error("favorite still set after toggling twice")
+	}
+	if got := pv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell = %q, want empty", got)
+	}
+}
+
+func TestSSMParamsViewFavoritesDoNotLeakAcrossProfiles(t *testing.T) {
+	host, pv := newTestSSMParamsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	host.cfg.AWSFavorites = host.cfg.AWSFavorites.Toggle(config.FavoriteSSMParameter, "work", "/app/one")
+
+	host.cfg.ActiveAWSProfile = "personal"
+	pv.repaint([]awsssm.Parameter{{Name: "/app/one"}})
+
+	if got := pv.table.GetCell(1, 0).Text; got != "" {
+		t.Errorf("star cell under a different profile = %q, want empty (favorite shouldn't leak)", got)
 	}
 }
 
