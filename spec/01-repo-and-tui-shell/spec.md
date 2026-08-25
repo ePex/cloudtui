@@ -33,7 +33,7 @@ tui/
 
 A fixed three-row layout:
 
-- **Top bar** — three sections: a connection-info panel on the left (shows active connection/AWS profile once those features exist), a **view-specific shortcuts** panel in the middle (populated by the active view's `Shortcuts()` if it implements `ui.Shortcuttable`; empty otherwise), and an ASCII logo on the right. While the `:` command prompt is active, the left section is replaced by the input field.
+- **Top bar** — three sections separated by a one-character-wide vertical divider bar (`│`, colored with the palette's border color, repeated for the top bar's full height) between the left and middle sections: a connection-info panel on the left (shows active connection/AWS profile once those features exist), a **view-specific shortcuts** panel in the middle (populated by the active view's `Shortcuts()` if it implements `ui.Shortcuttable`; empty otherwise), and an ASCII logo on the right. While the `:` command prompt is active, the left section is replaced by the input field. The shortcuts panel renders **one shortcut per line** — `<key> description`, key in the accent color — never concatenated onto a single line; the top bar's height is fixed to fit the tallest view's shortcut list (see `ShortcutPanelRows`), not scrollable.
 - **Content area** — the main paged view area, backed by a `tview.Pages` container. Switching views calls `SwitchToPage` (not `ShowPage`) so the previous page is fully hidden, not just covered in z-order.
 - **Status bar** — a transient message strip at the bottom. It has no idle default text (see spec-origin/05-home-navigation for why) — it shows loading/error/confirmation text and otherwise stays blank. The full global-hotkey reference lives in the `?` help modal and in Home's own context panel, not in the status bar.
 
@@ -72,6 +72,7 @@ Current locations (post package-split — see spec-origin/03-architecture-and-pa
 - `tui/internal/ui/view.go` — `View` interface (`Name`, `Title`, `Primitive`).
 - `tui/internal/ui/shortcuttable.go` — `Shortcuttable` interface (`Shortcuts() []Shortcut`).
 - `tui/internal/app/app.go` — shell composition root: three-row layout, top bar, status bar, global hotkey routing, help modal, view registration/switching.
+- `tui/internal/ui/topbar.go` — `NewTopBar`/`TopBar`: the left info/prompt `Pages`, the divider, the context panel, and the logo, laid out in a single `tview.Flex` row.
 - `tui/internal/app/promptcommands.go` — the `:` prompt's special-command table and its autocomplete suggestion function.
 - `tui/internal/ui/views/home.go` — the Home view (moved out of `internal/app` as part of the later package split; originally lived at `internal/app/home.go`).
 - `tui/internal/config/` — `Config`/`Palette` schema, load/save/defaults, `config.example.yaml`.
