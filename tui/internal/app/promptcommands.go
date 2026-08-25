@@ -29,10 +29,20 @@ func promptCommandTable() []promptCommand {
 	}
 }
 
+// globalHotkeyAliases are promptCommand names that duplicate a global
+// single-key hotkey handled by onGlobalKey (app.go, the switch around
+// lines 456-483). They stay valid to type-and-execute in the prompt (see
+// promptCommandTable) but are excluded from promptSuggestions: the global
+// hotkey already covers that need, and suggesting them just clutters the
+// list under their own full name. Keep this in sync with onGlobalKey's
+// switch if a hotkey is added, removed, or reassigned.
+var globalHotkeyAliases = map[string]bool{"h": true, "s": true, "l": true, "q": true}
+
 // promptSuggestions returns the ':' prompt's autocomplete entries matching
 // currentText: theme names once the text starts with "theme ", otherwise
-// every special command name, "theme " itself, and every registered view's
-// Name() that starts with currentText.
+// every special command name (except globalHotkeyAliases), "theme "
+// itself, and every registered view's Name() that starts with
+// currentText.
 func (a *App) promptSuggestions(currentText string) []string {
 	if strings.HasPrefix(currentText, "theme ") {
 		prefix := strings.TrimPrefix(currentText, "theme ")
@@ -56,6 +66,9 @@ func (a *App) promptSuggestions(currentText string) []string {
 
 	for _, pc := range promptCommandTable() {
 		for _, n := range pc.names {
+			if globalHotkeyAliases[n] {
+				continue
+			}
 			if strings.HasPrefix(n, currentText) {
 				add(n)
 			}

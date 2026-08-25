@@ -778,7 +778,7 @@ func TestPromptAutocompleteFirstOpenIsReadable(t *testing.T) {
 
 	contents, w, _ := screen.GetContents()
 	wantText := tcell.GetColor(p.Text)
-	wantBackground := tcell.GetColor(p.Background)
+	wantBackground := ui.BlendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), ui.AutocompletePanelBlend)
 
 	// The drop-down opens directly below the prompt (row 0), so row 1 is
 	// its first (selected-by-default) entry and row 2 is its second,
@@ -789,7 +789,7 @@ func TestPromptAutocompleteFirstOpenIsReadable(t *testing.T) {
 		t.Fatalf("unselected autocomplete item at row 2: fg == bg == %v, text is invisible", fg.Hex())
 	}
 	if fg != wantText || bg != wantBackground {
-		t.Errorf("unselected autocomplete item colors = fg:%v bg:%v, want fg:%v (Text) bg:%v (Background)",
+		t.Errorf("unselected autocomplete item colors = fg:%v bg:%v, want fg:%v (Text) bg:%v (blended panel background)",
 			fg.Hex(), bg.Hex(), wantText.Hex(), wantBackground.Hex())
 	}
 }
