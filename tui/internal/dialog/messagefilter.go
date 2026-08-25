@@ -112,9 +112,19 @@ func (mf *MessageFilter) jmsTypeSuggestions(currentText string) []string {
 // onJMSTypeChanged detects the scan-trigger sentinel and starts a scan;
 // any other change is the field's own text changing normally, which
 // needs no action here (tview.InputField refreshes its own suggestions).
+//
+// It deliberately does NOT clear the field's text back here, even though
+// the sentinel is left sitting in it until the scan completes (see
+// handleScanResult) — tview.InputField.SetText ultimately calls
+// TextArea.Replace, which drives the underlying text buffer's own
+// change-notification synchronously; calling SetText again from inside
+// that same notification (i.e. reentrantly, on the same field, before
+// the outer Replace has returned) corrupts the buffer, observed live as
+// visibly garbled/duplicated text. handleScanResult runs from a
+// completed goroutine's QueueUpdateDraw instead — genuinely outside the
+// input handler's call stack — so it can safely call SetText there.
 func (mf *MessageFilter) onJMSTypeChanged(text string) {
 	if text == jmsTypeScanSentinel {
-		mf.jmsTypeItem.SetText("")
 		mf.startScan()
 	}
 }
@@ -141,9 +151,12 @@ func (mf *MessageFilter) startScan() {
 // way this codebase's view.repaint()/showError() methods are tested
 // without ever running their own load() goroutine (see
 // ssmparams_test.go's TestSSMParamsViewLoadErrorsWithoutActiveProfile doc
-// comment).
+// comment). Also where the sentinel text left in the field by
+// onJMSTypeChanged finally gets cleared — safe here, unlike there (see
+// onJMSTypeChanged's doc comment).
 func (mf *MessageFilter) handleScanResult(types []string, err error) {
 	mf.scanning = false
+	mf.jmsTypeItem.SetText("")
 	if err != nil {
 		mf.host.SetStatus(fmt.Sprintf("[red]JMS type scan failed: %s[-]", err))
 		return
@@ -160,7 +173,14 @@ func (mf *MessageFilter) Show() {
 	mf.scanning = false
 
 	f := mf.host.MessagesFilter()
-	mf.form.GetFormItem(0).(*tview.InputField).SetText(f.JMSType)
+	mf.jmsTypeItem.SetText(f.JMSType)
+	// SetText doesn't itself refresh an active SetAutocompleteFunc
+	// drop-down (only a live keystroke does) — without this, the field
+	// shows whatever suggestions were current at SetAutocompleteFunc's
+	// own wiring time in NewMessageFilter (before messagesV existed, so
+	// empty aside from the sentinel), same gotcha as the ':' prompt (see
+	// spec/01) and its fix.
+	mf.jmsTypeItem.Autocomplete()
 	mf.form.GetFormItem(1).(*tview.InputField).SetText(formatFilterDate(f.FromDate))
 	mf.form.GetFormItem(2).(*tview.InputField).SetText(formatFilterDate(f.ToDate))
 	maxCount := ""
@@ -211,7 +231,14 @@ func (mf *MessageFilter) Visible() bool { return mf.visible }
 // messagesV's active filter, closes the overlay, and reloads. On a parse
 // error, the status bar reports it and the form stays open for correction.
 func (mf *MessageFilter) apply() {
-	jmsType := mf.form.GetFormItem(0).(*tview.InputField).GetText()
+	if mf.scanning {
+		// The JMS Type field still holds the scan-trigger sentinel text
+		// until the scan completes (see handleScanResult) — applying now
+		// would filter by that literal string, not a real JMS type.
+		mf.host.SetStatus("[yellow]Still scanning for JMS types — wait for it to finish, then apply[-]")
+		return
+	}
+	jmsType := mf.jmsTypeItem.GetText()
 	from := mf.form.GetFormItem(1).(*tview.InputField).GetText()
 	to := mf.form.GetFormItem(2).(*tview.InputField).GetText()
 	maxCount := mf.form.GetFormItem(3).(*tview.InputField).GetText()
