@@ -27,6 +27,10 @@ Two separate GitHub Actions workflows (kept separate rather than one conditional
 - Only `tui` is released as binaries — `mq-proxy` is a supporting dev service (used for local proxy-backend testing), not the shipped product, and is not packaged or published by this pipeline.
 - Cutting a release tag is a manual, explicit action (pushing a tag is a public, hard-to-reverse action) — never automated by CI itself.
 
+### Repository settings
+
+- GitHub's "Automatically delete head branches" is enabled on the repo, so merging a PR (`gh pr merge` or the GitHub UI) deletes its remote branch without a separate step. The corresponding local branch still needs a manual `git branch -d` — see the root `CLAUDE.md` workflow's merge-and-clean-up step.
+
 ## Data & config
 
 - `.github/workflows/ci.yml` — CI workflow.
