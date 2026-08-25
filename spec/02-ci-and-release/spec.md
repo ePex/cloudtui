@@ -31,12 +31,21 @@ Two separate GitHub Actions workflows (kept separate rather than one conditional
 
 - GitHub's "Automatically delete head branches" is enabled on the repo, so merging a PR (`gh pr merge` or the GitHub UI) deletes its remote branch without a separate step. The corresponding local branch still needs a manual `git branch -d` — see the root `CLAUDE.md` workflow's merge-and-clean-up step.
 
+## Licensing
+
+The repo is MIT-licensed (`LICENSE` at repo root) — compatible with its
+dependencies (`tview`: MIT, `tcell`: Apache-2.0, `aws-sdk-go-v2`:
+Apache-2.0). `README.md` links it under a `## License` section and
+documents how to install a release (download the platform archive from
+the Releases page) versus building from source (`task run:tui`).
+
 ## Data & config
 
 - `.github/workflows/ci.yml` — CI workflow.
 - `.github/workflows/release.yml` — release workflow.
 - `.goreleaser.yaml` (repo root, scoped to build from `tui/`) — GoReleaser config.
 - `Taskfile.yml` — `test:tui`, `build:tui`, `test:proxy`, `build:proxy:jar`, `build:proxy`, `run:proxy` tasks; the last four branch on OS for the Gradle wrapper.
+- `LICENSE` — MIT License text, copyright Philipp Holz.
 
 ## Implementation notes
 
