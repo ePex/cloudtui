@@ -55,7 +55,7 @@ When switching views, focus goes to `view.Primitive()` (the view's own root prim
 ## Views
 
 - **Home** — a dashboard/launcher. See spec-origin/05-home-navigation for its sectioned, keyboard-navigable structure.
-- **Settings** — an editable representation of the active `config.yaml`. Rows map to config fields; selecting a row lets the user change its value inline. Changes persist immediately to `config.yaml`. The theme row opens a picker; selecting a new theme applies it at runtime without restart. See spec-origin/04-theming.
+- **Settings** — a `tview.List` with **secondary text disabled** (`ShowSecondaryText(false)`): each row is a single `Label: value` line only, never a description or hint line underneath. Rows map to config fields; selecting a row opens that field's editor. Changes persist immediately to `config.yaml`. Every row's editor is a **centered modal dialog overlay** (`internal/dialog`, layered on `rootPages` via `ui.Centered` — see spec-origin/03-architecture-and-package-layout), never a page pushed into the main content `Pages` — this is true of the Theme row (picker; applies at runtime without restart), the AMQ Connection row (spec-origin/12), the AWS Profile row (spec-origin/14), and the Datadog row (spec-origin/18) alike. See spec-origin/04-theming for the theme picker specifically.
 
 ## Theming
 

@@ -140,6 +140,8 @@ Construction pattern: every dialog's constructor takes `host ui.Host` as its fir
 
 Every dialog type exposes `Primitive()` (the tview widget to embed in an overlay page), `Visible() bool`, and `Show(...)`/`close()` methods; most implement `ui.Themeable` for live theme-switch recoloring.
 
+**Keybinding hints are embedded in the dialog's own layout, not the top bar.** Each dialog with its own keybindings (e.g. `ConnManager`, `AWSProfilesPicker`) builds a `hints *tview.TextView` with color-tagged `<key> action` pairs (e.g. `<Enter> activate  <r> refresh  </> filter  <Esc> close`) and appends it as a fixed-height row at the bottom of its own `Flex`. This is a completely separate mechanism from `Host.SetContextHint`, which only applies to `ui.View`s open in the main content `Pages` and drives the top bar's context panel — a modal overlay is not a `ui.View` and never touches the top bar. Don't reach for `SetContextHint` when giving a dialog its own hints; build the footer `TextView` the same way the existing dialogs do.
+
 ## Views (`internal/view`)
 
 Construction pattern: every view's constructor takes `host ui.ViewHost` as its first argument, plus (for the 5 dialog-coupled ones) the specific `*dialog.X` pointer(s) it opens, plus (for list→detail pairs) a callback the App wires up at construction time to open the corresponding detail view — e.g. `NewQueuesView(host, backend, confirm, movePicker, sendMessage, openMessages)`.
