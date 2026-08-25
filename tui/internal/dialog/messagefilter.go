@@ -139,7 +139,7 @@ func (mf *MessageFilter) startScan() {
 	mf.scanning = true
 	mf.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", jmsTypeScanCount))
 	go func() {
-		types, err := mf.host.ScanJMSTypes(context.Background(), jmsTypeScanCount)
+		types, err := mf.host.ScanJMSTypes(context.Background(), mf.host.MessagesQueueName(), jmsTypeScanCount)
 		mf.host.QueueUpdateDraw(func() {
 			mf.handleScanResult(types, err)
 		})

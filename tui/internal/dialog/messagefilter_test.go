@@ -126,7 +126,7 @@ func TestJMSTypeSuggestionsDedupesLoadedAndScanned(t *testing.T) {
 // here).
 func TestOnJMSTypeChangedTriggersScan(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
-	host.scanJMSTypesFn = func(context.Context, int) ([]string, error) {
+	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
 		select {} // never returns; this test only checks the synchronous part
 	}
 
@@ -151,7 +151,7 @@ func TestStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	calls := 0
 	entered := make(chan struct{})
-	host.scanJMSTypesFn = func(context.Context, int) ([]string, error) {
+	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
 		calls++
 		close(entered) // happens-after calls++, so the test's read below is race-free
 		select {}      // never returns

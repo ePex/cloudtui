@@ -15,6 +15,15 @@ import (
 
 type fakeQueueBackend struct {
 	summaries []queue.Summary
+
+	// Injectable per-test overrides for the purge/move-all routing tests
+	// (see TestQueuesViewPurge*/TestQueuesViewMoveAll* below) — nil means
+	// the plain no-op default every other test in this file already
+	// relies on.
+	purgeQueueFn      func(ctx context.Context, queueName string) error
+	deleteMessagesFn  func(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error)
+	moveAllMessagesFn func(ctx context.Context, sourceQueue, targetQueue string) (int, error)
+	moveMessagesFn    func(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error)
 }
 
 func (f *fakeQueueBackend) List(_ context.Context) ([]queue.Summary, error) {
@@ -25,8 +34,11 @@ func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.M
 	return nil, nil
 }
 
-func (f *fakeQueueBackend) PurgeQueue(_ context.Context, _ string) error {
-	return nil
+func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) error {
+	if f.purgeQueueFn == nil {
+		return nil
+	}
+	return f.purgeQueueFn(ctx, queueName)
 }
 
 func (f *fakeQueueBackend) RemoveMessage(_ context.Context, _, _ string) error {
@@ -37,29 +49,44 @@ func (f *fakeQueueBackend) MoveMessage(_ context.Context, _, _, _ string) error 
 	return nil
 }
 
-func (f *fakeQueueBackend) MoveAllMessages(_ context.Context, _, _ string) (int, error) {
-	return 0, nil
+func (f *fakeQueueBackend) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
+	if f.moveAllMessagesFn == nil {
+		return 0, nil
+	}
+	return f.moveAllMessagesFn(ctx, sourceQueue, targetQueue)
 }
 
 func (f *fakeQueueBackend) SendMessage(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (f *fakeQueueBackend) DeleteMessages(_ context.Context, _ string, _ queue.MessageFilter) (int, error) {
-	return 0, nil
+func (f *fakeQueueBackend) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+	if f.deleteMessagesFn == nil {
+		return 0, nil
+	}
+	return f.deleteMessagesFn(ctx, queueName, filter)
 }
 
-func (f *fakeQueueBackend) MoveMessages(_ context.Context, _, _ string, _ queue.MessageFilter) (int, error) {
-	return 0, nil
+func (f *fakeQueueBackend) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+	if f.moveMessagesFn == nil {
+		return 0, nil
+	}
+	return f.moveMessagesFn(ctx, sourceQueue, targetQueue, filter)
 }
 
 func newTestQueuesView(t *testing.T) (*fakeViewHost, *QueuesView) {
+	t.Helper()
+	return newTestQueuesViewWithBackend(t, &fakeQueueBackend{})
+}
+
+func newTestQueuesViewWithBackend(t *testing.T, b *fakeQueueBackend) (*fakeViewHost, *QueuesView) {
 	t.Helper()
 	host := newFakeViewHost()
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	sendMessage := dialog.NewSendMessageOverlay(host)
-	return host, NewQueuesView(host, &fakeQueueBackend{}, confirm, movePicker, sendMessage, func(string) {})
+	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
+	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
 }
 
 func TestQueuesViewHeaderLabels(t *testing.T) {
@@ -389,5 +416,183 @@ func TestQueuesViewPendingTextWhenZero(t *testing.T) {
 	fg, _, _ := pendingCell.Style.Decompose()
 	if fg != wantColor {
 		t.Errorf("pending cell color = %v, want text %v", fg, wantColor)
+	}
+}
+
+// TestQueuesViewDoPurgeUnfilteredCallsPurgeQueue confirms an empty
+// jmsType keeps using the existing fast, native PurgeQueue path rather
+// than DeleteMessages with an empty filter — see spec/09's "Preserving
+// the existing unfiltered path".
+func TestQueuesViewDoPurgeUnfilteredCallsPurgeQueue(t *testing.T) {
+	var gotQueue string
+	purgeCalled := false
+	deleteCalled := false
+	b := &fakeQueueBackend{
+		purgeQueueFn: func(_ context.Context, queueName string) error {
+			purgeCalled = true
+			gotQueue = queueName
+			return nil
+		},
+		deleteMessagesFn: func(context.Context, string, queue.MessageFilter) (int, error) {
+			deleteCalled = true
+			return 0, nil
+		},
+	}
+	_, qv := newTestQueuesViewWithBackend(t, b)
+
+	err := qv.doPurge(context.Background(), "orders", "")
+
+	if err != nil {
+		t.Fatalf("doPurge() error = %v", err)
+	}
+	if !purgeCalled {
+		t.Error("PurgeQueue was not called for an empty JMS type")
+	}
+	if deleteCalled {
+		t.Error("DeleteMessages was called for an empty JMS type, want PurgeQueue only")
+	}
+	if gotQueue != "orders" {
+		t.Errorf("queue passed to PurgeQueue = %q, want %q", gotQueue, "orders")
+	}
+}
+
+// TestQueuesViewDoPurgeFilteredCallsDeleteMessages confirms a non-empty
+// jmsType routes through DeleteMessages with the filter set, not
+// PurgeQueue.
+func TestQueuesViewDoPurgeFilteredCallsDeleteMessages(t *testing.T) {
+	var gotQueue string
+	var gotFilter queue.MessageFilter
+	purgeCalled := false
+	b := &fakeQueueBackend{
+		purgeQueueFn: func(context.Context, string) error {
+			purgeCalled = true
+			return nil
+		},
+		deleteMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+			gotQueue, gotFilter = queueName, filter
+			return 3, nil
+		},
+	}
+	_, qv := newTestQueuesViewWithBackend(t, b)
+
+	err := qv.doPurge(context.Background(), "orders", "OrderCreated")
+
+	if err != nil {
+		t.Fatalf("doPurge() error = %v", err)
+	}
+	if purgeCalled {
+		t.Error("PurgeQueue was called for a non-empty JMS type, want DeleteMessages only")
+	}
+	if gotQueue != "orders" {
+		t.Errorf("queue passed to DeleteMessages = %q, want %q", gotQueue, "orders")
+	}
+	if want := (queue.MessageFilter{JMSType: "OrderCreated"}); gotFilter != want {
+		t.Errorf("filter passed to DeleteMessages = %+v, want %+v", gotFilter, want)
+	}
+}
+
+func TestQueuesViewDoMoveAllUnfilteredCallsMoveAllMessages(t *testing.T) {
+	var gotSrc, gotDst string
+	moveAllCalled := false
+	moveCalled := false
+	b := &fakeQueueBackend{
+		moveAllMessagesFn: func(_ context.Context, sourceQueue, targetQueue string) (int, error) {
+			moveAllCalled = true
+			gotSrc, gotDst = sourceQueue, targetQueue
+			return 5, nil
+		},
+		moveMessagesFn: func(context.Context, string, string, queue.MessageFilter) (int, error) {
+			moveCalled = true
+			return 0, nil
+		},
+	}
+	_, qv := newTestQueuesViewWithBackend(t, b)
+
+	count, err := qv.doMoveAll(context.Background(), "orders", "orders-archive", "")
+
+	if err != nil {
+		t.Fatalf("doMoveAll() error = %v", err)
+	}
+	if !moveAllCalled {
+		t.Error("MoveAllMessages was not called for an empty JMS type")
+	}
+	if moveCalled {
+		t.Error("MoveMessages was called for an empty JMS type, want MoveAllMessages only")
+	}
+	if gotSrc != "orders" || gotDst != "orders-archive" {
+		t.Errorf("MoveAllMessages(%q, %q), want (%q, %q)", gotSrc, gotDst, "orders", "orders-archive")
+	}
+	if count != 5 {
+		t.Errorf("doMoveAll() count = %d, want %d", count, 5)
+	}
+}
+
+func TestQueuesViewDoMoveAllFilteredCallsMoveMessages(t *testing.T) {
+	var gotSrc, gotDst string
+	var gotFilter queue.MessageFilter
+	moveAllCalled := false
+	b := &fakeQueueBackend{
+		moveAllMessagesFn: func(context.Context, string, string) (int, error) {
+			moveAllCalled = true
+			return 0, nil
+		},
+		moveMessagesFn: func(_ context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+			gotSrc, gotDst, gotFilter = sourceQueue, targetQueue, filter
+			return 2, nil
+		},
+	}
+	_, qv := newTestQueuesViewWithBackend(t, b)
+
+	count, err := qv.doMoveAll(context.Background(), "orders", "orders-archive", "OrderCreated")
+
+	if err != nil {
+		t.Fatalf("doMoveAll() error = %v", err)
+	}
+	if moveAllCalled {
+		t.Error("MoveAllMessages was called for a non-empty JMS type, want MoveMessages only")
+	}
+	if gotSrc != "orders" || gotDst != "orders-archive" {
+		t.Errorf("MoveMessages(%q, %q, ...), want (%q, %q)", gotSrc, gotDst, "orders", "orders-archive")
+	}
+	if want := (queue.MessageFilter{JMSType: "OrderCreated"}); gotFilter != want {
+		t.Errorf("filter passed to MoveMessages = %+v, want %+v", gotFilter, want)
+	}
+	if count != 2 {
+		t.Errorf("doMoveAll() count = %d, want %d", count, 2)
+	}
+}
+
+// TestQueuesViewPurgeKeyShowsJMSTypePrompt confirms pressing 'p' opens
+// the JMS Type prompt (rather than jumping straight to the confirm
+// dialog, as it did before this filter step existed).
+func TestQueuesViewPurgeKeyShowsJMSTypePrompt(t *testing.T) {
+	_, qv := newTestQueuesView(t)
+	qv.repaint([]queue.Summary{{Name: "orders"}})
+	qv.table.Select(1, 0)
+
+	qv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+
+	if !qv.jmsTypePrompt.Visible() {
+		t.Error("jmsTypePrompt is not visible after pressing 'p'")
+	}
+	if qv.confirm.Visible() {
+		t.Error("confirm dialog is visible before the JMS Type prompt was continued past")
+	}
+}
+
+// TestQueuesViewMoveAllKeyShowsJMSTypePrompt is the 'M' analogue of
+// TestQueuesViewPurgeKeyShowsJMSTypePrompt.
+func TestQueuesViewMoveAllKeyShowsJMSTypePrompt(t *testing.T) {
+	_, qv := newTestQueuesView(t)
+	qv.repaint([]queue.Summary{{Name: "orders"}})
+	qv.table.Select(1, 0)
+
+	qv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'M', tcell.ModNone))
+
+	if !qv.jmsTypePrompt.Visible() {
+		t.Error("jmsTypePrompt is not visible after pressing 'M'")
+	}
+	if qv.movePicker.Visible() {
+		t.Error("movePicker is visible before the JMS Type prompt was continued past")
 	}
 }

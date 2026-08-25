@@ -45,11 +45,18 @@ type Host interface {
 	FocusMessages()
 
 	// JMS Type suggestions for the message filter overlay's "JMS Type"
-	// field (spec/08). LoadedJMSTypes is synchronous/free — the distinct
-	// types among messages already loaded. ScanJMSTypes is the opt-in,
-	// network-costly widening: a fresh, unfiltered browse capped at
-	// maxCount, purely to find more types without changing what's
-	// displayed in the Messages view.
+	// field (spec/08) and the purge/move-all JMS Type filter prompt
+	// (spec/09). LoadedJMSTypes is synchronous/free — the distinct types
+	// among messages already loaded in the Messages view (there is none
+	// to ask about from the Queues view, which doesn't pre-load
+	// messages — callers there rely on ScanJMSTypes only).
+	// MessagesQueueName is MessageFilter's own way to learn which queue
+	// it's scanning (it has no queue name of its own, unlike
+	// JMSTypePrompt, which is told one via its Show parameter).
+	// ScanJMSTypes is the opt-in, network-costly widening: a fresh,
+	// unfiltered browse of queueName capped at maxCount, purely to find
+	// more types without changing what's displayed in the Messages view.
 	LoadedJMSTypes() []string
-	ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error)
+	MessagesQueueName() string
+	ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error)
 }

@@ -236,7 +236,13 @@ Backend-specific filter behavior:
   `MessagesView.AllMessages()` for the former) supply the two tiers —
   `internal/dialog` can't import `internal/view` directly to read
   `allMsgs` itself (the reverse import already exists, for `MessageFilter`
-  and friends).
+  and friends). `Host.ScanJMSTypes` takes an explicit `queueName`
+  parameter (`ScanJMSTypes(ctx, queueName, maxCount)`), not an implicit
+  "whatever the Messages view currently has open" — generalized when
+  spec/09's purge/move-all JMS Type filter needed to scan a queue that
+  may never have been opened in the Messages view at all;
+  `MessageFilter` itself gets the (unchanged) Messages-view queue via
+  the newer `Host.MessagesQueueName()` and passes it through explicitly.
 - **`SetAutocompleteFunc` eagerly caches the drop-down once, at wiring
   time — found live, same root cause as the `:` prompt's documented
   gotcha (see spec/01).** `NewMessageFilter` wires the JMS Type field's
