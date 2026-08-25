@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -236,6 +237,42 @@ func TestJMSTypePromptContinueNowCallsOnContinueWithFieldText(t *testing.T) {
 	}
 	if got != "OrderCreated" {
 		t.Errorf("onContinue jmsType = %q, want %q", got, "OrderCreated")
+	}
+}
+
+// TestJMSTypePromptEnterOnBlankFieldContinuesWithoutScanning is a
+// regression test found live (verify-live): with no free suggestion
+// tier, the sentinel is the sole, already-highlighted autocomplete entry
+// on an untouched field — tview.InputField's own Enter handling accepts
+// whatever's highlighted in an open drop-down before ever reaching
+// SetDoneFunc, so without the SetInputCapture guard added alongside this
+// test, pressing Enter on a blank, fresh-from-Show() field would always
+// accept the sentinel and kick off an unwanted scan instead of
+// continuing with no filter, as Show's contract promises.
+func TestJMSTypePromptEnterOnBlankFieldContinuesWithoutScanning(t *testing.T) {
+	jp, host := newTestJMSTypePrompt(t)
+	scanCalled := false
+	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
+		scanCalled = true
+		return nil, nil
+	}
+	var got string
+	called := false
+	jp.Show("Purge", "orders", func(jmsType string) { called, got = true, jmsType }, nil)
+
+	// Show() already opens the drop-down (its own eager Autocomplete()
+	// call) with the sentinel as the sole, highlighted entry — this is
+	// exactly the state a real "just press Enter" user hits.
+	jp.field.GetInputCapture()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if scanCalled {
+		t.Error("ScanJMSTypes was called for Enter on a blank field, want no scan")
+	}
+	if !called {
+		t.Fatal("onContinue was not called")
+	}
+	if got != "" {
+		t.Errorf("onContinue jmsType = %q, want empty (no filter)", got)
 	}
 }
 
