@@ -15,7 +15,7 @@ A palette-driven color system, configurable per-theme and per-user, switchable a
 - `config.Load()` does a **two-pass unmarshal**: effective `Colors` = theme base (from `PaletteForTheme(theme)`) merged with the sparse `colors:` overrides on top (`ApplyPaletteOverrides`).
 - Switching theme at runtime (via the Settings dropdown or `:theme <name>`) applies immediately, no restart needed, and persists by writing only the theme name plus sparse overrides back to `config.yaml` (`PaletteUserOverrides` computes the sparse diff against the new base) — never the full resolved palette. This keeps `config.yaml` legible and keeps a theme's own file as the single source of truth for its unmodified colors.
 - `Palette` struct fields all use `yaml:"...,omitempty"` so an empty/default override never gets serialized.
-- The Settings theme dropdown is keyboard-interactive: opening it, moving between options, and confirming with Enter all work. (This requires focus to land on the Settings view's own primitive when switching views — see spec-origin/01-repo-and-tui-shell's navigation note; focusing the `Pages` container instead leaves the dropdown unable to receive input, since tview does not cascade key events from `Pages` into a child `Form`.)
+- The Settings theme dropdown is keyboard-interactive: opening it, moving between options, and confirming with Enter all work. (This requires focus to land on the Settings view's own primitive when switching views — see spec/01-repo-and-tui-shell's navigation note; focusing the `Pages` container instead leaves the dropdown unable to receive input, since tview does not cascade key events from `Pages` into a child `Form`.)
 
 ## Data & config
 
@@ -25,13 +25,13 @@ colors:              # sparse — only fields the user explicitly overrides
   accent: "#FF00FF"
 ```
 
-Three built-in themes ship: `dark`, `cyberpunk` (palettes described in spec-origin/01-repo-and-tui-shell), and `gofore` — the Gofore brand palette: Deep Blue (`#0F3D51`) background, Gofore Orange (`#F7673B`) labels, Digital Blue (`#00819D`) borders/selection, Code Blue (`#44C2DE`) values, Salmon Byte (`#FFA572`) accent. Each theme YAML defines the full `Palette` shape: `background`, `border`, `label`, `text`, `value`, `accent`, `selectionBg`, `selectionText`, `statusBarBg`, `statusBarText`, plus a `views:` map for per-view color overrides.
+Three built-in themes ship: `dark`, `cyberpunk` (palettes described in spec/01-repo-and-tui-shell), and `gofore` — the Gofore brand palette: Deep Blue (`#0F3D51`) background, Gofore Orange (`#F7673B`) labels, Digital Blue (`#00819D`) borders/selection, Code Blue (`#44C2DE`) values, Salmon Byte (`#FFA572`) accent. Each theme YAML defines the full `Palette` shape: `background`, `border`, `label`, `text`, `value`, `accent`, `selectionBg`, `selectionText`, `statusBarBg`, `statusBarText`, plus a `views:` map for per-view color overrides.
 
 ## Implementation notes
 
 - `tui/internal/config/themes/dark.yaml`, `tui/internal/config/themes/cyberpunk.yaml`, `tui/internal/config/themes/gofore.yaml` — embedded theme files.
 - `tui/internal/config/config.go` — `PaletteForTheme`, `AvailableThemes`, `ApplyPaletteOverrides`, `PaletteUserOverrides`, the two-pass `Load()`.
-- `tui/internal/app/settings.go` (theme picker logic) — calls `config.AvailableThemes()` for the dropdown's option list.
+- `tui/internal/dialog/themepicker.go` (`ThemePicker`) — calls `config.AvailableThemes()` for the dropdown's option list; `tui/internal/app/promptcommands.go` calls it too, for the `:theme ` autocomplete.
 - `tui/config.example.yaml` — documents that `theme:` must match an embedded file name.
 
 ## Notable gotchas worth preserving

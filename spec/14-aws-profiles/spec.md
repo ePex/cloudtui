@@ -90,11 +90,12 @@ auto-reauth for it (reauth is gated on `AuthType == AuthSSO`).
   invalid/missing/expired cached token — `errors.As` against
   `*ssocreds.InvalidTokenError` (legacy `sso_start_url` profiles) plus a
   narrow string check for the `sso-session`-style expired-token error.
-- The three AWS views' `load()` functions (SSM Parameters, Secrets
-  Manager, CloudWatch Logs) all go through one shared retry helper rather
-  than duplicating the reauth dance per view.
+- SSM Parameters', Secrets Manager's, CloudWatch Logs', and CodePipeline's
+  (list, detail, and the background watcher) `load()`/poll functions all
+  go through one shared retry helper, `awsauth.WithReauth`, rather than
+  duplicating the reauth dance per call site.
 - `:ap`/`:awsprofiles` reuses the same `onPromptDone` focus-reset guard
-  built for `:aq` (spec-origin/12).
+  built for `:aq` (spec/12).
 
 ## Notable gotchas worth preserving
 

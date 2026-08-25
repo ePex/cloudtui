@@ -7,7 +7,7 @@ _Condensed from spec/13, spec/14, spec/15, spec/16, spec/17 — see those folder
 Operational actions on queues and messages, so common ActiveMQ admin tasks
 (clearing a DLQ, requeuing a message, draining a queue, injecting a test
 message) don't require the ActiveMQ web console. Builds on the queue list
-(spec-origin/07) and message browser/detail (spec-origin/08).
+(spec/07) and message browser/detail (spec/08).
 
 ## Behavior / user flow
 
@@ -84,7 +84,7 @@ SendMessage(ctx context.Context, queueName, body string) error
 ```
 
 No config additions — send reuses the same Jolokia connection config as
-every other queue operation (spec-origin/07).
+every other queue operation (spec/07).
 
 ## Implementation notes
 
@@ -115,7 +115,7 @@ every other queue operation (spec-origin/07).
   `browseMessages()` call against *that queue* then throws
   `IllegalStateException: Error while extracting clientID` for the whole
   queue, not just the sent message — this is exactly why `BrowseMessages`
-  (spec-origin/08) falls back to the simpler `browse()` JMX operation
+  (spec/08) falls back to the simpler `browse()` JMX operation
   whenever `browseMessages()` errors, rather than surfacing the error.
   Fallback-path messages have empty IDs; a yellow status note is shown
   when this path is taken.
@@ -123,10 +123,9 @@ every other queue operation (spec-origin/07).
   overlay using the same centered pattern as the confirm dialog; queue
   names are loaded via `backend.List()` in a goroutine, showing
   `"Loading…"` while in flight.
-- Files: `internal/app/movepicker.go` (or its post-refactor location under
-  `internal/dialog/` — see spec-origin/03) for the picker; purge/move/send
-  wiring lives alongside `queuesView`/`messagesView`/`messageDetailView`
-  (spec-origin/07, 08); Jolokia implementations in
+- Files: `tui/internal/dialog/movepicker.go` (see spec/03) for the picker;
+  purge/move/send wiring lives alongside `QueuesView`/`MessagesView`/
+  `MessageDetailView` (spec/07, 08); Jolokia implementations in
   `internal/queue/jolokia/`.
 
 ## Out of scope (deliberate)

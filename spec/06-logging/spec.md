@@ -28,7 +28,7 @@ Lines are colorized by slog level: `level=ERROR` red, `level=WARN` yellow, `leve
 ## Implementation notes
 
 - Logger initialization lives in `cmd/tui/main.go`, before `app.New()` is called (so applying the theme and building the shell are themselves covered by the startup log entries).
-- `tui/internal/view/log.go` — `logView`, implementing `ui.View`, `ui.Shortcuttable`, and an `activatable` interface (`Activate()` reload-on-entry). Originally lived at `internal/app/log.go`; moved into `internal/view` as part of the later package split (see spec-origin/03-architecture-and-package-layout).
+- `tui/internal/view/log.go` — `LogView`, implementing `ui.View`, `ui.Shortcuttable`, and an `activatable` interface (`Activate()` reload-on-entry). Originally lived at `internal/app/log.go`; moved into `internal/view` as part of the later package split (see spec/03-architecture-and-package-layout).
 - Global hotkey `l` and the `l: Log` status-bar/help-modal entries are wired in the shell composition root (`internal/app/app.go`) and the help modal.
 
 ## Notable gotchas worth preserving
