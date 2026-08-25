@@ -4,7 +4,7 @@
    `Toggle` in `tui/internal/config/config.go`, wired into `Config`; unit
    tests in `tui/internal/config/config_test.go` (toggle on/off,
    independent kinds, independent profiles, YAML round-trip).
-2. [ ] `Host.ToggleFavorite` — interface method in `tui/internal/ui/host.go`,
+2. [x] `Host.ToggleFavorite` — interface method in `tui/internal/ui/host.go`,
    implementation in `tui/internal/app/host.go` (mutate + persist,
    mirroring `SetActiveAWSProfile`), stub methods in
    `tui/internal/app/host_test.go`, `tui/internal/dialog/hosttest_test.go`,
