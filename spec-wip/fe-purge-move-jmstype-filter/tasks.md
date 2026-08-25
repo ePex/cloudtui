@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Generalize `Host.ScanJMSTypes` to take an explicit `queueName`;
+1. [x] Generalize `Host.ScanJMSTypes` to take an explicit `queueName`;
    add `Host.MessagesQueueName()`. Update `App`'s implementations,
    `MessageFilter.startScan()`'s call site, and every fake/stub
    (`internal/app/host_test.go`, `internal/dialog/hosttest_test.go`,
