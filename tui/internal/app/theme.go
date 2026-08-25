@@ -67,10 +67,21 @@ func reapplyTheme(a *App, p config.Palette) {
 	// Logo panel
 	a.logoPanel.SetBackgroundColor(bg)
 
-	// Command prompt's own background (the field itself renders
-	// transparently via SetFieldBackgroundColor(tcell.ColorDefault) in
-	// New(), so what's visible is this Box-level background).
-	a.prompt.SetBackgroundColor(bg)
+	// Command prompt's own background, label color, and typed-text color.
+	// InputField.SetBackgroundColor (the embedded *Box) is NOT enough here:
+	// InputField wraps a private *TextArea with its OWN separate embedded
+	// *Box, baked in at construction and never exposed for direct access.
+	// TextArea.Draw() repaints its own rect from that private Box's
+	// background on every frame, overwriting whatever InputField's outer
+	// Box just painted — so the outer SetBackgroundColor has no visible
+	// effect once the field has been drawn once. SetFormAttributes is the
+	// only exported InputField method that reaches the private TextArea's
+	// background (it forwards directly to TextArea.SetFormAttributes,
+	// which sets the field it actually paints from). fieldWidth stays 0
+	// (auto) and the field's own background stays tcell.ColorDefault
+	// (transparent, unchanged from New()) to preserve existing layout and
+	// look — only the three theme-dependent colors change here.
+	a.prompt.SetFormAttributes(0, tcell.GetColor(p.Value), bg, tcell.GetColor(p.Text), tcell.ColorDefault)
 
 	// Command prompt's autocomplete drop-down
 	ui.StyleInputFieldAutocomplete(a.prompt, p)

@@ -53,7 +53,20 @@ func TestReapplyThemeUpdatesStatusBarColors(t *testing.T) {
 	}
 }
 
-func TestReapplyThemeUpdatesPromptBackground(t *testing.T) {
+// TestReapplyThemeUpdatesPromptRenderedBackground guards against a
+// regression where the ':' prompt's visible background stayed on the
+// startup theme after a live switch. InputField.GetBackgroundColor()
+// (the embedded *Box) is NOT sufficient to catch this: InputField wraps a
+// private *TextArea with its own separate embedded *Box, and
+// TextArea.Draw() repaints its rect from that private Box's background on
+// every frame — overwriting whatever InputField's own SetBackgroundColor
+// painted moments earlier. The only exported InputField method that
+// reaches the private TextArea's actual background is
+// SetFormAttributes. Since that inner Box isn't reachable from this
+// package (its field is unexported), the fix can only be verified by
+// rendering to a SimulationScreen and reading cell styles back, the same
+// technique TestPromptAutocompleteFirstOpenIsReadable already uses.
+func TestReapplyThemeUpdatesPromptRenderedBackground(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
@@ -61,8 +74,29 @@ func TestReapplyThemeUpdatesPromptBackground(t *testing.T) {
 	a.cfg.Colors = p
 	reapplyTheme(a, p)
 
-	if got, want := a.prompt.GetBackgroundColor(), tcell.GetColor(p.Background); got != want {
-		t.Errorf("prompt background after reapplyTheme = %v, want %v", got, want)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 20)
+
+	a.prompt.SetRect(0, 0, 40, 1)
+	a.prompt.Draw(screen)
+	screen.Show()
+
+	contents, _, _ := screen.GetContents()
+	wantBg := tcell.GetColor(p.Background)
+	wantFg := tcell.GetColor(p.Value)
+
+	// Column 0 is the ':' label's leading space — the one part of the
+	// prompt that's always painted (unlike the field area beyond it,
+	// which intentionally stays transparent/ColorDefault).
+	fg, bg, _ := contents[0].Style.Decompose()
+	if bg != wantBg {
+		t.Errorf("prompt label background after reapplyTheme = %v, want %v (palette Background)", bg.Hex(), wantBg.Hex())
+	}
+	if fg != wantFg {
+		t.Errorf("prompt label foreground after reapplyTheme = %v, want %v (palette Value)", fg.Hex(), wantFg.Hex())
 	}
 }
 
