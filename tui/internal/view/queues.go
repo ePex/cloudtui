@@ -21,18 +21,19 @@ import (
 var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
 
 type QueuesView struct {
-	table        *tview.Table
-	filterInput  *tview.InputField
-	flex         *tview.Flex
-	host         ui.ViewHost
-	backend      queue.Backend
-	confirm      *dialog.ConfirmDialog
-	movePicker   *dialog.MovePicker
-	sendMessage  *dialog.SendMessageOverlay
-	filter       string          // active filter (empty = no filter)
-	allSummaries []queue.Summary // full unfiltered list from last load
-	sortCol      int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
-	sortAsc      bool            // true = ascending
+	table         *tview.Table
+	filterInput   *tview.InputField
+	flex          *tview.Flex
+	host          ui.ViewHost
+	backend       queue.Backend
+	confirm       *dialog.ConfirmDialog
+	movePicker    *dialog.MovePicker
+	sendMessage   *dialog.SendMessageOverlay
+	jmsTypePrompt *dialog.JMSTypePrompt
+	filter        string          // active filter (empty = no filter)
+	allSummaries  []queue.Summary // full unfiltered list from last load
+	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
+	sortAsc       bool            // true = ascending
 }
 
 var _ ui.View = (*QueuesView)(nil)
@@ -74,7 +75,7 @@ func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 }
 
 // NewQueuesView constructs the queues view backed by b.
-func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, onSelect func(queueName string)) *QueuesView {
+func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string)) *QueuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)
@@ -91,7 +92,7 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 		AddItem(table, 0, 1, true).
 		AddItem(filterInput, 1, 0, false)
 
-	qv := &QueuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, sortAsc: true}
+	qv := &QueuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, jmsTypePrompt: jmsTypePrompt, sortAsc: true}
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -139,19 +140,9 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 				return nil
 			}
 			name := cell.Text
-			qv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
-				go func() {
-					err := qv.backend.PurgeQueue(context.Background(), name)
-					qv.host.QueueUpdateDraw(func() {
-						if err != nil {
-							slog.Error("queues: purge failed", "queue", name, "error", err)
-							qv.showError(err)
-							return
-						}
-						qv.Load()
-					})
-				}()
-			})
+			qv.jmsTypePrompt.Show("Purge", name, func(jmsType string) {
+				qv.confirmPurge(name, jmsType)
+			}, qv.restoreShortcuts)
 			return nil
 		case 'M':
 			row, _ := qv.table.GetSelection()
@@ -160,26 +151,9 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 				return nil
 			}
 			srcQueue := cell.Text
-			restoreQueues := func() {
-				qv.host.SetFocus(qv.table)
-				lines := make([]string, 0, len(qv.Shortcuts()))
-				for _, sc := range qv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
-				}
-				qv.host.SetContextHint(strings.Join(lines, "\n"))
-			}
-			qv.movePicker.Show(srcQueue, func(target string) {
-				count, err := qv.backend.MoveAllMessages(context.Background(), srcQueue, target)
-				qv.host.QueueUpdateDraw(func() {
-					if err != nil {
-						slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "error", err)
-						qv.showError(err)
-						return
-					}
-					qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
-					qv.Load()
-				})
-			}, restoreQueues)
+			qv.jmsTypePrompt.Show("Move All", srcQueue, func(jmsType string) {
+				qv.pickMoveAllTarget(srcQueue, jmsType)
+			}, qv.restoreShortcuts)
 			return nil
 		case 'c':
 			row, _ := qv.table.GetSelection()
@@ -188,14 +162,7 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 				return nil
 			}
 			name := cell.Text
-			qv.sendMessage.Show(name, func() {
-				qv.host.SetFocus(qv.table)
-				lines := make([]string, 0, len(qv.Shortcuts()))
-				for _, sc := range qv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
-				}
-				qv.host.SetContextHint(strings.Join(lines, "\n"))
-			})
+			qv.sendMessage.Show(name, qv.restoreShortcuts)
 			return nil
 		}
 		return event
@@ -210,6 +177,83 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 	})
 
 	return qv
+}
+
+// restoreShortcuts returns focus to the queue table and rewrites the
+// context panel's shortcut hints — the common "an overlay opened from
+// here just closed" cleanup shared by every overlay this view opens
+// (send message, the JMS Type filter prompt, the move picker).
+func (qv *QueuesView) restoreShortcuts() {
+	qv.host.SetFocus(qv.table)
+	lines := make([]string, 0, len(qv.Shortcuts()))
+	for _, sc := range qv.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", qv.host.Config().Colors.Accent, sc.Key, sc.Description))
+	}
+	qv.host.SetContextHint(strings.Join(lines, "\n"))
+}
+
+// confirmPurge shows the purge confirmation dialog for name, wording it
+// according to jmsType (empty = every message), and on confirmation
+// performs the purge via doPurge.
+func (qv *QueuesView) confirmPurge(name, jmsType string) {
+	question := fmt.Sprintf("Purge %q? All messages will be deleted.", name)
+	if jmsType != "" {
+		question = fmt.Sprintf("Purge %q? All %s messages will be deleted.", name, jmsType)
+	}
+	qv.confirm.Show(question, func() {
+		go func() {
+			err := qv.doPurge(context.Background(), name, jmsType)
+			qv.host.QueueUpdateDraw(func() {
+				if err != nil {
+					slog.Error("queues: purge failed", "queue", name, "jmsType", jmsType, "error", err)
+					qv.showError(err)
+					return
+				}
+				qv.Load()
+			})
+		}()
+	})
+}
+
+// doPurge dispatches to the backend call matching jmsType: PurgeQueue
+// (the existing fast, native path) when empty, or DeleteMessages with a
+// JMSType filter otherwise — see spec/09's "Preserving the existing
+// unfiltered path" for why these stay two different backend calls
+// rather than DeleteMessages with an always-empty-filter fallback.
+func (qv *QueuesView) doPurge(ctx context.Context, name, jmsType string) error {
+	if jmsType == "" {
+		return qv.backend.PurgeQueue(ctx, name)
+	}
+	_, err := qv.backend.DeleteMessages(ctx, name, queue.MessageFilter{JMSType: jmsType})
+	return err
+}
+
+// pickMoveAllTarget shows the move-picker for srcQueue, and on target
+// selection performs the move via doMoveAll.
+func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
+	qv.movePicker.Show(srcQueue, func(target string) {
+		count, err := qv.doMoveAll(context.Background(), srcQueue, target, jmsType)
+		qv.host.QueueUpdateDraw(func() {
+			if err != nil {
+				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
+				qv.showError(err)
+				return
+			}
+			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
+			qv.Load()
+		})
+	}, qv.restoreShortcuts)
+}
+
+// doMoveAll dispatches to the backend call matching jmsType:
+// MoveAllMessages (the existing fast, native path) when empty, or
+// MoveMessages with a JMSType filter otherwise — same reasoning as
+// doPurge above.
+func (qv *QueuesView) doMoveAll(ctx context.Context, srcQueue, target, jmsType string) (int, error) {
+	if jmsType == "" {
+		return qv.backend.MoveAllMessages(ctx, srcQueue, target)
+	}
+	return qv.backend.MoveMessages(ctx, srcQueue, target, queue.MessageFilter{JMSType: jmsType})
 }
 
 // Activate reloads the queue list. Called by SwitchTo each time the queues

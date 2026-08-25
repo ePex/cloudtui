@@ -68,6 +68,7 @@ type App struct {
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
+	jmsTypePrompt  *dialog.JMSTypePrompt
 	timeRangeModal *dialog.TimeRangeModal
 	datadogEditor  *dialog.DatadogEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
@@ -225,6 +226,7 @@ func New(cfg config.Config) *App {
 	a.movePicker = dialog.NewMovePicker(a)
 	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	a.messageFilter = dialog.NewMessageFilter(a)
+	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 	a.connManager = dialog.NewConnManager(a, a.confirm)
 	a.datadogEditor = dialog.NewDatadogEditor(a)
@@ -233,7 +235,7 @@ func New(cfg config.Config) *App {
 
 	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
 
-	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.OpenMessages)
+	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
 	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm,
 		func() {
@@ -330,6 +332,9 @@ func New(cfg config.Config) *App {
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
+	// A single bordered field: border top+bottom (2 rows) + content (1 row).
+	jmsTypePromptOverlay := ui.Centered(a.jmsTypePrompt.Primitive(), 64, 3)
+
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
 	// (caught live via verify-live, spec/53 — the same failure mode as
@@ -358,6 +363,7 @@ func New(cfg config.Config) *App {
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
+		AddPage("jmstype-prompt", jmsTypePromptOverlay, true, false).
 		AddPage("time-range", timeRangeOverlay, true, false).
 		AddPage("datadog-editor", datadogEditorOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
@@ -387,6 +393,7 @@ func New(cfg config.Config) *App {
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
+		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
 		a.themePicker,
@@ -415,6 +422,7 @@ func New(cfg config.Config) *App {
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
+		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
 		a.themePicker,
