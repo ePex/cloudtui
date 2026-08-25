@@ -150,6 +150,31 @@ interactive re-auth flow the way AWS SSO has (spec/14).
   editor specifically (its `datadogEditorVisible` flag was omitted when
   first added) and is a recurring class of bug worth checking for any new
   overlay.
+- **Global-hotkey leak, second instance: the *other* exemption
+  mechanism (`focusExemptInputs`, not `overlayVisible`) had the same
+  class of bug, for a structurally different reason.** `serviceFilterDD`/
+  `envFilterDD` are registered in `focusExemptInputs` via
+  `FilterInputs()`, and `onGlobalKey` used to check for exemption by
+  comparing `tview.Application.GetFocus()` against each registered
+  primitive by identity (`==`). That works while a `tview.DropDown`'s
+  popup is **closed** — `GetFocus()` genuinely returns the `*DropDown`
+  then — but `DropDown.Focus(delegate)` calls `delegate(d.list)` (an
+  unexported, internal `*tview.List`) once the popup is **open**, so
+  `Application.focus` becomes that private list, not the `*DropDown`
+  itself, and the identity check silently stops matching for every
+  keystroke typed into an open popup: confirmed live, `q` quit the whole
+  app while the Service filter's dropdown was open. Fixed by checking
+  `in.HasFocus()` instead of `focus == in` — `DropDown.HasFocus()`
+  correctly delegates to `d.list.HasFocus()` while open, and every other
+  `focusExemptInputs` entry is a plain `*tview.InputField`, for which
+  `HasFocus()` is identity-equivalent, so the fix changes nothing for
+  the non-dropdown cases. The existing regression tests for this
+  (`TestOnGlobalKeyPassesThroughWhenDatadogServiceFilterFocused`/
+  `...EnvFilterFocused`) had set focus on the closed dropdown only,
+  which is exactly the one case where the old check still worked — they
+  passed the whole time without ever exercising the bug; fixed by
+  driving the dropdown's own `InputHandler` with `KeyEnter` first to
+  actually open the popup before asserting.
 - Facet-listing's response shape (`buckets[].by.<facet>`) was confirmed
   against a real API call, not fully derivable from Datadog's public
   docs alone — worth re-verifying live if this integration is rebuilt.
