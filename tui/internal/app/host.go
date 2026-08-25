@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"sort"
 
 	"github.com/rivo/tview"
 
@@ -61,6 +62,40 @@ func (a *App) ApplyMessagesFilter(f queue.MessageFilter) {
 }
 
 func (a *App) FocusMessages() { a.tv.SetFocus(a.messagesV.Table()) }
+
+// LoadedJMSTypes returns the distinct, non-empty JMSType values among the
+// messages currently loaded in the messages view (free — no network
+// call).
+func (a *App) LoadedJMSTypes() []string {
+	return distinctJMSTypes(a.messagesV.AllMessages())
+}
+
+// ScanJMSTypes runs a fresh, unfiltered browse capped at maxCount purely
+// to widen the JMS Type suggestion set — it does not touch the messages
+// view's displayed list.
+func (a *App) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
+	msgs, err := a.backend.BrowseMessages(ctx, a.messagesV.QueueName(), queue.MessageFilter{MaxCount: maxCount})
+	if err != nil {
+		return nil, err
+	}
+	return distinctJMSTypes(msgs), nil
+}
+
+// distinctJMSTypes returns the non-empty, deduplicated JMSType values in
+// msgs, sorted for stable, predictable suggestion ordering.
+func distinctJMSTypes(msgs []queue.Message) []string {
+	seen := make(map[string]bool)
+	var types []string
+	for _, m := range msgs {
+		if m.JMSType == "" || seen[m.JMSType] {
+			continue
+		}
+		seen[m.JMSType] = true
+		types = append(types, m.JMSType)
+	}
+	sort.Strings(types)
+	return types
+}
 
 // DeleteConnection removes name from Connections. If it was the active
 // connection, activates the first remaining one (reusing switchConnection
