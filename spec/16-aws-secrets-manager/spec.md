@@ -11,7 +11,8 @@ CLI/console.
 ## Behavior / user flow
 
 - A top-level app (`secrets-manager`), its own `ui.View`, listed in Home's
-  "Apps" section next to `queues` and `ssm-parameters`.
+  "AWS" section next to `ssm-parameters`, `cloudwatch-logs`, and
+  `codepipeline` (not `queues`, which is its own "ActiveMQ" section).
 - Uses `cfg.ActiveAWSProfile` for credentials; errors clearly if none is
   selected.
 - List view (table): secrets fetched via paginated `ListSecrets`, showing
@@ -39,16 +40,18 @@ CLI/console.
 ## Data & config
 
 - `tui/internal/awssecrets/`: `List(ctx, profile) ([]Secret, error)`
-  (paginated `ListSecrets`) and `Reveal(ctx, profile, name) (Secret,
-  error)` (`GetSecretValue`, `AWSCURRENT` only).
-- Also used by spec-origin/12 (named connections) to resolve a
+  (paginated `ListSecrets`) and `Reveal(ctx, profile, name) (value string,
+  isBinary bool, err error)` (`GetSecretValue`, `AWSCURRENT` only —
+  `isBinary` is true, and `value` empty, for a `SecretBinary`-only
+  secret; there is no `Secret`-typed return here).
+- Also used by spec/12 (named connections) to resolve a
   Secrets-Manager-backed connection password via `Reveal`.
 
 ## Notable gotchas worth preserving
 
 - The reveal-gating shape here (metadata-only list, explicit `r` to
   decrypt) mirrors Parameter Store's `SecureString` handling
-  (spec-origin/15) but for a structurally different reason: Parameter
+  (spec/15) but for a structurally different reason: Parameter
   Store *chooses* to mask; Secrets Manager's list API is *incapable* of
   returning a value at all.
 - The `c`-copies-without-revealing / cached-fetch behavior here is shared

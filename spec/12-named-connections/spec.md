@@ -11,10 +11,10 @@ app, without hand-editing `config.yaml` and restarting.
 ## Behavior / user flow
 
 - One connection is active at a time (`config.yaml`'s `activeConnection`).
-  The top-left info panel shows a `Connection: <name>` line.
-- **Settings view** (a `tview.List`) has a `Connection: <name>` item that
+  The top-left info panel shows an `AMQ Connection: <name>` line.
+- **Settings view** (a `tview.List`) has an `AMQ Connection: <name>` item that
   opens the connection manager overlay. It also has a `Theme: <name>` item
-  (theme picker) and an "AWS Profiles" item (spec-origin/14).
+  (theme picker) and an "AWS Profiles" item (spec/14).
 - **Connection manager overlay** — reachable from Settings, or directly from
   anywhere via the command prompt (`:aq` or `:connections`):
   - Lists all connections as `<name>  (<backend>)`; the active one is marked
@@ -115,14 +115,14 @@ connections:
   `ProxyConfig` structs; `Connections []Connection` / `ActiveConnection
   string` on `Config`; `Load()` migration; `Save()`.
 - `tui/internal/dialog/connections.go` — `ConnManager` and `ConnEditor`
-  overlays (moved out of `internal/app`; see spec-origin/03,
+  overlays (moved out of `internal/app`; see spec/03,
   architecture-and-package-layout — `ConnEditor` takes its sibling
   `ConnManager` as a constructor parameter, one of the few cross-dialog
   references).
 - `tui/internal/queue/secretbackend/` — the `queue.Backend` decorator that
   resolves a `passwordSecret` password lazily (in-memory cache,
   invalidate/retry wiring); moved here from `internal/app` (see
-  spec-origin/03).
+  spec/03).
 - Command prompt: `onPromptDone` matches `"aq"`/`"connections"` →
   open the connection manager. It intentionally has no bare-key global
   hotkey (unlike `s` for Settings) — it's one level under Settings, and

@@ -7,9 +7,9 @@ final, current behavior of the Queues view._
 ## Purpose
 
 A read-only-by-default **Queues** view listing every queue on the active
-ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
+ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 `:queues`. This is the tool's primary screen — the entry point into browsing
-(spec-origin/08) and acting on (spec-origin/09) queue messages.
+(spec/08) and acting on (spec/09) queue messages.
 
 ## Behavior
 
@@ -22,7 +22,7 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
   distinct background (label/accent color) with dark foreground text.
 - **Row selection**: cursor navigation with ↑/↓ and j/k; selected row shown
   in the palette's selection colors. Enter on a row opens the Messages view
-  for that queue (spec-origin/08).
+  for that queue (spec/08).
 - **Sorting**: `o` cycles the active sort column through all 5 columns in
   order (NAME → PENDING → CONSUMERS → ENQUEUED → DEQUEUED → NAME → …);
   `O` (Shift+o) toggles ascending/descending. The active column's header
@@ -42,7 +42,7 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
   first data row. Scroll position is deliberately *not* preserved across
   navigations — this is intentional UX, not a gap.
 - **Reload**: `r` reloads the queue list from the active backend
-  (Jolokia or mq-proxy, spec-origin/11).
+  (Jolokia or mq-proxy, spec/11).
 - **Auto-refresh on activate**: entering the view (via Home, `:queues`, or
   Backspace/Esc back from a child view) triggers an automatic reload.
 
@@ -52,7 +52,7 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
   int64`, `EnqueueCount int64`, `DequeueCount int64`.
 - `queue.Backend` interface: `List(ctx context.Context) ([]Summary, error)`
   — implemented by both the Jolokia client and the mq-proxy client
-  (spec-origin/11); this view is backend-agnostic.
+  (spec/11); this view is backend-agnostic.
 - Jolokia backend connection config lives under `queue:` in `config.yaml`
   (`brokerName`, `url`, `username`, `password`); `Default()` points at
   `http://localhost:8161/api/jolokia` with `admin`/`` credentials matching
@@ -69,7 +69,7 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
 
 - Current location: `tui/internal/view/queues.go` (`QueuesView`) — moved
   here from `internal/app/queues.go` by the later package split; see
-  spec-origin/03 for the current `internal/view` package layout and the
+  spec/03 for the current `internal/view` package layout and the
   `ui.ViewHost` interface this view depends on.
 - The Jolokia client (`tui/internal/queue/jolokia/`) reads queue summaries,
   including Enqueue/DequeueCount, from the broker MBean over Jolokia HTTP
@@ -80,8 +80,8 @@ ActiveMQ broker, reachable via the Home dashboard (spec-origin/05) and via
 - A `tview.Table` cell swallows a leading `[x]`-shaped substring as a color
   tag. The filter string is escaped/wrapped before being embedded in the
   table title for this reason (same issue independently hit and fixed in
-  the connection manager and move-picker filters — see spec-origin/12 and
-  spec-origin/09).
+  the connection manager and move-picker filters — see spec/12 and
+  spec/09).
 - Every Jolokia request sets an explicit `Origin` header to the broker
   URL. ActiveMQ's default `jolokia-access.xml` rejects origin-less
   requests under strict origin checking — without this header, calls fail

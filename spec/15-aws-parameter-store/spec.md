@@ -11,9 +11,9 @@ leaving the app or reaching for the AWS CLI/console.
 ## Behavior / user flow
 
 - A top-level app (`ssm-parameters`), registered as a real `ui.View` in
-  Home's "Apps" section and switchable via the command prompt — not tucked
+  Home's "AWS" section and switchable via the command prompt — not tucked
   under Settings, since browsing is a primary feature, not configuration.
-- Uses `cfg.ActiveAWSProfile` (spec-origin/14) for credentials; errors
+- Uses `cfg.ActiveAWSProfile` (spec/14) for credentials; errors
   clearly if none is selected rather than falling back to the SDK's
   default credential chain.
 - List view (table, same shape as `queuesView`): parameters fetched
@@ -40,7 +40,7 @@ leaving the app or reaching for the AWS CLI/console.
   config.WithSharedConfigProfile(name))` — this genuinely authenticates
   (unlike `awsprofile`'s config-file-only reads), so SSO/credential_process
   resolution actually executes. An expired SSO token does not itself
-  trigger a browser login — see spec-origin/14's auto-reauth behavior,
+  trigger a browser login — see spec/14's auto-reauth behavior,
   which wraps this view's `load()`.
 - Always fetches the whole parameter tree from `/` and filters
   client-side (same approach as the AWS Profiles overlay) — no
@@ -48,8 +48,10 @@ leaving the app or reaching for the AWS CLI/console.
 
 ## Implementation notes
 
-- Registered alongside `queues` in Home's "Apps" section (see
-  spec-origin/05 for the current section grouping).
+- Registered in Home's "AWS" section, alongside `secrets-manager`,
+  `cloudwatch-logs`, and `codepipeline` — not alongside `queues`, which is
+  its own "ActiveMQ" section (see spec/05 for the current section
+  grouping).
 - Detail view reuses the existing message-detail-view rendering pattern.
 
 ## Notable gotchas worth preserving
@@ -57,4 +59,4 @@ leaving the app or reaching for the AWS CLI/console.
 - Secrets Manager was deliberately **not** folded into this view despite
   the similar "browse a secret store" shape — it has a structurally
   different value-retrieval API (`ListSecrets` never returns a value at
-  all) and ships as its own app; see spec-origin/16.
+  all) and ships as its own app; see spec/16.

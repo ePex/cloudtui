@@ -1,11 +1,11 @@
 # Log investigation cross-links: correlation jump + shared time-range modal
 
-_Condensed from spec/41, spec/53 — see those folders for the incremental history. CorrelationID jump's time-range behavior updated by spec-origin/91-bugfix-correlation-jump-timerange._
+_Condensed from spec/41, spec/53 — see those folders for the incremental history. CorrelationID jump's time-range behavior updated by spec-wip/91-bugfix-correlation-jump-timerange._
 
 ## Purpose
 
 Two pieces of shared infrastructure across the CloudWatch Logs
-(spec-origin/17) and Datadog Logs (spec-origin/18) search views: jumping
+(spec/17) and Datadog Logs (spec/18) search views: jumping
 from a Datadog log to its matching CloudWatch line, and a shared,
 richer time-range picker that replaced both views' original preset-cycling.
 
@@ -22,7 +22,7 @@ richer time-range picker that replaced both views' original preset-cycling.
   — no pattern or timestamp is queued.
 - The jump lands on the CloudWatch Logs *group list* (there's no
   cross-log-group search — CloudWatch Logs Insights is out of scope, see
-  spec-origin/17) with the CorrelationID and timestamp queued. Picking a
+  spec/17) with the CorrelationID and timestamp queued. Picking a
   group (the normal Enter-on-a-row flow) opens that group's search
   **pre-filled** with the CorrelationID as the filter pattern, instead
   of the normal empty default — **and** on an **absolute time range**
@@ -31,7 +31,7 @@ richer time-range picker that replaced both views' original preset-cycling.
   default is relative to *now*: without it, jumping to an event older
   than the default window landed on a CloudWatch search that
   structurally could not contain the event, silently — narrowing the
-  filter pattern or spec-origin/90's pagination couldn't fix it, since
+  filter pattern or spec-wip/90's pagination couldn't fix it, since
   the event was outside the queried window entirely, not hidden by a
   page cap.
 - A normal (non-jump) group open is unaffected — it still resets to the
@@ -120,7 +120,7 @@ window, `tr.label()` for title-bar display.
 ## Implementation notes
 
 - Shared modal type/construction lives in `internal/ui`/`internal/dialog`
-  post the package split (spec-origin/03) — `timeRange`/`timeRangeMode`/
+  post the package split (spec/03) — `timeRange`/`timeRangeMode`/
   presets were promoted out of the CloudWatch-specific file to
   `internal/ui` so the dialog package doesn't depend on a resource-view
   file (originally `logsearch.go`).
@@ -153,4 +153,4 @@ window, `tr.label()` for title-bar display.
 - Tab-indicator styling can't use literal `[Relative]`/`[Absolute]` —
   square brackets are swallowed as `tview` color/region tags, a
   recurring gotcha throughout this codebase (see also the multi-select
-  `"[x]"` mark gotcha in spec-origin/08).
+  `"[x]"` mark gotcha in spec/08).

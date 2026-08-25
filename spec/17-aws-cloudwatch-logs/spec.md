@@ -1,6 +1,6 @@
 # AWS CloudWatch Logs search
 
-_Condensed from spec/34 — see that folder for the incremental history. Time-range UI superseded by spec/53 — see spec-origin/19-log-investigation-crosslinks for the current shared time-range modal. Pagination behavior updated by spec-origin/90-cr-log-search-pagination._
+_Condensed from spec/34 — see that folder for the incremental history. Time-range UI superseded by spec/53 — see spec/19-log-investigation-crosslinks for the current shared time-range modal. Pagination behavior updated by spec-wip/90-cr-log-search-pagination._
 
 ## Purpose
 
@@ -12,7 +12,7 @@ this is a query tool over a high-volume, time-ordered event stream.
 ## Behavior / user flow
 
 - A top-level app (`cloudwatch-logs`), its own `ui.View`, listed in Home's
-  "Apps" section. Uses `cfg.ActiveAWSProfile` for credentials; errors
+  "AWS" section. Uses `cfg.ActiveAWSProfile` for credentials; errors
   clearly if none is selected.
 - **Two screens**:
   1. Log-group list — browse, filterable by name (`/`, same convention as
@@ -25,7 +25,7 @@ this is a query tool over a high-volume, time-ordered event stream.
   through to AWS with no client-side reinterpretation, against a single
   log group at a time. The query round-trips to AWS on submit — not
   live-filtered like the local-data views.
-- Time range: see spec-origin/19 for the shared time-range modal (`t` key)
+- Time range: see spec/19 for the shared time-range modal (`t` key)
   used by this view — Relative presets (15m/1h/4h/1day/2days/3days/7days/
   15days/1month) or an Absolute From/Until range.
 - Each `FilterLogEvents` call is capped to a single page (`Limit: 1000`).
@@ -38,7 +38,7 @@ this is a query tool over a high-volume, time-ordered event stream.
   same title hint — this exists because a specific pattern expresses
   clear intent to find every match, and silently dropping one behind the
   1000-event single-page cap defeated that (see
-  spec-origin/90-cr-log-search-pagination for the motivating case: a
+  spec-wip/90-cr-log-search-pagination for the motivating case: a
   high-volume window with a pattern match older than the newest 1000
   events in range). Either way, pressing `n` any time the title shows
   the hint fetches and appends one more page on top of what's already
@@ -49,7 +49,7 @@ this is a query tool over a high-volume, time-ordered event stream.
 - `Enter` on a result opens a detail view with the full, unwrapped message
   (log lines are frequently long/multi-line). `c` copies the message to
   the clipboard (nothing is masked here, so no reveal-gating).
-- The search screen's results table supports `w` (spec-origin/92): a
+- The search screen's results table supports `w` (spec-wip/92): a
   per-session (not persisted) word-wrap toggle on the Message column,
   off by default. Off, the Message column shows `logEventPreview`'s
   compact single-line summary — first line only, capped at 200 chars.
@@ -90,7 +90,7 @@ this is a query tool over a high-volume, time-ordered event stream.
   pattern auto-continue and the `n` manual-load-more paths described
   above.
 - View type: `logSearchView` (per-log-group search screen) — also the
-  jump target for the Datadog correlation-ID lookup, see spec-origin/19.
+  jump target for the Datadog correlation-ID lookup, see spec/19.
 
 ## Notable gotchas worth preserving
 
@@ -101,4 +101,4 @@ this is a query tool over a high-volume, time-ordered event stream.
   containing hyphens (e.g. a UUID) must be double-quoted or it gets
   tokenized on the internal hyphens and fails to match as a whole term
   (relevant when constructing a pattern programmatically — see
-  spec-origin/19's correlation-jump feature).
+  spec/19's correlation-jump feature).

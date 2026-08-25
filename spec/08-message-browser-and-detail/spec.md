@@ -6,7 +6,7 @@ _Condensed from spec/07, spec/08, spec/12, spec/24, spec/46 — see those folder
 
 Let the user inspect the messages sitting in a queue: a list view for
 scanning many messages at once, and a detail view for reading one message's
-full headers and body. Built on top of the queue list (spec-origin/07);
+full headers and body. Built on top of the queue list (spec/07);
 opened by pressing Enter on a queue row.
 
 ## Behavior / user flow
@@ -31,7 +31,7 @@ opened by pressing Enter on a queue row.
 3. **Escape**/**Backspace** returns to the Queues view. **r** refreshes.
 4. **Enter** on a message row opens the Message Detail view for that row.
 5. **w** toggles word-wrap on the Preview column, per-session (not
-   persisted), off by default (spec-origin/92): when on, a preview
+   persisted), off by default (spec-wip/92): when on, a preview
    that doesn't fit on one line word-wraps into non-selectable
    continuation rows directly below the message's row, up to
    `maxWrapLines` (50) — a preview whose wrapping would need more than
@@ -68,7 +68,7 @@ Multi-select, independent of the table cursor:
 Delete (`d`) and move (`m`) act on the marked set when one exists, and fall
 back to the single message under the cursor when nothing is marked (so
 `d`/`m` double as a single-item shortcut without requiring an explicit mark
-first) — see spec-origin/09 for the actions themselves. Only a genuinely
+first) — see spec/09 for the actions themselves. Only a genuinely
 empty target (empty list, or a cursor row with no ID) is a no-op. Bulk
 delete/move run in a goroutine (unlike the single-item path, which calls the
 backend synchronously) so a large batch doesn't visibly freeze the UI, and
@@ -103,14 +103,14 @@ reloads and are reflected in the table title):
 - **Quick search** (`/`) — a live, client-side substring filter over the
   *currently loaded* rows (matches JMS type and/or preview text). No
   network round trip; narrows what's already on screen. Same mechanic as
-  the queue list's `/` filter (spec-origin/07).
+  the queue list's `/` filter (spec/07).
 - **Filter form** (`f`) — a `tview.Form` overlay (JMS Type / From / To / Max
   Count fields, Apply/Clear/Cancel) that builds a `queue.MessageFilter` and
   re-fetches via `BrowseMessages` — the actual server-side-pushed-down
   filter. This is the one that bounds how much is fetched for large
   backlogs.
 
-Both hotkeys appear in `messagesView.Shortcuts()`/the context panel.
+Both hotkeys appear in `MessagesView.Shortcuts()`/the context panel.
 
 ## Data & config
 
@@ -162,22 +162,25 @@ Backend-specific filter behavior:
 - **Proxy backend**: pushes `jmsType`/`messageId`/`fromDate`/`toDate`/
   `maxCount` down to `mq-proxy`'s `list-messages` endpoint as real query
   params, and always sends `returnBody=true` (the preview column needs the
-  body). See spec-origin/11 for the exact wire shape.
+  body). See spec/11 for the exact wire shape.
 
 ## Implementation notes
 
-- `internal/app/messages.go` — `messagesView`: table, marking state
+- `tui/internal/view/messages.go` — `MessagesView`: table, marking state
   (`marked map[string]bool` keyed by message ID), the five/seven
-  keybindings above, bulk delete/move.
-- `internal/app/message_detail.go` — `messageDetailView`, registered as
-  page `"message-detail"` (not in `a.views`).
+  keybindings above, bulk delete/move. Originally lived at
+  `internal/app/messages.go`; moved into `internal/view` as part of the
+  later package split (see spec/03-architecture-and-package-layout).
+- `tui/internal/view/message_detail.go` — `MessageDetailView`, registered
+  as page `"message-detail"` (not in `a.views`). Same package-split move
+  as above.
 - `internal/queue/jolokia/` — `BrowseMessages` implementation and
   `filter.go`'s `filterMessages` helper. `previewMaxLen` (2000) is the
   jolokia-package-local constant capping `Preview`'s length — the full
   body is already in memory by the time it's applied, so this is a
   display/memory bound, not a network one.
 - `internal/queue/proxy/` — `BrowseMessages` implementation (see
-  spec-origin/11); its own identical `previewMaxLen` constant (same
+  spec/11); its own identical `previewMaxLen` constant (same
   reasoning as the Jolokia backend's).
 - The `w` wrap toggle's helpers (`wrapText`, `wrapMultilineText`,
   `setContinuationRow`, `dynamicWrapWidth`, `maxWrapLines`) live in

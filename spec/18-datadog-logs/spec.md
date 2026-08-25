@@ -1,11 +1,11 @@
 # Datadog Logs search
 
-_Condensed from spec/39, spec/40, spec/42, spec/52 — see those folders for the incremental history. Time-range UI superseded by spec/53 — see spec-origin/19-log-investigation-crosslinks for the current shared time-range modal._
+_Condensed from spec/39, spec/40, spec/42, spec/52 — see those folders for the incremental history. Time-range UI superseded by spec/53 — see spec/19-log-investigation-crosslinks for the current shared time-range modal._
 
 ## Purpose
 
 Search Datadog Logs from inside cloudtui, mirroring CloudWatch Logs
-(spec-origin/17) for teams that ship logs to Datadog instead of (or as
+(spec/17) for teams that ship logs to Datadog instead of (or as
 well as) AWS.
 
 ## Auth model (differs from AWS)
@@ -19,12 +19,14 @@ modern replacement and is self-serviceable). A **site** (regional API
 host, e.g. `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`) selects
 which host to call — same suffix as the web UI's `app.<site>` domain. The
 token is a static credential the user pastes in once; there's no
-interactive re-auth flow the way AWS SSO has (spec-origin/14).
+interactive re-auth flow the way AWS SSO has (spec/14).
 
 ## Behavior / user flow
 
-- A top-level app (`datadog-logs`), alongside `cloudwatch-logs` in Home's
-  "Apps" section. **Single search view** — no log-group-list step first,
+- A top-level app (`datadog-logs`), its own `ui.View`, listed in Home's
+  own "Datadog" section — not grouped with `cloudwatch-logs`, which is
+  under "AWS" (see spec/05 for the current section grouping). **Single
+  search view** — no log-group-list step first,
   since Datadog Logs is one flat, taggable/queryable stream, not
   organized into named groups: query input → results table → detail view.
 - Query is Datadog's own query syntax (`filter.query`), passed straight
@@ -61,7 +63,7 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
     filter resets to `(any)` rather than silently continuing to claim a
     filter that isn't actually being applied to what's displayed.
   - Filter values are double-quoted in the constructed query (same
-    reason as the CorrelationID quoting in spec-origin/19 — unquoted
+    reason as the CorrelationID quoting in spec/19 — unquoted
     punctuation would otherwise be tokenized by Datadog's query parser).
 - Detail view shows the full log message plus attributes (Service,
   Status, Host, Env, Tags, timestamp). `c` copies the message to the
@@ -72,7 +74,7 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   exempted from the app's global-hotkey handling while open (see gotcha
   below) — every keystroke, including letters that would otherwise be
   global hotkeys, must reach the form fields.
-- The results table supports `w` (spec-origin/92): a per-session (not
+- The results table supports `w` (spec-wip/92): a per-session (not
   persisted) word-wrap toggle on the Message column, off by default —
   same shape as CloudWatch Logs search's toggle (spec/17), sharing the
   same underlying helpers (`tui/internal/view/wraptext.go`). Off, the
@@ -110,8 +112,10 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
   - `Search(ctx, cfg config.DatadogConfig, query string, from, to
     time.Time) ([]LogEvent, hasMore bool, error)` — posts to
     `https://api.<site>/api/v2/logs/events/search`.
-  - `ListFacetValues`/`ListServices`/`ListEnvs(ctx, cfg, from, to
-    time.Time) ([]string, error)` — posts to
+  - `ListFacetValues(ctx, cfg config.DatadogConfig, facet string, from,
+    to time.Time) ([]string, error)` — one generic function, called once
+    per facet (`"service"`, `"env"`) rather than separate
+    `ListServices`/`ListEnvs` functions. Posts to
     `https://api.<site>/api/v2/logs/analytics/aggregate`. Response shape
     is `buckets[].by.<facet>`.
   - `LogEvent.Env` field populated by `extractEnv(tags []string) string`
@@ -127,9 +131,9 @@ interactive re-auth flow the way AWS SSO has (spec-origin/14).
 
 ## Implementation notes
 
-- `tui/internal/app/datadoglogs.go` (view), `datadoglogdetail.go` (detail
-  view) — or their current `internal/view` locations post the package
-  split (spec-origin/03).
+- `tui/internal/view/datadoglogs.go` (`DatadogLogsView`), `datadoglogdetail.go`
+  (`DatadogLogDetailView`). Originally lived under `internal/app`; moved
+  as part of the package split (spec/03).
 - `tview.DropDown`s (`serviceFilterDD`, `envFilterDD`) require
   `styleDropDown` for their unselected popup-list items to be readable
   against the theme — the same gotcha hit for the theme/connection-editor

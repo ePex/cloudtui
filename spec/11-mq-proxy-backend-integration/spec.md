@@ -4,11 +4,11 @@ _Condensed from spec/21, spec/44, spec/45, spec/47, spec/48, spec/49, spec/50, s
 
 ## Purpose
 
-`tui/internal/queue/proxy/` implements `queue.Backend` (spec-origin/07) by
-calling `mq-proxy` (spec-origin/10) over REST/JSON, so the TUI can talk to
+`tui/internal/queue/proxy/` implements `queue.Backend` (spec/07) by
+calling `mq-proxy` (spec/10) over REST/JSON, so the TUI can talk to
 brokers that don't expose Jolokia (notably AWS Amazon MQ). Which backend a
 connection uses (`jolokia` vs `proxy`) is a per-connection config field —
-see spec-origin/12 (Named connections) for that config shape; this document
+see spec/12 (Named connections) for that config shape; this document
 covers the wire contract itself and the Go client's behavior.
 
 ## REST API shape (current, final)
@@ -23,7 +23,7 @@ covers the wire contract itself and the Go client's behavior.
   errors }` (or `{ data, error }` for single-result operations), rather
   than a bare array/object with errors only as HTTP status.
 - **Auth**: HTTP Basic on every `/api/**` endpoint, unchanged from
-  spec-origin/10.
+  spec/10.
 
 ### `list-queues`
 
@@ -54,8 +54,12 @@ Structured body DTO: `targetQueue`, `jmsType`, `headers` (map), `groupId`,
 
 ### `delete-messages` / `move-messages` (POST)
 
-JSON body nests the filter naturally (Kotlin data class serialization):
-`{ sourceQueue, filter: { jmsType, messageId, fromDate, toDate, maxCount } }`
+JSON body is an **array** of the request object (`openapi.yaml`'s schema
+is `type: array` of `DeleteMessagesRequest`/`MoveMessagesRequest` — the
+shape exists for bulk-operation parity, but the TUI always sends exactly
+one element), each nesting the filter naturally (Kotlin data class
+serialization):
+`[{ sourceQueue, filter: { jmsType, messageId, fromDate, toDate, maxCount } }]`
 (plus a target queue for move). `filter.maxCount` stays **optional** here —
 unset means "match everything" (purge / move-all), a deliberately
 preserved, tested behavior, unlike `list-messages`.
@@ -75,10 +79,10 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   falling back to body-presence inference (`"text"` when a body is
   present, `"other"` otherwise) only when the server doesn't supply one —
   mirroring the pattern the Jolokia backend uses for its own `jMSType`
-  header (spec-origin/08), so both backends filter on the same kind of
+  header (spec/08), so both backends filter on the same kind of
   value.
 - Sends `returnBody=true` always when browsing (the message browser needs
-  the body for its preview column — spec-origin/08).
+  the body for its preview column — spec/08).
 - **GET requests retry exactly once** on a pure transport-level failure
   (`http.Client.Do` returns a non-nil error — connection refused, DNS
   failure, timeout waiting for headers — meaning no response was ever
@@ -90,7 +94,7 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   failure surfaces as a real error.
 - **Client-side default `maxCount`**: the TUI's message browser
   (`internal/app/messages.go` or its post-refactor location — see
-  spec-origin/03) applies a default of **500** whenever the user hasn't set
+  spec/03) applies a default of **500** whenever the user hasn't set
   one via the filter form, for both the proxy and Jolokia backends — so the
   proxy backend's hard requirement is always satisfied transparently, and
   the Jolokia backend (which still fetches unbounded from JMX, then

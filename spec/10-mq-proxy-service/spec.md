@@ -1,15 +1,15 @@
 # mq-proxy: standalone ActiveMQ REST proxy service
 
-_Condensed from spec/20, spec/38 — see those folders for the incremental history. The exact REST routes/DTOs sketched in the original FE 20 spec were later reworked (CR 44/45/49/51, spec-origin/11) to match a reference API; this document covers the service's architecture and purpose, not the wire contract — see spec-origin/11 for that._
+_Condensed from spec/20, spec/38 — see those folders for the incremental history. The exact REST routes/DTOs sketched in the original FE 20 spec were later reworked (CR 44/45/49/51, spec/11) to match a reference API; this document covers the service's architecture and purpose, not the wire contract — see spec/11 for that._
 
 ## Purpose
 
 AWS Amazon MQ (managed ActiveMQ) does not expose Jolokia, so cloudtui's
-Jolokia-based queue backend (spec-origin/07) cannot talk to it. `mq-proxy/`
+Jolokia-based queue backend (spec/07) cannot talk to it. `mq-proxy/`
 is a standalone service, independent of the TUI, that exposes a REST/JSON
 API over the same broker operations and translates them to native JMS
 (OpenWire) calls via `activemq-client`. The TUI's `proxy.Client` backend
-(spec-origin/11) talks to this service instead of Jolokia; the proxy is
+(spec/11) talks to this service instead of Jolokia; the proxy is
 broker-agnostic from the TUI's perspective — the same proxy can front a
 local/self-hosted ActiveMQ or an AWS AMQ instance.
 
@@ -42,9 +42,9 @@ local/self-hosted ActiveMQ or an AWS AMQ instance.
 
 The service exposes broker operations equivalent to everything the TUI
 needs: list queues (with pending/consumer/enqueue/dequeue counts), browse
-messages (with filtering — see spec-origin/11), get a single message,
+messages (with filtering — see spec/11), get a single message,
 delete a message, move a single message, move all messages between queues,
-send a new message, and purge a queue. See spec-origin/11 for the exact
+send a new message, and purge a queue. See spec/11 for the exact
 route shapes, request/response DTOs, and the filter query-param
 conventions as they exist today.
 
@@ -85,7 +85,7 @@ conventions as they exist today.
 ## Out of scope (deliberate)
 
 - Making the proxy the TUI's default backend (separate concern — see
-  spec-origin/11 and spec-origin/12 for connection-level backend
+  spec/11 and spec/12 for connection-level backend
   selection).
 - Quarkus/native compilation.
 - Non-text (binary/object) message bodies.
