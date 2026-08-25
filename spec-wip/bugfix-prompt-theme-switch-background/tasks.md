@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Add `a.prompt.SetBackgroundColor(bg)` to `reapplyTheme`
+1. [x] Add `a.prompt.SetBackgroundColor(bg)` to `reapplyTheme`
    (`tui/internal/app/theme.go`), plus `TestReapplyThemeUpdatesPromptBackground`
    in `tui/internal/app/theme_test.go`.
 2. [ ] Manual verification: build and run the TUI, switch themes at

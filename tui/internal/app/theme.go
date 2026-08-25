@@ -67,6 +67,11 @@ func reapplyTheme(a *App, p config.Palette) {
 	// Logo panel
 	a.logoPanel.SetBackgroundColor(bg)
 
+	// Command prompt's own background (the field itself renders
+	// transparently via SetFieldBackgroundColor(tcell.ColorDefault) in
+	// New(), so what's visible is this Box-level background).
+	a.prompt.SetBackgroundColor(bg)
+
 	// Command prompt's autocomplete drop-down
 	ui.StyleInputFieldAutocomplete(a.prompt, p)
 

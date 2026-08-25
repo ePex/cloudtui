@@ -53,6 +53,19 @@ func TestReapplyThemeUpdatesStatusBarColors(t *testing.T) {
 	}
 }
 
+func TestReapplyThemeUpdatesPromptBackground(t *testing.T) {
+	a := New(config.Default())
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+
+	p := mustTheme(t, "cyberpunk")
+	a.cfg.Colors = p
+	reapplyTheme(a, p)
+
+	if got, want := a.prompt.GetBackgroundColor(), tcell.GetColor(p.Background); got != want {
+		t.Errorf("prompt background after reapplyTheme = %v, want %v", got, want)
+	}
+}
+
 func TestReapplyThemeUpdatesInfoPanelText(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
