@@ -176,6 +176,22 @@ func TestLoadedJMSTypesEmptyWhenNothingLoaded(t *testing.T) {
 	}
 }
 
+// TestLoadedJMSTypesNilMessagesViewDoesNotPanic is a regression test:
+// dialog.NewMessageFilter (built before a.messagesV — see App.New())
+// wires LoadedJMSTypes into the JMS Type field's SetAutocompleteFunc,
+// which eagerly calls Autocomplete() once immediately at wiring time —
+// before a.messagesV exists. New(config.Default()) itself would already
+// panic if this guard regressed (every app_test.go test constructing an
+// App would fail), but this pins the exact behavior directly rather than
+// relying on that as incidental coverage.
+func TestLoadedJMSTypesNilMessagesViewDoesNotPanic(t *testing.T) {
+	a := &App{}
+
+	if got := a.LoadedJMSTypes(); got != nil {
+		t.Errorf("LoadedJMSTypes() with nil messagesV = %v, want nil", got)
+	}
+}
+
 // fakeBrowseBackend is a minimal queue.Backend double for ScanJMSTypes'
 // wiring test — only BrowseMessages is exercised, so every other method
 // panics rather than returning a silently-wrong zero value.
