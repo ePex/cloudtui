@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
 )
 
@@ -122,5 +124,148 @@ func TestSetActiveAWSProfileRebuildsSecretBackedBackend(t *testing.T) {
 	}
 	if after == before {
 		t.Error("a.backend is the same *secretbackend.Backend instance after SetActiveAWSProfile, want a rebuilt one")
+	}
+}
+
+func TestDistinctJMSTypes(t *testing.T) {
+	tests := []struct {
+		name string
+		msgs []queue.Message
+		want []string
+	}{
+		{
+			name: "dedupes and sorts",
+			msgs: []queue.Message{
+				{JMSType: "OrderCreated"},
+				{JMSType: "OrderCancelled"},
+				{JMSType: "OrderCreated"},
+			},
+			want: []string{"OrderCancelled", "OrderCreated"},
+		},
+		{
+			name: "empty JMSType excluded",
+			msgs: []queue.Message{{JMSType: ""}, {JMSType: "text"}},
+			want: []string{"text"},
+		},
+		{
+			name: "empty input",
+			msgs: nil,
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := distinctJMSTypes(tt.msgs)
+			if len(got) != len(tt.want) {
+				t.Fatalf("distinctJMSTypes() = %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Errorf("distinctJMSTypes()[%d] = %q, want %q (full: %v)", i, got[i], tt.want[i], got)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadedJMSTypesEmptyWhenNothingLoaded(t *testing.T) {
+	a := New(config.Default())
+
+	if got := a.LoadedJMSTypes(); len(got) != 0 {
+		t.Errorf("LoadedJMSTypes() = %v, want empty (no queue opened)", got)
+	}
+}
+
+// TestLoadedJMSTypesNilMessagesViewDoesNotPanic is a regression test:
+// dialog.NewMessageFilter (built before a.messagesV — see App.New())
+// wires LoadedJMSTypes into the JMS Type field's SetAutocompleteFunc,
+// which eagerly calls Autocomplete() once immediately at wiring time —
+// before a.messagesV exists. New(config.Default()) itself would already
+// panic if this guard regressed (every app_test.go test constructing an
+// App would fail), but this pins the exact behavior directly rather than
+// relying on that as incidental coverage.
+func TestLoadedJMSTypesNilMessagesViewDoesNotPanic(t *testing.T) {
+	a := &App{}
+
+	if got := a.LoadedJMSTypes(); got != nil {
+		t.Errorf("LoadedJMSTypes() with nil messagesV = %v, want nil", got)
+	}
+}
+
+// fakeBrowseBackend is a minimal queue.Backend double for ScanJMSTypes'
+// wiring test — only BrowseMessages is exercised, so every other method
+// panics rather than returning a silently-wrong zero value.
+type fakeBrowseBackend struct {
+	browseMessagesFn func(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error)
+}
+
+func (f *fakeBrowseBackend) List(context.Context) ([]queue.Summary, error) { panic("not used") }
+func (f *fakeBrowseBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+	return f.browseMessagesFn(ctx, queueName, filter)
+}
+func (f *fakeBrowseBackend) PurgeQueue(context.Context, string) error { panic("not used") }
+func (f *fakeBrowseBackend) RemoveMessage(context.Context, string, string) error {
+	panic("not used")
+}
+func (f *fakeBrowseBackend) MoveMessage(context.Context, string, string, string) error {
+	panic("not used")
+}
+func (f *fakeBrowseBackend) MoveAllMessages(context.Context, string, string) (int, error) {
+	panic("not used")
+}
+func (f *fakeBrowseBackend) SendMessage(context.Context, string, string) error { panic("not used") }
+func (f *fakeBrowseBackend) DeleteMessages(context.Context, string, queue.MessageFilter) (int, error) {
+	panic("not used")
+}
+func (f *fakeBrowseBackend) MoveMessages(context.Context, string, string, queue.MessageFilter) (int, error) {
+	panic("not used")
+}
+
+var _ queue.Backend = (*fakeBrowseBackend)(nil)
+
+// TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter confirms ScanJMSTypes
+// browses with the given maxCount and no JMSType filter (it's
+// discovering types, not narrowing by one already known), and extracts
+// the distinct types from whatever the backend returns. The queue name
+// passed through is whatever messagesV.QueueName() currently is — this
+// test never calls messagesV.Open() (which would spawn Load()'s async
+// goroutine against a *tview.Application with no running event loop, a
+// path no other test in this package exercises either).
+func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
+	a := New(config.Default())
+	var gotFilter queue.MessageFilter
+	a.backend = &fakeBrowseBackend{
+		browseMessagesFn: func(_ context.Context, _ string, filter queue.MessageFilter) ([]queue.Message, error) {
+			gotFilter = filter
+			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, nil
+		},
+	}
+
+	got, err := a.ScanJMSTypes(context.Background(), 5000)
+	if err != nil {
+		t.Fatalf("ScanJMSTypes() error = %v", err)
+	}
+
+	if want := (queue.MessageFilter{MaxCount: 5000}); gotFilter != want {
+		t.Errorf("filter passed to BrowseMessages = %+v, want %+v", gotFilter, want)
+	}
+	want := []string{"a", "b"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("ScanJMSTypes() = %v, want %v", got, want)
+	}
+}
+
+func TestScanJMSTypesPropagatesBackendError(t *testing.T) {
+	a := New(config.Default())
+	wantErr := context.DeadlineExceeded
+	a.backend = &fakeBrowseBackend{
+		browseMessagesFn: func(context.Context, string, queue.MessageFilter) ([]queue.Message, error) {
+			return nil, wantErr
+		},
+	}
+
+	_, err := a.ScanJMSTypes(context.Background(), 5000)
+	if err != wantErr {
+		t.Errorf("ScanJMSTypes() error = %v, want %v", err, wantErr)
 	}
 }

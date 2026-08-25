@@ -35,6 +35,8 @@ type testHost struct {
 	savedDatadogConfig *config.DatadogConfig
 	activeAWSProfile   string
 	toggledFavorite    *toggledFavoriteCall
+	loadedJMSTypes     []string
+	scanJMSTypesFn     func(ctx context.Context, maxCount int) ([]string, error)
 	reloadedQueue      string
 	appliedFilter      *queue.MessageFilter
 	focusMessagesCalls int
@@ -96,5 +98,13 @@ func (h *testHost) ReloadAfterSend(queueName string) { h.reloadedQueue = queueNa
 func (h *testHost) MessagesFilter() queue.MessageFilter       { return h.messagesFilter }
 func (h *testHost) ApplyMessagesFilter(f queue.MessageFilter) { h.appliedFilter = &f }
 func (h *testHost) FocusMessages()                            { h.focusMessagesCalls++ }
+
+func (h *testHost) LoadedJMSTypes() []string { return h.loadedJMSTypes }
+func (h *testHost) ScanJMSTypes(ctx context.Context, maxCount int) ([]string, error) {
+	if h.scanJMSTypesFn == nil {
+		return nil, nil
+	}
+	return h.scanJMSTypesFn(ctx, maxCount)
+}
 
 var _ ui.Host = (*testHost)(nil)
