@@ -233,19 +233,24 @@ var _ queue.Backend = (*fakeBrowseBackend)(nil)
 // path no other test in this package exercises either).
 func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
 	a := New(config.Default())
+	var gotQueue string
 	var gotFilter queue.MessageFilter
 	a.backend = &fakeBrowseBackend{
-		browseMessagesFn: func(_ context.Context, _ string, filter queue.MessageFilter) ([]queue.Message, error) {
+		browseMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+			gotQueue = queueName
 			gotFilter = filter
 			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, nil
 		},
 	}
 
-	got, err := a.ScanJMSTypes(context.Background(), 5000)
+	got, err := a.ScanJMSTypes(context.Background(), "orders", 5000)
 	if err != nil {
 		t.Fatalf("ScanJMSTypes() error = %v", err)
 	}
 
+	if gotQueue != "orders" {
+		t.Errorf("queue passed to BrowseMessages = %q, want %q", gotQueue, "orders")
+	}
 	if want := (queue.MessageFilter{MaxCount: 5000}); gotFilter != want {
 		t.Errorf("filter passed to BrowseMessages = %+v, want %+v", gotFilter, want)
 	}
@@ -264,7 +269,7 @@ func TestScanJMSTypesPropagatesBackendError(t *testing.T) {
 		},
 	}
 
-	_, err := a.ScanJMSTypes(context.Background(), 5000)
+	_, err := a.ScanJMSTypes(context.Background(), "orders", 5000)
 	if err != wantErr {
 		t.Errorf("ScanJMSTypes() error = %v, want %v", err, wantErr)
 	}
