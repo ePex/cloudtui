@@ -85,6 +85,38 @@
    restored `config.yaml`'s `activeConnection` to `default` (switching
    connections for the mq-proxy spot-check changed it, same as the
    previous PR's live verification).
+
+   **Second bug found and fixed, reported by the user directly testing
+   this branch**: pressing `M`/`p` on a queue rendered the JMS Type
+   prompt with the sentinel suggestion — the *only* visible content on a
+   fresh open — smashed into and unreadable against the box's own bottom
+   border, reading as an empty/broken overlay rather than "↻ Scan up to
+   5000 messages for JMS types". Root cause: the overlay's declared
+   height (`ui.Centered(a.jmsTypePrompt.Primitive(), 64, 3)`) covered
+   only the field itself (border + content + border), with zero spare
+   rows — but `tview.InputField.Draw` positions the autocomplete
+   drop-down at exactly one row below the field's own content row
+   (`ly := y+1`) regardless of the box's declared height, so with height
+   3 that row lands exactly on the box's bottom border, and the
+   drop-down draws directly on top of it. `MessageFilter`'s equivalent
+   overlay (64×16) never hit this because its box has three more form
+   fields and a button row below the JMS Type field, giving the
+   drop-down room "for free"; `JMSTypePrompt` is a single field with
+   nothing else in the box to borrow room from. Fixed by increasing the
+   overlay height to 12 (9 spare rows below the field, comfortably
+   covering a typical scanned-types list). Reproduced and confirmed
+   fixed live, in tmux at a realistic 100×30 terminal size (the original
+   bug's live verification pass used a much wider 160-column terminal,
+   which likely mattered less for this specific *height* issue than it
+   would have for a width one, but is a useful reminder that this
+   feature's earlier live verification pass didn't use a size close to
+   a plausible default terminal window) — confirmed the sentinel and,
+   after a scan, all scanned types now render fully inside the box with
+   no border overlap, and that the full accept-then-submit flow (Tab to
+   accept a highlighted suggestion, second Enter to actually continue)
+   still worked correctly afterward, with no accidental auto-continue
+   at any step. This is purely a rendering fix (`app.go`'s overlay
+   height constant) — no dialog logic changed.
 5. [ ] Merge-back: update `spec/09-queue-message-actions/spec.md` (JMS
    Type filter step for purge/move-all) and add a short cross-reference
    note to `spec/08-message-browser-and-detail/spec.md` where it

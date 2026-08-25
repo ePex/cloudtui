@@ -332,8 +332,21 @@ func New(cfg config.Config) *App {
 	// button row (1 row) = 15; give it one spare row.
 	messageFilterOverlay := ui.Centered(a.messageFilter.Primitive(), 64, 16)
 
-	// A single bordered field: border top+bottom (2 rows) + content (1 row).
-	jmsTypePromptOverlay := ui.Centered(a.jmsTypePrompt.Primitive(), 64, 3)
+	// Border top+bottom (2 rows) + content (1 row) + spare rows below the
+	// field for the autocomplete drop-down. tview.InputField draws that
+	// drop-down starting exactly one row below the field's own content
+	// row (InputField.Draw's ly := y+1), regardless of the box's declared
+	// height — with too little height, that row lands on the box's own
+	// bottom border, drawing the drop-down's first entry directly on top
+	// of the border line (found live: the sentinel's "Scan up to 5000..."
+	// text rendered smashed into "╚═══...═══╝", unreadable). 12 leaves 9
+	// spare rows, comfortably covering a typical scanned-types list (the
+	// sentinel plus a handful of real types) without touching the
+	// border — unlike messageFilterOverlay above (which gets its spare
+	// vertical space for free from its own sibling form fields/buttons
+	// below the JMS Type field), this is a single field with nothing
+	// else in the box to borrow room from.
+	jmsTypePromptOverlay := ui.Centered(a.jmsTypePrompt.Primitive(), 64, 12)
 
 	// Width: the Absolute tab's "Until (YYYY-MM-DD HH:MM or RFC3339)"
 	// label (35 chars) + its 30-wide field overflows a narrower box
