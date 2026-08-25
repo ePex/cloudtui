@@ -65,8 +65,14 @@ func (a *App) FocusMessages() { a.tv.SetFocus(a.messagesV.Table()) }
 
 // LoadedJMSTypes returns the distinct, non-empty JMSType values among the
 // messages currently loaded in the messages view (free — no network
-// call).
+// call). a.messagesV is nil here at construction time: NewMessageFilter
+// (built before messagesV — see App.New()) wires this via
+// SetAutocompleteFunc, which eagerly calls Autocomplete() once at wiring
+// time, before messagesV exists.
 func (a *App) LoadedJMSTypes() []string {
+	if a.messagesV == nil {
+		return nil
+	}
 	return distinctJMSTypes(a.messagesV.AllMessages())
 }
 
