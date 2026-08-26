@@ -230,7 +230,7 @@ func TestLogSearchViewEscReturnsToCloudWatchLogs(t *testing.T) {
 // already covered this before the move.
 
 func TestSwitchThemeRefreshesSettingsList(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
@@ -243,7 +243,7 @@ func TestSwitchThemeRefreshesSettingsList(t *testing.T) {
 }
 
 func TestSwitchConnectionRefreshesSettingsList(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	a.cfg.Connections = append(a.cfg.Connections, config.Connection{Name: "other", Backend: "jolokia"})
 
@@ -256,7 +256,7 @@ func TestSwitchConnectionRefreshesSettingsList(t *testing.T) {
 }
 
 func TestSaveConnectionRefreshesSettingsList(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 
 	a.SaveConnection(config.Connection{Name: "renamed", Backend: "jolokia"}, "default", false)
@@ -268,7 +268,7 @@ func TestSaveConnectionRefreshesSettingsList(t *testing.T) {
 }
 
 func TestSaveDatadogConfigRefreshesSettingsList(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 
 	a.SaveDatadogConfig(config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok"})
