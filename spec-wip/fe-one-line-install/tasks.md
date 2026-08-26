@@ -48,7 +48,7 @@
    Windows machine confirms it once, since `pwsh`-on-macOS can't
    exercise real Windows PATH semantics or `.exe` execution.
 
-4. [ ] **README: install script section.** Add the macOS/Linux and
+4. [x] **README: install script section.** Add the macOS/Linux and
    Windows one-liners to `README.md`'s "Installing a release" section
    (ahead of the manual-download fallback, per `plan.md` §7 — the rest
    of that section's restructuring happens incrementally as each
