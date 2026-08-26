@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] **Config relocation.** Add `config.DefaultPath()` and
+1. [x] **Config relocation.** Add `config.DefaultPath()` and
    `migrateLegacyConfig(legacyPath, newPath string) error` to
    `tui/internal/config/config.go`; rewire `LoadDefault`/`SaveDefault` to
    use them; update `tui/cmd/tui/main.go`'s startup log line to use

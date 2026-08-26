@@ -1,13 +1,16 @@
 // Package config loads the tui shell's customisable appearance settings from
-// a local, gitignored YAML file, falling back to built-in defaults when it's
+// ~/.cloudtui/config.yaml, falling back to built-in defaults when it's
 // absent.
 package config
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -461,11 +464,59 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// LoadDefault loads config.yaml from the current working directory (Task's
-// build:tui/run:tui/test:tui targets all run with dir: tui, so this resolves
-// to tui/config.yaml under normal dev usage).
+// DefaultPath returns the path to the user's config.yaml
+// (~/.cloudtui/config.yaml) — the single location LoadDefault and
+// SaveDefault read from and write to, regardless of the process's
+// current working directory.
+func DefaultPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	return filepath.Join(home, ".cloudtui", "config.yaml"), nil
+}
+
+// migrateLegacyConfig copies legacyPath to newPath the first time newPath
+// doesn't exist yet, preserving a pre-relocation, cwd-relative config.yaml
+// (e.g. tui/config.yaml under the old dev workflow) instead of silently
+// discarding it. A no-op once newPath exists, or if legacyPath doesn't.
+func migrateLegacyConfig(legacyPath, newPath string) error {
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	data, err := os.ReadFile(legacyPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(newPath, data, 0o644); err != nil {
+		return err
+	}
+	slog.Info("config: migrated legacy config.yaml", "from", legacyPath, "to", newPath)
+	return nil
+}
+
+// LoadDefault loads config.yaml from the user's home config directory
+// (~/.cloudtui/config.yaml, see DefaultPath), migrating a pre-existing
+// cwd-relative config.yaml into place on first run if one is found.
 func LoadDefault() (Config, error) {
-	return Load("config.yaml")
+	path, err := DefaultPath()
+	if err != nil {
+		return Config{}, err
+	}
+	if err := migrateLegacyConfig("config.yaml", path); err != nil {
+		slog.Warn("config: legacy migration failed", "error", err)
+	}
+	return Load(path)
 }
 
 // Save writes cfg to path as YAML.
@@ -480,8 +531,15 @@ func Save(path string, cfg Config) error {
 	return nil
 }
 
-// SaveDefault saves cfg to config.yaml in the working directory,
-// mirroring LoadDefault's path resolution.
+// SaveDefault saves cfg to the user's home config directory, mirroring
+// LoadDefault's path resolution.
 func SaveDefault(cfg Config) error {
-	return Save("config.yaml", cfg)
+	path, err := DefaultPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+	return Save(path, cfg)
 }
