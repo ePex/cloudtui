@@ -42,9 +42,10 @@ consumers of it:
    release tag, downloads the matching archive, verifies it against that
    release's `checksums.txt`, extracts the binary into a per-user
    directory (no `sudo`/admin), prints a `PATH` hint if needed.
-2. **Homebrew** — `brew install ePex/tap/cloudtui` (macOS + Linux).
-   GoReleaser auto-generates and pushes a formula to a new tap repo,
-   `ePex/homebrew-tap`, on every release.
+2. **Homebrew** — `brew install --cask ePex/tap/cloudtui` (macOS + Linux).
+   GoReleaser auto-generates and pushes a cask (not a classic formula —
+   see `plan.md` §3 for why) to a new tap repo, `ePex/homebrew-tap`, on
+   every release.
 3. **Scoop** — `scoop bucket add ePex https://github.com/ePex/scoop-bucket`
    then `scoop install cloudtui` (Windows). Same mechanism, pushing a
    manifest to a new bucket repo, `ePex/scoop-bucket`.
