@@ -132,10 +132,18 @@ explicit manual steps for.
 
 ## 3. Homebrew
 
-`.goreleaser.yaml` gains:
+**Correction (found via `goreleaser check`, not known when this plan was
+first written):** the classic `brews:` key is deprecated as of GoReleaser
+v2.16 (hard deprecation) in favor of `homebrew_casks:` — a newer,
+simpler Homebrew mechanism for distributing a plain binary (no Ruby
+`install`/`test` DSL blocks; just a `binaries:` list naming what to
+symlink). Confirmed via a real local `goreleaser release --snapshot
+--clean` dry run, including inspecting the generated
+`dist/homebrew/Casks/cloudtui.rb` (correct per-OS/arch `sha256`/`url`
+entries, `binary "cloudtui"` stanza). `.goreleaser.yaml` gains:
 
 ```yaml
-brews:
+homebrew_casks:
   - name: cloudtui
     repository:
       owner: ePex
@@ -144,10 +152,8 @@ brews:
     homepage: "https://github.com/ePex/cloudtui"
     description: "A terminal UI for managing cloud resources."
     license: "MIT"
-    install: |
-      bin.install "cloudtui"
-    test: |
-      system "#{bin}/cloudtui", "--version"
+    binaries:
+      - cloudtui
 ```
 
 New empty public repo `ePex/homebrew-tap` (created via `gh repo create`).

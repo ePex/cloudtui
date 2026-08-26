@@ -34,6 +34,18 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+homebrew_casks:
+  - name: cloudtui
+    repository:
+      owner: ePex
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ePex/cloudtui"
+    description: "A terminal UI for managing cloud resources."
+    license: "MIT"
+    binaries:
+      - cloudtui
+
 changelog:
   sort: asc
   groups:
