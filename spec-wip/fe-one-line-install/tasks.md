@@ -20,7 +20,7 @@
    picks up the same (now-migrated) config. Restore your real
    `~/.cloudtui/config.yaml` afterward if this test moved it.
 
-2. [ ] **Install script: macOS/Linux.** Add `scripts/install.sh` per
+2. [x] **Install script: macOS/Linux.** Add `scripts/install.sh` per
    `plan.md` §2. Add a `shellcheck` step to `.github/workflows/ci.yml`
    (or a new lint job — whichever fits the existing workflow shape
    better) running against this one script.
