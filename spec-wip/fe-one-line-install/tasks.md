@@ -30,13 +30,23 @@
    `CLOUDTUI_VERSION` (e.g. `v0.0.0-nope`) and confirm it fails cleanly
    instead of hanging or extracting garbage.
 
-3. [ ] **Install script: Windows.** Add `scripts/install.ps1` per
+3. [x] **Install script: Windows.** Added `scripts/install.ps1` per
    `plan.md` §2.
-   **Manual verification**: this session only has direct access to
-   macOS — note in this task's checkbox comment (or ask the user) how
-   Windows verification was actually performed (a Windows machine/VM, or
-   deferred to a later manual check) since it can't be exercised
-   directly here.
+   **Manual verification**: no Windows machine available in this
+   session, but `pwsh` (PowerShell 7, arm64) was installed locally via
+   `brew install powershell` specifically to actually execute this
+   script rather than only reading it — caught and fixed two real bugs
+   this way (`$env:TEMP`/`$env:LOCALAPPDATA` aren't set outside real
+   Windows; switched to `[System.IO.Path]::GetTempPath()` and
+   `[Environment]::GetFolderPath(...)`, both of which *do* resolve
+   correctly on real Windows too, so this wasn't just a test-environment
+   workaround). Confirmed end-to-end against the real `v0.3.0` release:
+   downloaded `cloudtui_0.3.0_windows_arm64.zip`, verified the extracted
+   binary is a genuine `PE32+ ... Aarch64, for MS Windows` executable,
+   confirmed clean failure on a bad `CLOUDTUI_VERSION`, and unit-checked
+   the checksum-line-parsing logic in isolation. Still recommend a real
+   Windows machine confirms it once, since `pwsh`-on-macOS can't
+   exercise real Windows PATH semantics or `.exe` execution.
 
 4. [ ] **README: install script section.** Add the macOS/Linux and
    Windows one-liners to `README.md`'s "Installing a release" section
