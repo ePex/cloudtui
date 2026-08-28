@@ -13,13 +13,17 @@
    `New()`, so it was already decoupled from this signature change.
    `go build`/`go vet`/`go test ./...` clean.
 
-2. [ ] **Connection editor UI.** Update `setPasswordField`,
+2. [x] **Connection editor UI.** Updated `setPasswordField`,
    `rebuildTail`, `Show`, and `save` in `connections.go` per `plan.md`
-   (the new "Secret AWS Profile" field, required-field validation). Add
-   tests in `connections_test.go`: field appears/disappears with
-   Password Source, survives a Backend toggle round-trip, round-trips
-   through `Show()`→`save()`, and the new validation rejects an empty
-   profile with AWS Secret selected. `go build`/`go vet`/`go test ./...`
+   (the new "Secret AWS Profile" field, required-field validation).
+   Added 4 tests in `connections_test.go`:
+   `TestConnEditorSecretAWSProfileFieldTracksPasswordSource` (appears/
+   disappears with Password Source), `TestConnEditorSecretAWSProfileSurvivesBackendToggle`
+   (survives a jolokia->proxy->jolokia round trip), `TestConnEditorPasswordSecretAWSProfileRoundTrips`
+   (Show()->edit->save() round-trip), and
+   `TestConnEditorSaveRequiresSecretAWSProfileWhenAWSSecretSelected`
+   (validation rejects an empty profile with AWS Secret selected).
+   `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test ./...` all
    clean.
 
 3. [ ] **Docs and manual verification.** Update

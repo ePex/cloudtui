@@ -274,11 +274,13 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	username := conn.Queue.Username
 	password := conn.Queue.Password
 	passwordSecret := conn.Queue.PasswordSecret
+	passwordSecretProfile := conn.Queue.PasswordSecretAWSProfile
 	if conn.Backend == "proxy" {
 		urlVal = conn.Proxy.URL
 		username = conn.Proxy.Username
 		password = conn.Proxy.Password
 		passwordSecret = conn.Proxy.PasswordSecret
+		passwordSecretProfile = conn.Proxy.PasswordSecretAWSProfile
 	} else {
 		ce.brokerName = conn.Queue.BrokerName
 		if item, ok := ce.form.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
@@ -298,6 +300,7 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
 		ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).SetText(passwordSecret)
+		ce.form.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField).SetText(passwordSecretProfile)
 	} else {
 		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
 	}
@@ -307,18 +310,28 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	ce.visible = true
 }
 
-// setPasswordField swaps the last form item — the item right before the
-// Save/Cancel buttons — between a plain Password field (sourceIdx 0) and
-// a Password Secret (AWS) field (sourceIdx 1), driven by the Password
-// Source dropdown. AddButton items aren't counted by GetFormItem, so the
-// last form item is always the password-ish field regardless of which
-// one is showing or whether Broker Name is present (see rebuildTail) —
-// hence computing the index instead of assuming a fixed one.
+// setPasswordField swaps the trailing form item(s) — right before the
+// Save/Cancel buttons — between a plain Password field (sourceIdx 0)
+// and a Password Secret (AWS) + Secret AWS Profile pair (sourceIdx 1),
+// driven by the Password Source dropdown. AddButton items aren't
+// counted by GetFormItem, so these are always the last item(s)
+// regardless of whether Broker Name is present (see rebuildTail).
+// Whether one or two trailing items currently exist is checked (via
+// whether "Secret AWS Profile" is present) rather than tracked
+// separately, so this works correctly regardless of which state it's
+// coming from.
 func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 	f := ce.form
-	f.RemoveFormItem(f.GetFormItemCount() - 1)
+	currentCount := 1
+	if _, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+		currentCount = 2
+	}
+	for i := 0; i < currentCount; i++ {
+		f.RemoveFormItem(f.GetFormItemCount() - 1)
+	}
 	if sourceIdx == 1 {
 		f.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
+		f.AddInputField("Secret AWS Profile", "", 20, nil, nil)
 	} else {
 		f.AddPasswordField("Password", "", 20, '*', nil)
 	}
@@ -348,7 +361,7 @@ func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 func (ce *ConnEditor) rebuildTail(backend string) {
 	f := ce.form
 
-	var url, username, passwordOrSecret string
+	var url, username, passwordOrSecret, secretProfile string
 	sourceIdx := 0
 	if item, ok := f.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
 		ce.brokerName = item.GetText()
@@ -367,6 +380,9 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	} else if item, ok := f.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField); ok {
 		passwordOrSecret = item.GetText()
 	}
+	if item, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+		secretProfile = item.GetText()
+	}
 
 	for f.GetFormItemCount() > 2 {
 		f.RemoveFormItem(2)
@@ -383,6 +399,7 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
 	if sourceIdx == 1 {
 		f.AddInputField("Password Secret (AWS)", passwordOrSecret, 30, nil, nil)
+		f.AddInputField("Secret AWS Profile", secretProfile, 20, nil, nil)
 	} else {
 		f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
 	}
@@ -443,15 +460,20 @@ func (ce *ConnEditor) save() {
 	urlVal := ce.form.GetFormItemByLabel("URL").(*tview.InputField).GetText()
 	username := ce.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
 	sourceIdx, _ := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
-	var password, passwordSecret string
+	var password, passwordSecret, passwordSecretProfile string
 	if sourceIdx == 1 {
 		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).GetText())
+		passwordSecretProfile = strings.TrimSpace(ce.form.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField).GetText())
 	} else {
 		password = ce.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
 	}
 
 	if name == "" {
 		ce.host.SetStatus("[red]Name is required[-]")
+		return
+	}
+	if sourceIdx == 1 && passwordSecretProfile == "" {
+		ce.host.SetStatus("[red]AWS Profile is required when Password Source is AWS Secret[-]")
 		return
 	}
 	for _, c := range ce.host.Config().Connections {
@@ -463,9 +485,9 @@ func (ce *ConnEditor) save() {
 
 	conn := config.Connection{Name: name, Backend: backend}
 	if backend == "proxy" {
-		conn.Proxy = config.ProxyConfig{URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
+		conn.Proxy = config.ProxyConfig{URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret, PasswordSecretAWSProfile: passwordSecretProfile}
 	} else {
-		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret}
+		conn.Queue = config.QueueConfig{BrokerName: brokerName, URL: urlVal, Username: username, Password: password, PasswordSecret: passwordSecret, PasswordSecretAWSProfile: passwordSecretProfile}
 	}
 
 	ce.host.SaveConnection(conn, ce.origName, ce.isNew)
