@@ -176,16 +176,21 @@ func (pv *SSMParamsView) load() {
 		pv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
 		authType, _ := pv.host.AWSAuthTypeFor(ctx, profile)
 		params, err := awsauth.WithReauth(ctx, profile, authType, pv.host.AWSSSOLogin,
 			func() {
 				pv.host.QueueUpdateDraw(func() {
-					pv.showStatus("AWS SSO session expired — opening browser to log in...")
+					pv.showStatus(reauthWaitingMsg)
 				})
 			},
-			nil, // TODO(fe-aws-sso-device-code task 3): show the device code/URL
+			func(code, url string) {
+				pv.host.QueueUpdateDraw(func() {
+					pv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
+				})
+			},
 			func(ctx context.Context) ([]awsssm.Parameter, error) {
 				return pv.host.ListParameters(ctx, profile, "/")
 			},

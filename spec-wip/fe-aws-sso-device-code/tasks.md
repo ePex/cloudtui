@@ -36,13 +36,22 @@
    in `datadoglogs_test.go`) is the pre-existing, already-known one,
    confirmed unrelated.
 
-3. [ ] **The five remaining `WithReauth` call sites.** Update
+3. [x] **The five remaining `WithReauth` call sites.** Updated
    `ssmparams.go`, `secrets.go`, `logs.go`, `codepipelinedetail.go`,
-   `codepipelinelist.go` (local `reauthWaitingMsg` const + `onCode`
-   argument each) and `pipelinewatcher.go` (`onCode: nil`). Add one new
-   test per updated view file confirming its `onCode` callback updates
-   the status message correctly. `go build`/`go vet`/`go test ./...`
-   clean.
+   `codepipelinelist.go` (local `reauthWaitingMsg` const + real `onCode`
+   argument each, replacing task 2's placeholder `nil`) — already had
+   `pipelinewatcher.go`'s permanent `onCode: nil` from task 2. Added one
+   new test per updated view file
+   (`TestXShowStatusRendersDeviceCodeMessage`) confirming `showStatus`
+   renders the combined "waiting + code + URL" message correctly — same
+   shape/spirit as each file's existing `TestXShowStatusRendersMessage`,
+   which already established that `load()`'s own goroutine+
+   `QueueUpdateDraw` plumbing isn't directly driven at this level (needs
+   a running tview event loop); the wiring itself (does `onCode` get
+   called and does it build the right string) is covered by
+   `internal/app`'s `TestShowReauthWaitingIncludesDeviceCodeAndURLWhenProvided`
+   and `internal/awsauth`'s `TestWithReauthPassesOnCodeThroughToLogin`.
+   `go build`/`go vet`/`go test ./...` clean; all 5 new tests pass.
 
 4. [ ] **Merge-back.** Update `spec/14-aws-profiles/spec.md` (the
    canonical spec for this shared mechanism — confirmed via grep that
