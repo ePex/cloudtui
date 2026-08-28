@@ -639,6 +639,21 @@ func newTestQueuesViewWithDrawSignal(t *testing.T, b *fakeQueueBackend, bufSize 
 	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
 }
 
+func TestQueuesViewShowReauthWaitingThenDone(t *testing.T) {
+	_, qv := newTestQueuesView(t)
+	qv.repaint([]queue.Summary{{Name: "orders"}}) // some prior state to overwrite
+
+	qv.ShowReauthWaiting()
+	if got := qv.table.GetCell(1, 0).Text; got != "AWS SSO session expired — opening browser to log in…" {
+		t.Errorf("row(1,0) after ShowReauthWaiting() = %q, want the SSO-wait message", got)
+	}
+
+	qv.ShowReauthDone()
+	if got := qv.table.GetCell(1, 0).Text; got != loadingQueuesStatus {
+		t.Errorf("row(1,0) after ShowReauthDone() = %q, want %q", got, loadingQueuesStatus)
+	}
+}
+
 func TestQueuesViewLoadShowsLoadingStatusImmediately(t *testing.T) {
 	unblock := make(chan struct{})
 	backend := &fakeQueueBackend{
