@@ -22,7 +22,7 @@ cloudtui/
 
 ```
 tui/
-├── cmd/tui/   # main package — entry point
+├── cmd/cloudtui/   # main package — entry point
 ├── internal/  # private application packages (not importable from outside)
 ├── go.mod
 └── go.sum
@@ -62,7 +62,7 @@ When switching views, focus goes to `view.Primitive()` (the view's own root prim
 
 ## Theming
 
-A `config.yaml` file (gitignored; `config.example.yaml` documents the schema) controls the active palette. Three built-in themes ship: **dark** (navy background, orange labels, cyan values, pink/magenta key-binding accents, teal list selection, orange status bar), **cyberpunk** (near-black background, neon yellow `#FFE400` primary accent, neon pink/magenta `#FF003C` secondary, electric cyan `#00D4FF` labels, neon yellow selection highlight), and **gofore** (Gofore brand palette: Deep Blue `#0F3D51` background, Gofore Orange `#F7673B` labels, Digital Blue `#00819D` borders/selection, Code Blue `#44C2DE` values, Salmon Byte `#FFA572` accent). The app runs with no `config.yaml` present at all — built-in defaults apply. See spec/04-theming for the full theme-loading mechanism (themes moved from hardcoded Go functions to embedded YAML files in a later revision).
+A `config.yaml` file at `~/.cloudtui/config.yaml` (`tui/config.example.yaml` documents the schema) controls the active palette. `config.LoadDefault`/`SaveDefault` resolve this path unconditionally — no current-working-directory fallback, matching `~/.cloudtui/cloudtui.log`'s (spec/06) precedent of a single fixed location, since the binary can be launched from anywhere once installed via any of spec/02's methods. A pre-relocation, cwd-relative `config.yaml` (e.g. a dev checkout's `tui/config.yaml` from before this location existed) is copied into place automatically the first time `~/.cloudtui/config.yaml` doesn't yet exist, so existing setups aren't silently discarded. Three built-in themes ship: **dark** (navy background, orange labels, cyan values, pink/magenta key-binding accents, teal list selection, orange status bar), **cyberpunk** (near-black background, neon yellow `#FFE400` primary accent, neon pink/magenta `#FF003C` secondary, electric cyan `#00D4FF` labels, neon yellow selection highlight), and **gofore** (Gofore brand palette: Deep Blue `#0F3D51` background, Gofore Orange `#F7673B` labels, Digital Blue `#00819D` borders/selection, Code Blue `#44C2DE` values, Salmon Byte `#FFA572` accent). The app runs with no `config.yaml` present at all — built-in defaults apply. See spec/04-theming for the full theme-loading mechanism (themes moved from hardcoded Go functions to embedded YAML files in a later revision).
 
 ## Help modal
 
