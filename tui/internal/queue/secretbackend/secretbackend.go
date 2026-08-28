@@ -95,11 +95,13 @@ type revealResult struct {
 
 // Resolve resolves secretName via profile, using the cache when possible.
 // No reveal call is attempted when profile is empty — the caller (a
-// connection with no AWS profile selected) gets an immediate, specific
-// error instead of a doomed API call.
+// connection whose passwordSecretAWSProfile is unset — normally
+// prevented by the connection editor's required-field validation, so
+// this means a hand-edited config) gets an immediate, specific error
+// instead of a doomed API call.
 func (r *SecretResolver) Resolve(ctx context.Context, profile, secretName string) (string, error) {
 	if profile == "" {
-		return "", fmt.Errorf("no AWS profile selected — pick one in Settings -> AWS Profiles")
+		return "", fmt.Errorf("no AWS profile configured for this connection's password secret — set passwordSecretAWSProfile")
 	}
 	if v, ok := r.cache.get(profile, secretName); ok {
 		return v, nil
@@ -144,6 +146,17 @@ func passwordSecretName(conn config.Connection) string {
 	return conn.Queue.PasswordSecret
 }
 
+// passwordSecretAWSProfile returns the AWS profile configured for
+// resolving conn's password secret, or "" if the connection uses a
+// plain password (or, if PasswordSecret is set, a hand-edited config
+// that skipped the connection editor's required-field validation).
+func passwordSecretAWSProfile(conn config.Connection) string {
+	if conn.Backend == "proxy" {
+		return conn.Proxy.PasswordSecretAWSProfile
+	}
+	return conn.Queue.PasswordSecretAWSProfile
+}
+
 // connWithPassword returns a copy of conn with its backend-appropriate
 // password field set to password, overriding whatever was there before
 // (including any plain-text password field a passwordSecret-bearing
@@ -171,12 +184,12 @@ func buildBackend(conn config.Connection) queue.Backend {
 // passwordSecret-bearing connection gets a *Backend that resolves the
 // password from AWS Secrets Manager on first use and transparently
 // recovers from a stale/rotated secret — see Backend.
-func New(resolver *SecretResolver, profile string, conn config.Connection) queue.Backend {
+func New(resolver *SecretResolver, conn config.Connection) queue.Backend {
 	secretName := passwordSecretName(conn)
 	if secretName == "" {
 		return buildBackend(conn)
 	}
-	return &Backend{resolver: resolver, conn: conn, secretName: secretName, profile: profile, build: buildBackend}
+	return &Backend{resolver: resolver, conn: conn, secretName: secretName, profile: passwordSecretAWSProfile(conn), build: buildBackend}
 }
 
 // Backend wraps a queue.Backend whose password comes from AWS Secrets

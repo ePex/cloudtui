@@ -223,7 +223,7 @@ func New(cfg config.Config) *App {
 
 	// All shell primitives are constructed.
 	a.logV = view.NewLogView()
-	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveAWSProfile, cfg.ActiveConn())
+	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveConn())
 
 	// Dialogs used directly by the views below (rather than through
 	// ui.ViewHost — see spec/80/83) must exist before those views are
@@ -620,7 +620,7 @@ func (a *App) switchConnection(name string) {
 		return
 	}
 	a.cfg.ActiveConnection = name
-	a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, conn)
+	a.backend = secretbackend.New(a.secretResolver, conn)
 	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()

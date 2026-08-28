@@ -7,7 +7,6 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
-	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
 )
 
 // TestSaveDatadogConfigPersists confirms App's real SaveDatadogConfig
@@ -98,41 +97,6 @@ func TestToggleFavoritePersists(t *testing.T) {
 	}
 	if !got.AWSFavorites.IsFavorite(config.FavoriteSSMParameter, "work", "/app/db/password") {
 		t.Error("persisted AWSFavorites does not have the favorite")
-	}
-}
-
-// TestSetActiveAWSProfileRebuildsSecretBackedBackend is a regression
-// test for spec/88: switching AWS profile must rebuild a
-// Secrets-Manager-backed connection's backend, not leave it resolving
-// against the profile that was active when it was first built.
-func TestSetActiveAWSProfileRebuildsSecretBackedBackend(t *testing.T) {
-	setHomeDir(t, t.TempDir())
-	a := New(config.Default())
-	a.cfg.Connections = append(a.cfg.Connections, config.Connection{
-		Name: "secret-conn", Backend: "jolokia",
-		Queue: config.QueueConfig{PasswordSecret: "my-secret"},
-	})
-	a.switchConnection("secret-conn")
-
-	before, ok := a.backend.(*secretbackend.Backend)
-	if !ok {
-		t.Fatalf("a.backend = %T, want *secretbackend.Backend", a.backend)
-	}
-	if before.Profile() != "" {
-		t.Errorf("Backend.Profile() before SetActiveAWSProfile = %q, want empty", before.Profile())
-	}
-
-	a.SetActiveAWSProfile("work")
-
-	after, ok := a.backend.(*secretbackend.Backend)
-	if !ok {
-		t.Fatalf("a.backend after SetActiveAWSProfile = %T, want *secretbackend.Backend", a.backend)
-	}
-	if after.Profile() != "work" {
-		t.Errorf("Backend.Profile() after SetActiveAWSProfile = %q, want %q", after.Profile(), "work")
-	}
-	if after == before {
-		t.Error("a.backend is the same *secretbackend.Backend instance after SetActiveAWSProfile, want a rebuilt one")
 	}
 }
 

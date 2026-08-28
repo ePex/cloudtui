@@ -155,7 +155,7 @@ func (a *App) SaveConnection(conn config.Connection, origName string, isNew bool
 		}
 		if wasActive {
 			a.cfg.ActiveConnection = conn.Name
-			a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, conn)
+			a.backend = secretbackend.New(a.secretResolver, conn)
 			a.queuesV.SetBackend(a.backend)
 			a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 		}
@@ -175,15 +175,15 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 	a.settingsV.Refresh()
 }
 
-// SetActiveAWSProfile sets name as the active AWS profile, rebuilds the
-// backend (so a Secrets-Manager-backed connection re-resolves its
-// password against the new profile rather than keeping the old one
-// indefinitely — see spec/88), updates the info panel, refreshes the
-// settings list, and persists.
+// SetActiveAWSProfile sets name as the active AWS profile, updates the
+// info panel, refreshes the settings list, and persists. Does not touch
+// a.backend: a secret-backed connection resolves its password via its
+// own passwordSecretAWSProfile (spec/12-named-connections), independent
+// of this value, so there's nothing to rebuild here (this used to
+// rebuild the backend — see spec/88 — back when secret resolution
+// depended on this same global profile).
 func (a *App) SetActiveAWSProfile(name string) {
 	a.cfg.ActiveAWSProfile = name
-	a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, a.cfg.ActiveConn())
-	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()
 	if err := config.SaveDefault(a.cfg); err != nil {
