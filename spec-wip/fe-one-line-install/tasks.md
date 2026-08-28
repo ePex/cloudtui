@@ -75,23 +75,22 @@
    (correct `64bit`/`arm64` entries, `bin: cloudtui.exe`). User created
    the PAT and secret — confirmed via `gh secret list`.
 
-7. [ ] **apt/rpm/apk via nfpm + Gemfury.** Add the `nfpms:` block to
-   `.goreleaser.yaml` per `plan.md` §5. **Blocked on the user**: creating
-   a Gemfury account and generating a push token — needed before the
-   `publishers:` block's exact repo-add instructions (for README) can be
-   confirmed against the real account. This task pauses here; once the
-   account/token exist, add the `publishers:` block, the
-   `FURY_PUSH_TOKEN`/`FURY_ACCOUNT` secrets, and the env passthrough to
-   `release.yml`.
+7. [x] ~~apt/rpm/apk via nfpm + Gemfury~~ — **descoped 2026-08-28, user
+   request**. The `nfpms:` block was added, verified via a local
+   `goreleaser --snapshot` dry run (real `.deb`/`.rpm`/`.apk` built,
+   metadata confirmed by unpacking one), then removed again before the
+   Gemfury account/`publishers:` step — the user decided the account
+   setup wasn't worth it for a third channel beyond Homebrew/Scoop. See
+   `plan.md` §5 for the full record of what was built and why it was
+   pulled. No secrets were ever created for this one.
 
-8. [ ] **README: finish the rewrite.** Fold in Homebrew, Scoop, apt (the
-   real Gemfury repo-add one-liner from task 7), and a `go install`
-   line — completing the "Installing a release" restructure started in
-   task 4, in the order from `plan.md` §7. Manual archive download stays
-   as the documented fallback.
+8. [ ] **README: finish the rewrite.** Fold in Homebrew, Scoop, and a
+   `go install` line — completing the "Installing a release" restructure
+   started in task 4, in the order from `plan.md` §7. Manual archive
+   download stays as the documented fallback.
 
 9. [ ] **Merge-back.** Update `spec/02-ci-and-release/spec.md` (replace
-   the stale out-of-scope line, document the five methods, the new
+   the stale out-of-scope line, document the four methods, the new
    `.goreleaser.yaml` blocks, the two new repos, and the new secrets by
    name) and `spec/01-repo-and-tui-shell/spec.md` (the theming section's
    `config.yaml` reference → `~/.cloudtui/config.yaml` + migration note).
@@ -100,8 +99,8 @@
 10. [ ] **Cut a release and verify end-to-end.** Once CI is green and
     the PR is merged, cut the next tag (following the existing
     manual-tag convention, spec/02) and confirm: the GitHub Release gets
-    the usual 6 archives + checksums, a Homebrew formula lands in
-    `ePex/homebrew-tap`, a Scoop manifest lands in `ePex/scoop-bucket`,
-    and the `.deb`/`.rpm`/`.apk` show up on Gemfury. Then actually run
-    `brew install ePex/tap/cloudtui` and the install script once against
-    the real new release.
+    the usual 6 archives + checksums, a Homebrew cask lands in
+    `ePex/homebrew-tap`, and a Scoop manifest lands in
+    `ePex/scoop-bucket`. Then actually run `brew install --cask
+    ePex/tap/cloudtui` and the install script once against the real new
+    release.

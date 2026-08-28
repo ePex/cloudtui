@@ -56,17 +56,6 @@ scoops:
     description: "A terminal UI for managing cloud resources."
     license: "MIT"
 
-nfpms:
-  - id: nfpm
-    ids: [tui]
-    package_name: cloudtui
-    formats: [deb, rpm, apk]
-    maintainer: "Philipp Holz"
-    homepage: "https://github.com/ePex/cloudtui"
-    description: "A terminal UI for managing cloud resources."
-    license: "MIT"
-    bindir: /usr/bin
-
 changelog:
   sort: asc
   groups:
