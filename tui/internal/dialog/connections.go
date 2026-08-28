@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -183,6 +184,12 @@ type ConnEditor struct {
 	// while Backend is proxy (rebuildTail has nothing to read it back from
 	// otherwise) — see spec/57-bugfix-broker-name-proxy-hidden.
 	brokerName string
+	// awsProfileNames feeds the "AWS Profile" field's autocomplete —
+	// refreshed once per Show() (see awsprofiles.go's own populate(), which
+	// re-reads the same discovery source on every open without caching
+	// across opens either) rather than per keystroke, so the AWS
+	// Profile field's SetAutocompleteFunc callback stays cheap.
+	awsProfileNames []string
 }
 
 // NewConnEditor builds the connection editor overlay's form.
@@ -244,6 +251,7 @@ func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
 func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) {
 	ce.isNew = isNew
 	ce.origName = origName
+	ce.loadAWSProfileNames()
 
 	title := " New AMQ Connection "
 	if !isNew {
@@ -331,9 +339,56 @@ func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 	if sourceIdx == 1 {
 		f.AddInputField("AWS Profile", "", 20, nil, nil)
 		f.AddInputField("Password Secret Name", "", 30, nil, nil)
+		ce.wireAWSProfileAutocomplete()
 	} else {
 		f.AddPasswordField("Password", "", 20, '*', nil)
 	}
+}
+
+// loadAWSProfileNames refreshes the cached names behind the "AWS
+// Profile" field's autocomplete. Called once per Show(), mirroring
+// AWSProfilesPicker.populate()'s own re-discovery on every open — a
+// failed lookup (e.g. no AWS config file) just leaves autocomplete with
+// nothing to suggest rather than surfacing an error inline, since the
+// field stays valid freeform text either way.
+func (ce *ConnEditor) loadAWSProfileNames() {
+	profiles, err := ce.host.ListAWSProfiles(context.Background())
+	if err != nil {
+		ce.awsProfileNames = nil
+		return
+	}
+	names := make([]string, len(profiles))
+	for i, p := range profiles {
+		names[i] = p.Name
+	}
+	ce.awsProfileNames = names
+}
+
+// awsProfileSuggestions returns the cached AWS profile names prefixed by
+// currentText, for the "AWS Profile" field's SetAutocompleteFunc.
+func (ce *ConnEditor) awsProfileSuggestions(currentText string) []string {
+	var matches []string
+	for _, name := range ce.awsProfileNames {
+		if strings.HasPrefix(name, currentText) {
+			matches = append(matches, name)
+		}
+	}
+	return matches
+}
+
+// wireAWSProfileAutocomplete styles and attaches awsProfileSuggestions to
+// the "AWS Profile" field. Must run after the field is added and styling
+// must precede SetAutocompleteFunc — SetAutocompleteFunc eagerly calls
+// Autocomplete() once, which lazily builds the drop-down and bakes in
+// whatever autocompleteStyles are set at that exact moment (see the
+// ':' prompt's own gotcha in app.go/jmstypeprompt.go/messagefilter.go).
+func (ce *ConnEditor) wireAWSProfileAutocomplete() {
+	item, ok := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+	if !ok {
+		return
+	}
+	ui.StyleInputFieldAutocomplete(item, ce.host.Config().Colors)
+	item.SetAutocompleteFunc(ce.awsProfileSuggestions)
 }
 
 // rebuildTail rebuilds every connection-editor form item after Backend
@@ -399,6 +454,7 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	if sourceIdx == 1 {
 		f.AddInputField("AWS Profile", secretProfile, 20, nil, nil)
 		f.AddInputField("Password Secret Name", passwordOrSecret, 30, nil, nil)
+		ce.wireAWSProfileAutocomplete()
 	} else {
 		f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
 	}

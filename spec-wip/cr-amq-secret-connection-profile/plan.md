@@ -175,6 +175,41 @@ code (initial construction, `Show()`, `setPasswordField`, `rebuildTail`,
   and the new required-field validation (empty profile + AWS Secret
   source → status message, no save).
 
+## AWS Profile autocomplete (added per user feedback after the initial cut)
+
+The "AWS Profile" field gains autocomplete against the same discovery
+source Settings → AWS Profiles already uses (`ui.Host.ListAWSProfiles`,
+backed by `awsprofile.List()`), following the existing JMS Type field's
+pattern (`MessageFilter.jmsTypeSuggestions` / `messagefilter.go`,
+`jmstypeprompt.go`) rather than inventing a new one:
+
+- `ConnEditor` gains `awsProfileNames []string`, refreshed once per
+  `Show()` call via a new `loadAWSProfileNames()` (mirrors
+  `AWSProfilesPicker.populate()`'s own re-discovery on every open —
+  no cross-open caching there either). A discovery error just leaves
+  `awsProfileNames` nil — no error surfaced inline, the field just
+  offers no suggestions and still works as plain freeform text.
+- `awsProfileSuggestions(currentText string) []string` filters the
+  cached names by prefix (`strings.HasPrefix`), same as
+  `jmsTypeSuggestions`.
+- A new `wireAWSProfileAutocomplete()` helper calls
+  `ui.StyleInputFieldAutocomplete` *then* `SetAutocompleteFunc` (order
+  matters — see the tview gotcha already documented at every other
+  autocomplete call site in this codebase) on the "AWS Profile" field.
+  Called right after `f.AddInputField("AWS Profile", ...)` in both
+  `setPasswordField` and `rebuildTail` — the only two places that field
+  gets (re)created.
+- `Show()` calls `loadAWSProfileNames()` before the Password Source
+  `SetCurrentOption` call that can immediately create the field (when
+  editing an existing AWS-Secret connection) — `SetAutocompleteFunc`
+  eagerly invokes the callback once at wiring time, so the cache must
+  already be populated by then.
+
+Tests: `awsProfileSuggestions` is unit-tested directly against
+`testHost.listAWSProfiles` (same convention `TestMessageFilterJMSType*`
+already uses for `jmsTypeSuggestions`) — prefix filtering, and graceful
+empty-suggestions behavior on a discovery error.
+
 ## `tui/config.example.yaml`
 
 Update the `passwordSecret` comment block to document

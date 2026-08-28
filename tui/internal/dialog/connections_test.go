@@ -1,12 +1,15 @@
 package dialog
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
@@ -171,5 +174,46 @@ func TestConnEditorSaveRequiresAWSProfileWhenAWSSecretSelected(t *testing.T) {
 	}
 	if !strings.Contains(host.status, "AWS Profile is required") {
 		t.Errorf("status = %q, want it to mention the missing AWS Profile", host.status)
+	}
+}
+
+// TestConnEditorAWSProfileSuggestionsFiltersByPrefix confirms the "AWS
+// Profile" field's autocomplete offers the discovered profile names
+// (via host.ListAWSProfiles) filtered by prefix, the same convention
+// MessageFilter's jmsTypeSuggestions already uses.
+func TestConnEditorAWSProfileSuggestionsFiltersByPrefix(t *testing.T) {
+	ce, host := newTestConnEditor(t)
+	host.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{{Name: "work-dev"}, {Name: "work-prod"}, {Name: "personal"}}, nil
+	}
+	ce.Show(config.Connection{}, true, "")
+
+	got := ce.awsProfileSuggestions("work")
+	want := []string{"work-dev", "work-prod"}
+	if len(got) != len(want) {
+		t.Fatalf("awsProfileSuggestions(\"work\") = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("awsProfileSuggestions(\"work\")[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+// TestConnEditorAWSProfileSuggestionsEmptyOnDiscoveryError confirms a
+// failed AWS profile discovery degrades to no suggestions rather than
+// breaking Show() or the field itself (still usable as freeform text).
+func TestConnEditorAWSProfileSuggestionsEmptyOnDiscoveryError(t *testing.T) {
+	ce, host := newTestConnEditor(t)
+	host.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return nil, errors.New("no AWS config file found")
+	}
+	ce.Show(config.Connection{}, true, "")
+
+	if got := ce.awsProfileSuggestions(""); got != nil {
+		t.Errorf("awsProfileSuggestions(\"\") after discovery error = %v, want nil", got)
+	}
+	if !ce.visible {
+		t.Error("Show() should still open the editor despite a discovery error")
 	}
 }
