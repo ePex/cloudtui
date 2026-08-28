@@ -822,11 +822,11 @@ func TestShowReauthWaitingDelegatesToActiveViewWhenSupported(t *testing.T) {
 	a := New(config.Default())
 	a.SwitchTo("queues")
 
-	a.showReauthWaiting()
+	const msg = "AWS SSO session expired — opening browser to log in... Verify code WDJB-MJHT at https://device.sso.example/"
+	a.showReauthWaiting(msg)
 
-	want := "AWS SSO session expired — opening browser to log in…"
-	if got := a.queuesV.Table().GetCell(1, 0).Text; got != want {
-		t.Errorf("queues table row(1,0) = %q, want %q", got, want)
+	if got := a.queuesV.Table().GetCell(1, 0).Text; got != msg {
+		t.Errorf("queues table row(1,0) = %q, want %q", got, msg)
 	}
 	if got := a.statusBar.GetText(true); got != "" {
 		t.Errorf("status bar = %q, want empty (queues view handles its own display)", got)
@@ -836,7 +836,7 @@ func TestShowReauthWaitingDelegatesToActiveViewWhenSupported(t *testing.T) {
 func TestShowReauthDoneRevertsActiveViewWhenSupported(t *testing.T) {
 	a := New(config.Default())
 	a.SwitchTo("queues")
-	a.showReauthWaiting()
+	a.showReauthWaiting("AWS SSO session expired — opening browser to log in...")
 
 	a.showReauthDone()
 
@@ -852,22 +852,41 @@ func TestShowReauthWaitingFallsBackToStatusBarWithoutSupport(t *testing.T) {
 	a := New(config.Default())
 	a.SwitchTo("home")
 
-	a.showReauthWaiting()
+	const msg = "AWS SSO session expired — opening browser to log in..."
+	a.showReauthWaiting(msg)
 
-	want := "AWS SSO session expired — opening browser to log in..."
-	if got := a.statusBar.GetText(true); got != want {
-		t.Errorf("status bar = %q, want %q", got, want)
+	if got := a.statusBar.GetText(true); got != msg {
+		t.Errorf("status bar = %q, want %q", got, msg)
 	}
 }
 
 func TestShowReauthDoneClearsStatusBarWithoutSupport(t *testing.T) {
 	a := New(config.Default())
 	a.SwitchTo("home")
-	a.showReauthWaiting()
+	a.showReauthWaiting("AWS SSO session expired — opening browser to log in...")
 
 	a.showReauthDone()
 
 	if got := a.statusBar.GetText(true); got != "" {
 		t.Errorf("status bar after showReauthDone() = %q, want empty", got)
+	}
+}
+
+// TestShowReauthWaitingIncludesDeviceCodeAndURLWhenProvided confirms
+// showReauthWaiting is a plain passthrough of whatever message the
+// caller builds — app.go's real onCode callback appends the device
+// verification code/URL to the same base message; this just locks in
+// that showReauthWaiting itself doesn't care what the text is or
+// truncate/reformat it.
+func TestShowReauthWaitingIncludesDeviceCodeAndURLWhenProvided(t *testing.T) {
+	a := New(config.Default())
+	a.SwitchTo("queues")
+
+	base := "AWS SSO session expired — opening browser to log in..."
+	withCode := base + " Verify code WDJB-MJHT at https://device.sso.us-east-1.amazonaws.com/"
+	a.showReauthWaiting(withCode)
+
+	if got := a.queuesV.Table().GetCell(1, 0).Text; got != withCode {
+		t.Errorf("queues table row(1,0) = %q, want %q", got, withCode)
 	}
 }

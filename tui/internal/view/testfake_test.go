@@ -46,7 +46,7 @@ type fakeViewHost struct {
 	listPipelinesFn          func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
 	getPipelineStateFn       func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	awsAuthTypeForFn         func(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	awsSSOLoginFn            func(ctx context.Context, profile string) error
+	awsSSOLoginFn            func(ctx context.Context, profile string, onCode func(code, url string)) error
 	loadedJMSTypes           []string
 	messagesQueueName        string
 	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) ([]string, error)
@@ -200,9 +200,9 @@ func (f *fakeViewHost) AWSAuthTypeFor(ctx context.Context, profile string) (awsp
 	return "", nil
 }
 
-func (f *fakeViewHost) AWSSSOLogin(ctx context.Context, profile string) error {
+func (f *fakeViewHost) AWSSSOLogin(ctx context.Context, profile string, onCode func(code, url string)) error {
 	if f.awsSSOLoginFn != nil {
-		return f.awsSSOLoginFn(ctx, profile)
+		return f.awsSSOLoginFn(ctx, profile, onCode)
 	}
 	return nil
 }

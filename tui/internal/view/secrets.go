@@ -183,6 +183,7 @@ func (sv *SecretsView) load() {
 					sv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
+			nil, // TODO(fe-aws-sso-device-code task 3): show the device code/URL
 			func(ctx context.Context) ([]awssecrets.Secret, error) {
 				return sv.host.ListSecrets(ctx, profile)
 			},
