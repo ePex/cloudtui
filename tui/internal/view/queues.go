@@ -20,6 +20,10 @@ import (
 // Pending, Consumers, Enqueued, and Dequeued for each queue on the broker.
 var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUED"}
 
+// loadingQueuesStatus is Load()'s placeholder text — also what
+// ShowReauthDone reverts to, so both stay in sync.
+const loadingQueuesStatus = "Loading queues…"
+
 type QueuesView struct {
 	table         *tview.Table
 	filterInput   *tview.InputField
@@ -40,6 +44,7 @@ type QueuesView struct {
 var _ ui.View = (*QueuesView)(nil)
 var _ ui.Shortcuttable = (*QueuesView)(nil)
 var _ ui.Themeable = (*QueuesView)(nil)
+var _ ui.ReauthStatusShower = (*QueuesView)(nil)
 
 // ApplyPalette recolors the queues view for a live theme switch.
 func (qv *QueuesView) ApplyPalette(p config.Palette) {
@@ -299,7 +304,7 @@ func (qv *QueuesView) setHeader() {
 func (qv *QueuesView) Load() {
 	qv.loadSeq++
 	seq := qv.loadSeq
-	qv.showStatus("Loading queues…")
+	qv.showStatus(loadingQueuesStatus)
 	go func() {
 		summaries, err := qv.backend.List(context.Background())
 		qv.host.QueueUpdateDraw(func() {
@@ -445,4 +450,18 @@ func (qv *QueuesView) showStatus(msg string) {
 			SetTextColor(tcell.GetColor(qv.host.Config().Colors.Accent)).
 			SetExpansion(5),
 	)
+}
+
+// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower:
+// while a fetch is blocked on an AWS SSO browser login (see
+// secretbackend.SecretResolver), the table's own loading placeholder
+// reflects that instead of sitting on a generic "Loading queues…" for
+// the whole wait — then reverts once login completes, right before the
+// fetch itself retries.
+func (qv *QueuesView) ShowReauthWaiting() {
+	qv.showStatus("AWS SSO session expired — opening browser to log in…")
+}
+
+func (qv *QueuesView) ShowReauthDone() {
+	qv.showStatus(loadingQueuesStatus)
 }

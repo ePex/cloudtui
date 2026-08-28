@@ -19,7 +19,7 @@ import (
 func newTestResolver(reveal func(context.Context, string, string) (string, bool, error)) *SecretResolver {
 	return NewSecretResolver(reveal,
 		func(context.Context, string) (awsprofile.AuthType, error) { return "", nil },
-		nil, nil)
+		nil, nil, nil)
 }
 
 func TestResolveNoProfileSelectedSkipsRevealCall(t *testing.T) {
@@ -201,7 +201,7 @@ func TestBackendRemoveMessageDoesNotRetryButInvalidatesCache(t *testing.T) {
 func TestResolveTriggersReauthOnSSOExpiredError(t *testing.T) {
 	ssoExpiredErr := errors.New("cached SSO token is expired, or not present")
 	revealCalls := 0
-	var onReauthCalled, loginCalled bool
+	var onReauthCalled, loginCalled, onReauthDoneCalled bool
 	var loginProfile string
 
 	reveal := func(context.Context, string, string) (string, bool, error) {
@@ -219,6 +219,7 @@ func TestResolveTriggersReauthOnSSOExpiredError(t *testing.T) {
 			return nil
 		},
 		func() { onReauthCalled = true },
+		func() { onReauthDoneCalled = true },
 	)
 
 	v, err := r.Resolve(context.Background(), "prof", "my-secret")
@@ -237,15 +238,23 @@ func TestResolveTriggersReauthOnSSOExpiredError(t *testing.T) {
 	if loginProfile != "prof" {
 		t.Errorf("login called with profile %q, want %q", loginProfile, "prof")
 	}
+	if !onReauthDoneCalled {
+		t.Error("onReauthDone was not called")
+	}
 	if revealCalls != 2 {
 		t.Errorf("reveal called %d times, want 2 (initial failure + retry after reauth)", revealCalls)
 	}
 }
 
+// TestResolveSurfacesErrorWhenReauthLoginFails also confirms
+// onReauthDone still fires when login itself fails — a caller reverting
+// its own "reauth in progress" message must not get stuck showing it
+// forever just because the login attempt didn't succeed.
 func TestResolveSurfacesErrorWhenReauthLoginFails(t *testing.T) {
 	ssoExpiredErr := errors.New("cached SSO token is expired, or not present")
 	loginErr := errors.New("browser login failed")
 	revealCalls := 0
+	onReauthDoneCalled := false
 
 	reveal := func(context.Context, string, string) (string, bool, error) {
 		revealCalls++
@@ -255,6 +264,7 @@ func TestResolveSurfacesErrorWhenReauthLoginFails(t *testing.T) {
 		func(context.Context, string) (awsprofile.AuthType, error) { return awsprofile.AuthSSO, nil },
 		func(context.Context, string) error { return loginErr },
 		func() {},
+		func() { onReauthDoneCalled = true },
 	)
 
 	_, err := r.Resolve(context.Background(), "prof", "my-secret")
@@ -263,6 +273,9 @@ func TestResolveSurfacesErrorWhenReauthLoginFails(t *testing.T) {
 	}
 	if revealCalls != 1 {
 		t.Errorf("reveal called %d times, want 1 (no retry attempted when login fails)", revealCalls)
+	}
+	if !onReauthDoneCalled {
+		t.Error("onReauthDone was not called even though login failed — a caller's \"reauth in progress\" message would be stuck")
 	}
 }
 
@@ -282,6 +295,7 @@ func TestResolveDoesNotReauthForNonSSOProfile(t *testing.T) {
 			return nil
 		},
 		func() { t.Error("onReauth should not be called for a non-SSO profile") },
+		func() { t.Error("onReauthDone should not be called for a non-SSO profile") },
 	)
 
 	_, err := r.Resolve(context.Background(), "prof", "my-secret")

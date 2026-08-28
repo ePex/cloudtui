@@ -16,6 +16,20 @@
    `go test -race`. `go build`/`go vet`/`go test ./...` clean across the
    whole module (confirmed no import cycle: `secretbackend` importing
    `awsauth` compiles fine).
+   **Addendum, found via live testing**: the status bar message never
+   cleared, and the table's own "Loading queues…" placeholder ignored
+   the reauth wait entirely. Fixed per `plan.md`'s addendum: added
+   `onReauthDone func()` to `SecretResolver` (fires right after `login`,
+   success or failure); added `ui.ReauthStatusShower`
+   (`ShowReauthWaiting`/`ShowReauthDone`), a new optional interface
+   mirroring `Themeable`/`Shortcuttable`, dispatched via
+   `a.activeView()`; `QueuesView` implements it, reusing a new
+   `loadingQueuesStatus` const so `Load()` and `ShowReauthDone()` can't
+   drift out of sync; `app.go`'s `onReauthDone` closure also clears the
+   status bar back to `""`. Added `TestQueuesViewShowReauthWaitingThenDone`
+   and extended `TestResolveSurfacesErrorWhenReauthLoginFails` to assert
+   `onReauthDone` fires even when `login` fails. All tests pass;
+   `go build`/`go vet`/`go test ./...` still clean.
 
 2. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution (AWS-Secrets-Manager-backed passwords)" section
