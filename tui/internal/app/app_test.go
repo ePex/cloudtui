@@ -811,3 +811,63 @@ func TestPromptAutocompleteFirstOpenIsReadable(t *testing.T) {
 			fg.Hex(), bg.Hex(), wantText.Hex(), wantBackground.Hex())
 	}
 }
+
+// TestShowReauthWaitingDelegatesToActiveViewWhenSupported and its
+// companion tests confirm showReauthWaiting/showReauthDone's dispatch:
+// an active view implementing ui.ReauthStatusShower (QueuesView) handles
+// the message itself, leaving the bottom status bar untouched — found
+// live that showing it in both places at once was redundant/confusing.
+// A view without that support (Home) falls back to the status bar.
+func TestShowReauthWaitingDelegatesToActiveViewWhenSupported(t *testing.T) {
+	a := New(config.Default())
+	a.SwitchTo("queues")
+
+	a.showReauthWaiting()
+
+	want := "AWS SSO session expired — opening browser to log in…"
+	if got := a.queuesV.Table().GetCell(1, 0).Text; got != want {
+		t.Errorf("queues table row(1,0) = %q, want %q", got, want)
+	}
+	if got := a.statusBar.GetText(true); got != "" {
+		t.Errorf("status bar = %q, want empty (queues view handles its own display)", got)
+	}
+}
+
+func TestShowReauthDoneRevertsActiveViewWhenSupported(t *testing.T) {
+	a := New(config.Default())
+	a.SwitchTo("queues")
+	a.showReauthWaiting()
+
+	a.showReauthDone()
+
+	if got := a.queuesV.Table().GetCell(1, 0).Text; got != "Loading queues…" {
+		t.Errorf("queues table row(1,0) after showReauthDone() = %q, want %q", got, "Loading queues…")
+	}
+	if got := a.statusBar.GetText(true); got != "" {
+		t.Errorf("status bar = %q, want empty (queues view handles its own display)", got)
+	}
+}
+
+func TestShowReauthWaitingFallsBackToStatusBarWithoutSupport(t *testing.T) {
+	a := New(config.Default())
+	a.SwitchTo("home")
+
+	a.showReauthWaiting()
+
+	want := "AWS SSO session expired — opening browser to log in..."
+	if got := a.statusBar.GetText(true); got != want {
+		t.Errorf("status bar = %q, want %q", got, want)
+	}
+}
+
+func TestShowReauthDoneClearsStatusBarWithoutSupport(t *testing.T) {
+	a := New(config.Default())
+	a.SwitchTo("home")
+	a.showReauthWaiting()
+
+	a.showReauthDone()
+
+	if got := a.statusBar.GetText(true); got != "" {
+		t.Errorf("status bar after showReauthDone() = %q, want empty", got)
+	}
+}

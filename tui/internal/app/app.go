@@ -202,7 +202,10 @@ func New(cfg config.Config) *App {
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = ui.DesktopNotify
-	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret)
+	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin,
+		func() { a.QueueUpdateDraw(a.showReauthWaiting) },
+		func() { a.QueueUpdateDraw(a.showReauthDone) },
+	)
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
@@ -696,6 +699,31 @@ func (a *App) activeView() ui.View {
 		}
 	}
 	return nil
+}
+
+// showReauthWaiting and showReauthDone are secretbackend.SecretResolver's
+// onReauth/onReauthDone callbacks (wrapped in a.QueueUpdateDraw at the
+// call site, since Resolve runs on a background goroutine): if the
+// active view shows its own reauth status (ui.ReauthStatusShower — e.g.
+// QueuesView's loading placeholder), it handles the message and the
+// bottom status bar is left untouched, avoiding the same message
+// appearing in two places at once (found live). Only a view with no such
+// display falls back to the status bar, so a fetch on some hypothetical
+// future view without this support still gets some indication.
+func (a *App) showReauthWaiting() {
+	if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+		av.ShowReauthWaiting()
+	} else {
+		a.SetStatus("AWS SSO session expired — opening browser to log in...")
+	}
+}
+
+func (a *App) showReauthDone() {
+	if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+		av.ShowReauthDone()
+	} else {
+		a.SetStatus("")
+	}
 }
 
 // colorBordered applies v's configured (or Border-fallback) color to prim's
