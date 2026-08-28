@@ -170,6 +170,20 @@ func (cm *ConnManager) delete() {
 	})
 }
 
+// labelPassword, labelPasswordSecretName, and labelAWSProfile carry a
+// 2-space indent so the field conditionally shown below "Password
+// Source" (exactly one of these three, depending on its value) reads as
+// visually nested under it, rather than a peer of Name/Backend/URL/etc.
+// Defined once and reused everywhere these labels are created or looked
+// up via GetFormItemByLabel, since GetFormItemByLabel matches the label
+// string exactly (including this indent) — a literal without it would
+// silently fail to find the field.
+const (
+	labelPassword           = "  Password"
+	labelPasswordSecretName = "  Password Secret Name"
+	labelAWSProfile         = "  AWS Profile"
+)
+
 // ConnEditor is the AMQ connection editor overlay, shared by "new",
 // "edit", and "duplicate" from the connection manager.
 type ConnEditor struct {
@@ -204,7 +218,7 @@ func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
 		AddInputField("URL", "", 40, nil, nil).
 		AddInputField("Username", "", 20, nil, nil).
 		AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, 0, nil).
-		AddPasswordField("Password", "", 20, '*', nil).
+		AddPasswordField(labelPassword, "", 20, '*', nil).
 		AddButton("Save", func() { ce.save() }).
 		AddButton("Cancel", func() { ce.close() })
 	if dd, ok := ce.form.GetFormItem(1).(*tview.DropDown); ok {
@@ -307,7 +321,7 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	// before its text is set below.
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
-		profileItem := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+		profileItem := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField)
 		profileItem.SetText(passwordSecretProfile)
 		// SetText doesn't itself refresh an active SetAutocompleteFunc
 		// drop-down — without this, the field keeps whatever suggestions
@@ -319,9 +333,9 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 		// profile with that stale selection — same fix as MessageFilter's
 		// jmsTypeItem in messagefilter.go's own Show().
 		profileItem.Autocomplete()
-		ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).SetText(passwordSecret)
+		ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).SetText(passwordSecret)
 	} else {
-		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
+		ce.form.GetFormItemByLabel(labelPassword).(*tview.InputField).SetText(password)
 	}
 
 	ce.host.ShowPage("conn-editor")
@@ -341,18 +355,18 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 	f := ce.form
 	currentCount := 1
-	if _, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
+	if _, ok := f.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); ok {
 		currentCount = 2
 	}
 	for i := 0; i < currentCount; i++ {
 		f.RemoveFormItem(f.GetFormItemCount() - 1)
 	}
 	if sourceIdx == 1 {
-		f.AddInputField("AWS Profile", "", 20, nil, nil)
-		f.AddInputField("Password Secret Name", "", 30, nil, nil)
+		f.AddInputField(labelAWSProfile, "", 20, nil, nil)
+		f.AddInputField(labelPasswordSecretName, "", 30, nil, nil)
 		ce.wireAWSProfileAutocomplete()
 	} else {
-		f.AddPasswordField("Password", "", 20, '*', nil)
+		f.AddPasswordField(labelPassword, "", 20, '*', nil)
 	}
 }
 
@@ -394,7 +408,7 @@ func (ce *ConnEditor) awsProfileSuggestions(currentText string) []string {
 // whatever autocompleteStyles are set at that exact moment (see the
 // ':' prompt's own gotcha in app.go/jmstypeprompt.go/messagefilter.go).
 func (ce *ConnEditor) wireAWSProfileAutocomplete() {
-	item, ok := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+	item, ok := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField)
 	if !ok {
 		return
 	}
@@ -440,12 +454,12 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
 		sourceIdx, _ = dd.GetCurrentOption()
 	}
-	if item, ok := f.GetFormItemByLabel("Password").(*tview.InputField); ok {
+	if item, ok := f.GetFormItemByLabel(labelPassword).(*tview.InputField); ok {
 		passwordOrSecret = item.GetText()
-	} else if item, ok := f.GetFormItemByLabel("Password Secret Name").(*tview.InputField); ok {
+	} else if item, ok := f.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField); ok {
 		passwordOrSecret = item.GetText()
 	}
-	if item, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
+	if item, ok := f.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); ok {
 		secretProfile = item.GetText()
 	}
 
@@ -463,11 +477,11 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	// added below would fire prematurely.
 	f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
 	if sourceIdx == 1 {
-		f.AddInputField("AWS Profile", secretProfile, 20, nil, nil)
-		f.AddInputField("Password Secret Name", passwordOrSecret, 30, nil, nil)
+		f.AddInputField(labelAWSProfile, secretProfile, 20, nil, nil)
+		f.AddInputField(labelPasswordSecretName, passwordOrSecret, 30, nil, nil)
 		ce.wireAWSProfileAutocomplete()
 	} else {
-		f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
+		f.AddPasswordField(labelPassword, passwordOrSecret, 20, '*', nil)
 	}
 
 	if dd, ok := f.GetFormItemByLabel("Password Source").(*tview.DropDown); ok {
@@ -528,10 +542,10 @@ func (ce *ConnEditor) save() {
 	sourceIdx, _ := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
 	var password, passwordSecret, passwordSecretProfile string
 	if sourceIdx == 1 {
-		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).GetText())
-		passwordSecretProfile = strings.TrimSpace(ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).GetText())
+		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).GetText())
+		passwordSecretProfile = strings.TrimSpace(ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).GetText())
 	} else {
-		password = ce.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
+		password = ce.form.GetFormItemByLabel(labelPassword).(*tview.InputField).GetText()
 	}
 
 	if name == "" {
