@@ -70,8 +70,8 @@ func (a *App) AWSAuthTypeFor(ctx context.Context, profile string) (awsprofile.Au
 	return a.awsAuthTypeFor(ctx, profile)
 }
 
-func (a *App) AWSSSOLogin(ctx context.Context, profile string) error {
-	return a.awsSSOLogin(ctx, profile)
+func (a *App) AWSSSOLogin(ctx context.Context, profile string, onCode func(code, url string)) error {
+	return a.awsSSOLogin(ctx, profile, onCode)
 }
 
 var _ ui.ViewHost = (*App)(nil)

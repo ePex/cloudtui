@@ -107,10 +107,12 @@ connections:
 - **SSO re-auth**: if resolving the secret fails because the active AWS
   profile's SSO session is missing/expired, the same mechanism every
   other AWS-backed view already uses (`awsauth.WithReauth`,
-  spec/36-fe-aws-sso-reauth) kicks in — a status message
-  ("AWS SSO session expired — opening browser to log in..."), then
-  `aws sso login` opens the browser, then the secret resolution (and
-  whichever `queue.Backend` call needed it) retries once. Wired in
+  spec/14-aws-profiles) kicks in — a status message ("AWS SSO session
+  expired — opening browser to log in...", updated in place with the
+  device verification code/URL once `aws sso login` prints them — see
+  spec/14 for why), then `aws sso login` opens the browser, then the
+  secret resolution (and whichever `queue.Backend` call needed it)
+  retries once. Wired in
   `secretbackend.SecretResolver.Resolve` — the one place that actually
   calls AWS Secrets Manager — so it covers every operation on a
   secret-backed connection (list, browse, send, delete, move, purge),

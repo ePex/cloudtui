@@ -19,7 +19,7 @@ import (
 func newTestResolver(reveal func(context.Context, string, string) (string, bool, error)) *SecretResolver {
 	return NewSecretResolver(reveal,
 		func(context.Context, string) (awsprofile.AuthType, error) { return "", nil },
-		nil, nil, nil)
+		nil, nil, nil, nil)
 }
 
 func TestResolveNoProfileSelectedSkipsRevealCall(t *testing.T) {
@@ -213,13 +213,14 @@ func TestResolveTriggersReauthOnSSOExpiredError(t *testing.T) {
 	}
 	r := NewSecretResolver(reveal,
 		func(context.Context, string) (awsprofile.AuthType, error) { return awsprofile.AuthSSO, nil },
-		func(_ context.Context, profile string) error {
+		func(_ context.Context, profile string, _ func(string, string)) error {
 			loginCalled = true
 			loginProfile = profile
 			return nil
 		},
 		func() { onReauthCalled = true },
 		func() { onReauthDoneCalled = true },
+		nil,
 	)
 
 	v, err := r.Resolve(context.Background(), "prof", "my-secret")
@@ -262,9 +263,10 @@ func TestResolveSurfacesErrorWhenReauthLoginFails(t *testing.T) {
 	}
 	r := NewSecretResolver(reveal,
 		func(context.Context, string) (awsprofile.AuthType, error) { return awsprofile.AuthSSO, nil },
-		func(context.Context, string) error { return loginErr },
+		func(context.Context, string, func(string, string)) error { return loginErr },
 		func() {},
 		func() { onReauthDoneCalled = true },
+		nil,
 	)
 
 	_, err := r.Resolve(context.Background(), "prof", "my-secret")
@@ -290,12 +292,13 @@ func TestResolveDoesNotReauthForNonSSOProfile(t *testing.T) {
 	}
 	r := NewSecretResolver(reveal,
 		func(context.Context, string) (awsprofile.AuthType, error) { return awsprofile.AuthStaticKeys, nil },
-		func(context.Context, string) error {
+		func(context.Context, string, func(string, string)) error {
 			loginCalled = true
 			return nil
 		},
 		func() { t.Error("onReauth should not be called for a non-SSO profile") },
 		func() { t.Error("onReauthDone should not be called for a non-SSO profile") },
+		nil,
 	)
 
 	_, err := r.Resolve(context.Background(), "prof", "my-secret")

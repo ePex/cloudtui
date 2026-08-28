@@ -133,13 +133,19 @@ func (dv *CodePipelineDetailView) load() {
 		return
 	}
 	pipelineName := dv.pipelineName
+	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
 		authType, _ := dv.host.AWSAuthTypeFor(ctx, profile)
 		stages, err := awsauth.WithReauth(ctx, profile, authType, dv.host.AWSSSOLogin,
 			func() {
 				dv.host.QueueUpdateDraw(func() {
-					dv.showStatus("AWS SSO session expired — opening browser to log in...")
+					dv.showStatus(reauthWaitingMsg)
+				})
+			},
+			func(code, url string) {
+				dv.host.QueueUpdateDraw(func() {
+					dv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.StageStatus, error) {

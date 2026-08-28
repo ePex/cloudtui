@@ -206,6 +206,24 @@ func TestSSMParamsViewShowStatusRendersMessage(t *testing.T) {
 	}
 }
 
+// TestSSMParamsViewShowStatusRendersDeviceCodeMessage confirms
+// showStatus correctly renders the longer message load()'s onCode
+// callback constructs (base message plus the AWS SSO device
+// verification code/URL) — load() itself isn't driven here for the
+// same reason TestSSMParamsViewShowStatusRendersMessage doesn't drive
+// it; this confirms the display side handles the combined string, the
+// wiring itself is covered by internal/app's
+// TestShowReauthWaitingIncludesDeviceCodeAndURLWhenProvided.
+func TestSSMParamsViewShowStatusRendersDeviceCodeMessage(t *testing.T) {
+	_, pv := newTestSSMParamsView(t)
+
+	pv.showStatus("AWS SSO session expired — opening browser to log in... Verify code WDJB-MJHT at https://device.sso.us-east-1.amazonaws.com/")
+
+	if got := pv.table.GetCell(1, 1).Text; !strings.Contains(got, "Verify code WDJB-MJHT at") {
+		t.Errorf("status cell = %q, want it to contain the device verification code/URL", got)
+	}
+}
+
 func TestSSMParamsViewFavoriteTogglePersistsAndShowsStar(t *testing.T) {
 	host, pv := newTestSSMParamsView(t)
 	host.cfg.ActiveAWSProfile = "work"

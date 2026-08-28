@@ -197,6 +197,19 @@ func TestLogsViewShowStatusRendersMessage(t *testing.T) {
 	}
 }
 
+// TestLogsViewShowStatusRendersDeviceCodeMessage — see
+// ssmparams_test.go's equivalent test for why load() itself isn't
+// driven here.
+func TestLogsViewShowStatusRendersDeviceCodeMessage(t *testing.T) {
+	_, lv := newTestLogsView(t)
+
+	lv.showStatus("AWS SSO session expired — opening browser to log in... Verify code WDJB-MJHT at https://device.sso.us-east-1.amazonaws.com/")
+
+	if got := lv.table.GetCell(1, 1).Text; !strings.Contains(got, "Verify code WDJB-MJHT at") {
+		t.Errorf("status cell = %q, want it to contain the device verification code/URL", got)
+	}
+}
+
 func TestLogsViewFavoriteTogglePersistsAndShowsStar(t *testing.T) {
 	host, lv := newTestLogsView(t)
 	host.cfg.ActiveAWSProfile = "work"

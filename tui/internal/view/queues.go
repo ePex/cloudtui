@@ -458,8 +458,8 @@ func (qv *QueuesView) showStatus(msg string) {
 // reflects that instead of sitting on a generic "Loading queues…" for
 // the whole wait — then reverts once login completes, right before the
 // fetch itself retries.
-func (qv *QueuesView) ShowReauthWaiting() {
-	qv.showStatus("AWS SSO session expired — opening browser to log in…")
+func (qv *QueuesView) ShowReauthWaiting(msg string) {
+	qv.showStatus(msg)
 }
 
 func (qv *QueuesView) ShowReauthDone() {

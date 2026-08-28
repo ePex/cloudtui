@@ -73,5 +73,5 @@ type ViewHost interface {
 	ListPipelines(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error)
 	GetPipelineState(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	AWSAuthTypeFor(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	AWSSSOLogin(ctx context.Context, profile string) error
+	AWSSSOLogin(ctx context.Context, profile string, onCode func(code, url string)) error
 }
