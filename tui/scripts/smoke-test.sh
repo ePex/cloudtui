@@ -6,7 +6,7 @@
 # same broker state.
 #
 # Requires: tmux, Go, a reachable ActiveMQ broker matching the active
-# connection in tui/config.yaml (Jolokia), and — for the backend-switch
+# connection in ~/.cloudtui/config.yaml (Jolokia), and — for the backend-switch
 # phase — a JDK capable of running mq-proxy (Java 21+; export JAVA_HOME if
 # `java` on PATH resolves to something older, e.g. via sdkman's "current").
 #
@@ -28,7 +28,7 @@ BIN="$(mktemp -t cloudtui-smoke.XXXXXX)"
 SRC_QUEUE="smoketest-src-$$"
 DST_QUEUE="smoketest-dst-$$"
 CONN_NAME="smoketest-proxy-$$"
-CONN_ALIAS="smk"
+CONFIG_PATH="$HOME/.cloudtui/config.yaml"
 CONFIG_BACKUP=""
 STARTED_PROXY=0
 EXISTING_CONN_COUNT=0
@@ -44,7 +44,7 @@ cleanup() {
   # against a non-jolokia active connection, and by this point the script
   # may have switched the active connection to the test proxy one.
   if [[ -n "$CONFIG_BACKUP" ]]; then
-    mv -f "$CONFIG_BACKUP" config.yaml
+    mv -f "$CONFIG_BACKUP" "$CONFIG_PATH"
   fi
   go run ./cmd/devtool remove-queue "$SRC_QUEUE" >/dev/null 2>&1 || true
   go run ./cmd/devtool remove-queue "$DST_QUEUE" >/dev/null 2>&1 || true
@@ -104,10 +104,10 @@ log "creating disposable queues: $SRC_QUEUE, $DST_QUEUE"
 go run ./cmd/devtool add-queue "$SRC_QUEUE"
 go run ./cmd/devtool add-queue "$DST_QUEUE"
 
-if [[ -f config.yaml ]]; then
+if [[ -f "$CONFIG_PATH" ]]; then
   CONFIG_BACKUP="$(mktemp -t cloudtui-config-backup.XXXXXX)"
-  cp config.yaml "$CONFIG_BACKUP"
-  EXISTING_CONN_COUNT=$(grep -c '^ *- name:' config.yaml || true)
+  cp "$CONFIG_PATH" "$CONFIG_BACKUP"
+  EXISTING_CONN_COUNT=$(grep -c '^ *- name:' "$CONFIG_PATH" || true)
 fi
 
 log "starting mq-proxy (needs JAVA_HOME pointed at a 21+ JDK)..."
@@ -115,7 +115,7 @@ go run ./cmd/devtool start-proxy
 STARTED_PROXY=1
 
 log "registering a test proxy connection ($EXISTING_CONN_COUNT existing)..."
-go run ./cmd/devtool add-proxy-conn "$CONN_NAME" "$CONN_ALIAS" \
+go run ./cmd/devtool add-proxy-conn "$CONN_NAME" \
   http://localhost:8080 cloudtui changeme
 
 log "launching TUI in tmux session $SESSION..."
@@ -188,7 +188,7 @@ send 'Enter'
 sleep 0.3
 for ((i = 0; i < EXISTING_CONN_COUNT; i++)); do send 'Down'; sleep 0.05; done
 send 'Enter'
-wait_for "Connection: $CONN_ALIAS" 5 >/dev/null
+wait_for "AMQ Connection: $CONN_NAME" 5 >/dev/null
 
 log "confirming the proxy backend sees the same broker state ($DST_QUEUE)..."
 send 'r'
