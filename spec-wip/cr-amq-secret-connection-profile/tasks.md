@@ -1,14 +1,17 @@
 # Tasks
 
-1. [ ] **Config schema and backend plumbing.** Add
-   `PasswordSecretAWSProfile` to `QueueConfig`/`ProxyConfig`. Update
-   `secretbackend.New` (drop `profile` param, add
+1. [x] **Config schema and backend plumbing.** Added
+   `PasswordSecretAWSProfile` to `QueueConfig`/`ProxyConfig`. Updated
+   `secretbackend.New` (dropped `profile` param, added
    `passwordSecretAWSProfile(conn)` helper) and all 4 call sites in
-   `app.go`/`host.go`. Simplify `SetActiveAWSProfile` (no more backend
-   rebuild). Reword `SecretResolver.Resolve`'s empty-profile error.
-   Delete `TestSetActiveAWSProfileRebuildsSecretBackedBackend`; update
-   `secretbackend_test.go`'s `New(...)` call sites and `newTestBackend`
-   helper. `go build`/`go vet`/`go test ./...` clean.
+   `app.go`/`host.go`. Simplified `SetActiveAWSProfile` (no more backend
+   rebuild). Reworded `SecretResolver.Resolve`'s empty-profile error.
+   Deleted `TestSetActiveAWSProfileRebuildsSecretBackedBackend` (and the
+   now-unused `secretbackend` import in `host_test.go`).
+   `secretbackend_test.go` needed no changes at all — `newTestBackend`
+   already constructs `*Backend` via a struct literal, never through
+   `New()`, so it was already decoupled from this signature change.
+   `go build`/`go vet`/`go test ./...` clean.
 
 2. [ ] **Connection editor UI.** Update `setPasswordField`,
    `rebuildTail`, `Show`, and `save` in `connections.go` per `plan.md`
