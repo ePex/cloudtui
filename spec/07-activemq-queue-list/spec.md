@@ -45,6 +45,23 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   (Jolokia or mq-proxy, spec/11).
 - **Auto-refresh on activate**: entering the view (via Home, `:queues`, or
   Backspace/Esc back from a child view) triggers an automatic reload.
+- **Loading indicator**: every reload shows an immediate accent-colored
+  "Loading queues…" placeholder row (same shape as the error row below —
+  see `showStatus`/`showError` in `queues.go`) rather than leaving the
+  previously-loaded queues on screen with no indication a fetch is in
+  progress. Matters most when switching to a proxy-backed connection
+  that's slow to warm up, has wrong credentials, or is simply
+  unreachable — those cases can take up to the backend client's full
+  retry/timeout window (~60s for the proxy backend, spec/11) before
+  resolving, during which the previous connection's queues would
+  otherwise look like current data for the new connection. If a second
+  reload starts (another connection switch, or `r`) before the first
+  resolves, the first's eventual result is discarded — the table always
+  ends up reflecting the *most recently triggered* reload, never a
+  slower, superseded one.
+- **Errors**: a failed reload replaces the table with a single red
+  "Error: …" row (`showError`) rather than leaving stale data on screen
+  or crashing — the same inline-row mechanism the loading indicator uses.
 
 ## Data & config
 
