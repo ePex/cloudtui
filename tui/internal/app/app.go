@@ -332,9 +332,13 @@ func New(cfg config.Config) *App {
 
 	a.connEditor = dialog.NewConnEditor(a, a.connManager)
 	a.connManager.SetEditor(a.connEditor)
-	// Height must cover border+padding (4 rows) + 7 items * (field + item
-	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
+	// Height must cover border+padding (4 rows) + 11 items * (field + item
+	// padding) (22 rows) + button row (1 row) = 27; give it one spare row.
+	// 11 is the tallest case: the 3 section headers (General/Destination/
+	// Auth), Name, Backend, Broker Name, URL, Username, Authentication
+	// Mode, AWS Profile, Secret Name — jolokia backend with AWS Secret
+	// selected.
+	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 28)
 
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.

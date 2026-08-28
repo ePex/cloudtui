@@ -256,6 +256,82 @@ or, with no matches, closes entirely. Exactly the fix
 `MessageFilter.Show()` already applies to `jmsTypeItem` for the same
 reason.
 
+## Connection editor sections + renames (added per user feedback)
+
+Investigated whether the Save/Cancel buttons' apparent indentation (user
+report: "the save and cancel buttons are now indented as well") was
+caused by the Password/AWS Profile/Secret Name label-indent commit.
+Built the prior commit (`f37d131`) via a detached worktree and compared
+column positions directly — Save/Cancel already rendered 2 columns right
+of Name's own column *before* that commit too (`tview.Form`'s button-
+width calculation reserves `label+4` cells per button, independent of
+any item's `SetFormAttributes` label width — confirmed by reading
+`form.go`'s button-positioning code, which never reads `maxLabelWidth`).
+Not a regression from the label-indent change; not something the public
+`tview.Button`/`tview.Form` API exposes a way to remove either. Reported
+this finding rather than pretending to fix an unrelated, unreproducible
+"bug."
+
+Sections implemented via `tview.Form.AddTextView(label, "", 0, 1,
+false, false)`: scrollable=false makes a Form-embedded `TextView`
+non-focusable (`TextView.Focus()` special-cases `!scrollable` by
+immediately replaying the last Tab/Backtab instead of stopping there —
+confirmed by reading `textview.go`). Put the header text in the
+TextView's own *label* slot, not its body text — `Form.Draw()` reserves
+the same `maxLabelWidth` column for every item's body regardless of that
+item's own label length, so body text would render indented to the
+value column; label text, by contrast, always starts at the row's own
+left edge, matching every other field's label.
+
+This forced two structural changes since Backend/Name were previously
+looked up by fixed index (`GetFormItem(0)`/`GetFormItem(1)`), which no
+longer hold once headers occupy indices 0 and 2:
+- Every fixed-index lookup in `connections.go` (`NewConnEditor`,
+  `Show`, `save`, `ApplyPalette`) switched to `GetFormItemByLabel`. This
+  incidentally fixes a long-standing dead-code bug in `ApplyPalette`
+  (`GetFormItem(2)` had been silently targeting the wrong item since an
+  earlier structural move, per its own preserved comment — now
+  `GetFormItemByLabel("Backend")`, correctly restyling it on a live
+  theme switch).
+- `NewConnEditor` no longer duplicates the tail-field chain (Broker
+  Name/URL/Auth header/Username/Authentication Mode/Password) — it
+  builds only the static prefix (General header, Name, Destination
+  header, Backend) directly, then calls `rebuildTail("jolokia")` once to
+  build the rest, reusing that logic instead of maintaining two copies.
+  `rebuildTail`'s own wipe-loop boundary changed from a hardcoded `2` to
+  the new `staticPrefixItemCount = 4` constant.
+- `Show()` now explicitly calls `ce.form.SetFocus(ce.form.GetFormItemIndex("Name"))`
+  before showing the page. Needed because `tview.Form` remembers
+  `focusedElement` across `Show()` calls and defaults to index `0` on a
+  brand-new instance — now the non-focusable "General" header. Verified
+  via `textview.go` that landing there isn't fatal (`TextView.Focus()`
+  replays the last Tab/Backtab), but there is no "last" key yet on a
+  fresh editor, so focus would otherwise appear stuck there on first
+  open; forcing it onto Name sidesteps relying on that fallback.
+
+Renames: "Password Source" → "Authentication Mode"; "Password Secret
+Name" → "Secret Name" (`labelSecretName` constant, was
+`labelPasswordSecretName`). The save-validation error message's wording
+updated to match ("...when Authentication Mode is AWS Secret...").
+
+`app.go`'s `connEditorOverlay` fixed height (`ui.Centered(...)`)
+increased from 20 to 28 — discovered via live verification that the
+taller sectioned form (11 items in the jolokia+AWS-Secret worst case, up
+from 7) was clipped at the old height, hiding AWS Profile/Secret
+Name/Save/Cancel entirely below the box's bottom border. Recomputed
+using the same "border+padding (4) + items×2 + button row (1)" budget
+already documented in that file's existing comment convention.
+
+Tests added in `connections_test.go`: `TestConnEditorSectionHeadersPresentInOrder`
+(each header sits directly above the field it groups),
+`TestConnEditorSectionHeadersAreNotFocusable` (Tab from Name lands on
+Backend, skipping the Destination header — simulated via
+`Form.Focus(delegate)` + a direct `InputHandler()` Tab keypress, since
+`Form.SetFocus` alone doesn't wire the `SetFinishedFunc` callback a real
+Tab needs to propagate), and `TestConnEditorFormItemCount` (pins the
+11-item worst case so a future field addition that needs another
+overlay-height bump doesn't silently start clipping instead).
+
 ## `tui/config.example.yaml`
 
 Update the `passwordSecret` comment block to document
