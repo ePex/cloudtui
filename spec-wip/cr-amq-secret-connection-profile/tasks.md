@@ -15,16 +15,26 @@
 
 2. [x] **Connection editor UI.** Updated `setPasswordField`,
    `rebuildTail`, `Show`, and `save` in `connections.go` per `plan.md`
-   (the new "Secret AWS Profile" field, required-field validation).
-   Added 4 tests in `connections_test.go`:
-   `TestConnEditorSecretAWSProfileFieldTracksPasswordSource` (appears/
-   disappears with Password Source), `TestConnEditorSecretAWSProfileSurvivesBackendToggle`
+   (the new field, required-field validation). Added 4 tests in
+   `connections_test.go`: `TestConnEditorAWSProfileFieldTracksPasswordSource`
+   (appears/disappears with Password Source, and sits directly above
+   the secret-name field), `TestConnEditorAWSProfileSurvivesBackendToggle`
    (survives a jolokia->proxy->jolokia round trip), `TestConnEditorPasswordSecretAWSProfileRoundTrips`
    (Show()->edit->save() round-trip), and
-   `TestConnEditorSaveRequiresSecretAWSProfileWhenAWSSecretSelected`
+   `TestConnEditorSaveRequiresAWSProfileWhenAWSSecretSelected`
    (validation rejects an empty profile with AWS Secret selected).
    `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test ./...` all
    clean.
+
+   **Follow-up per user feedback**: the field was initially labeled
+   "Secret AWS Profile" and placed *below* "Password Secret (AWS)".
+   The user asked for it to lead instead — renamed to "AWS Profile",
+   moved above the secret-name field (also renamed, to "Password
+   Secret Name" for symmetry), in `setPasswordField`/`rebuildTail`/
+   `Show`/`save` and all 4 tests (which now also assert the field
+   order via `GetFormItemIndex`). Re-verified live via tmux: field
+   order/labels render correctly, and the full create->save->persist
+   round trip still works with the new names.
 
 3. [x] **Docs and manual verification.** Updated
    `tui/config.example.yaml`'s `passwordSecret` comment block and both
@@ -32,8 +42,8 @@
    `passwordSecretAWSProfile` field. Manually verified live via tmux
    against the real binary and the user's real config (backed up and
    restored around the test): created a new jolokia connection
-   (`zzz-cr-test`), switched Password Source to AWS Secret — "Secret
-   AWS Profile" appeared alongside "Password Secret (AWS)"; attempted
+   (`zzz-cr-test`), switched Password Source to AWS Secret — the AWS
+   profile field appeared alongside the secret-name field; attempted
    Save with the profile blank — blocked with status message "AWS
    Profile is required when Password Source is AWS Secret", editor
    stayed open; filled in the profile, saved successfully, confirmed

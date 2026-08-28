@@ -42,11 +42,11 @@ behavior made the ambiguity concrete.
   profile. This is a breaking config change for any existing connection
   using `passwordSecret`: it needs this field added by hand (or via the
   connection editor) to keep working.
-- Connection editor: a new "Secret AWS Profile" text field, shown
-  alongside "Password Secret (AWS)" only when Password Source = AWS
-  Secret (same conditional-visibility mechanism), and validated as
-  required on save when that source is selected (same pattern as the
-  existing "Name is required" check).
+- Connection editor: a new "AWS Profile" text field, shown directly
+  above "Password Secret Name" (renamed from "Password Secret (AWS)")
+  only when Password Source = AWS Secret (same conditional-visibility
+  mechanism), and validated as required on save when that source is
+  selected (same pattern as the existing "Name is required" check).
 - `secretbackend.New` drops its separate `profile string` parameter
   entirely — the profile now comes from the connection itself
   (`conn.Queue.PasswordSecretAWSProfile` /
@@ -81,5 +81,5 @@ behavior made the ambiguity concrete.
   spec/12, unchanged.
 - A profile-picker dropdown (reusing `awsprofile.List()`'s discovery)
   for the new field — a plain text input, matching every other field in
-  this form (including the existing "Password Secret (AWS)" field,
+  this form (including the existing "Password Secret Name" field,
   which is also freeform text with no autocomplete).
