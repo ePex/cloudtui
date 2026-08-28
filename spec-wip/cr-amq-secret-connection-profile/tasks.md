@@ -99,7 +99,34 @@
    activeConnection/activeAWSProfile were restored to their original
    values and confirmed via `config.yaml` before moving on.)
 
-6. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
+6. [x] **Bugfix: tabbing out of "AWS Profile" could silently change it**
+   (found by the user while editing an existing AWS-Secret connection).
+   Root cause: `wireAWSProfileAutocomplete`'s `SetAutocompleteFunc` call
+   in `setPasswordField` eagerly builds tview's autocomplete drop-down
+   while the field is still empty (fired by `Show()`'s
+   `SetCurrentOption(1)`, before `Show()` sets the real saved profile
+   text) — `SetText()` doesn't refresh an already-open drop-down, so it
+   stayed unfiltered/stale; tview's `InputField` treats Tab as "accept
+   the drop-down's current entry" rather than "move to the next field"
+   whenever a drop-down is open, so tabbing straight out silently
+   replaced the just-set profile with the stale list's pre-selected
+   entry (e.g. alphabetically-first). Fixed in `Show()` by calling
+   `profileItem.Autocomplete()` right after `SetText()` — the exact
+   same fix already used for `MessageFilter.jmsTypeItem` in
+   `messagefilter.go`'s own `Show()`. Added
+   `TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting`
+   (simulates the Tab keypress via `InputField.InputHandler()` directly
+   — confirmed it fails without the fix, via a `git stash` of just the
+   fix and re-running it, before restoring). `gofmt -l .`,
+   `go build ./...`, `go vet ./...`, `go test ./...` all clean.
+   Manually re-verified live via tmux against the real binary/config:
+   editing the real `redacted-aws-secret-connection` connection, tabbing
+   into "AWS Profile" now shows a drop-down correctly pre-filtered to
+   that profile's own prefix (not the full unfiltered list), and
+   tabbing straight out leaves the value unchanged and correctly
+   advances focus.
+
+7. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
    profile" out-of-scope line (this CR ships exactly that), document
    the new required field (including its autocomplete and its info

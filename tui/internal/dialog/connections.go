@@ -307,7 +307,18 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	// before its text is set below.
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
-		ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).SetText(passwordSecretProfile)
+		profileItem := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+		profileItem.SetText(passwordSecretProfile)
+		// SetText doesn't itself refresh an active SetAutocompleteFunc
+		// drop-down — without this, the field keeps whatever suggestions
+		// were current at wireAWSProfileAutocomplete's eager wiring call
+		// (fired above by SetCurrentOption, while the field was still
+		// empty), pre-selecting an unrelated entry. Left uncorrected, Tab
+		// out of this field (see setPasswordField/tview's own Tab-selects-
+		// current-entry behavior) would silently replace the just-set
+		// profile with that stale selection — same fix as MessageFilter's
+		// jmsTypeItem in messagefilter.go's own Show().
+		profileItem.Autocomplete()
 		ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).SetText(passwordSecret)
 	} else {
 		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
