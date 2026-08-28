@@ -46,7 +46,7 @@ various points — don't assume a fresh empty broker). Rules:
 
 ```bash
 cd tui
-go build -o /tmp/cloudtui_verify ./cmd/tui   # use your session's scratch dir if you have one, not shared /tmp under concurrent jobs
+go build -o /tmp/cloudtui_verify ./cmd/cloudtui   # use your session's scratch dir if you have one, not shared /tmp under concurrent jobs
 ```
 
 Seed test data (Jolokia only): `task seed:queue -- <queue> <count>` sends
