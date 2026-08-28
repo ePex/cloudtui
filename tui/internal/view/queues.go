@@ -34,6 +34,7 @@ type QueuesView struct {
 	allSummaries  []queue.Summary // full unfiltered list from last load
 	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
 	sortAsc       bool            // true = ascending
+	loadSeq       int             // incremented per Load() call; guards against a stale response landing after a newer one
 }
 
 var _ ui.View = (*QueuesView)(nil)
@@ -287,11 +288,24 @@ func (qv *QueuesView) setHeader() {
 }
 
 // load fetches queues from the backend in a goroutine and repaints via
-// QueueUpdateDraw so the update lands on the tview event loop.
+// QueueUpdateDraw so the update lands on the tview event loop. Shows a
+// loading placeholder immediately (a connection switch to a slow-to-warm-up
+// or unreachable backend can take up to ~60s — see proxy.go's GET-retry —
+// during which the table would otherwise keep showing a previous
+// connection's queues with no indication a fetch is even in progress).
+// loadSeq guards against a slow, superseded response clobbering a newer
+// one if Load() is called again (another connection switch, or `r`)
+// before the first call resolves.
 func (qv *QueuesView) Load() {
+	qv.loadSeq++
+	seq := qv.loadSeq
+	qv.showStatus("Loading queues…")
 	go func() {
 		summaries, err := qv.backend.List(context.Background())
 		qv.host.QueueUpdateDraw(func() {
+			if seq != qv.loadSeq {
+				return // superseded by a newer Load()
+			}
 			if err != nil {
 				slog.Error("queues: failed to list queues", "error", err)
 				qv.showError(err)
@@ -415,6 +429,20 @@ func (qv *QueuesView) showError(err error) {
 	qv.table.SetCell(1, 0,
 		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
 			SetTextColor(tcell.ColorRed).
+			SetExpansion(5),
+	)
+}
+
+// showStatus displays an in-progress, non-error message (e.g. while queues
+// are loading) — same shape as showError but accent-colored so it doesn't
+// read as a failure. Mirrors CodePipelineDetailView.showStatus.
+func (qv *QueuesView) showStatus(msg string) {
+	for qv.table.GetRowCount() > 1 {
+		qv.table.RemoveRow(qv.table.GetRowCount() - 1)
+	}
+	qv.table.SetCell(1, 0,
+		tview.NewTableCell(msg).
+			SetTextColor(tcell.GetColor(qv.host.Config().Colors.Accent)).
 			SetExpansion(5),
 	)
 }
