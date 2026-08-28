@@ -643,9 +643,10 @@ func TestQueuesViewShowReauthWaitingThenDone(t *testing.T) {
 	_, qv := newTestQueuesView(t)
 	qv.repaint([]queue.Summary{{Name: "orders"}}) // some prior state to overwrite
 
-	qv.ShowReauthWaiting()
-	if got := qv.table.GetCell(1, 0).Text; got != "AWS SSO session expired — opening browser to log in…" {
-		t.Errorf("row(1,0) after ShowReauthWaiting() = %q, want the SSO-wait message", got)
+	const msg = "AWS SSO session expired — opening browser to log in…"
+	qv.ShowReauthWaiting(msg)
+	if got := qv.table.GetCell(1, 0).Text; got != msg {
+		t.Errorf("row(1,0) after ShowReauthWaiting(%q) = %q, want it unchanged", msg, got)
 	}
 
 	qv.ShowReauthDone()

@@ -62,9 +62,11 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 - **AWS SSO re-auth**: on a connection whose password comes from AWS
   Secrets Manager, if the reload's fetch hits an expired SSO session,
   the "Loading queues…" placeholder switches to "AWS SSO session
-  expired — opening browser to log in…" for the duration of the login,
-  then reverts to "Loading queues…" once login completes (success or
-  failure), before the fetch itself retries — see
+  expired — opening browser to log in…" for the duration of the login —
+  updated in place to append the device verification code/URL once `aws
+  sso login`'s subprocess prints them (see spec/14-aws-profiles for why
+  this matters) — then reverts to "Loading queues…" once login completes
+  (success or failure), before the fetch itself retries — see
   spec/12-named-connections for the underlying mechanism
   (`secretbackend.SecretResolver`, `ui.ReauthStatusShower`). The bottom
   status bar is not also used for this — showing the same message in

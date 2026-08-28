@@ -115,3 +115,16 @@ func TestCodePipelineDetailViewShowStatusRendersMessage(t *testing.T) {
 		t.Errorf("status cell color = %v, want accent color %v", fg, want)
 	}
 }
+
+// TestCodePipelineDetailViewShowStatusRendersDeviceCodeMessage — see
+// ssmparams_test.go's equivalent test for why load() itself isn't
+// driven here.
+func TestCodePipelineDetailViewShowStatusRendersDeviceCodeMessage(t *testing.T) {
+	_, dv := newTestCodePipelineDetailView(t)
+
+	dv.showStatus("AWS SSO session expired — opening browser to log in... Verify code WDJB-MJHT at https://device.sso.us-east-1.amazonaws.com/")
+
+	if got := dv.table.GetCell(1, 0).Text; !strings.Contains(got, "Verify code WDJB-MJHT at") {
+		t.Errorf("status cell = %q, want it to contain the device verification code/URL", got)
+	}
+}

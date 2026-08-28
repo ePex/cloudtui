@@ -172,13 +172,19 @@ func (lv *CodePipelineListView) load() {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
 		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
 		pipelines, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
 			func() {
 				lv.host.QueueUpdateDraw(func() {
-					lv.showStatus("AWS SSO session expired — opening browser to log in...")
+					lv.showStatus(reauthWaitingMsg)
+				})
+			},
+			func(code, url string) {
+				lv.host.QueueUpdateDraw(func() {
+					lv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.Pipeline, error) {

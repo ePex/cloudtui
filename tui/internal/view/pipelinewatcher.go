@@ -102,6 +102,7 @@ func (w *PipelineWatcher) pollPipeline(name, profile string, stop chan struct{})
 		authType, _ := w.host.AWSAuthTypeFor(ctx, profile)
 		stages, err := awsauth.WithReauth(ctx, profile, authType, w.host.AWSSSOLogin,
 			nil, // no in-progress status message — this isn't a visible search view
+			nil, // ...and so no device code/URL display either, for the same reason
 			func(ctx context.Context) ([]awscodepipeline.StageStatus, error) {
 				return w.host.GetPipelineState(ctx, profile, name)
 			},

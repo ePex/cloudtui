@@ -174,13 +174,19 @@ func (sv *SecretsView) load() {
 		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
 		authType, _ := sv.host.AWSAuthTypeFor(ctx, profile)
 		secrets, err := awsauth.WithReauth(ctx, profile, authType, sv.host.AWSSSOLogin,
 			func() {
 				sv.host.QueueUpdateDraw(func() {
-					sv.showStatus("AWS SSO session expired — opening browser to log in...")
+					sv.showStatus(reauthWaitingMsg)
+				})
+			},
+			func(code, url string) {
+				sv.host.QueueUpdateDraw(func() {
+					sv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awssecrets.Secret, error) {
