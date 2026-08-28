@@ -43,21 +43,34 @@ behavior made the ambiguity concrete.
   using `passwordSecret`: it needs this field added by hand (or via the
   connection editor) to keep working.
 - Connection editor: a new "AWS Profile" text field, shown directly
-  above "Password Secret Name" (renamed from "Password Secret (AWS)")
-  only when Password Source = AWS Secret (same conditional-visibility
-  mechanism), and validated as required on save when that source is
-  selected (same pattern as the existing "Name is required" check).
-  Whichever field(s) Password Source currently shows below it
-  ("Password" for Plain, or "AWS Profile"/"Password Secret Name" for
-  AWS Secret) render with a 2-space label indent, reading as visually
-  nested under Password Source rather than a peer of Name/Backend/URL.
-  The field offers autocomplete against the same discovered-profile
-  source as Settings → AWS Profiles (`host.ListAWSProfiles`, i.e.
-  `awsprofile.List()`), filtered by prefix — same mechanism and
-  degrade-on-error behavior as the existing JMS Type field's
-  autocomplete (`MessageFilter.jmsTypeSuggestions`). It remains a
-  plain, freeform `InputField` underneath: autocomplete only offers
-  suggestions, it never restricts input to known profiles.
+  above "Secret Name" (renamed from "Password Secret (AWS)", then again
+  from "Password Secret Name") only when Authentication Mode (renamed
+  from "Password Source") = AWS Secret, and validated as required on
+  save when that source is selected (same pattern as the existing "Name
+  is required" check). Whichever field(s) Authentication Mode currently
+  shows below it ("Password" for Plain, or "AWS Profile"/"Secret Name"
+  for AWS Secret) render with a 2-space label indent, reading as
+  visually nested under Authentication Mode rather than a peer of
+  Name/Backend/URL. The field offers autocomplete against the same
+  discovered-profile source as Settings → AWS Profiles
+  (`host.ListAWSProfiles`, i.e. `awsprofile.List()`), filtered by
+  prefix — same mechanism and degrade-on-error behavior as the existing
+  JMS Type field's autocomplete (`MessageFilter.jmsTypeSuggestions`). It
+  remains a plain, freeform `InputField` underneath: autocomplete only
+  offers suggestions, it never restricts input to known profiles.
+- Connection editor form reorganized into three visually-separated,
+  non-interactive section headers (`── General ──`, `── Destination ──`,
+  `── Auth ──`, added via `tview.Form.AddTextView` with
+  `scrollable=false`, which makes a Form-embedded `TextView`
+  non-focusable — Tab skips straight over it): General holds Name;
+  Destination holds Backend and whatever it implies (Broker Name for
+  jolokia, URL for both); Auth holds Username, Authentication Mode, and
+  the indented field(s) described above. Save/Cancel remain unindented,
+  last, outside every section. Prompted by the same conversation that
+  named/positioned the AWS Profile field — the editor's fixed overlay
+  height (`app.go`'s `connEditorOverlay`) was widened from 20 to 28 rows
+  to fit the now-taller worst case (jolokia + AWS Secret, 11 form
+  items) without clipping.
 - `secretbackend.New` drops its separate `profile string` parameter
   entirely — the profile now comes from the connection itself
   (`conn.Queue.PasswordSecretAWSProfile` /
@@ -102,3 +115,7 @@ behavior made the ambiguity concrete.
   autocomplete (added per user feedback after the initial cut), not a
   constrained selector; an unlisted or not-yet-configured profile name
   must still be typeable.
+- Any further reorganization of the connection editor beyond the three
+  sections above (e.g. a genuinely collapsible/foldable section, or
+  sections that persist a per-user open/closed state) — these are
+  always-expanded, purely visual groupings.

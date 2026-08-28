@@ -59,9 +59,9 @@ func TestConnEditorOtherKeysPassThrough(t *testing.T) {
 }
 
 // TestConnEditorAWSProfileFieldTracksPasswordSource confirms "AWS
-// Profile" only exists alongside "Password Secret Name", appears above
-// it, and both are added by selecting "AWS Secret" / removed by
-// selecting "Plain".
+// Profile" only exists alongside "Secret Name", appears above it, and
+// both are added by selecting "AWS Secret" / removed by selecting
+// "Plain".
 func TestConnEditorAWSProfileFieldTracksPasswordSource(t *testing.T) {
 	ce, _ := newTestConnEditor(t)
 	ce.Show(config.Connection{}, true, "")
@@ -70,17 +70,17 @@ func TestConnEditorAWSProfileFieldTracksPasswordSource(t *testing.T) {
 		t.Fatal(`"AWS Profile" present before selecting "AWS Secret"`)
 	}
 
-	source := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown)
+	source := ce.form.GetFormItemByLabel(labelAuthenticationMode).(*tview.DropDown)
 	source.SetCurrentOption(1) // AWS Secret
 
 	if _, ok := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); !ok {
 		t.Fatal(`"AWS Profile" missing after selecting "AWS Secret"`)
 	}
-	if _, ok := ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField); !ok {
-		t.Fatal(`"Password Secret Name" missing after selecting "AWS Secret"`)
+	if _, ok := ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField); !ok {
+		t.Fatal(`"Secret Name" missing after selecting "AWS Secret"`)
 	}
-	if profileIdx, secretIdx := ce.form.GetFormItemIndex(labelAWSProfile), ce.form.GetFormItemIndex(labelPasswordSecretName); profileIdx != secretIdx-1 {
-		t.Errorf(`"AWS Profile" (index %d) is not directly above "Password Secret Name" (index %d)`, profileIdx, secretIdx)
+	if profileIdx, secretIdx := ce.form.GetFormItemIndex(labelAWSProfile), ce.form.GetFormItemIndex(labelSecretName); profileIdx != secretIdx-1 {
+		t.Errorf(`"AWS Profile" (index %d) is not directly above "Secret Name" (index %d)`, profileIdx, secretIdx)
 	}
 
 	source.SetCurrentOption(0) // Plain
@@ -96,25 +96,24 @@ func TestConnEditorAWSProfileFieldTracksPasswordSource(t *testing.T) {
 // TestConnEditorAWSProfileSurvivesBackendToggle confirms rebuildTail
 // (fired by the Backend dropdown) preserves whatever was typed into
 // "AWS Profile" across a jolokia -> proxy -> jolokia round trip, the
-// same guarantee already relied on for the Password Secret Name field
-// itself.
+// same guarantee already relied on for the Secret Name field itself.
 func TestConnEditorAWSProfileSurvivesBackendToggle(t *testing.T) {
 	ce, _ := newTestConnEditor(t)
 	ce.Show(config.Connection{}, true, "")
 
-	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(1) // AWS Secret
+	ce.form.GetFormItemByLabel(labelAuthenticationMode).(*tview.DropDown).SetCurrentOption(1) // AWS Secret
 	ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).SetText("work")
-	ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).SetText("my/secret")
+	ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField).SetText("my/secret")
 
-	backend := ce.form.GetFormItem(1).(*tview.DropDown)
+	backend := ce.form.GetFormItemByLabel("Backend").(*tview.DropDown)
 	backend.SetCurrentOption(1) // proxy
 	backend.SetCurrentOption(0) // back to jolokia
 
 	if got := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).GetText(); got != "work" {
 		t.Errorf(`AWS Profile = %q after Backend round trip, want "work"`, got)
 	}
-	if got := ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).GetText(); got != "my/secret" {
-		t.Errorf(`Password Secret Name = %q after Backend round trip, want "my/secret"`, got)
+	if got := ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField).GetText(); got != "my/secret" {
+		t.Errorf(`Secret Name = %q after Backend round trip, want "my/secret"`, got)
 	}
 }
 
@@ -159,9 +158,9 @@ func TestConnEditorSaveRequiresAWSProfileWhenAWSSecretSelected(t *testing.T) {
 	ce, host := newTestConnEditor(t)
 	ce.Show(config.Connection{}, true, "")
 
-	ce.form.GetFormItem(0).(*tview.InputField).SetText("orders")
-	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(1) // AWS Secret
-	ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).SetText("my/secret")
+	ce.form.GetFormItemByLabel("Name").(*tview.InputField).SetText("orders")
+	ce.form.GetFormItemByLabel(labelAuthenticationMode).(*tview.DropDown).SetCurrentOption(1) // AWS Secret
+	ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField).SetText("my/secret")
 	// AWS Profile left blank.
 
 	ce.save()
@@ -259,5 +258,84 @@ func TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting(t *testing.T) {
 
 	if got := item.GetText(); got != "foo-bar" {
 		t.Errorf("AWS Profile after tabbing out unchanged = %q, want unchanged %q", got, "foo-bar")
+	}
+}
+
+// TestConnEditorSectionHeadersPresentInOrder confirms the three
+// non-interactive section headers exist as form items (not just visual
+// decoration bolted on elsewhere) and appear directly above the field
+// each groups: General above Name, Destination above Backend, Auth
+// above Username.
+func TestConnEditorSectionHeadersPresentInOrder(t *testing.T) {
+	ce, _ := newTestConnEditor(t)
+	ce.Show(config.Connection{}, true, "")
+
+	for _, tt := range []struct{ header, field string }{
+		{sectionGeneral, "Name"},
+		{sectionDestination, "Backend"},
+		{sectionAuth, "Username"},
+	} {
+		headerIdx := ce.form.GetFormItemIndex(tt.header)
+		if headerIdx < 0 {
+			t.Errorf("section header %q not found", tt.header)
+			continue
+		}
+		if fieldIdx := ce.form.GetFormItemIndex(tt.field); fieldIdx != headerIdx+1 {
+			t.Errorf("%q (index %d) is not directly above %q (index %d)", tt.header, headerIdx, tt.field, fieldIdx)
+		}
+	}
+}
+
+// TestConnEditorSectionHeadersAreNotFocusable confirms tabbing from Name
+// skips straight to Backend — the "Destination" header in between must
+// not consume a Tab press or ever receive focus itself, since it's pure
+// decoration (AddTextView's scrollable=false is what makes a Form-
+// embedded TextView non-focusable — see TextView.Focus(), which replays
+// the last Tab/Backtab instead of stopping there).
+//
+// Form.Focus(delegate) must actually run (not just Form.SetFocus, which
+// only repositions focusedElement) — it's what wires every item's
+// SetFinishedFunc to the Tab/Backtab-handling closure Form.Focus keeps
+// in its own scope; without it, an item's own InputHandler has no
+// finished callback to call and a Tab keypress delivered directly to it
+// is a no-op, never reaching Form's focus-advance logic at all.
+func TestConnEditorSectionHeadersAreNotFocusable(t *testing.T) {
+	ce, _ := newTestConnEditor(t)
+	ce.Show(config.Connection{}, true, "")
+
+	ce.form.SetFocus(ce.form.GetFormItemIndex("Name"))
+	var focus func(p tview.Primitive)
+	focus = func(p tview.Primitive) { p.Focus(focus) }
+	ce.form.Focus(focus)
+
+	name := ce.form.GetFormItemByLabel("Name").(*tview.InputField)
+	name.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), focus)
+
+	backend := ce.form.GetFormItemByLabel("Backend").(*tview.DropDown)
+	if !backend.HasFocus() {
+		t.Error("Tab from Name did not land on Backend — the Destination header was not skipped")
+	}
+}
+
+// TestConnEditorFormItemCount pins the exact item count for the tallest
+// possible layout (jolokia backend, AWS Secret auth — the only
+// combination including every optional field: Broker Name, AWS Profile,
+// and Secret Name all at once). app.go's connEditorOverlay height budget
+// comment is derived from this number; if this test's expected count
+// ever needs to change, that comment (and the overlay's fixed height)
+// needs updating too, or the form will start clipping again.
+func TestConnEditorFormItemCount(t *testing.T) {
+	ce, _ := newTestConnEditor(t)
+	conn := config.Connection{
+		Backend: "jolokia",
+		Queue:   config.QueueConfig{PasswordSecret: "s", PasswordSecretAWSProfile: "p"},
+	}
+	ce.Show(conn, true, "")
+
+	// General header, Name, Destination header, Backend, Broker Name,
+	// URL, Auth header, Username, Authentication Mode, AWS Profile,
+	// Secret Name.
+	if got, want := ce.form.GetFormItemCount(), 11; got != want {
+		t.Errorf("GetFormItemCount() = %d, want %d (keep app.go's connEditorOverlay height comment in sync)", got, want)
 	}
 }
