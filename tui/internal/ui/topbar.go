@@ -77,10 +77,20 @@ func InfoPanelText(cfg config.Config) string {
 	if awsProfile == "" {
 		awsProfile = "(none)"
 	}
+	conn := cfg.ActiveConn()
+	connLine := conn.Name
+	// A secret-backed connection's password profile is independent of
+	// ActiveAWSProfile below (spec/12-named-connections) — surfaced here
+	// too so it's clear at a glance which account a connection using AWS
+	// Secret actually authenticates against, without having to open the
+	// connection editor.
+	if secretProfile := conn.SecretAWSProfile(); secretProfile != "" {
+		connLine = fmt.Sprintf("%s [%s](AWS: %s)[-]", conn.Name, cfg.Colors.Label, secretProfile)
+	}
 	return fmt.Sprintf(
 		"[%s]Theme:[-] [%s]%s[-]\n[%s]AMQ Connection:[-] [%s]%s[-]\n[%s]AWS Profile:[-] [%s]%s[-]",
 		cfg.Colors.Label, cfg.Colors.Value, cfg.Theme,
-		cfg.Colors.Label, cfg.Colors.Value, cfg.ActiveConn().Name,
+		cfg.Colors.Label, cfg.Colors.Value, connLine,
 		cfg.Colors.Label, cfg.Colors.Value, awsProfile,
 	)
 }

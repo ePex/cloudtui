@@ -166,6 +166,24 @@ func (c Config) ActiveConn() Connection {
 	return Connection{}
 }
 
+// SecretAWSProfile returns the AWS profile used to resolve c's password
+// secret, or "" if c authenticates with a plain password instead
+// (backend-appropriate PasswordSecret is empty) — including a
+// hand-edited config with PasswordSecretAWSProfile set but PasswordSecret
+// left blank, which doesn't actually use a secret.
+func (c Connection) SecretAWSProfile() string {
+	if c.Backend == "proxy" {
+		if c.Proxy.PasswordSecret == "" {
+			return ""
+		}
+		return c.Proxy.PasswordSecretAWSProfile
+	}
+	if c.Queue.PasswordSecret == "" {
+		return ""
+	}
+	return c.Queue.PasswordSecretAWSProfile
+}
+
 // QueueConfig holds the connection settings for the ActiveMQ Jolokia backend.
 // Password is intentionally kept out of version control: leave it empty here
 // and set MQPROXY_CLIENT_PASSWORD instead.
@@ -175,9 +193,16 @@ type QueueConfig struct {
 	Username   string `yaml:"username"`
 	Password   string `yaml:"password"`
 	// PasswordSecret, when non-empty, names an AWS Secrets Manager secret
-	// resolved at connect time via the active AWS profile; it takes
-	// precedence over Password (see spec/56-fe-amq-connection-aws-secret-password).
+	// resolved at connect time via PasswordSecretAWSProfile; it takes
+	// precedence over Password (see spec/12-named-connections).
 	PasswordSecret string `yaml:"passwordSecret,omitempty"`
+	// PasswordSecretAWSProfile names the AWS profile used to resolve
+	// PasswordSecret — required whenever PasswordSecret is set.
+	// Independent of cfg.ActiveAWSProfile, the profile used for SSM
+	// Parameters/Secrets Manager/CloudWatch Logs/CodePipeline browsing —
+	// switching that one has no effect on an already-configured
+	// connection's password.
+	PasswordSecretAWSProfile string `yaml:"passwordSecretAWSProfile,omitempty"`
 }
 
 // ProxyConfig holds the connection settings for the mq-proxy backend.
@@ -186,9 +211,16 @@ type ProxyConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	// PasswordSecret, when non-empty, names an AWS Secrets Manager secret
-	// resolved at connect time via the active AWS profile; it takes
-	// precedence over Password (see spec/56-fe-amq-connection-aws-secret-password).
+	// resolved at connect time via PasswordSecretAWSProfile; it takes
+	// precedence over Password (see spec/12-named-connections).
 	PasswordSecret string `yaml:"passwordSecret,omitempty"`
+	// PasswordSecretAWSProfile names the AWS profile used to resolve
+	// PasswordSecret — required whenever PasswordSecret is set.
+	// Independent of cfg.ActiveAWSProfile, the profile used for SSM
+	// Parameters/Secrets Manager/CloudWatch Logs/CodePipeline browsing —
+	// switching that one has no effect on an already-configured
+	// connection's password.
+	PasswordSecretAWSProfile string `yaml:"passwordSecretAWSProfile,omitempty"`
 }
 
 // Palette is the set of named colors used across the shell chrome. Values are

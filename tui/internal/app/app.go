@@ -223,7 +223,7 @@ func New(cfg config.Config) *App {
 
 	// All shell primitives are constructed.
 	a.logV = view.NewLogView()
-	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveAWSProfile, cfg.ActiveConn())
+	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveConn())
 
 	// Dialogs used directly by the views below (rather than through
 	// ui.ViewHost — see spec/80/83) must exist before those views are
@@ -332,9 +332,13 @@ func New(cfg config.Config) *App {
 
 	a.connEditor = dialog.NewConnEditor(a, a.connManager)
 	a.connManager.SetEditor(a.connEditor)
-	// Height must cover border+padding (4 rows) + 7 items * (field + item
-	// padding) (14 rows) + button row (1 row) = 19; give it one spare row.
-	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 20)
+	// Height must cover border+padding (4 rows) + 11 items * (field + item
+	// padding) (22 rows) + button row (1 row) = 27; give it one spare row.
+	// 11 is the tallest case: the 3 section headers (General/Destination/
+	// Auth), Name, Backend, Broker Name, URL, Username, Authentication
+	// Mode, AWS Profile, Secret Name — jolokia backend with AWS Secret
+	// selected.
+	connEditorOverlay := ui.Centered(a.connEditor.Primitive(), 64, 28)
 
 	// Height must cover border+padding (4 rows) + 4 items * 2 (10 rows) +
 	// button row (1 row) = 15; give it one spare row.
@@ -620,7 +624,7 @@ func (a *App) switchConnection(name string) {
 		return
 	}
 	a.cfg.ActiveConnection = name
-	a.backend = secretbackend.New(a.secretResolver, a.cfg.ActiveAWSProfile, conn)
+	a.backend = secretbackend.New(a.secretResolver, conn)
 	a.queuesV.SetBackend(a.backend)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 	a.settingsV.Refresh()
