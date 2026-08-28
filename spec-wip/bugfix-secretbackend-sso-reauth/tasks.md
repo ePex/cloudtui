@@ -30,6 +30,15 @@
    and extended `TestResolveSurfacesErrorWhenReauthLoginFails` to assert
    `onReauthDone` fires even when `login` fails. All tests pass;
    `go build`/`go vet`/`go test ./...` still clean.
+   **Second live-testing round**: showing the message in both the
+   status bar *and* the active view's own display at once was
+   redundant. Extracted `app.go`'s inline closures into named
+   `showReauthWaiting`/`showReauthDone` methods (directly testable
+   without touching the real `QueueUpdateDraw`) and made the status-bar
+   fallback mutually exclusive with the view-level display, per
+   `plan.md`. Added 4 new `internal/app` tests confirming both branches
+   (queues view handles it / home view falls back to the status bar).
+   All tests pass; `go build`/`go vet`/`go test ./...` still clean.
 
 2. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution (AWS-Secrets-Manager-backed passwords)" section

@@ -133,36 +133,48 @@ becomes:
 
 ```go
 a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin,
-	func() {
-		a.QueueUpdateDraw(func() {
-			a.SetStatus("AWS SSO session expired — opening browser to log in...")
-			if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
-				av.ShowReauthWaiting()
-			}
-		})
-	},
-	func() {
-		a.QueueUpdateDraw(func() {
-			a.SetStatus("")
-			if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
-				av.ShowReauthDone()
-			}
-		})
-	},
+	func() { a.QueueUpdateDraw(a.showReauthWaiting) },
+	func() { a.QueueUpdateDraw(a.showReauthDone) },
 )
 ```
 
-Uses the bottom status bar (`SetStatus`) *and*, if the currently active
-view implements `ui.ReauthStatusShower`, its own table-level message too
-— covers both UI regions the live test found showing stale/disconnected
-text. `onReauthDone` also clears the status bar back to `""`, so it
-doesn't linger after login completes the way it did before this
-addendum. Not unit-tested at this exact call-site level (it's a thin,
-direct composition of already-tested primitives — `SetStatus`,
-`QueueUpdateDraw`, `activeView`, the type-assert dispatch pattern already
-used for `Themeable` — with no independent logic of its own); covered
-indirectly by `SecretResolver`'s wiring tests plus `QueuesView`'s own
-`ShowReauthWaiting`/`ShowReauthDone` tests.
+`showReauthWaiting`/`showReauthDone` are new named methods (next to
+`activeView`, which they use) rather than inline closures — split out
+specifically so the dispatch logic is directly unit-testable without
+going through the real `tview.Application.QueueUpdateDraw` (which needs
+a running event loop; no existing `internal/app` test exercises it
+directly, so this keeps the untested surface to the thin
+`QueueUpdateDraw` wrapper alone, consistent with `plan.md`'s original
+reasoning for not testing that specific hop):
+
+```go
+func (a *App) showReauthWaiting() {
+	if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+		av.ShowReauthWaiting()
+	} else {
+		a.SetStatus("AWS SSO session expired — opening browser to log in...")
+	}
+}
+
+func (a *App) showReauthDone() {
+	if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+		av.ShowReauthDone()
+	} else {
+		a.SetStatus("")
+	}
+}
+```
+
+### Second live-testing round: don't show both at once
+
+First addendum's version (above the code block) set the status bar
+*and* called the active view's `ShowReauthWaiting`/`ShowReauthDone`
+unconditionally — live-tested again, and the user found this redundant:
+once `QueuesView` correctly showed and reverted its own message, the
+same text appearing in the status bar too was just noise, not a useful
+second signal. Fixed by making them mutually exclusive (`if/else` above)
+— the status bar is purely a fallback for a view that doesn't implement
+`ui.ReauthStatusShower`, not a second, simultaneous display.
 
 ## `tui/internal/queue/secretbackend/secretbackend_test.go`
 
@@ -200,6 +212,21 @@ indirectly by `SecretResolver`'s wiring tests plus `QueuesView`'s own
   state (so there's something to overwrite), `ShowReauthWaiting()`
   shows the SSO-wait message and `ShowReauthDone()` reverts to
   `loadingQueuesStatus`.
+
+## `tui/internal/app/app_test.go`
+
+Four tests against the new named methods (constructing a real `*App`,
+no fakes needed — `showReauthWaiting`/`showReauthDone` don't touch
+`QueueUpdateDraw` themselves):
+
+- `TestShowReauthWaitingDelegatesToActiveViewWhenSupported` /
+  `TestShowReauthDoneRevertsActiveViewWhenSupported` — with `queues`
+  active, both delegate to `QueuesView`'s own display and leave the
+  status bar empty.
+- `TestShowReauthWaitingFallsBackToStatusBarWithoutSupport` /
+  `TestShowReauthDoneClearsStatusBarWithoutSupport` — with `home`
+  active (doesn't implement `ui.ReauthStatusShower`), both fall back to
+  the status bar.
 
 ## Manual verification
 
