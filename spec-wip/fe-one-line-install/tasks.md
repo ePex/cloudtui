@@ -54,15 +54,18 @@
    of that section's restructuring happens incrementally as each
    remaining method lands, task 8 does the final pass).
 
-5. [ ] **Homebrew tap.** Create the `ePex/homebrew-tap` repo (empty,
-   public). Add the `brews:` block to `.goreleaser.yaml` per `plan.md`
-   §3, and the `HOMEBREW_TAP_GITHUB_TOKEN` secret + env passthrough to
-   `.github/workflows/release.yml`. **Blocked on the user**: creating the
-   PAT and running `gh secret set HOMEBREW_TAP_GITHUB_TOKEN --repo
-   ePex/cloudtui` — this task pauses for that before it can be
-   considered done (verify with `gh secret list`, name only, never the
-   value). No live release exists yet to test this against; verification
-   happens for real at the next tag push (task 10 covers cutting one).
+5. [x] **Homebrew tap.** Created the `ePex/homebrew-tap` repo (with an
+   initial commit so it has a default branch to push to). Added a
+   `homebrew_casks:` block to `.goreleaser.yaml` per `plan.md` §3 — note
+   the correction there: GoReleaser's `brews:` is hard-deprecated as of
+   v2.16, replaced with the cask-based mechanism, confirmed via a local
+   `goreleaser check` + `goreleaser release --snapshot --clean` dry run
+   (inspected the generated `Casks/cloudtui.rb`, correct per-OS/arch
+   URLs and checksums). Added the `HOMEBREW_TAP_GITHUB_TOKEN` env
+   passthrough to `.github/workflows/release.yml`. User created the PAT
+   and ran `gh secret set` — confirmed registered via `gh secret list`
+   (name only). No live release exists yet to test the actual push; that
+   happens for real at the next tag (task 10).
 
 6. [ ] **Scoop bucket.** Same shape as task 5, targeting
    `ePex/scoop-bucket` and `SCOOP_BUCKET_GITHUB_TOKEN`.
