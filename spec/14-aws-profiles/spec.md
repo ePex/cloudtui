@@ -35,16 +35,29 @@ user dropping to a terminal.
   purely a discovery aid / remembered selection: `cfg.ActiveAWSProfile` is
   not wired into `config.Connection` or any backend.
 - **Automatic SSO re-authentication**: when an AWS-backed view (SSM
-  Parameters, Secrets Manager, CloudWatch Logs) fails a load specifically
-  because the active SSO profile's cached token is missing/expired, the
-  view shows a status message ("AWS SSO session expired — opening browser
-  to log in..."), shells out to `aws sso login --profile <name>` in the
-  background (on the existing load goroutine — no extra async wiring), and
-  on success silently retries the original call once. If the retry also
-  fails, the second error is shown normally (`showError`) — no retry
-  loops. Any other failure (network error, real `AccessDenied`, bad
-  parameter path, no profile selected, or a non-SSO auth type) is shown as
-  a plain error immediately, unchanged.
+  Parameters, Secrets Manager, CloudWatch Logs, CodePipeline list/detail,
+  or a secret-backed AMQ connection via `secretbackend`, spec/12) fails a
+  load specifically because the active SSO profile's cached token is
+  missing/expired, the view shows a status message ("AWS SSO session
+  expired — opening browser to log in..."), shells out to `aws sso login
+  --profile <name>` in the background (on the existing load goroutine —
+  no extra async wiring), and on success silently retries the original
+  call once. If the retry also fails, the second error is shown normally
+  (`showError`) — no retry loops. Any other failure (network error, real
+  `AccessDenied`, bad parameter path, no profile selected, or a non-SSO
+  auth type) is shown as a plain error immediately, unchanged.
+- **Device verification code/URL**: the same status message is updated
+  in place, once `aws sso login`'s device-authorization flow prints them
+  (while the browser is still open, not just after login completes), to
+  append the verification code and URL — e.g. "...opening browser to log
+  in... Verify code WDJB-MJHT at https://device.sso.us-east-1.amazonaws.com/".
+  This is how the user confirms the browser page that opened is actually
+  theirs to approve (anti-phishing measure inherent to OAuth
+  device-authorization grant, RFC 8628) and gives them a URL to copy into
+  a different browser if the wrong one opened. The background pipeline
+  watcher (`PipelineWatcher.pollPipeline`) deliberately shows neither this
+  nor the base status message — it isn't a visible search view, matching
+  its existing design.
 
 ## Data & config
 
@@ -84,12 +97,24 @@ auto-reauth for it (reauth is gated on `AuthType == AuthSSO`).
 - `tui/internal/awsprofile/` — `List()`, `classify()` (SSO-first
   precedence).
 - `tui/internal/awsauth/` — `NeedsReauth(err error, auth
-  awsprofile.AuthType) bool` and `Login(ctx, profile string) error` (the
-  `aws sso login` shell-out). `NeedsReauth` is true only when both: the
-  active profile's `AuthType` is SSO, and the error indicates an
-  invalid/missing/expired cached token — `errors.As` against
-  `*ssocreds.InvalidTokenError` (legacy `sso_start_url` profiles) plus a
-  narrow string check for the `sso-session`-style expired-token error.
+  awsprofile.AuthType) bool` and `Login(ctx, profile string, onCode
+  func(code, url string)) error` (the `aws sso login` shell-out).
+  `NeedsReauth` is true only when both: the active profile's `AuthType`
+  is SSO, and the error indicates an invalid/missing/expired cached
+  token — `errors.As` against `*ssocreds.InvalidTokenError` (legacy
+  `sso_start_url` profiles) plus a narrow string check for the
+  `sso-session`-style expired-token error. `Login` streams the CLI
+  subprocess's output live (`io.Pipe` + a scanning goroutine, not
+  `CombinedOutput()`) so `onCode` can fire — exactly once, with the
+  device verification code and URL — as soon as both are printed, well
+  before the command itself exits (it blocks until the user finishes the
+  browser flow). Parses by anchoring on literal substrings confirmed
+  against the real AWS CLI's own source
+  (`awscli/customizations/sso/utils.go`'s `OpenBrowserHandler`) — "open
+  the following URL:" then "Then enter the code:", each followed by the
+  value on the next non-blank line — not a code-format regex, so a
+  future CLI wording change just means `onCode` doesn't fire rather than
+  `Login` misbehaving.
 - SSM Parameters', Secrets Manager's, CloudWatch Logs', and CodePipeline's
   (list, detail, and the background watcher) `load()`/poll functions all
   go through one shared retry helper, `awsauth.WithReauth`, rather than
