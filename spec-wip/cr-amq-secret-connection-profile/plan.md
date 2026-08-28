@@ -87,22 +87,26 @@ code (initial construction, `Show()`, `setPasswordField`, `rebuildTail`,
 1. **`setPasswordField(sourceIdx)`**: currently swaps exactly the one
    trailing item. Needs to remove/add *two* items when the AWS Secret
    side is involved, and must work regardless of which state it's
-   currently in (checked via whether "Secret AWS Profile" currently
-   exists, not via a separately-tracked flag):
+   currently in (checked via whether "AWS Profile" currently exists,
+   not via a separately-tracked flag). Field order is "AWS Profile"
+   above "Password Secret Name" (renamed from "Password Secret (AWS)")
+   — the user asked for the profile field to lead, since it's the more
+   fundamental choice ("which account") with the secret name scoped
+   under it:
 
    ```go
    func (ce *ConnEditor) setPasswordField(sourceIdx int) {
    	f := ce.form
    	currentCount := 1
-   	if _, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+   	if _, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
    		currentCount = 2
    	}
    	for i := 0; i < currentCount; i++ {
    		f.RemoveFormItem(f.GetFormItemCount() - 1)
    	}
    	if sourceIdx == 1 {
-   		f.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
-   		f.AddInputField("Secret AWS Profile", "", 20, nil, nil)
+   		f.AddInputField("AWS Profile", "", 20, nil, nil)
+   		f.AddInputField("Password Secret Name", "", 30, nil, nil)
    	} else {
    		f.AddPasswordField("Password", "", 20, '*', nil)
    	}
@@ -117,14 +121,14 @@ code (initial construction, `Show()`, `setPasswordField`, `rebuildTail`,
    ```go
    var url, username, passwordOrSecret, secretProfile string
    // ...
-   if item, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+   if item, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
    	secretProfile = item.GetText()
    }
    // ... (existing wipe loop unchanged)
    f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
    if sourceIdx == 1 {
-   	f.AddInputField("Password Secret (AWS)", passwordOrSecret, 30, nil, nil)
-   	f.AddInputField("Secret AWS Profile", secretProfile, 20, nil, nil)
+   	f.AddInputField("AWS Profile", secretProfile, 20, nil, nil)
+   	f.AddInputField("Password Secret Name", passwordOrSecret, 30, nil, nil)
    } else {
    	f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
    }
@@ -163,12 +167,13 @@ code (initial construction, `Show()`, `setPasswordField`, `rebuildTail`,
   `TestSetActiveAWSProfilePersistsAndUpdatesUI` stays (still valid —
   `SetActiveAWSProfile` still updates the info panel/settings list/config,
   just doesn't touch `a.backend` anymore).
-- `tui/internal/dialog/connections_test.go`: new tests for the "Secret
-  AWS Profile" field mirroring the existing "Password Secret (AWS)"
-  field's own test coverage — appears/disappears with Password Source,
-  survives a Backend toggle round-trip (`rebuildTail`), round-trips
-  through `Show()`→`save()`, and the new required-field validation
-  (empty profile + AWS Secret source → status message, no save).
+- `tui/internal/dialog/connections_test.go`: new tests for the "AWS
+  Profile" field mirroring the existing "Password Secret Name" field's
+  own test coverage — appears/disappears with Password Source (and sits
+  directly above "Password Secret Name"), survives a Backend toggle
+  round-trip (`rebuildTail`), round-trips through `Show()`→`save()`,
+  and the new required-field validation (empty profile + AWS Secret
+  source → status message, no save).
 
 ## `tui/config.example.yaml`
 

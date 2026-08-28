@@ -211,10 +211,10 @@ func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
 			ce.rebuildTail(backends[idx])
 		})
 	}
-	// The Password Source dropdown swaps the last form item (before the
+	// The Password Source dropdown swaps the last form item(s) (before the
 	// Save/Cancel buttons, which AddButton keeps separate from GetFormItem)
-	// between a plain Password field and a Password Secret (AWS) field —
-	// see setPasswordField. Wired via SetSelectedFunc rather than passed
+	// between a plain Password field and an AWS Profile + Password Secret
+	// Name pair — see setPasswordField. Wired via SetSelectedFunc rather than passed
 	// to AddDropDown itself, since AddDropDown's initial
 	// SetCurrentOption(0) call would otherwise fire the swap before the
 	// Password field even exists yet. GetFormItem(5) is safe here because
@@ -299,8 +299,8 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	// before its text is set below.
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
-		ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).SetText(passwordSecret)
-		ce.form.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField).SetText(passwordSecretProfile)
+		ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).SetText(passwordSecretProfile)
+		ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).SetText(passwordSecret)
 	} else {
 		ce.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(password)
 	}
@@ -312,26 +312,25 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 
 // setPasswordField swaps the trailing form item(s) — right before the
 // Save/Cancel buttons — between a plain Password field (sourceIdx 0)
-// and a Password Secret (AWS) + Secret AWS Profile pair (sourceIdx 1),
-// driven by the Password Source dropdown. AddButton items aren't
-// counted by GetFormItem, so these are always the last item(s)
-// regardless of whether Broker Name is present (see rebuildTail).
-// Whether one or two trailing items currently exist is checked (via
-// whether "Secret AWS Profile" is present) rather than tracked
-// separately, so this works correctly regardless of which state it's
-// coming from.
+// and an AWS Profile + Password Secret Name pair (sourceIdx 1), driven
+// by the Password Source dropdown. AddButton items aren't counted by
+// GetFormItem, so these are always the last item(s) regardless of
+// whether Broker Name is present (see rebuildTail). Whether one or two
+// trailing items currently exist is checked (via whether "AWS Profile"
+// is present) rather than tracked separately, so this works correctly
+// regardless of which state it's coming from.
 func (ce *ConnEditor) setPasswordField(sourceIdx int) {
 	f := ce.form
 	currentCount := 1
-	if _, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+	if _, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
 		currentCount = 2
 	}
 	for i := 0; i < currentCount; i++ {
 		f.RemoveFormItem(f.GetFormItemCount() - 1)
 	}
 	if sourceIdx == 1 {
-		f.AddInputField("Password Secret (AWS)", "", 30, nil, nil)
-		f.AddInputField("Secret AWS Profile", "", 20, nil, nil)
+		f.AddInputField("AWS Profile", "", 20, nil, nil)
+		f.AddInputField("Password Secret Name", "", 30, nil, nil)
 	} else {
 		f.AddPasswordField("Password", "", 20, '*', nil)
 	}
@@ -377,10 +376,10 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	}
 	if item, ok := f.GetFormItemByLabel("Password").(*tview.InputField); ok {
 		passwordOrSecret = item.GetText()
-	} else if item, ok := f.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField); ok {
+	} else if item, ok := f.GetFormItemByLabel("Password Secret Name").(*tview.InputField); ok {
 		passwordOrSecret = item.GetText()
 	}
-	if item, ok := f.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField); ok {
+	if item, ok := f.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
 		secretProfile = item.GetText()
 	}
 
@@ -398,8 +397,8 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	// added below would fire prematurely.
 	f.AddDropDown("Password Source", []string{"Plain", "AWS Secret"}, sourceIdx, nil)
 	if sourceIdx == 1 {
-		f.AddInputField("Password Secret (AWS)", passwordOrSecret, 30, nil, nil)
-		f.AddInputField("Secret AWS Profile", secretProfile, 20, nil, nil)
+		f.AddInputField("AWS Profile", secretProfile, 20, nil, nil)
+		f.AddInputField("Password Secret Name", passwordOrSecret, 30, nil, nil)
 	} else {
 		f.AddPasswordField("Password", passwordOrSecret, 20, '*', nil)
 	}
@@ -462,8 +461,8 @@ func (ce *ConnEditor) save() {
 	sourceIdx, _ := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).GetCurrentOption()
 	var password, passwordSecret, passwordSecretProfile string
 	if sourceIdx == 1 {
-		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel("Password Secret (AWS)").(*tview.InputField).GetText())
-		passwordSecretProfile = strings.TrimSpace(ce.form.GetFormItemByLabel("Secret AWS Profile").(*tview.InputField).GetText())
+		passwordSecret = strings.TrimSpace(ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).GetText())
+		passwordSecretProfile = strings.TrimSpace(ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).GetText())
 	} else {
 		password = ce.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
 	}
