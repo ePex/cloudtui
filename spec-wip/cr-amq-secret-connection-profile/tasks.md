@@ -55,10 +55,30 @@
    the two are independent as designed. Test connection and config
    changes cleaned up afterward (config.yaml restored from backup).
 
-4. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
+4. [x] **AWS Profile autocomplete** (added per user feedback after the
+   initial cut). `ConnEditor` gained `awsProfileNames []string`,
+   `loadAWSProfileNames()` (called once per `Show()`, before the
+   Password Source `SetCurrentOption` that can immediately recreate the
+   field), `awsProfileSuggestions(currentText string) []string`
+   (prefix-filters the cached names, same convention as
+   `MessageFilter.jmsTypeSuggestions`), and `wireAWSProfileAutocomplete()`
+   (styles then wires `SetAutocompleteFunc` on the "AWS Profile" field —
+   called from both `setPasswordField` and `rebuildTail`, the only two
+   places that field is (re)created). Added 2 tests in
+   `connections_test.go`: `TestConnEditorAWSProfileSuggestionsFiltersByPrefix`
+   and `TestConnEditorAWSProfileSuggestionsEmptyOnDiscoveryError`
+   (degrades to no suggestions, doesn't break `Show()`, on a discovery
+   error). `gofmt -l .`, `go build ./...`, `go vet ./...`,
+   `go test ./...` all clean. Manually verified live via tmux against
+   the real binary and the user's real `~/.aws/config` (backed up and
+   restored around the test): typing "mlf" into "AWS Profile" popped a
+   real, filtered autocomplete list of the user's actual `mlf-*`
+   profiles; selecting an entry populated the field correctly.
+
+5. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
    profile" out-of-scope line (this CR ships exactly that), document
-   the new required field and its interaction with the connection
-   editor, and note `SetActiveAWSProfile` no longer rebuilds
-   secret-backed connections. Delete
-   `spec-wip/cr-amq-secret-connection-profile/`.
+   the new required field (including its autocomplete) and its
+   interaction with the connection editor, and note
+   `SetActiveAWSProfile` no longer rebuilds secret-backed connections.
+   Delete `spec-wip/cr-amq-secret-connection-profile/`.

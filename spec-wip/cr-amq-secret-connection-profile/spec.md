@@ -47,6 +47,13 @@ behavior made the ambiguity concrete.
   only when Password Source = AWS Secret (same conditional-visibility
   mechanism), and validated as required on save when that source is
   selected (same pattern as the existing "Name is required" check).
+  The field offers autocomplete against the same discovered-profile
+  source as Settings → AWS Profiles (`host.ListAWSProfiles`, i.e.
+  `awsprofile.List()`), filtered by prefix — same mechanism and
+  degrade-on-error behavior as the existing JMS Type field's
+  autocomplete (`MessageFilter.jmsTypeSuggestions`). It remains a
+  plain, freeform `InputField` underneath: autocomplete only offers
+  suggestions, it never restricts input to known profiles.
 - `secretbackend.New` drops its separate `profile string` parameter
   entirely — the profile now comes from the connection itself
   (`conn.Queue.PasswordSecretAWSProfile` /
@@ -79,7 +86,8 @@ behavior made the ambiguity concrete.
   Secrets Manager, a manual "refresh secret" action, editing/rotating
   the secret's value from within cloudtui — all still out of scope per
   spec/12, unchanged.
-- A profile-picker dropdown (reusing `awsprofile.List()`'s discovery)
-  for the new field — a plain text input, matching every other field in
-  this form (including the existing "Password Secret Name" field,
-  which is also freeform text with no autocomplete).
+- A hard profile-*picker* dropdown (a `DropDown` restricted to known
+  profiles) for the new field — it stays a freeform `InputField` with
+  autocomplete (added per user feedback after the initial cut), not a
+  constrained selector; an unlisted or not-yet-configured profile name
+  must still be typeable.
