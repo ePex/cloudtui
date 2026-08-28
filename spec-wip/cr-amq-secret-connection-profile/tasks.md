@@ -26,15 +26,24 @@
    `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test ./...` all
    clean.
 
-3. [ ] **Docs and manual verification.** Update
+3. [x] **Docs and manual verification.** Updated
    `tui/config.example.yaml`'s `passwordSecret` comment block and both
-   commented examples. Manually verify live (per `plan.md` — this one
-   doesn't need a real expired SSO session): create/edit a connection
-   with `passwordSecret`/`passwordSecretAWSProfile` set, confirm it
-   resolves; switch the *global* AWS profile and confirm the
-   connection's queues still load unaffected; try saving with AWS
-   Secret selected and the new field blank, confirm the validation
-   message blocks the save.
+   commented examples to document the new required
+   `passwordSecretAWSProfile` field. Manually verified live via tmux
+   against the real binary and the user's real config (backed up and
+   restored around the test): created a new jolokia connection
+   (`zzz-cr-test`), switched Password Source to AWS Secret — "Secret
+   AWS Profile" appeared alongside "Password Secret (AWS)"; attempted
+   Save with the profile blank — blocked with status message "AWS
+   Profile is required when Password Source is AWS Secret", editor
+   stayed open; filled in the profile, saved successfully, confirmed
+   `passwordSecret`/`passwordSecretAWSProfile` both persisted correctly
+   to `config.yaml`; reopened the connection for editing — the field
+   round-tripped correctly; switched the *global* AWS profile via
+   Settings -> AWS Profiles and confirmed `zzz-cr-test`'s
+   `passwordSecretAWSProfile` was untouched in `config.yaml`, proving
+   the two are independent as designed. Test connection and config
+   changes cleaned up afterward (config.yaml restored from backup).
 
 4. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
