@@ -232,6 +232,30 @@ PasswordSecret unset → empty). `ui.InfoPanelText` tested for both the
 secret case (contains the profile annotation) and the plain-password
 case (no stray annotation).
 
+## Bugfix: Tab out of "AWS Profile" could silently change it (found by user)
+
+Editing an existing AWS-Secret connection, then tabbing straight out of
+"AWS Profile" without typing, could silently replace the saved profile
+with an unrelated one. Root cause: `wireAWSProfileAutocomplete`'s
+`SetAutocompleteFunc` (called from `setPasswordField`, fired by
+`Show()`'s `SetCurrentOption(1)`) eagerly builds tview's autocomplete
+drop-down while the field is still empty — before `Show()`'s later
+`SetText(passwordSecretProfile)` sets the real value. `SetText()` alone
+doesn't refresh an already-open drop-down (same gotcha already
+documented for `MessageFilter.jmsTypeItem`), so the drop-down stayed
+built from `""` (all profiles, arbitrary pre-selection). tview's
+`InputField.InputHandler()` treats Tab as "accept the drop-down's
+current entry" rather than "move to the next field" whenever a
+drop-down is open — so tabbing out replaced the field's real value with
+that stale pre-selection.
+
+Fix: in `Show()`, call `profileItem.Autocomplete()` immediately after
+`SetText(passwordSecretProfile)` — rebuilds the drop-down filtered by
+the real current text, so it either matches (harmless no-op selection)
+or, with no matches, closes entirely. Exactly the fix
+`MessageFilter.Show()` already applies to `jmsTypeItem` for the same
+reason.
+
 ## `tui/config.example.yaml`
 
 Update the `passwordSecret` comment block to document

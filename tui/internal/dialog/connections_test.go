@@ -217,3 +217,47 @@ func TestConnEditorAWSProfileSuggestionsEmptyOnDiscoveryError(t *testing.T) {
 		t.Error("Show() should still open the editor despite a discovery error")
 	}
 }
+
+// TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting is a
+// regression test for a real reported bug: editing a connection that
+// already uses AWS Secret, then tabbing straight out of "AWS Profile"
+// without typing anything, silently replaced the saved profile with
+// whatever entry the autocomplete drop-down had pre-selected — because
+// the drop-down was built once (via SetAutocompleteFunc's eager wiring
+// call in setPasswordField, fired by Show()'s SetCurrentOption while the
+// field was still empty) and SetText() alone doesn't refresh it, tview's
+// InputField treats Tab as "accept the drop-down's current entry", not
+// "move to the next field", whenever a drop-down is present. Fixed by
+// calling Autocomplete() right after SetText() in Show(), the same
+// pattern MessageFilter.Show() already uses for jmsTypeItem.
+func TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting(t *testing.T) {
+	ce, host := newTestConnEditor(t)
+	// "abc" is alphabetically first and shortest — exactly what the
+	// stale, unfiltered (built for empty text) drop-down would have
+	// pre-selected before the fix.
+	host.listAWSProfiles = func(context.Context) ([]awsprofile.Profile, error) {
+		return []awsprofile.Profile{{Name: "abc"}, {Name: "foo-bar"}, {Name: "zzz"}}, nil
+	}
+	conn := config.Connection{
+		Name:    "orders",
+		Backend: "jolokia",
+		Queue: config.QueueConfig{
+			PasswordSecret:           "my/secret",
+			PasswordSecretAWSProfile: "foo-bar",
+		},
+	}
+	ce.Show(conn, false, "orders")
+
+	item := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+	if got := item.GetText(); got != "foo-bar" {
+		t.Fatalf("AWS Profile after Show() = %q, want %q", got, "foo-bar")
+	}
+
+	// Simulate tabbing straight out of the field, exactly reproducing
+	// tview's own InputField.InputHandler() Tab-with-open-drop-down path.
+	item.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := item.GetText(); got != "foo-bar" {
+		t.Errorf("AWS Profile after tabbing out unchanged = %q, want unchanged %q", got, "foo-bar")
+	}
+}
