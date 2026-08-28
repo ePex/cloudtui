@@ -67,8 +67,13 @@
    (name only). No live release exists yet to test the actual push; that
    happens for real at the next tag (task 10).
 
-6. [ ] **Scoop bucket.** Same shape as task 5, targeting
-   `ePex/scoop-bucket` and `SCOOP_BUCKET_GITHUB_TOKEN`.
+6. [x] **Scoop bucket.** Created `ePex/scoop-bucket` (with an initial
+   commit). Added the `scoops:` block to `.goreleaser.yaml` (this key is
+   not deprecated, unlike `brews:`) and the `SCOOP_BUCKET_GITHUB_TOKEN`
+   env passthrough. Verified via a local `goreleaser check` +
+   `--snapshot` dry run, inspected the generated `scoop/cloudtui.json`
+   (correct `64bit`/`arm64` entries, `bin: cloudtui.exe`). User created
+   the PAT and secret — confirmed via `gh secret list`.
 
 7. [ ] **apt/rpm/apk via nfpm + Gemfury.** Add the `nfpms:` block to
    `.goreleaser.yaml` per `plan.md` §5. **Blocked on the user**: creating
