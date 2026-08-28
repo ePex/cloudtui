@@ -63,6 +63,39 @@ func TestInfoPanelTextShowsActiveAWSProfile(t *testing.T) {
 	}
 }
 
+// TestInfoPanelTextShowsSecretAWSProfile confirms a connection
+// authenticated via AWS Secret shows the profile used to resolve that
+// secret in the AMQ Connection line, so it's clear at a glance which
+// account it depends on without opening the connection editor.
+func TestInfoPanelTextShowsSecretAWSProfile(t *testing.T) {
+	cfg := config.Default()
+	cfg.Connections[0].Name = "staging"
+	cfg.Connections[0].Queue.PasswordSecret = "/cloudtui/staging/mq-password"
+	cfg.Connections[0].Queue.PasswordSecretAWSProfile = "work"
+
+	text := InfoPanelText(cfg)
+
+	for _, want := range []string{"staging", "AWS: work"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("InfoPanelText() = %q, want it to contain %q", text, want)
+		}
+	}
+}
+
+// TestInfoPanelTextOmitsSecretAWSProfileForPlainPassword confirms a
+// plain-password connection's AMQ Connection line stays unchanged (no
+// stray "(AWS: ...)" annotation).
+func TestInfoPanelTextOmitsSecretAWSProfileForPlainPassword(t *testing.T) {
+	cfg := config.Default()
+	cfg.Connections[0].Name = "staging"
+
+	text := InfoPanelText(cfg)
+
+	if strings.Contains(text, "AWS:") {
+		t.Errorf("InfoPanelText() = %q, want no \"AWS:\" annotation for a plain-password connection", text)
+	}
+}
+
 func TestInfoPanelTextShowsThemeName(t *testing.T) {
 	cfg := config.Default()
 	cfg.Theme = "cyberpunk"

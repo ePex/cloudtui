@@ -75,10 +75,34 @@
    real, filtered autocomplete list of the user's actual `mlf-*`
    profiles; selecting an entry populated the field correctly.
 
-5. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
+5. [x] **Info panel shows the connection's AWS profile** (added per
+   user feedback after the initial cut). Added `Connection.SecretAWSProfile()`
+   to `config.go` (backend-appropriate `PasswordSecretAWSProfile` when
+   the backend-appropriate `PasswordSecret` is non-empty, else `""`).
+   `ui.InfoPanelText` (`topbar.go`) appends `(AWS: <profile>)` to the
+   "AMQ Connection" line when non-empty. Added 4 tests:
+   `TestSecretAWSProfileJolokia`/`Proxy`/`EmptyWhenPlainPassword`/
+   `EmptyWhenPasswordSecretUnset` in `config_test.go`, and
+   `TestInfoPanelTextShowsSecretAWSProfile`/
+   `TestInfoPanelTextOmitsSecretAWSProfileForPlainPassword` in
+   `topbar_test.go`. `gofmt -l .`, `go build ./...`, `go vet ./...`,
+   `go test ./...` all clean. Manually verified live via tmux against
+   the real binary/config: the real `fibu-proxy-dev-aws-secret`
+   connection's info panel line read
+   `AMQ Connection: fibu-proxy-dev-aws-secret (AWS: mlf-dev)` while the
+   separate "AWS Profile:" line showed the differing globally-active
+   profile, demonstrating the two are independent; switching to a
+   plain-password connection showed no annotation. (Made and then
+   corrected a stray real-config change mid-verification — a settings
+   list cursor persisted from a prior navigation and a keystroke landed
+   on the AWS Profile picker instead of the connection manager;
+   activeConnection/activeAWSProfile were restored to their original
+   values and confirmed via `config.yaml` before moving on.)
+
+6. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
    profile" out-of-scope line (this CR ships exactly that), document
-   the new required field (including its autocomplete) and its
-   interaction with the connection editor, and note
-   `SetActiveAWSProfile` no longer rebuilds secret-backed connections.
-   Delete `spec-wip/cr-amq-secret-connection-profile/`.
+   the new required field (including its autocomplete and its info
+   panel display) and its interaction with the connection editor, and
+   note `SetActiveAWSProfile` no longer rebuilds secret-backed
+   connections. Delete `spec-wip/cr-amq-secret-connection-profile/`.
