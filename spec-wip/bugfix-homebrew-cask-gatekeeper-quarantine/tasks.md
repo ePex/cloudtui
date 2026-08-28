@@ -1,11 +1,16 @@
 # Tasks
 
-1. [ ] **Add the postflight quarantine-removal hook.** Add
+1. [x] **Add the postflight quarantine-removal hook.** Added
    `hooks.post.install` to `.goreleaser.yaml`'s `homebrew_casks:` block
-   per `plan.md`. Verify with `goreleaser check` and a local
-   `goreleaser release --snapshot --clean --skip=publish,announce,sign`,
-   inspecting the generated `dist/homebrew/Casks/cloudtui.rb` for a
-   correct `postflight do ... end` block.
+   per `plan.md`. Verified with `goreleaser check` and a local
+   `goreleaser release --snapshot --clean --skip=publish,announce,sign`
+   — the generated `Casks/cloudtui.rb` contains the exact expected
+   `postflight do ... end` block. (Noted in passing: the snapshot dry
+   run's fabricated version/URLs got confused between the `v0.4.1` and
+   `tui/v0.4.1` tags now both sitting near HEAD — a `--snapshot`-only,
+   local-`git describe` artifact; confirmed harmless since the real
+   CI-triggered v0.4.1 release already correctly published and installed
+   against the plain `v0.4.1` tag before this task started.)
 
 2. [ ] **Merge-back.** Add a short note to
    `spec/02-ci-and-release/spec.md`'s Homebrew paragraph naming the
