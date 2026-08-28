@@ -261,6 +261,19 @@ func TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting(t *testing.T) {
 	}
 }
 
+// formItemIndexByTitle returns the index of the sectionHeaderItem titled
+// title, or -1 if none is found. Headers have no label (see
+// sectionHeaderItem.GetLabel), so GetFormItemIndex can't locate them —
+// this searches by their actual title instead.
+func formItemIndexByTitle(f *tview.Form, title string) int {
+	for i := 0; i < f.GetFormItemCount(); i++ {
+		if sh, ok := f.GetFormItem(i).(*sectionHeaderItem); ok && sh.title == title {
+			return i
+		}
+	}
+	return -1
+}
+
 // TestConnEditorSectionHeadersPresentInOrder confirms the three
 // non-interactive section headers exist as form items (not just visual
 // decoration bolted on elsewhere) and appear directly above the field
@@ -275,7 +288,7 @@ func TestConnEditorSectionHeadersPresentInOrder(t *testing.T) {
 		{sectionDestination, "Backend"},
 		{sectionAuth, "Username"},
 	} {
-		headerIdx := ce.form.GetFormItemIndex(tt.header)
+		headerIdx := formItemIndexByTitle(ce.form, tt.header)
 		if headerIdx < 0 {
 			t.Errorf("section header %q not found", tt.header)
 			continue
@@ -289,9 +302,8 @@ func TestConnEditorSectionHeadersPresentInOrder(t *testing.T) {
 // TestConnEditorSectionHeadersAreNotFocusable confirms tabbing from Name
 // skips straight to Backend — the "Destination" header in between must
 // not consume a Tab press or ever receive focus itself, since it's pure
-// decoration (AddTextView's scrollable=false is what makes a Form-
-// embedded TextView non-focusable — see TextView.Focus(), which replays
-// the last Tab/Backtab instead of stopping there).
+// decoration (sectionHeaderItem.Focus immediately replays the last
+// Tab/Backtab instead of actually taking focus — see sectionheader.go).
 //
 // Form.Focus(delegate) must actually run (not just Form.SetFocus, which
 // only repositions focusedElement) — it's what wires every item's

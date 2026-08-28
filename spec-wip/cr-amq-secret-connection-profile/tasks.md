@@ -193,7 +193,51 @@
    Name→save→persist round trip against a throwaway connection worked
    end-to-end with the new field names.
 
-9. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
+9. [x] **Full-width section headers** (added per user feedback).
+   `tview.Form.AddTextView` couldn't give a header both a flush-left
+   start *and* full modal width at once: its `SetFormAttributes`
+   unconditionally reserves the form's shared label-width column before
+   drawing anything, so body text renders indented to that column and
+   label text is truncated to it. Replaced it with a bespoke
+   `tview.FormItem`, `sectionHeaderItem` (new `sectionheader.go`), which
+   ignores the shared label width entirely and draws "── Title ──" plus
+   trailing dashes across its own full inner width at `Draw()` time
+   (via the exported `tview.Print`) — genuinely full-width and flush
+   left simultaneously, and it adapts automatically if the overlay's
+   size ever changes. Kept the same non-focusable "replay the last
+   Tab/Backtab" trick `tview.TextView.Focus()` uses internally
+   (`sectionHeaderItem.Focus`), so Tab still skips headers exactly as
+   before. `sectionGeneral`/`sectionDestination`/`sectionAuth` now hold
+   bare titles ("General"/"Destination"/"Auth") instead of the
+   pre-decorated "── General ──" strings, since decoration now happens
+   in `Draw()`. Added `sectionheader_test.go` (5 tests: empty label,
+   field height, nil InputHandler, Focus replays the last key once
+   wired, Focus falls back to normal Box focus when not yet wired) and
+   updated `TestConnEditorSectionHeadersPresentInOrder` to locate
+   headers by title via a new `formItemIndexByTitle` test helper (their
+   `GetFormItemIndex`-based label lookup broke once headers stopped
+   using the label slot). `gofmt -l .`, `go build ./...`,
+   `go vet ./...`, `go test ./...` all clean. Manually verified live
+   via tmux: all three headers now span the full modal width for both
+   backends and both Authentication Modes; Tab from Name still skips
+   straight to Backend (typed text landed correctly).
+
+   Also investigated the reported "Save/Cancel are still indented"
+   further: read `tview`'s `Button.Draw()` directly and confirmed the
+   ~2-column gap is `AlignCenter`-within-a-`label+4`-wide box, both
+   hardcoded inside `Button.Draw()`/`Form.Draw()` with no public
+   override — the button's own bounding box already starts flush left
+   at the same column as every field (confirmed via the same
+   detached-worktree comparison as before); only the *centered text
+   inside that wider box* creates the visual gap. Every other
+   `AddButton`-using dialog in this codebase (ConfirmDialog,
+   DatadogEditor, etc.) has the identical gap for the same reason —
+   raised with the user as a real architectural fork (replace
+   `tview.Form`'s built-in Button with a hand-built left-aligned
+   focusable widget, app-wide, vs. leave as inherent/pre-existing)
+   rather than deciding unilaterally.
+
+10. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
    profile" out-of-scope line (this CR ships exactly that), document
    the new required field (including its autocomplete and its info

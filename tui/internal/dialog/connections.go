@@ -187,21 +187,12 @@ const (
 	labelAWSProfile         = "  AWS Profile"
 )
 
-// sectionGeneral, sectionDestination, and sectionAuth are non-interactive
-// section-header rows in the connection editor form, added via
-// tview.Form's AddTextView (scrollable=false makes a TextView
-// non-focusable when embedded in a Form — see TextView.Focus(), which
-// immediately replays the last Tab/Backtab instead of stopping there).
-// Held in the TextView's own label slot (not its body text) so they
-// print flush against the form's left edge like every other field's
-// label, rather than indented to align with the value column the way a
-// body-text TextView would be (Form reserves the same label-width
-// column for every item in a vertical form, uniformly, regardless of
-// that item's own label length).
+// sectionGeneral, sectionDestination, and sectionAuth title the
+// connection editor's three sectionHeaderItem divider rows.
 const (
-	sectionGeneral     = "── General ──"
-	sectionDestination = "── Destination ──"
-	sectionAuth        = "── Auth ──"
+	sectionGeneral     = "General"
+	sectionDestination = "Destination"
+	sectionAuth        = "Auth"
 )
 
 // staticPrefixItemCount is the number of form items rebuildTail leaves
@@ -242,9 +233,9 @@ func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
 	ce.form = tview.NewForm()
 	ce.form.SetBorder(true).SetTitle(" AMQ Connection ")
 	ce.form.
-		AddTextView(sectionGeneral, "", 0, 1, false, false).
+		AddFormItem(newSectionHeader(sectionGeneral)).
 		AddInputField("Name", "", 30, nil, nil).
-		AddTextView(sectionDestination, "", 0, 1, false, false).
+		AddFormItem(newSectionHeader(sectionDestination)).
 		AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil).
 		AddButton("Save", func() { ce.save() }).
 		AddButton("Cancel", func() { ce.close() })
@@ -493,7 +484,7 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 		f.AddInputField("Broker Name", ce.brokerName, 30, nil, nil)
 	}
 	f.AddInputField("URL", url, 40, nil, nil)
-	f.AddTextView(sectionAuth, "", 0, 1, false, false)
+	f.AddFormItem(newSectionHeader(sectionAuth))
 	f.AddInputField("Username", username, 20, nil, nil)
 	// nil selected func here for the same reason as the initial
 	// construction: wiring it before the trailing password-ish field is

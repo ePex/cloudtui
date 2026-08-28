@@ -59,18 +59,26 @@ behavior made the ambiguity concrete.
   remains a plain, freeform `InputField` underneath: autocomplete only
   offers suggestions, it never restricts input to known profiles.
 - Connection editor form reorganized into three visually-separated,
-  non-interactive section headers (`── General ──`, `── Destination ──`,
-  `── Auth ──`, added via `tview.Form.AddTextView` with
-  `scrollable=false`, which makes a Form-embedded `TextView`
-  non-focusable — Tab skips straight over it): General holds Name;
-  Destination holds Backend and whatever it implies (Broker Name for
-  jolokia, URL for both); Auth holds Username, Authentication Mode, and
-  the indented field(s) described above. Save/Cancel remain unindented,
-  last, outside every section. Prompted by the same conversation that
-  named/positioned the AWS Profile field — the editor's fixed overlay
-  height (`app.go`'s `connEditorOverlay`) was widened from 20 to 28 rows
-  to fit the now-taller worst case (jolokia + AWS Secret, 11 form
-  items) without clipping.
+  non-interactive, full-modal-width section headers ("General",
+  "Destination", "Auth", rendered as "── Title ──" padded with dashes
+  to the row's full width) — implemented as a bespoke `tview.FormItem`
+  (`sectionHeaderItem` in the new `sectionheader.go`), non-focusable
+  (Tab skips straight over it) the same way a non-scrollable
+  Form-embedded `tview.TextView` is: General holds Name; Destination
+  holds Backend and whatever it implies (Broker Name for jolokia, URL
+  for both); Auth holds Username, Authentication Mode, and the indented
+  field(s) described above. Save/Cancel remain unindented, last,
+  outside every section — their own apparent slight indent (confirmed
+  present before this CR, and on every other `AddButton`-using dialog
+  in this codebase) is `tview.Button`'s own hardcoded
+  centered-in-a-wider-box rendering, not fixable via any public API
+  without replacing `tview.Form`'s built-in buttons app-wide; left as
+  is pending the user's call on whether that larger change is worth it.
+  Prompted by the same conversation that named/positioned the AWS
+  Profile field — the editor's fixed overlay height (`app.go`'s
+  `connEditorOverlay`) was widened from 20 to 28 rows to fit the now-
+  taller worst case (jolokia + AWS Secret, 11 form items) without
+  clipping.
 - `secretbackend.New` drops its separate `profile string` parameter
   entirely — the profile now comes from the connection itself
   (`conn.Queue.PasswordSecretAWSProfile` /
