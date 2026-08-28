@@ -272,6 +272,44 @@ Not a regression from the label-indent change; not something the public
 this finding rather than pretending to fix an unrelated, unreproducible
 "bug."
 
+## Full-width section headers (added per user feedback, second round)
+
+Went deeper on the Save/Cancel question by reading `Button.Draw()`
+directly: `printWithStyle(screen, b.text, x, y, 0, width, AlignCenter,
+style, true)` — the button's *box* starts at the same `x` as every
+field (confirmed: `Form.Draw()` never advances `x` for a vertical
+form's items, so `positions[buttonIndex].x` inherits the same unchanged
+`startX`), but its *text* is centered within a box `label+4` cells wide
+(`buttonWidths[index] = TaggedStringWidth(button.GetLabel()) + 4`, also
+hardcoded in `form.go`). Both the `+4` width and the `AlignCenter` are
+compile-time constants inside `tview` with no exposed setter — the only
+way to make the button's *text* start flush left would be to stop using
+`tview.Form`'s built-in `AddButton`/`Button` entirely, which every
+`AddButton`-using dialog in this codebase relies on identically. Not
+attempted without the user's explicit go-ahead, given the blast radius
+(app-wide, not scoped to this one dialog) and the payoff (a 2-character
+cosmetic gap).
+
+Also asked to make the section headers span the modal's full width.
+`tview.Form.AddTextView` can't do both flush-left *and* full-width at
+once: `TextView.SetFormAttributes` (called by every `Form.Draw()` pass)
+unconditionally sets `t.labelWidth` to the form's shared
+`maxLabelWidth`, and `TextView`'s own renderer (`textview.go`,
+`printWithStyle` call around line 1025) always reserves that many cells
+before drawing body text — so body text lands indented to the value
+column, while label text is capped/truncated to that same column's
+width. Resolved by writing a minimal custom `tview.FormItem`
+(`sectionHeaderItem`, `sectionheader.go`) instead: `SetFormAttributes`
+still receives the shared `labelWidth` but discards it, and `Draw()`
+computes the header text length itself from `GetInnerRect()`'s actual
+width at draw time (via `strings.Repeat("─", pad)` + the exported
+`tview.Print`), so it always spans the item's true full width — flush
+left and edge-to-edge simultaneously, and it adapts automatically if
+the overlay is ever resized. `Focus()` replicates
+`TextView.Focus()`'s exact non-scrollable trick (call the
+`SetFinishedFunc` handler with a negative key instead of taking real
+focus) so Tab-skipping behavior is unchanged.
+
 Sections implemented via `tview.Form.AddTextView(label, "", 0, 1,
 false, false)`: scrollable=false makes a Form-embedded `TextView`
 non-focusable (`TextView.Focus()` special-cases `!scrollable` by
