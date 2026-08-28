@@ -47,6 +47,10 @@ behavior made the ambiguity concrete.
   only when Password Source = AWS Secret (same conditional-visibility
   mechanism), and validated as required on save when that source is
   selected (same pattern as the existing "Name is required" check).
+  Whichever field(s) Password Source currently shows below it
+  ("Password" for Plain, or "AWS Profile"/"Password Secret Name" for
+  AWS Secret) render with a 2-space label indent, reading as visually
+  nested under Password Source rather than a peer of Name/Backend/URL.
   The field offers autocomplete against the same discovered-profile
   source as Settings → AWS Profiles (`host.ListAWSProfiles`, i.e.
   `awsprofile.List()`), filtered by prefix — same mechanism and

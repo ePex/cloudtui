@@ -66,29 +66,29 @@ func TestConnEditorAWSProfileFieldTracksPasswordSource(t *testing.T) {
 	ce, _ := newTestConnEditor(t)
 	ce.Show(config.Connection{}, true, "")
 
-	if _, ok := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
+	if _, ok := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); ok {
 		t.Fatal(`"AWS Profile" present before selecting "AWS Secret"`)
 	}
 
 	source := ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown)
 	source.SetCurrentOption(1) // AWS Secret
 
-	if _, ok := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField); !ok {
+	if _, ok := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); !ok {
 		t.Fatal(`"AWS Profile" missing after selecting "AWS Secret"`)
 	}
-	if _, ok := ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField); !ok {
+	if _, ok := ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField); !ok {
 		t.Fatal(`"Password Secret Name" missing after selecting "AWS Secret"`)
 	}
-	if profileIdx, secretIdx := ce.form.GetFormItemIndex("AWS Profile"), ce.form.GetFormItemIndex("Password Secret Name"); profileIdx != secretIdx-1 {
+	if profileIdx, secretIdx := ce.form.GetFormItemIndex(labelAWSProfile), ce.form.GetFormItemIndex(labelPasswordSecretName); profileIdx != secretIdx-1 {
 		t.Errorf(`"AWS Profile" (index %d) is not directly above "Password Secret Name" (index %d)`, profileIdx, secretIdx)
 	}
 
 	source.SetCurrentOption(0) // Plain
 
-	if _, ok := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField); ok {
+	if _, ok := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField); ok {
 		t.Fatal(`"AWS Profile" still present after selecting "Plain"`)
 	}
-	if _, ok := ce.form.GetFormItemByLabel("Password").(*tview.InputField); !ok {
+	if _, ok := ce.form.GetFormItemByLabel(labelPassword).(*tview.InputField); !ok {
 		t.Fatal(`"Password" missing after selecting "Plain"`)
 	}
 }
@@ -103,17 +103,17 @@ func TestConnEditorAWSProfileSurvivesBackendToggle(t *testing.T) {
 	ce.Show(config.Connection{}, true, "")
 
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(1) // AWS Secret
-	ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).SetText("work")
-	ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).SetText("my/secret")
+	ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).SetText("work")
+	ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).SetText("my/secret")
 
 	backend := ce.form.GetFormItem(1).(*tview.DropDown)
 	backend.SetCurrentOption(1) // proxy
 	backend.SetCurrentOption(0) // back to jolokia
 
-	if got := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).GetText(); got != "work" {
+	if got := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).GetText(); got != "work" {
 		t.Errorf(`AWS Profile = %q after Backend round trip, want "work"`, got)
 	}
-	if got := ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).GetText(); got != "my/secret" {
+	if got := ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).GetText(); got != "my/secret" {
 		t.Errorf(`Password Secret Name = %q after Backend round trip, want "my/secret"`, got)
 	}
 }
@@ -135,11 +135,11 @@ func TestConnEditorPasswordSecretAWSProfileRoundTrips(t *testing.T) {
 	}
 	ce.Show(conn, false, "orders")
 
-	if got := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).GetText(); got != "work" {
+	if got := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).GetText(); got != "work" {
 		t.Fatalf(`AWS Profile after Show() = %q, want "work"`, got)
 	}
 
-	ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField).SetText("prod")
+	ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField).SetText("prod")
 	ce.save()
 
 	if host.savedConnection == nil {
@@ -161,7 +161,7 @@ func TestConnEditorSaveRequiresAWSProfileWhenAWSSecretSelected(t *testing.T) {
 
 	ce.form.GetFormItem(0).(*tview.InputField).SetText("orders")
 	ce.form.GetFormItemByLabel("Password Source").(*tview.DropDown).SetCurrentOption(1) // AWS Secret
-	ce.form.GetFormItemByLabel("Password Secret Name").(*tview.InputField).SetText("my/secret")
+	ce.form.GetFormItemByLabel(labelPasswordSecretName).(*tview.InputField).SetText("my/secret")
 	// AWS Profile left blank.
 
 	ce.save()
@@ -248,7 +248,7 @@ func TestConnEditorAWSProfileFieldSurvivesTabWhenEditingExisting(t *testing.T) {
 	}
 	ce.Show(conn, false, "orders")
 
-	item := ce.form.GetFormItemByLabel("AWS Profile").(*tview.InputField)
+	item := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField)
 	if got := item.GetText(); got != "foo-bar" {
 		t.Fatalf("AWS Profile after Show() = %q, want %q", got, "foo-bar")
 	}

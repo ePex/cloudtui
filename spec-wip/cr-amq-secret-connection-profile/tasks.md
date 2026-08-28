@@ -126,7 +126,22 @@
    tabbing straight out leaves the value unchanged and correctly
    advances focus.
 
-7. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
+7. [x] **Indent the fields below "Password Source"** (added per user
+   feedback). "Password" / "AWS Profile" / "Password Secret Name" now
+   carry a 2-space indent (`labelPassword`/`labelAWSProfile`/
+   `labelPasswordSecretName` constants in `connections.go`, since
+   `GetFormItemByLabel` matches the label string exactly, indent
+   included — used everywhere these fields are created or looked up).
+   Updated all call sites in `connections.go` and all
+   `GetFormItemByLabel`/`GetFormItemIndex` lookups in
+   `connections_test.go` (comment/error-message prose left as plain
+   "AWS Profile" etc., unaffected since those are just text). `gofmt -l .`,
+   `go build ./...`, `go vet ./...`, `go test ./...` all clean. Manually
+   verified live via tmux: both the Plain "Password" field and the AWS
+   Secret "AWS Profile"/"Password Secret Name" pair render indented
+   under "Password Source".
+
+8. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
    profile" out-of-scope line (this CR ships exactly that), document
    the new required field (including its autocomplete and its info
