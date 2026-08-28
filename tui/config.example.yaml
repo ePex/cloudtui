@@ -57,11 +57,11 @@ activeConnection: default
 #
 # passwordSecret (optional, on queue: or proxy:): names an AWS Secrets
 # Manager secret to use as the password instead. Resolved at connect time
-# via the AWS profile selected in Settings -> AWS Profiles (activeAWSProfile
-# below) — a connection using passwordSecret needs a profile selected there.
-# When set, it takes precedence over both password and
-# MQPROXY_CLIENT_PASSWORD; the secret's raw string value is used verbatim
-# (no JSON key extraction).
+# via passwordSecretAWSProfile (required whenever passwordSecret is set —
+# independent of activeAWSProfile below, which only affects AWS resource
+# browsing, not connection passwords). When set, it takes precedence over
+# both password and MQPROXY_CLIENT_PASSWORD; the secret's raw string value
+# is used verbatim (no JSON key extraction).
 connections:
   - name: default
     backend: jolokia
@@ -71,6 +71,7 @@ connections:
       username: admin
       # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
       # passwordSecret: "/cloudtui/local/mq-password"   # or resolve from AWS Secrets Manager instead
+      # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set
 
   # Example proxy connection (uncomment and fill in to use):
   # - name: aws-staging
@@ -80,6 +81,7 @@ connections:
   #     username: cloudtui
   #     password: changeme
   #     # passwordSecret: "/cloudtui/aws-staging/mq-password"
+  #     # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set
 
 # activeAWSProfile: the AWS CLI profile selected in Settings -> AWS Profiles
 # (read from ~/.aws/config / ~/.aws/credentials, or their AWS_CONFIG_FILE /
