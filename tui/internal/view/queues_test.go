@@ -2,8 +2,10 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -24,9 +26,17 @@ type fakeQueueBackend struct {
 	deleteMessagesFn  func(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error)
 	moveAllMessagesFn func(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 	moveMessagesFn    func(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error)
+	// listFn overrides List entirely when set — used by the Load()
+	// loading-indicator/stale-response tests below to control timing and
+	// inject errors, without disturbing every other test's plain
+	// f.summaries default.
+	listFn func(ctx context.Context) ([]queue.Summary, error)
 }
 
-func (f *fakeQueueBackend) List(_ context.Context) ([]queue.Summary, error) {
+func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
+	if f.listFn != nil {
+		return f.listFn(ctx)
+	}
 	return f.summaries, nil
 }
 
@@ -594,5 +604,131 @@ func TestQueuesViewMoveAllKeyShowsJMSTypePrompt(t *testing.T) {
 	}
 	if qv.movePicker.Visible() {
 		t.Error("movePicker is visible before the JMS Type prompt was continued past")
+	}
+}
+
+// drawSignalingHost wraps fakeViewHost to additionally signal after every
+// QueueUpdateDraw call — used only by TestQueuesViewLoadDiscardsStaleResponse
+// below to deterministically order assertions around two overlapping Load()
+// goroutines without an actual data race (channel operations establish the
+// happens-before edge -race needs).
+type drawSignalingHost struct {
+	*fakeViewHost
+	drawn chan struct{}
+}
+
+func (h *drawSignalingHost) QueueUpdateDraw(fn func()) {
+	fn()
+	h.drawn <- struct{}{}
+}
+
+// newTestQueuesViewWithDrawSignal is newTestQueuesViewWithBackend's
+// draw-signaling counterpart: drawn receives once per QueueUpdateDraw call,
+// letting a test deterministically wait for Load()'s background goroutine
+// to finish applying its result before asserting on qv.table — without it,
+// a fast (non-blocking) fakeQueueBackend races the test's own goroutine.
+func newTestQueuesViewWithDrawSignal(t *testing.T, b *fakeQueueBackend, bufSize int) (*drawSignalingHost, *QueuesView) {
+	t.Helper()
+	base := newFakeViewHost()
+	base.backend = b
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	confirm := dialog.NewConfirmDialog(host)
+	movePicker := dialog.NewMovePicker(host)
+	sendMessage := dialog.NewSendMessageOverlay(host)
+	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
+	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
+}
+
+func TestQueuesViewLoadShowsLoadingStatusImmediately(t *testing.T) {
+	unblock := make(chan struct{})
+	backend := &fakeQueueBackend{
+		listFn: func(context.Context) ([]queue.Summary, error) {
+			<-unblock
+			return nil, nil
+		},
+	}
+	_, qv := newTestQueuesViewWithBackend(t, backend)
+
+	qv.Load()
+
+	cell := qv.table.GetCell(1, 0)
+	if cell == nil || cell.Text != "Loading queues…" {
+		t.Errorf("row(1,0) after Load() = %+v, want text %q", cell, "Loading queues…")
+	}
+	close(unblock) // let the goroutine finish so it doesn't leak past the test
+}
+
+func TestQueuesViewLoadRepaintsOnSuccess(t *testing.T) {
+	backend := &fakeQueueBackend{summaries: []queue.Summary{{Name: "orders"}}}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.Load()
+	<-host.drawn
+
+	name := qv.table.GetCell(1, 0).Text
+	if name != "orders" {
+		t.Errorf("row(1,0) after Load() success = %q, want %q", name, "orders")
+	}
+}
+
+func TestQueuesViewLoadShowsErrorOnFailure(t *testing.T) {
+	wantErr := errors.New("connection refused")
+	backend := &fakeQueueBackend{
+		listFn: func(context.Context) ([]queue.Summary, error) {
+			return nil, wantErr
+		},
+	}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.Load()
+	<-host.drawn
+
+	cell := qv.table.GetCell(1, 0)
+	if cell == nil || !strings.Contains(cell.Text, wantErr.Error()) {
+		t.Errorf("row(1,0) after Load() failure = %+v, want it to contain %q", cell, wantErr.Error())
+	}
+}
+
+// TestQueuesViewLoadDiscardsStaleResponse is the key regression test for
+// loadSeq: if the user triggers a second Load() (another connection
+// switch, or 'r') before the first resolves, the first's eventual — slower
+// — response must not clobber the second's already-rendered result.
+func TestQueuesViewLoadDiscardsStaleResponse(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstCalled := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	backend := &fakeQueueBackend{}
+	backend.listFn = func(context.Context) ([]queue.Summary, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(firstCalled)
+			<-releaseFirst
+			return []queue.Summary{{Name: "stale"}}, nil
+		}
+		return []queue.Summary{{Name: "fresh"}}, nil
+	}
+
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 2)
+
+	qv.Load()     // call 1 — will become "stale"; blocks inside listFn
+	<-firstCalled // call 1's listFn has started (and is now blocked on releaseFirst)
+
+	qv.Load()    // call 2 — "fresh"; proceeds and draws immediately
+	<-host.drawn // call 2's draw has landed (guaranteed first: call 1 can't proceed yet)
+
+	if got := qv.table.GetCell(1, 0).Text; got != "fresh" {
+		t.Fatalf("row(1,0) after call 2's draw = %q, want %q", got, "fresh")
+	}
+
+	close(releaseFirst) // let call 1 (stale) proceed to its now-discarded draw attempt
+	<-host.drawn        // call 1's draw attempt has landed (and should have no-opped)
+
+	if got := qv.table.GetCell(1, 0).Text; got != "fresh" {
+		t.Errorf("row(1,0) after stale call 1's draw = %q, want unchanged %q", got, "fresh")
 	}
 }
