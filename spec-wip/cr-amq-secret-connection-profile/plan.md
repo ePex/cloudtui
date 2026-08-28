@@ -210,6 +210,28 @@ Tests: `awsProfileSuggestions` is unit-tested directly against
 already uses for `jmsTypeSuggestions`) — prefix filtering, and graceful
 empty-suggestions behavior on a discovery error.
 
+## Info panel (added per user feedback after the initial cut)
+
+`config.Connection` gains a `SecretAWSProfile() string` method — returns
+the backend-appropriate `PasswordSecretAWSProfile` when the
+backend-appropriate `PasswordSecret` is non-empty, else `""` (so a
+hand-edited config with a stray profile but no secret doesn't falsely
+report one in use). Placed on `Connection` rather than duplicating
+`secretbackend.go`'s existing private `passwordSecretName`/
+`passwordSecretAWSProfile` helpers, since `ui/topbar.go` doesn't import
+`queue/secretbackend`.
+
+`ui.InfoPanelText` (`topbar.go`) calls it on `cfg.ActiveConn()`: when
+non-empty, the "AMQ Connection" line becomes
+`<name> (AWS: <profile>)` instead of just `<name>`, in the label color
+(a secondary annotation, not the primary value).
+
+Tests: `config.SecretAWSProfile` unit-tested directly (jolokia backend,
+proxy backend, plain password → empty, PasswordSecretAWSProfile set but
+PasswordSecret unset → empty). `ui.InfoPanelText` tested for both the
+secret case (contains the profile annotation) and the plain-password
+case (no stray annotation).
+
 ## `tui/config.example.yaml`
 
 Update the `passwordSecret` comment block to document

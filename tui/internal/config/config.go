@@ -166,6 +166,24 @@ func (c Config) ActiveConn() Connection {
 	return Connection{}
 }
 
+// SecretAWSProfile returns the AWS profile used to resolve c's password
+// secret, or "" if c authenticates with a plain password instead
+// (backend-appropriate PasswordSecret is empty) — including a
+// hand-edited config with PasswordSecretAWSProfile set but PasswordSecret
+// left blank, which doesn't actually use a secret.
+func (c Connection) SecretAWSProfile() string {
+	if c.Backend == "proxy" {
+		if c.Proxy.PasswordSecret == "" {
+			return ""
+		}
+		return c.Proxy.PasswordSecretAWSProfile
+	}
+	if c.Queue.PasswordSecret == "" {
+		return ""
+	}
+	return c.Queue.PasswordSecretAWSProfile
+}
+
 // QueueConfig holds the connection settings for the ActiveMQ Jolokia backend.
 // Password is intentionally kept out of version control: leave it empty here
 // and set MQPROXY_CLIENT_PASSWORD instead.

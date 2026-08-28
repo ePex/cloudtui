@@ -443,6 +443,40 @@ func TestActiveConnEmptyConnections(t *testing.T) {
 	}
 }
 
+func TestSecretAWSProfileJolokia(t *testing.T) {
+	c := Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}
+	if got := c.SecretAWSProfile(); got != "work" {
+		t.Errorf("SecretAWSProfile() = %q, want %q", got, "work")
+	}
+}
+
+func TestSecretAWSProfileProxy(t *testing.T) {
+	c := Connection{Backend: "proxy", Proxy: ProxyConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}
+	if got := c.SecretAWSProfile(); got != "work" {
+		t.Errorf("SecretAWSProfile() = %q, want %q", got, "work")
+	}
+}
+
+func TestSecretAWSProfileEmptyWhenPlainPassword(t *testing.T) {
+	c := Connection{Backend: "jolokia", Queue: QueueConfig{Password: "hunter2"}}
+	if got := c.SecretAWSProfile(); got != "" {
+		t.Errorf("SecretAWSProfile() with a plain password = %q, want empty", got)
+	}
+}
+
+// TestSecretAWSProfileEmptyWhenPasswordSecretUnset is a regression test
+// for a hand-edited config that sets PasswordSecretAWSProfile without
+// PasswordSecret (the connection editor's own validation prevents this,
+// but a hand-edited config.yaml can bypass it) — such a connection isn't
+// actually using a secret, so the profile must not be reported as if it
+// were in use.
+func TestSecretAWSProfileEmptyWhenPasswordSecretUnset(t *testing.T) {
+	c := Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecretAWSProfile: "work"}}
+	if got := c.SecretAWSProfile(); got != "" {
+		t.Errorf("SecretAWSProfile() with PasswordSecret unset = %q, want empty", got)
+	}
+}
+
 func TestLoadConnectionsNewFormat(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := "activeConnection: aws\nconnections:\n  - name: aws\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"

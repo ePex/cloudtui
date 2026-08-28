@@ -74,6 +74,13 @@ behavior made the ambiguity concrete.
   the editor's now-required validation).
 - `tui/config.example.yaml` updated to document the new field and show
   it as required alongside `passwordSecret`.
+- Top-left info panel: the "AMQ Connection" line appends
+  `(AWS: <profile>)` when the active connection authenticates via AWS
+  Secret, so which account a connection's password depends on is
+  visible at a glance without opening the connection editor — and
+  visibly distinct from the separate "AWS Profile:" line below it
+  (the *global* active profile), reinforcing that the two are
+  independent.
 
 ## Out of scope
 
