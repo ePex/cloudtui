@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,8 +18,7 @@ import (
 // from internal/dialog's own tests, since testHost only records this
 // call rather than persisting anything.
 func TestSaveDatadogConfigPersists(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
+	setHomeDir(t, t.TempDir())
 
 	a := New(config.Default())
 	want := config.DatadogConfig{Site: "datadoghq.eu", AccessToken: "tok-456"}
@@ -31,7 +29,11 @@ func TestSaveDatadogConfigPersists(t *testing.T) {
 		t.Errorf("cfg.Datadog = %+v, want %+v", a.cfg.Datadog, want)
 	}
 
-	got, err := config.Load(filepath.Join(dir, "config.yaml"))
+	path, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("config.DefaultPath() error = %v", err)
+	}
+	got, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -49,7 +51,7 @@ func TestSaveDatadogConfigPersists(t *testing.T) {
 // since testHost only records this call rather than updating any
 // other App state or persisting anything.
 func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 
 	a.SetActiveAWSProfile("work")
@@ -63,7 +65,11 @@ func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 	if main2, _ := a.settingsV.List().GetItemText(2); !strings.Contains(main2, "work") {
 		t.Errorf("settings list item 2 = %q, want it to contain %q", main2, "work")
 	}
-	if _, err := config.Load("config.yaml"); err != nil {
+	path, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("config.DefaultPath() error = %v", err)
+	}
+	if _, err := config.Load(path); err != nil {
 		t.Errorf("config.yaml not written after SetActiveAWSProfile: %v", err)
 	}
 }
@@ -72,8 +78,7 @@ func TestSetActiveAWSProfilePersistsAndUpdatesUI(t *testing.T) {
 // ui.Host method the SSM Parameters/Secrets Manager/CloudWatch Logs
 // views call) updates cfg.AWSFavorites and persists it to config.yaml.
 func TestToggleFavoritePersists(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
+	setHomeDir(t, t.TempDir())
 
 	a := New(config.Default())
 
@@ -83,7 +88,11 @@ func TestToggleFavoritePersists(t *testing.T) {
 		t.Error("cfg.AWSFavorites does not have the favorite after ToggleFavorite")
 	}
 
-	got, err := config.Load(filepath.Join(dir, "config.yaml"))
+	path, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("config.DefaultPath() error = %v", err)
+	}
+	got, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -97,7 +106,7 @@ func TestToggleFavoritePersists(t *testing.T) {
 // Secrets-Manager-backed connection's backend, not leave it resolving
 // against the profile that was active when it was first built.
 func TestSetActiveAWSProfileRebuildsSecretBackedBackend(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	a.cfg.Connections = append(a.cfg.Connections, config.Connection{
 		Name: "secret-conn", Backend: "jolokia",

@@ -13,7 +13,7 @@ before:
 builds:
   - id: tui
     dir: tui
-    main: ./cmd/tui
+    main: ./cmd/cloudtui
     binary: cloudtui
     env:
       - CGO_ENABLED=0
@@ -33,6 +33,28 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+
+homebrew_casks:
+  - name: cloudtui
+    repository:
+      owner: ePex
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ePex/cloudtui"
+    description: "A terminal UI for managing cloud resources."
+    license: "MIT"
+    binaries:
+      - cloudtui
+
+scoops:
+  - name: cloudtui
+    repository:
+      owner: ePex
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ePex/cloudtui"
+    description: "A terminal UI for managing cloud resources."
+    license: "MIT"
 
 changelog:
   sort: asc

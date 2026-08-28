@@ -6,7 +6,7 @@ Go terminal UI using tview/tcell. See root `CLAUDE.md` for repository convention
 
 | Path             | Description                        |
 |------------------|------------------------------------|
-| `cmd/tui/`       | Entrypoint (`main.go`)             |
+| `cmd/cloudtui/`  | Entrypoint (`main.go`)             |
 | `internal/app/`  | Application shell                  |
 | `internal/ui/`   | View interface and implementations |
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,15 @@ func themeOrFatal(t *testing.T, name string) Palette {
 		t.Fatalf("PaletteForTheme(%q) = (_, false), want (_, true)", name)
 	}
 	return p
+}
+
+// setHomeDir isolates os.UserHomeDir() to dir for the duration of the test.
+// Sets both HOME (Unix) and USERPROFILE (Windows) unconditionally — the one
+// os.UserHomeDir() doesn't consult on the current OS is simply ignored.
+func setHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }
 
 func TestDefault(t *testing.T) {
@@ -273,12 +283,134 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadDefaultFallsBackWhenAbsent(t *testing.T) {
+	setHomeDir(t, t.TempDir())
+	t.Chdir(t.TempDir()) // no legacy config.yaml to migrate
+
 	got, err := LoadDefault()
 	if err != nil {
 		t.Fatalf("LoadDefault() error = %v, want nil", err)
 	}
 	if want := Default(); !reflect.DeepEqual(got, want) {
-		t.Errorf("LoadDefault() = %#v, want %#v (no config.yaml in test cwd)", got, want)
+		t.Errorf("LoadDefault() = %#v, want %#v (no config.yaml anywhere)", got, want)
+	}
+}
+
+func TestDefaultPath(t *testing.T) {
+	home := t.TempDir()
+	setHomeDir(t, home)
+
+	got, err := DefaultPath()
+	if err != nil {
+		t.Fatalf("DefaultPath() error = %v, want nil", err)
+	}
+	if want := filepath.Join(home, ".cloudtui", "config.yaml"); got != want {
+		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+func TestMigrateLegacyConfigCopiesWhenDestAbsent(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "legacy.yaml")
+	newPath := filepath.Join(dir, "new", "config.yaml")
+
+	if err := os.WriteFile(legacy, []byte("theme: cyberpunk\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy) error = %v", err)
+	}
+
+	if err := migrateLegacyConfig(legacy, newPath); err != nil {
+		t.Fatalf("migrateLegacyConfig() error = %v, want nil", err)
+	}
+
+	got, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("ReadFile(newPath) error = %v", err)
+	}
+	if string(got) != "theme: cyberpunk\n" {
+		t.Errorf("migrated content = %q, want %q", got, "theme: cyberpunk\n")
+	}
+}
+
+func TestMigrateLegacyConfigNoopWhenDestExists(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "legacy.yaml")
+	newPath := filepath.Join(dir, "config.yaml")
+
+	if err := os.WriteFile(legacy, []byte("theme: cyberpunk\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy) error = %v", err)
+	}
+	if err := os.WriteFile(newPath, []byte("theme: dark\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(newPath) error = %v", err)
+	}
+
+	if err := migrateLegacyConfig(legacy, newPath); err != nil {
+		t.Fatalf("migrateLegacyConfig() error = %v, want nil", err)
+	}
+
+	got, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("ReadFile(newPath) error = %v", err)
+	}
+	if string(got) != "theme: dark\n" {
+		t.Errorf("newPath content = %q, want unchanged %q", got, "theme: dark\n")
+	}
+}
+
+func TestMigrateLegacyConfigNoopWhenSourceAbsent(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "does-not-exist.yaml")
+	newPath := filepath.Join(dir, "config.yaml")
+
+	if err := migrateLegacyConfig(legacy, newPath); err != nil {
+		t.Fatalf("migrateLegacyConfig() error = %v, want nil", err)
+	}
+	if _, err := os.Stat(newPath); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("newPath exists, want it absent (nothing to migrate)")
+	}
+}
+
+func TestLoadDefaultMigratesOnFirstRun(t *testing.T) {
+	setHomeDir(t, t.TempDir())
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	if err := os.WriteFile(filepath.Join(cwd, "config.yaml"), []byte("theme: cyberpunk\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy config.yaml) error = %v", err)
+	}
+
+	got, err := LoadDefault()
+	if err != nil {
+		t.Fatalf("LoadDefault() error = %v, want nil", err)
+	}
+	if got.Theme != "cyberpunk" {
+		t.Errorf("LoadDefault().Theme = %q, want %q (migrated)", got.Theme, "cyberpunk")
+	}
+
+	path, err := DefaultPath()
+	if err != nil {
+		t.Fatalf("DefaultPath() error = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("migrated config not found at %q: %v", path, err)
+	}
+}
+
+func TestSaveDefaultWritesUnderHomeConfigDir(t *testing.T) {
+	home := t.TempDir()
+	setHomeDir(t, home)
+
+	cfg := Default()
+	cfg.Theme = "gofore"
+	if err := SaveDefault(cfg); err != nil {
+		t.Fatalf("SaveDefault() error = %v, want nil", err)
+	}
+
+	want := filepath.Join(home, ".cloudtui", "config.yaml")
+	got, err := Load(want)
+	if err != nil {
+		t.Fatalf("Load(%q) error = %v", want, err)
+	}
+	if got.Theme != "gofore" {
+		t.Errorf("Theme = %q, want %q", got.Theme, "gofore")
 	}
 }
 

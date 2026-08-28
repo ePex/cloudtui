@@ -4,7 +4,47 @@ A terminal UI for managing cloud resources.
 
 ## Installing a release
 
-Download the archive for your OS/architecture from the
+**macOS/Linux:**
+
+```
+curl -fsSL https://raw.githubusercontent.com/ePex/cloudtui/main/scripts/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```
+irm https://raw.githubusercontent.com/ePex/cloudtui/main/scripts/install.ps1 | iex
+```
+
+Both scripts install to a per-user directory (no `sudo`/admin rights
+needed) and verify the download's checksum before installing. Pin a
+specific version with the `CLOUDTUI_VERSION` environment variable
+(default: latest).
+
+**Homebrew (macOS/Linux):**
+
+```
+brew install --cask ePex/tap/cloudtui
+```
+
+Upgrade later with `brew upgrade --cask cloudtui`.
+
+**Scoop (Windows):**
+
+```
+scoop bucket add ePex https://github.com/ePex/scoop-bucket
+scoop install cloudtui
+```
+
+Upgrade later with `scoop update cloudtui`.
+
+**Go toolchain installed?**
+
+```
+go install github.com/ePex/cloudtui/tui/cmd/cloudtui@latest
+```
+
+Prefer to pick the archive yourself? Download it for your OS/architecture from the
 [Releases](https://github.com/ePex/cloudtui/releases) page
 (`cloudtui_<version>_<os>_<arch>.tar.gz`, or `.zip` on Windows), extract
 it, and run the `cloudtui` binary inside. `checksums.txt` on the same
