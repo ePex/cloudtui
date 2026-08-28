@@ -6,9 +6,12 @@
 2. Install script (`install.sh` + `install.ps1`).
 3. Homebrew.
 4. Scoop.
-5. apt/rpm via nfpm + Gemfury.
+5. ~~apt/rpm via nfpm + Gemfury~~ — **descoped 2026-08-28**, see the note
+   at the top of that section below. Implemented and verified, then
+   removed at the user's request before publishing any secrets/wiring
+   for it.
 6. `go install` doc note (no code).
-7. README rewrite covering all five.
+7. README rewrite covering the four shipped methods.
 8. Merge-back into `spec/01` and `spec/02`.
 
 Each numbered item below is a separate `tasks.md` step (or a few), reviewed
@@ -188,7 +191,20 @@ rather than one shared PAT, so each can be scoped to exactly one repo if
 using fine-grained PATs — narrower blast radius than one token valid for
 both.)
 
-## 5. apt/rpm via nfpm + Gemfury
+## 5. apt/rpm via nfpm + Gemfury (descoped 2026-08-28)
+
+**This section describes a design that was implemented and verified,
+then removed** — kept here rather than deleted, per this project's
+practice of preserving the record of what was tried and why. The
+`nfpms:` block below was added to `.goreleaser.yaml`, validated with
+`goreleaser check` and a local `--snapshot` dry run (real `.deb`/`.rpm`/
+`.apk` files built, correct `Maintainer`/`Homepage`/`Description`
+confirmed by unpacking one), then removed again once the user decided,
+after seeing what Gemfury account setup would actually involve, that it
+wasn't worth it for a third channel beyond Homebrew/Scoop. The
+`publishers:`/Gemfury wiring below was never actually added to
+`.goreleaser.yaml` — the descope happened at the "user creates the
+account" pause point, before that step.
 
 `.goreleaser.yaml` gains an `nfpms:` block (linux only — nfpm doesn't
 package for darwin/windows):
@@ -248,19 +264,19 @@ Documented in the README rewrite only.
 
 ## 7. README rewrite
 
-"Installing a release" section restructured into the five options,
-roughly: install script and `go install` first (zero setup), then
-Homebrew/Scoop/apt (one-time add, then `install`/`upgrade` going
+"Installing a release" section restructured into the four shipped
+options, roughly: install script and `go install` first (zero setup),
+then Homebrew/Scoop (one-time add, then `install`/`upgrade` going
 forward), manual archive download kept last as the fallback that always
 works regardless of platform/tooling.
 
 ## 8. Merge-back
 
 - `spec/02-ci-and-release/spec.md`: replace the "no install
-  scripts/packaging" out-of-scope line with the five methods actually
-  shipped (script, Homebrew, Scoop, apt/rpm/apk via Gemfury, go
-  install), the new `.goreleaser.yaml` blocks, the two new repos, and
-  the new secrets (naming them, not their values).
+  scripts/packaging" out-of-scope line with the four methods actually
+  shipped (script, Homebrew, Scoop, go install), the new
+  `.goreleaser.yaml` blocks, the two new repos, and the new secrets
+  (naming them, not their values).
 - `spec/01-repo-and-tui-shell/spec.md`: update the theming section's
   `config.yaml` reference to name `~/.cloudtui/config.yaml` and mention
   the one-time legacy migration.
@@ -271,12 +287,14 @@ works regardless of platform/tooling.
   migration** — one location, matching the log file's existing
   precedent; simpler than supporting multiple resolution strategies for
   a single-user desktop-style app.
-- **Gemfury over a self-hosted apt repo** — self-hosting (e.g. a GitHub
-  Pages-hosted repo with `reprepro`/`aptly` + a signing key managed in
-  CI) would avoid a third-party dependency but is meaningfully more
+- **apt/rpm dropped rather than pursued via a self-hosted repo** —
+  self-hosting (e.g. a GitHub Pages-hosted repo with `reprepro`/`aptly` +
+  a signing key managed in CI) was the alternative to Gemfury considered
+  before descoping apt entirely; it would have been meaningfully more
   moving parts (key management, repo metadata regeneration) for a small
-  OSS project; Gemfury's free OSS tier trades a third-party dependency
-  for near-zero ongoing maintenance.
+  OSS project, and once Gemfury itself (the lower-effort option) didn't
+  feel worth the account-setup overhead for a third channel, the
+  self-hosted alternative — strictly more work — clearly wasn't either.
 - **Two separate tap/bucket tokens, not one shared PAT** — narrower
   blast radius if fine-grained PATs are used (each scoped to exactly one
   repo) at the cost of one extra secret to create.
