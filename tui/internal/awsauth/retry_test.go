@@ -10,7 +10,7 @@ import (
 
 func TestWithReauthSuccessFirstTry(t *testing.T) {
 	loginCalls, onReauthCalls, callCalls := 0, 0, 0
-	login := func(context.Context, string) error {
+	login := func(context.Context, string, func(string, string)) error {
 		loginCalls++
 		return nil
 	}
@@ -20,7 +20,7 @@ func TestWithReauthSuccessFirstTry(t *testing.T) {
 		return "ok", nil
 	}
 
-	got, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, onReauth, call)
+	got, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, onReauth, nil, call)
 	if err != nil {
 		t.Fatalf("WithReauth() error = %v, want nil", err)
 	}
@@ -38,7 +38,7 @@ func TestWithReauthSuccessFirstTry(t *testing.T) {
 func TestWithReauthRetriesAfterSuccessfulLogin(t *testing.T) {
 	invalidToken := &sentinelReauthError{}
 	loginCalls, onReauthCalls, callCalls := 0, 0, 0
-	login := func(context.Context, string) error {
+	login := func(context.Context, string, func(string, string)) error {
 		loginCalls++
 		return nil
 	}
@@ -51,7 +51,7 @@ func TestWithReauthRetriesAfterSuccessfulLogin(t *testing.T) {
 		return "ok-after-retry", nil
 	}
 
-	got, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, onReauth, call)
+	got, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, onReauth, nil, call)
 	if err != nil {
 		t.Fatalf("WithReauth() error = %v, want nil", err)
 	}
@@ -73,13 +73,13 @@ func TestWithReauthLoginFails(t *testing.T) {
 	invalidToken := &sentinelReauthError{}
 	loginErr := errors.New("aws CLI not found")
 	callCalls := 0
-	login := func(context.Context, string) error { return loginErr }
+	login := func(context.Context, string, func(string, string)) error { return loginErr }
 	call := func(context.Context) (string, error) {
 		callCalls++
 		return "", invalidToken
 	}
 
-	_, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, nil, call)
+	_, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, nil, nil, call)
 	if err == nil {
 		t.Fatal("WithReauth() error = nil, want non-nil when login fails")
 	}
@@ -94,7 +94,7 @@ func TestWithReauthLoginFails(t *testing.T) {
 func TestWithReauthNotNeeded(t *testing.T) {
 	originalErr := errors.New("no AWS profile selected")
 	loginCalls, onReauthCalls, callCalls := 0, 0, 0
-	login := func(context.Context, string) error {
+	login := func(context.Context, string, func(string, string)) error {
 		loginCalls++
 		return nil
 	}
@@ -106,7 +106,7 @@ func TestWithReauthNotNeeded(t *testing.T) {
 
 	// AuthStaticKeys: NeedsReauth is never true regardless of the error,
 	// so this must fall straight through without touching login/onReauth.
-	_, err := WithReauth(t.Context(), "p", awsprofile.AuthStaticKeys, login, onReauth, call)
+	_, err := WithReauth(t.Context(), "p", awsprofile.AuthStaticKeys, login, onReauth, nil, call)
 	if !errors.Is(err, originalErr) {
 		t.Errorf("WithReauth() error = %v, want %v unchanged", err, originalErr)
 	}
@@ -115,6 +115,39 @@ func TestWithReauthNotNeeded(t *testing.T) {
 	}
 	if callCalls != 1 {
 		t.Errorf("call invoked %d times, want 1", callCalls)
+	}
+}
+
+func TestWithReauthPassesOnCodeThroughToLogin(t *testing.T) {
+	invalidToken := &sentinelReauthError{}
+	callCalls := 0
+	call := func(context.Context) (string, error) {
+		callCalls++
+		if callCalls == 1 {
+			return "", invalidToken
+		}
+		return "ok", nil
+	}
+
+	var gotOnCode func(string, string)
+	login := func(_ context.Context, _ string, onCode func(string, string)) error {
+		gotOnCode = onCode
+		return nil
+	}
+
+	onCodeCalled := false
+	onCode := func(code, url string) { onCodeCalled = true }
+
+	_, err := WithReauth(t.Context(), "p", awsprofile.AuthSSO, login, nil, onCode, call)
+	if err != nil {
+		t.Fatalf("WithReauth() error = %v, want nil", err)
+	}
+	if gotOnCode == nil {
+		t.Fatal("login was not given an onCode callback")
+	}
+	gotOnCode("WDJB-MJHT", "https://device.sso.us-east-1.amazonaws.com/")
+	if !onCodeCalled {
+		t.Error("the onCode callback login received was not the one WithReauth was given")
 	}
 }
 

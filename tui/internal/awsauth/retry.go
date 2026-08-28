@@ -9,7 +9,9 @@ import (
 
 // WithReauth calls call once. If it fails with an error NeedsReauth
 // recognizes for profile's authType, it invokes onReauth (so the caller
-// can show a status message before the browser opens), then login, then
+// can show a status message before the browser opens), then login
+// (passing onCode through so the caller can show the device
+// verification code/URL once login's subprocess prints them), then
 // retries call exactly once. Any other failure — including login itself
 // failing — is returned as-is; login's failure is wrapped onto the
 // original call error for context.
@@ -17,8 +19,9 @@ func WithReauth[T any](
 	ctx context.Context,
 	profile string,
 	authType awsprofile.AuthType,
-	login func(ctx context.Context, profile string) error,
+	login func(ctx context.Context, profile string, onCode func(code, url string)) error,
 	onReauth func(),
+	onCode func(code, url string),
 	call func(ctx context.Context) (T, error),
 ) (T, error) {
 	result, err := call(ctx)
@@ -30,7 +33,7 @@ func WithReauth[T any](
 		onReauth()
 	}
 
-	if loginErr := login(ctx, profile); loginErr != nil {
+	if loginErr := login(ctx, profile, onCode); loginErr != nil {
 		return result, fmt.Errorf("%w (re-auth attempt failed: %v)", err, loginErr)
 	}
 
