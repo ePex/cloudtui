@@ -35,7 +35,10 @@ func main() {
 		cfg = config.Default()
 	}
 
-	cfgPath, _ := filepath.Abs("config.yaml")
+	cfgPath, err := config.DefaultPath()
+	if err != nil {
+		cfgPath = "(unresolved)"
+	}
 	slog.Info("startup", "config", cfgPath, "theme", cfg.Theme)
 
 	if err := app.New(cfg).Run(); err != nil {

@@ -16,7 +16,7 @@ this module.
 
 ## Package layout
 
-- `cmd/tui/` — entrypoint only (`main.go`); no logic beyond wiring.
+- `cmd/cloudtui/` — entrypoint only (`main.go`); no logic beyond wiring.
 - `cmd/seedqueue/` — entrypoint only; dev tool that sends sample JSON
   messages to a queue (`task seed:queue -- <queue> <count>`).
 - `cmd/devtool/` — entrypoint only; dev tool for live-testing setup: create/

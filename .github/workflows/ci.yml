@@ -21,6 +21,12 @@ jobs:
       - run: task test:tui
       - run: task build:tui
 
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck scripts/install.sh
+
   mq-proxy:
     strategy:
       fail-fast: false

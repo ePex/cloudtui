@@ -19,6 +19,18 @@ func mustTheme(t *testing.T, name string) config.Palette {
 	return p
 }
 
+// setHomeDir isolates os.UserHomeDir() (and therefore config.SaveDefault's
+// write target) to dir for the duration of the test — without this, any
+// test exercising a config-persisting App method would write to the real
+// developer's ~/.cloudtui/config.yaml. Sets both HOME (Unix) and
+// USERPROFILE (Windows) unconditionally; the one os.UserHomeDir() doesn't
+// consult on the current OS is simply ignored.
+func setHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func TestApplyThemeSetsBoxDefaults(t *testing.T) {
 	p := config.Palette{
 		Background:    "#111111",
@@ -133,7 +145,7 @@ func TestReapplyThemeUpdatesGlobalStyles(t *testing.T) {
 // config mutation, not anything Settings-specific.
 
 func TestSwitchThemeAppliesPalette(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
@@ -149,7 +161,7 @@ func TestSwitchThemeAppliesPalette(t *testing.T) {
 }
 
 func TestSwitchThemeUnknownIsNoOp(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	original := a.cfg.Theme
 
@@ -161,13 +173,17 @@ func TestSwitchThemeUnknownIsNoOp(t *testing.T) {
 }
 
 func TestSwitchThemePersistsConfig(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })
 
 	a.switchTheme("cyberpunk")
 
-	if _, err := os.Stat("config.yaml"); err != nil {
+	path, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("config.DefaultPath() error = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
 		t.Errorf("config.yaml not written after switchTheme: %v", err)
 	}
 }

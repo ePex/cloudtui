@@ -457,7 +457,7 @@ func TestOnPromptDoneShortAliasQ(t *testing.T) {
 }
 
 func TestOnPromptDoneThemeCommand(t *testing.T) {
-	t.Chdir(t.TempDir())
+	setHomeDir(t, t.TempDir())
 	a := New(config.Default())
 	a.prompt.SetText("theme cyberpunk")
 
