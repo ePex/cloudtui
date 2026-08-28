@@ -84,17 +84,35 @@
    `plan.md` §5 for the full record of what was built and why it was
    pulled. No secrets were ever created for this one.
 
-8. [ ] **README: finish the rewrite.** Fold in Homebrew, Scoop, and a
+8. [x] **README: finish the rewrite.** Folded in Homebrew, Scoop, and a
    `go install` line — completing the "Installing a release" restructure
    started in task 4, in the order from `plan.md` §7. Manual archive
-   download stays as the documented fallback.
+   download stays as the documented fallback. While writing the
+   `go install` line, actually ran it locally and found it produced a
+   binary named `tui` (Go names it after the package directory, not the
+   module) — inconsistent with every other method's `cloudtui`. Per
+   `plan.md` §6, renamed `tui/cmd/tui/` → `tui/cmd/cloudtui/` (`git mv`)
+   to fix it at the source rather than document around it; updated every
+   real reference (`.goreleaser.yaml`, `Taskfile.yml`, `tui/README.md`,
+   `tui/CLAUDE.md`, `tui/scripts/smoke-test.sh`,
+   `.claude/skills/verify-live/SKILL.md`) and re-verified: `go build`/
+   `go vet`/`go test ./...` all clean, `task build:tui` still works,
+   `goreleaser check` + a `--snapshot` dry run still produce a correctly
+   named `cloudtui` binary inside the archive, and `go install
+   ./cmd/cloudtui` now genuinely installs a binary named `cloudtui`.
+   `spec/01`/`spec/06`'s own `cmd/tui` references are intentionally left
+   for task 9 (merge-back), matching the rule that `spec/` only changes
+   there.
 
 9. [ ] **Merge-back.** Update `spec/02-ci-and-release/spec.md` (replace
    the stale out-of-scope line, document the four methods, the new
    `.goreleaser.yaml` blocks, the two new repos, and the new secrets by
    name) and `spec/01-repo-and-tui-shell/spec.md` (the theming section's
-   `config.yaml` reference → `~/.cloudtui/config.yaml` + migration note).
-   Delete `spec-wip/fe-one-line-install/`.
+   `config.yaml` reference → `~/.cloudtui/config.yaml` + migration note,
+   **and** its repo-layout tree's `cmd/tui/` → `cmd/cloudtui/`, per the
+   rename in task 8). Also fix `spec/06-logging/spec.md`'s
+   `cmd/tui/main.go` reference to `cmd/cloudtui/main.go`. Delete
+   `spec-wip/fe-one-line-install/`.
 
 10. [ ] **Cut a release and verify end-to-end.** Once CI is green and
     the PR is merged, cut the next tag (following the existing

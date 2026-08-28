@@ -15,13 +15,13 @@ tasks:
     desc: Build the tui binary into tui/bin/.
     dir: tui
     cmds:
-      - go build -o bin/cloudtui{{exeExt}} ./cmd/tui
+      - go build -o bin/cloudtui{{exeExt}} ./cmd/cloudtui
 
   run:tui:
     desc: Run the tui application from source.
     dir: tui
     cmds:
-      - go run ./cmd/tui
+      - go run ./cmd/cloudtui
 
   seed:queue:
     desc: 'Send sample JSON messages to a queue via Jolokia. Usage: task seed:queue -- <queue> <count>'

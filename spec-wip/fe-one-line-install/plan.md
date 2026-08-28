@@ -257,10 +257,22 @@ against the real account.
 
 ## 6. `go install`
 
-No code/pipeline change — `tui/go.mod`'s module path
-(`github.com/ePex/cloudtui/tui`) already makes
-`go install github.com/ePex/cloudtui/tui/cmd/tui@latest` work today.
-Documented in the README rewrite only.
+**Revised from the original "doc-only" plan** after actually running
+`go install github.com/ePex/cloudtui/tui/cmd/tui@latest` locally
+(`GOBIN=... go install ...`) and finding it produces a binary literally
+named `tui`, not `cloudtui` — Go names the installed binary after the
+main package's directory, not the module. Every other install method
+(script, Homebrew, Scoop, manual archive) produces `cloudtui`; presented
+with that inconsistency, the user chose to fix it at the source rather
+than document around it: `tui/cmd/tui/` renamed to `tui/cmd/cloudtui/`
+(`git mv`, preserving history). This is a real, if small, code-adjacent
+change — not doc-only as originally planned — so it also touches:
+`.goreleaser.yaml`'s `main: ./cmd/tui`, `Taskfile.yml`'s `build:tui`/
+`run:tui` tasks, `tui/README.md` and `tui/CLAUDE.md`'s package-layout
+tables, `tui/scripts/smoke-test.sh`, and
+`.claude/skills/verify-live/SKILL.md`. `spec/`'s own references
+(`spec/01`, `spec/06`) are fixed at merge-back (task 9), not here, per
+the usual rule that `spec/` only changes at merge-back.
 
 ## 7. README rewrite
 

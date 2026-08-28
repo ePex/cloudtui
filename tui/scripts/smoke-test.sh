@@ -98,7 +98,7 @@ filter_queues() {
 }
 
 log "building tui..."
-go build -o "$BIN" ./cmd/tui
+go build -o "$BIN" ./cmd/cloudtui
 
 log "creating disposable queues: $SRC_QUEUE, $DST_QUEUE"
 go run ./cmd/devtool add-queue "$SRC_QUEUE"

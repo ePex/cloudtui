@@ -13,7 +13,7 @@ before:
 builds:
   - id: tui
     dir: tui
-    main: ./cmd/tui
+    main: ./cmd/cloudtui
     binary: cloudtui
     env:
       - CGO_ENABLED=0

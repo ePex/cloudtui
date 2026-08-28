@@ -50,10 +50,12 @@ consumers of it:
 3. **Scoop** — `scoop bucket add ePex https://github.com/ePex/scoop-bucket`
    then `scoop install cloudtui` (Windows). Same mechanism, pushing a
    manifest to a new bucket repo, `ePex/scoop-bucket`.
-4. **`go install`** — `go install github.com/ePex/cloudtui/tui/cmd/tui@latest`.
-   Already works today (confirmed: `tui/go.mod`'s module path is
-   `github.com/ePex/cloudtui/tui`) — this task only documents it, no
-   code/pipeline change.
+4. **`go install`** — `go install github.com/ePex/cloudtui/tui/cmd/cloudtui@latest`.
+   `tui/cmd/tui/` was renamed to `tui/cmd/cloudtui/` (see `plan.md` §6)
+   so the installed binary is actually named `cloudtui`, matching every
+   other install method — Go otherwise names it after the last path
+   segment (`tui`), found by actually running the command locally
+   before writing this down as a fact.
 
 `README.md`'s "Installing a release" section is restructured to present
 all of these, with the install script and `go install` as the two
