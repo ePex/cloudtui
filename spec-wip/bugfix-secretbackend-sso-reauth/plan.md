@@ -71,6 +71,56 @@ that stub `authTypeFor` to return a non-SSO type can safely pass `nil`
 for both, exactly like `awsauth.WithReauth`'s own nil-safe `onReauth`
 handling.
 
+### Addendum, found live: also revert the "waiting" message
+
+Live-testing this (see "Manual verification" below) surfaced a real gap
+the plan above didn't cover: the bottom status bar shows the SSO-wait
+message, but nothing ever clears it back — unlike every *other*
+`WithReauth` call site, where the message lives in a table row that
+naturally gets overwritten once real data renders, the bottom status bar
+is a separate, persistent UI element with nothing to overwrite it. Worse,
+the table's own "Loading queues…" placeholder (from the queues-loading
+indicator bugfix, already shipped) just sits there unchanged through the
+whole reauth wait, so the user sees two disconnected messages at once
+with no indication they're related.
+
+Fix: `SecretResolver` gains a fourth field, `onReauthDone func()`,
+invoked immediately after `login` returns — success or failure — before
+the retry fires:
+
+```go
+loginThenNotifyDone := func(ctx context.Context, profile string) error {
+	err := r.login(ctx, profile)
+	if r.onReauthDone != nil {
+		r.onReauthDone()
+	}
+	return err
+}
+result, err := awsauth.WithReauth(ctx, profile, authType, loginThenNotifyDone, r.onReauth, /* ... */)
+```
+
+Firing `onReauthDone` regardless of `login`'s outcome matters: a caller
+reverting its own "reauth in progress" message must not get stuck
+showing it forever just because the login attempt failed.
+
+New `ui.ReauthStatusShower` interface (`tui/internal/ui/reauth.go`,
+mirroring the existing `Themeable`/`Shortcuttable` optional-interface
+pattern — dispatched via the existing `a.activeView()` helper):
+
+```go
+type ReauthStatusShower interface {
+	ShowReauthWaiting()
+	ShowReauthDone()
+}
+```
+
+`QueuesView` implements it (`tui/internal/view/queues.go`): a new
+`loadingQueuesStatus` const holds `"Loading queues…"` (previously an
+inline literal in `Load()`) so both `Load()` and `ShowReauthDone()` stay
+in sync; `ShowReauthWaiting()` replaces the table's placeholder with the
+SSO-wait message; `ShowReauthDone()` reverts it back to
+`loadingQueuesStatus`.
+
 ## `tui/internal/app/app.go`
 
 The one production call site:
@@ -82,15 +132,37 @@ a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret)
 becomes:
 
 ```go
-a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin, func() {
-	a.QueueUpdateDraw(func() {
-		a.SetStatus("AWS SSO session expired — opening browser to log in...")
-	})
-})
+a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin,
+	func() {
+		a.QueueUpdateDraw(func() {
+			a.SetStatus("AWS SSO session expired — opening browser to log in...")
+			if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+				av.ShowReauthWaiting()
+			}
+		})
+	},
+	func() {
+		a.QueueUpdateDraw(func() {
+			a.SetStatus("")
+			if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
+				av.ShowReauthDone()
+			}
+		})
+	},
+)
 ```
 
-Uses the bottom status bar (`SetStatus`), not a per-view table row —
-see spec.md for why (this code path isn't owned by any one view).
+Uses the bottom status bar (`SetStatus`) *and*, if the currently active
+view implements `ui.ReauthStatusShower`, its own table-level message too
+— covers both UI regions the live test found showing stale/disconnected
+text. `onReauthDone` also clears the status bar back to `""`, so it
+doesn't linger after login completes the way it did before this
+addendum. Not unit-tested at this exact call-site level (it's a thin,
+direct composition of already-tested primitives — `SetStatus`,
+`QueueUpdateDraw`, `activeView`, the type-assert dispatch pattern already
+used for `Themeable` — with no independent logic of its own); covered
+indirectly by `SecretResolver`'s wiring tests plus `QueuesView`'s own
+`ShowReauthWaiting`/`ShowReauthDone` tests.
 
 ## `tui/internal/queue/secretbackend/secretbackend_test.go`
 
@@ -119,16 +191,25 @@ see spec.md for why (this code path isn't owned by any one view).
     and the raw error is surfaced (proves this doesn't accidentally
     fire reauth for auth types where the whole flow, especially
     `login`'s real `aws sso login` shell-out, would just fail).
+  - `TestResolveSurfacesErrorWhenReauthLoginFails` additionally asserts
+    `onReauthDone` still fires when `login` fails (addendum above).
+
+## `tui/internal/view/queues_test.go`
+
+- `TestQueuesViewShowReauthWaitingThenDone` — after some prior table
+  state (so there's something to overwrite), `ShowReauthWaiting()`
+  shows the SSO-wait message and `ShowReauthDone()` reverts to
+  `loadingQueuesStatus`.
 
 ## Manual verification
 
-Genuinely hard to trigger for real (needs an actually-expired SSO
-session against a real AWS org) — `tasks.md`'s manual-check task
-documents inspecting the code path live if a real expired session is
-available, but falls back to the unit tests above as the primary
-evidence, consistent with `CLAUDE.md`'s "say so explicitly" rule for
-behavior that can't be fully driven by hand. The visible-effect half
-(does `SetStatus` actually render as expected in a live terminal) is
-already covered by the *existing* `WithReauth` call sites' own
-established live behavior — this isn't new UI, just a new trigger path
-into function that's already visibly proven to work.
+Turned out *not* to be as hard to trigger as initially assumed: the user
+tested this live against a real expired SSO session and found the
+addendum's gap directly (status bar message never clearing, table stuck
+on a generic "Loading queues…" throughout) — which is exactly the kind
+of thing `CLAUDE.md`'s "drive the real binary" guidance exists for. The
+fix above was verified against that same live report, not re-tested
+live independently in this session (no real expired SSO session
+available here) — the unit tests are the evidence of record for this
+implementation, with the live report as the origin of the addendum
+itself.

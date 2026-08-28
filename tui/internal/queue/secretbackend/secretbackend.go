@@ -52,28 +52,34 @@ func (c *secretCache) invalidate(profile, secretName string) {
 // passwords, caching resolved values in memory. See
 // spec/56-fe-amq-connection-aws-secret-password.
 type SecretResolver struct {
-	cache       *secretCache
-	reveal      func(ctx context.Context, profile, name string) (string, bool, error)
-	authTypeFor func(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	login       func(ctx context.Context, profile string) error
-	onReauth    func()
+	cache        *secretCache
+	reveal       func(ctx context.Context, profile, name string) (string, bool, error)
+	authTypeFor  func(ctx context.Context, profile string) (awsprofile.AuthType, error)
+	login        func(ctx context.Context, profile string) error
+	onReauth     func()
+	onReauthDone func()
 }
 
 // NewSecretResolver constructs a SecretResolver that resolves secrets via
 // reveal (e.g. awssecrets.Reveal). If reveal fails because profile's
 // cached SSO token is missing/expired (per authTypeFor and
-// awsauth.NeedsReauth), onReauth is called, then login, then reveal is
-// retried once — the same recovery every other AWS-backed view already
-// gets via awsauth.WithReauth (see spec/36-fe-aws-sso-reauth). login and
-// onReauth are only ever invoked for an AuthSSO profile, so callers that
-// never expect SSO profiles may pass nil for either.
+// awsauth.NeedsReauth), onReauth is called, then login, then onReauthDone
+// (regardless of whether login succeeded), then reveal is retried once —
+// the same recovery every other AWS-backed view already gets via
+// awsauth.WithReauth (see spec/36-fe-aws-sso-reauth), plus onReauthDone
+// so a caller showing its own "reauth in progress" message (e.g. a
+// table's loading placeholder) can revert it right when login finishes,
+// rather than it sitting there through the retry too. login, onReauth,
+// and onReauthDone are only ever invoked for an AuthSSO profile, so
+// callers that never expect SSO profiles may pass nil for any of them.
 func NewSecretResolver(
 	reveal func(ctx context.Context, profile, name string) (string, bool, error),
 	authTypeFor func(ctx context.Context, profile string) (awsprofile.AuthType, error),
 	login func(ctx context.Context, profile string) error,
 	onReauth func(),
+	onReauthDone func(),
 ) *SecretResolver {
-	return &SecretResolver{cache: newSecretCache(), reveal: reveal, authTypeFor: authTypeFor, login: login, onReauth: onReauth}
+	return &SecretResolver{cache: newSecretCache(), reveal: reveal, authTypeFor: authTypeFor, login: login, onReauth: onReauth, onReauthDone: onReauthDone}
 }
 
 // revealResult carries reveal's two success values through
@@ -95,7 +101,14 @@ func (r *SecretResolver) Resolve(ctx context.Context, profile, secretName string
 		return v, nil
 	}
 	authType, _ := r.authTypeFor(ctx, profile)
-	result, err := awsauth.WithReauth(ctx, profile, authType, r.login, r.onReauth,
+	loginThenNotifyDone := func(ctx context.Context, profile string) error {
+		err := r.login(ctx, profile)
+		if r.onReauthDone != nil {
+			r.onReauthDone()
+		}
+		return err
+	}
+	result, err := awsauth.WithReauth(ctx, profile, authType, loginThenNotifyDone, r.onReauth,
 		func(ctx context.Context) (revealResult, error) {
 			value, isBinary, err := r.reveal(ctx, profile, secretName)
 			return revealResult{value, isBinary}, err
