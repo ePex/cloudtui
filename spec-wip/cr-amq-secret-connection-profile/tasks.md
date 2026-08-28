@@ -234,8 +234,12 @@
    DatadogEditor, etc.) has the identical gap for the same reason —
    raised with the user as a real architectural fork (replace
    `tview.Form`'s built-in Button with a hand-built left-aligned
-   focusable widget, app-wide, vs. leave as inherent/pre-existing)
-   rather than deciding unilaterally.
+   focusable widget, app-wide vs. this dialog only, vs. leave as
+   inherent/pre-existing) rather than deciding unilaterally. **Decision:
+   leave it** — confirmed not worth an app-wide (or even single-dialog)
+   rewrite for a ~2-character cosmetic gap present on every
+   `AddButton`-using dialog already, unrelated to anything this CR
+   actually changed.
 
 10. [ ] **Merge-back.** Update `spec/12-named-connections/spec.md`'s
    "Password resolution" section: remove the "per-connection AWS
