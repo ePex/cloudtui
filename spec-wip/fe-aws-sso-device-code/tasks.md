@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] **Core `awsauth` package.** Rewrite `Login` to stream via
+1. [x] **Core `awsauth` package.** Rewrite `Login` to stream via
    `io.Pipe` + `scanForDeviceCode`; add the `onCode` parameter to
    `WithReauth`. Update `TestLoginAWSCLINotOnPath`; add
    `TestScanForDeviceCodeParsesRealCLIOutputShape`,
@@ -11,7 +11,9 @@
    `retry_test.go` stubs for the new `login` signature.
    `go build`/`go vet`/`go test ./internal/awsauth/...` clean (this task
    alone won't compile the rest of the module — the interface/call-site
-   changes land in tasks 2–3).
+   changes land in tasks 2–3). All 11 tests pass under `-race`,
+   including `TestLoginStreamsDeviceCodeBeforeCompleting`'s real
+   subprocess (fake `aws` script) end-to-end check.
 
 2. [ ] **Interface plumbing, secretbackend, and QueuesView.** Update
    `ui.Host`/`ui.ViewHost`'s `AWSSSOLogin`, `ui.ReauthStatusShower`'s
