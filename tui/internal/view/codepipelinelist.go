@@ -181,6 +181,7 @@ func (lv *CodePipelineListView) load() {
 					lv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
+			nil, // TODO(fe-aws-sso-device-code task 3): show the device code/URL
 			func(ctx context.Context) ([]awscodepipeline.Pipeline, error) {
 				return lv.host.ListPipelines(ctx, profile)
 			},

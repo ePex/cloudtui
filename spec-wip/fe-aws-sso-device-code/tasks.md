@@ -15,7 +15,7 @@
    including `TestLoginStreamsDeviceCodeBeforeCompleting`'s real
    subprocess (fake `aws` script) end-to-end check.
 
-2. [ ] **Interface plumbing, secretbackend, and QueuesView.** Update
+2. [x] **Interface plumbing, secretbackend, and QueuesView.** Update
    `ui.Host`/`ui.ViewHost`'s `AWSSSOLogin`, `ui.ReauthStatusShower`'s
    `ShowReauthWaiting`, `app.go`/`viewhost.go`'s wiring (including the
    `NewSecretResolver` call site's new `onCode` closure),
@@ -26,7 +26,15 @@
    `TestShowReauthWaitingIncludesDeviceCodeAndURLWhenProvided`.
    `go build`/`go vet`/`go test ./...` clean across the whole module at
    the end of this task (this is the point everything compiles together
-   again).
+   again). To get there, the five remaining `WithReauth` call sites
+   (task 3's actual scope) needed a placeholder `nil` argument added for
+   the new `onCode` parameter — Go requires the whole module to compile
+   together, so this couldn't wait for task 3; each is marked with a
+   `// TODO(fe-aws-sso-device-code task 3)` comment and gets its real
+   implementation there. All tests pass; the one `-race` failure
+   (`TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive`
+   in `datadoglogs_test.go`) is the pre-existing, already-known one,
+   confirmed unrelated.
 
 3. [ ] **The five remaining `WithReauth` call sites.** Update
    `ssmparams.go`, `secrets.go`, `logs.go`, `codepipelinedetail.go`,

@@ -87,7 +87,7 @@ type App struct {
 	topBarHeight               int
 	listAWSProfiles            func(context.Context) ([]awsprofile.Profile, error)
 	awsAuthTypeFor             func(ctx context.Context, profile string) (awsprofile.AuthType, error)
-	awsSSOLogin                func(ctx context.Context, profile string) error
+	awsSSOLogin                func(ctx context.Context, profile string, onCode func(code, url string)) error
 	ssmParamsV                 *view.SSMParamsView
 	secretsV                   *view.SecretsView
 	paramDetailV               *view.ParamDetailView
@@ -203,8 +203,13 @@ func New(cfg config.Config) *App {
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = ui.DesktopNotify
 	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin,
-		func() { a.QueueUpdateDraw(a.showReauthWaiting) },
+		func() { a.QueueUpdateDraw(func() { a.showReauthWaiting(awsSSOReauthWaitingMsg) }) },
 		func() { a.QueueUpdateDraw(a.showReauthDone) },
+		func(code, url string) {
+			a.QueueUpdateDraw(func() {
+				a.showReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", awsSSOReauthWaitingMsg, code, url))
+			})
+		},
 	)
 
 	// tview.Application never exposes its tcell.Screen directly (no
@@ -701,6 +706,11 @@ func (a *App) activeView() ui.View {
 	return nil
 }
 
+// awsSSOReauthWaitingMsg is shown (via showReauthWaiting) the moment an
+// SSO re-auth starts, then again with the device verification code/URL
+// appended once awsauth.Login's subprocess prints them.
+const awsSSOReauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
+
 // showReauthWaiting and showReauthDone are secretbackend.SecretResolver's
 // onReauth/onReauthDone callbacks (wrapped in a.QueueUpdateDraw at the
 // call site, since Resolve runs on a background goroutine): if the
@@ -710,11 +720,11 @@ func (a *App) activeView() ui.View {
 // appearing in two places at once (found live). Only a view with no such
 // display falls back to the status bar, so a fetch on some hypothetical
 // future view without this support still gets some indication.
-func (a *App) showReauthWaiting() {
+func (a *App) showReauthWaiting(msg string) {
 	if av, ok := a.activeView().(ui.ReauthStatusShower); ok {
-		av.ShowReauthWaiting()
+		av.ShowReauthWaiting(msg)
 	} else {
-		a.SetStatus("AWS SSO session expired — opening browser to log in...")
+		a.SetStatus(msg)
 	}
 }
 

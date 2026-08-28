@@ -186,6 +186,7 @@ func (lv *LogsView) load() {
 					lv.showStatus("AWS SSO session expired — opening browser to log in...")
 				})
 			},
+			nil, // TODO(fe-aws-sso-device-code task 3): show the device code/URL
 			func(ctx context.Context) ([]awslogs.LogGroup, error) {
 				return lv.host.ListLogGroups(ctx, profile)
 			},
