@@ -202,7 +202,11 @@ func New(cfg config.Config) *App {
 	a.listPipelines = awscodepipeline.ListPipelines
 	a.getPipelineState = awscodepipeline.GetPipelineState
 	a.notify = ui.DesktopNotify
-	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret)
+	a.secretResolver = secretbackend.NewSecretResolver(a.revealSecret, a.AWSAuthTypeFor, a.AWSSSOLogin, func() {
+		a.QueueUpdateDraw(func() {
+			a.SetStatus("AWS SSO session expired — opening browser to log in...")
+		})
+	})
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,

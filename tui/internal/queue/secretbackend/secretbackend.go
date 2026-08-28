@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ePex/cloudtui/tui/internal/awsauth"
+	"github.com/ePex/cloudtui/tui/internal/awsprofile"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/jolokia"
@@ -50,14 +52,35 @@ func (c *secretCache) invalidate(profile, secretName string) {
 // passwords, caching resolved values in memory. See
 // spec/56-fe-amq-connection-aws-secret-password.
 type SecretResolver struct {
-	cache  *secretCache
-	reveal func(ctx context.Context, profile, name string) (string, bool, error)
+	cache       *secretCache
+	reveal      func(ctx context.Context, profile, name string) (string, bool, error)
+	authTypeFor func(ctx context.Context, profile string) (awsprofile.AuthType, error)
+	login       func(ctx context.Context, profile string) error
+	onReauth    func()
 }
 
 // NewSecretResolver constructs a SecretResolver that resolves secrets via
-// reveal (e.g. awssecrets.Reveal).
-func NewSecretResolver(reveal func(ctx context.Context, profile, name string) (string, bool, error)) *SecretResolver {
-	return &SecretResolver{cache: newSecretCache(), reveal: reveal}
+// reveal (e.g. awssecrets.Reveal). If reveal fails because profile's
+// cached SSO token is missing/expired (per authTypeFor and
+// awsauth.NeedsReauth), onReauth is called, then login, then reveal is
+// retried once — the same recovery every other AWS-backed view already
+// gets via awsauth.WithReauth (see spec/36-fe-aws-sso-reauth). login and
+// onReauth are only ever invoked for an AuthSSO profile, so callers that
+// never expect SSO profiles may pass nil for either.
+func NewSecretResolver(
+	reveal func(ctx context.Context, profile, name string) (string, bool, error),
+	authTypeFor func(ctx context.Context, profile string) (awsprofile.AuthType, error),
+	login func(ctx context.Context, profile string) error,
+	onReauth func(),
+) *SecretResolver {
+	return &SecretResolver{cache: newSecretCache(), reveal: reveal, authTypeFor: authTypeFor, login: login, onReauth: onReauth}
+}
+
+// revealResult carries reveal's two success values through
+// awsauth.WithReauth, which is generic over a single (T, error) return.
+type revealResult struct {
+	value    string
+	isBinary bool
 }
 
 // Resolve resolves secretName via profile, using the cache when possible.
@@ -71,10 +94,17 @@ func (r *SecretResolver) Resolve(ctx context.Context, profile, secretName string
 	if v, ok := r.cache.get(profile, secretName); ok {
 		return v, nil
 	}
-	value, isBinary, err := r.reveal(ctx, profile, secretName)
+	authType, _ := r.authTypeFor(ctx, profile)
+	result, err := awsauth.WithReauth(ctx, profile, authType, r.login, r.onReauth,
+		func(ctx context.Context) (revealResult, error) {
+			value, isBinary, err := r.reveal(ctx, profile, secretName)
+			return revealResult{value, isBinary}, err
+		},
+	)
 	if err != nil {
 		return "", fmt.Errorf("resolving password secret %q: %w", secretName, err)
 	}
+	value, isBinary := result.value, result.isBinary
 	if isBinary {
 		return "", fmt.Errorf("password secret %q has a binary value, expected a string", secretName)
 	}
