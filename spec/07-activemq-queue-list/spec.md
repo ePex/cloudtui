@@ -59,6 +59,16 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   resolves, the first's eventual result is discarded — the table always
   ends up reflecting the *most recently triggered* reload, never a
   slower, superseded one.
+- **AWS SSO re-auth**: on a connection whose password comes from AWS
+  Secrets Manager, if the reload's fetch hits an expired SSO session,
+  the "Loading queues…" placeholder switches to "AWS SSO session
+  expired — opening browser to log in…" for the duration of the login,
+  then reverts to "Loading queues…" once login completes (success or
+  failure), before the fetch itself retries — see
+  spec/12-named-connections for the underlying mechanism
+  (`secretbackend.SecretResolver`, `ui.ReauthStatusShower`). The bottom
+  status bar is not also used for this — showing the same message in
+  both places at once was tried and found redundant.
 - **Errors**: a failed reload replaces the table with a single red
   "Error: …" row (`showError`) rather than leaving stale data on screen
   or crashing — the same inline-row mechanism the loading indicator uses.

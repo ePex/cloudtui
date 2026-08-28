@@ -104,6 +104,33 @@ connections:
     server-side but returned an error). The cache is still invalidated on
     failure so the *next* call fetches fresh, but the mutating call itself
     just fails and is reported as usual.
+- **SSO re-auth**: if resolving the secret fails because the active AWS
+  profile's SSO session is missing/expired, the same mechanism every
+  other AWS-backed view already uses (`awsauth.WithReauth`,
+  spec/36-fe-aws-sso-reauth) kicks in — a status message
+  ("AWS SSO session expired — opening browser to log in..."), then
+  `aws sso login` opens the browser, then the secret resolution (and
+  whichever `queue.Backend` call needed it) retries once. Wired in
+  `secretbackend.SecretResolver.Resolve` — the one place that actually
+  calls AWS Secrets Manager — so it covers every operation on a
+  secret-backed connection (list, browse, send, delete, move, purge),
+  not just one call site. Unlike the other `WithReauth` call sites
+  (each owned by one view's own table, using an in-table status row),
+  this one posts to the bottom status bar (`Host.SetStatus`) instead,
+  since the resolver is shared across every view that might touch a
+  secret-backed connection — but only as a **fallback**: if the
+  currently active view implements `ui.ReauthStatusShower` (e.g.
+  `QueuesView`, whose own loading placeholder switches from "Loading
+  queues…" to the SSO-wait message and back once login completes), it
+  handles the message itself and the status bar is left untouched
+  entirely. Found live, in two rounds: first, that the status bar's
+  message never got cleared after login completed; then, once the
+  table-level display was added and fixed, that showing the *same*
+  message in both places at once was redundant rather than helpful — so
+  the two displays are mutually exclusive, not simultaneous. Only
+  triggers for an SSO-authenticating profile — a
+  static-keys/assume-role/credential-process profile's resolution
+  failure surfaces as a normal error, unchanged.
 - Out of scope by design: per-connection AWS profile, structured/JSON
   secrets, sourcing username/broker-name/URL from Secrets Manager, a manual
   "refresh secret" action, editing/rotating the secret's value from within
