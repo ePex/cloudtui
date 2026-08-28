@@ -154,8 +154,8 @@ backend, not less.
 
 - Purge/remove only the queues you created or confirmed are test data.
 - If you added a test connection via the connection manager, delete it
-  (`d`/`x` in the manager) so `config.yaml` (gitignored, but still your
-  real local file) ends up back where you found it.
+  (`d`/`x` in the manager) so `~/.cloudtui/config.yaml` (outside the repo,
+  but still your real local file) ends up back where you found it.
 - `task dev:proxy:stop` if you started mq-proxy.
 - `tmux kill-session` for any session you created.
 - Remove any scratch Go files/binaries you created for one-off checks.
