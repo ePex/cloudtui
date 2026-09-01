@@ -1,0 +1,591 @@
+/*
+ * cloudtui AMQ web console — all page logic.
+ *
+ * Loaded as a classic (non-module) <script src="app.js"> so it works when
+ * index.html is opened directly via file:// (Chrome blocks ES module
+ * loading over file://, but has no such restriction on classic scripts).
+ * The UMD-lite wrapper below makes the same file's pure functions
+ * importable from Node for app.test.js, without a bundler or build step.
+ */
+(function (exports) {
+  'use strict';
+
+  // ---------------------------------------------------------------------
+  // Pure helpers — no DOM, unit tested directly (app.test.js).
+  // ---------------------------------------------------------------------
+
+  function base64Encode(str) {
+    if (typeof btoa === 'function') return btoa(str);
+    return Buffer.from(str, 'utf-8').toString('base64');
+  }
+
+  function buildAuthHeader(username, password) {
+    return 'Basic ' + base64Encode(username + ':' + password);
+  }
+
+  // Normalizes mq-proxy's two response envelope shapes (spec/11):
+  // list endpoints return { data, errors: [...] }, single-item endpoints
+  // return { data, error } or { data, error: null }. Always returns
+  // { data, errors: [] } with errors as an array, empty when there were
+  // none, so every call site has one shape to check.
+  function parseEnvelope(json) {
+    if (!json || typeof json !== 'object') {
+      return { data: undefined, errors: [] };
+    }
+    if (Array.isArray(json.errors)) {
+      return { data: json.data, errors: json.errors };
+    }
+    if (json.error) {
+      return { data: json.data, errors: [json.error] };
+    }
+    return { data: json.data, errors: [] };
+  }
+
+  function errorMessageFrom(envelope, fallback) {
+    var first = envelope.errors[0];
+    if (!first) return fallback;
+    if (typeof first === 'string') return first;
+    if (first.message) return first.message;
+    return fallback;
+  }
+
+  // Flattens a (possibly nested) params object into a mq-proxy-style query
+  // string, e.g. { sourceQueue: 'orders', filter: { maxCount: 50 } } ->
+  // "sourceQueue=orders&filter.maxCount=50". Nested keys only — this is
+  // what makes list-messages' filter.* binding work (spec/11); mq-proxy
+  // does not accept a flat/legacy duplicate form. undefined/null values
+  // (at any depth) are omitted entirely rather than sent as "undefined".
+  function buildQueryString(params) {
+    var parts = [];
+    function walk(obj, prefix) {
+      Object.keys(obj).forEach(function (key) {
+        var value = obj[key];
+        if (value === undefined || value === null) return;
+        var qualified = prefix ? prefix + '.' + key : key;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          walk(value, qualified);
+        } else {
+          parts.push(encodeURIComponent(qualified) + '=' + encodeURIComponent(value));
+        }
+      });
+    }
+    walk(params, '');
+    return parts.join('&');
+  }
+
+  // Builds the list-messages query params object (spec/11): sourceQueue
+  // and returnBody stay top-level, everything else nests under filter.*.
+  function buildListMessagesParams(sourceQueue, opts) {
+    opts = opts || {};
+    return {
+      sourceQueue: sourceQueue,
+      returnBody: true,
+      filter: {
+        jmsType: opts.jmsType || undefined,
+        messageId: opts.messageId || undefined,
+        maxCount: opts.maxCount || undefined,
+      },
+    };
+  }
+
+  // Shared by purge and move-all/drain: a blank JMS Type means "match
+  // everything" (filter.maxCount stays unset, never sent), a typed one
+  // narrows via filter.jmsType — maxCount is deliberately never set here
+  // either, mirroring the TUI's PurgeQueue/MoveAllMessages vs.
+  // DeleteMessages/MoveMessages distinction (spec/09): a blank filter is
+  // still "match everything", not "match zero".
+  function buildBulkFilter(jmsType) {
+    var trimmed = (jmsType || '').trim();
+    return trimmed ? { jmsType: trimmed } : {};
+  }
+
+  // Filter for acting on exactly one already-known message (single
+  // delete/move) — matches the TUI proxy client's MessageFilter{MessageID,
+  // MaxCount: 1} pattern (tui/internal/queue/proxy/proxy.go).
+  function buildSingleMessageFilter(messageId) {
+    return { messageId: messageId, maxCount: 1 };
+  }
+
+  var DLQ_IMQ_PREFIX = /^(dlq\.|imq\.)/;
+  var SYSTEM_PREFIX = /^(activemq\.|statistics\.)/;
+
+  // Four-tier move-target ordering, mirroring the TUI's move-picker
+  // (spec/09) — DLQ requeue is the dominant real workflow, so a queue
+  // whose name matches the source's stripped dlq./imq. prefix is pinned
+  // first. Tiers: 0 preferred, 1 regular, 2 dlq./imq.-prefixed, 3
+  // activemq./statistics.-prefixed. Sorted alphabetically within each
+  // tier; the source queue itself is excluded.
+  function tierForQueue(name, sourceQueue) {
+    var preferred = sourceQueue.match(DLQ_IMQ_PREFIX)
+      ? sourceQueue.slice(sourceQueue.indexOf('.') + 1)
+      : null;
+    if (preferred !== null && name === preferred) return 0;
+    if (SYSTEM_PREFIX.test(name)) return 3;
+    if (DLQ_IMQ_PREFIX.test(name)) return 2;
+    return 1;
+  }
+
+  function sortMoveTargets(queueNames, sourceQueue) {
+    return queueNames
+      .filter(function (name) { return name !== sourceQueue; })
+      .map(function (name) { return { name: name, tier: tierForQueue(name, sourceQueue) }; })
+      .sort(function (a, b) {
+        if (a.tier !== b.tier) return a.tier - b.tier;
+        return a.name.localeCompare(b.name);
+      })
+      .map(function (entry) { return entry.name; });
+  }
+
+  function truncate(str, maxLen) {
+    if (str == null) return '';
+    return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
+  }
+
+  // ---------------------------------------------------------------------
+  // API client
+  // ---------------------------------------------------------------------
+
+  // conn: { baseUrl, username, password }. verb: e.g. "list-queues".
+  // opts: { method, query, body } — query is a (possibly nested) params
+  // object per buildQueryString; body is a plain object, JSON-encoded.
+  function apiCall(conn, verb, opts) {
+    opts = opts || {};
+    var url = conn.baseUrl.replace(/\/$/, '') + '/api/management/command/' + verb;
+    var qs = opts.query ? buildQueryString(opts.query) : '';
+    if (qs) url += '?' + qs;
+    var headers = { Authorization: buildAuthHeader(conn.username, conn.password) };
+    var fetchOpts = { method: opts.method || 'GET', headers: headers };
+    if (opts.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      fetchOpts.body = JSON.stringify(opts.body);
+    }
+    return fetch(url, fetchOpts).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (json) {
+        var envelope = parseEnvelope(json);
+        if (!res.ok) {
+          throw new Error(errorMessageFrom(envelope, 'HTTP ' + res.status + ' ' + res.statusText));
+        }
+        if (envelope.errors.length > 0) {
+          throw new Error(errorMessageFrom(envelope, 'mq-proxy reported an error'));
+        }
+        return envelope.data;
+      });
+    });
+  }
+
+  exports.buildAuthHeader = buildAuthHeader;
+  exports.parseEnvelope = parseEnvelope;
+  exports.errorMessageFrom = errorMessageFrom;
+  exports.buildQueryString = buildQueryString;
+  exports.buildListMessagesParams = buildListMessagesParams;
+  exports.buildBulkFilter = buildBulkFilter;
+  exports.buildSingleMessageFilter = buildSingleMessageFilter;
+  exports.tierForQueue = tierForQueue;
+  exports.sortMoveTargets = sortMoveTargets;
+  exports.truncate = truncate;
+  exports.apiCall = apiCall;
+
+  // ---------------------------------------------------------------------
+  // DOM wiring — skipped entirely outside a browser (e.g. under Node for
+  // app.test.js), since none of the above needs it.
+  // ---------------------------------------------------------------------
+
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  var STORAGE_KEY = 'cloudtui-mq-proxy-connection';
+  var DEFAULT_MAX_COUNT = 500;
+
+  var state = {
+    conn: null,
+    currentQueue: null,
+    currentMessage: null,
+  };
+
+  function $(id) { return document.getElementById(id); }
+
+  function showError(el, err) {
+    el.textContent = err && err.message ? err.message : String(err);
+    el.hidden = false;
+  }
+
+  function clearError(el) {
+    el.hidden = true;
+    el.textContent = '';
+  }
+
+  function showView(id) {
+    ['connectView', 'queuesView', 'messagesView', 'messageDetailView'].forEach(function (viewId) {
+      $(viewId).hidden = viewId !== id;
+    });
+    $('topbar').hidden = id === 'connectView';
+  }
+
+  function loadStoredConnection() {
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function storeConnection(conn) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(conn));
+    } catch (e) {
+      // localStorage unavailable (private mode, quota) — connection just
+      // won't be remembered next visit; not fatal to the current session.
+    }
+  }
+
+  function forgetConnection() {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // ---- Connect ----
+
+  function tryConnect(conn) {
+    clearError($('connectError'));
+    return apiCall(conn, 'list-queues').then(function () {
+      state.conn = conn;
+      storeConnection(conn);
+      $('connLabel').textContent = conn.baseUrl + ' (' + conn.username + ')';
+      showView('queuesView');
+      return loadQueues();
+    }, function (err) {
+      showError($('connectError'), err);
+    });
+  }
+
+  $('connectForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    tryConnect({
+      baseUrl: $('connUrl').value.trim(),
+      username: $('connUser').value,
+      password: $('connPass').value,
+    });
+  });
+
+  $('disconnectBtn').addEventListener('click', function () {
+    forgetConnection();
+    state.conn = null;
+    $('connUrl').value = '';
+    $('connUser').value = '';
+    $('connPass').value = '';
+    showView('connectView');
+  });
+
+  // ---- Queues ----
+
+  function loadQueues() {
+    clearError($('queuesError'));
+    var tbody = $('queuesTable').querySelector('tbody');
+    tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+    return apiCall(state.conn, 'list-queues').then(function (queues) {
+      renderQueues(queues || []);
+    }, function (err) {
+      tbody.innerHTML = '';
+      showError($('queuesError'), err);
+    });
+  }
+
+  function renderQueues(queues) {
+    var tbody = $('queuesTable').querySelector('tbody');
+    tbody.innerHTML = '';
+    queues.forEach(function (q) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="queue-name">' + escapeHtml(q.name) + '</td>' +
+        '<td>' + q.messageCount + '</td>' +
+        '<td>' + q.consumerCount + '</td>' +
+        '<td>' + q.enqueuedCount + '</td>' +
+        '<td>' + q.dequeuedCount + '</td>' +
+        '<td>' + q.producerCount + '</td>' +
+        '<td class="row-actions"></td>';
+      tr.querySelector('.queue-name').addEventListener('click', function () {
+        openMessages(q.name);
+      });
+      var actions = tr.querySelector('.row-actions');
+      actions.appendChild(makeButton('Purge', function () { purgeQueue(q.name); }));
+      actions.appendChild(makeButton('Move all…', function () { moveAllMessages(q.name); }));
+      actions.appendChild(makeButton('Send…', function () { openSendModal(q.name); }));
+      tbody.appendChild(tr);
+    });
+  }
+
+  function makeButton(label, onClick) {
+    var btn = document.createElement('button');
+    btn.textContent = label;
+    btn.type = 'button';
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  $('refreshQueuesBtn').addEventListener('click', loadQueues);
+  $('backToQueuesBtn').addEventListener('click', function () { showView('queuesView'); });
+
+  // ---- Messages ----
+
+  function openMessages(queueName) {
+    state.currentQueue = queueName;
+    $('msgFilterType').value = '';
+    $('msgFilterMax').value = String(DEFAULT_MAX_COUNT);
+    showView('messagesView');
+    loadMessages();
+  }
+
+  function loadMessages() {
+    var queueName = state.currentQueue;
+    var maxCount = parseInt($('msgFilterMax').value, 10) || DEFAULT_MAX_COUNT;
+    var jmsType = $('msgFilterType').value.trim();
+    $('messagesTitle').textContent = queueName + ' (max=' + maxCount + ')';
+    clearError($('messagesError'));
+    var tbody = $('messagesTable').querySelector('tbody');
+    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    return apiCall(state.conn, 'list-messages', {
+      query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount }),
+    }).then(function (messages) {
+      renderMessages(messages || []);
+    }, function (err) {
+      tbody.innerHTML = '';
+      showError($('messagesError'), err);
+    });
+  }
+
+  function renderMessages(messages) {
+    var tbody = $('messagesTable').querySelector('tbody');
+    tbody.innerHTML = '';
+    messages.forEach(function (m) {
+      var tr = document.createElement('tr');
+      tr.className = 'message-row';
+      tr.innerHTML =
+        '<td>' + escapeHtml(m.messageId) + '</td>' +
+        '<td>' + escapeHtml(m.jmsType) + '</td>' +
+        '<td>' + escapeHtml(m.timestamp) + '</td>' +
+        '<td>' + escapeHtml(truncate(m.body, 80)) + '</td>';
+      tr.addEventListener('click', function () { openMessageDetail(m); });
+      tbody.appendChild(tr);
+    });
+  }
+
+  $('applyMsgFilterBtn').addEventListener('click', loadMessages);
+  $('sendFromMessagesBtn').addEventListener('click', function () { openSendModal(state.currentQueue); });
+  $('backToMessagesBtn').addEventListener('click', function () { showView('messagesView'); });
+
+  // ---- Message detail ----
+
+  function openMessageDetail(message) {
+    state.currentMessage = message;
+    clearError($('messageDetailError'));
+    var fields = $('messageDetailFields');
+    fields.innerHTML =
+      '<dt>Message ID</dt><dd>' + escapeHtml(message.messageId) + '</dd>' +
+      '<dt>JMS Type</dt><dd>' + escapeHtml(message.jmsType) + '</dd>' +
+      '<dt>Timestamp</dt><dd>' + escapeHtml(message.timestamp) + '</dd>';
+    $('messageDetailBody').textContent = message.body || '';
+    showView('messageDetailView');
+  }
+
+  $('deleteMessageBtn').addEventListener('click', function () {
+    var message = state.currentMessage;
+    var queueName = state.currentQueue;
+    confirmDialog('Delete message "' + message.messageId + '"?').then(function (confirmed) {
+      if (!confirmed) return;
+      apiCall(state.conn, 'delete-messages', {
+        method: 'POST',
+        body: [{ sourceQueue: queueName, filter: buildSingleMessageFilter(message.messageId) }],
+      }).then(function () {
+        showView('messagesView');
+        loadMessages();
+      }, function (err) {
+        showError($('messageDetailError'), err);
+      });
+    });
+  });
+
+  $('moveMessageBtn').addEventListener('click', function () {
+    openMovePicker(state.currentQueue, function (target) {
+      var message = state.currentMessage;
+      return apiCall(state.conn, 'move-messages', {
+        method: 'POST',
+        body: [{ sourceQueue: state.currentQueue, targetQueue: target, filter: buildSingleMessageFilter(message.messageId) }],
+      }).then(function () {
+        showView('messagesView');
+        loadMessages();
+      });
+    }, $('messageDetailError'));
+  });
+
+  // ---- Purge / move-all (shared JMS Type prompt) ----
+
+  function jmsTypePrompt(title) {
+    return new Promise(function (resolve) {
+      $('jmsTypePromptTitle').textContent = title;
+      $('jmsTypePromptInput').value = '';
+      $('jmsTypePromptModal').hidden = false;
+      function cleanup(result) {
+        $('jmsTypePromptModal').hidden = true;
+        continueBtn.removeEventListener('click', onContinue);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(result);
+      }
+      var continueBtn = $('jmsTypePromptContinue');
+      var cancelBtn = $('jmsTypePromptCancel');
+      function onContinue() { cleanup({ cancelled: false, jmsType: $('jmsTypePromptInput').value.trim() }); }
+      function onCancel() { cleanup({ cancelled: true }); }
+      continueBtn.addEventListener('click', onContinue);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  function confirmDialog(message) {
+    return new Promise(function (resolve) {
+      $('confirmMessage').textContent = message;
+      $('confirmModal').hidden = false;
+      function cleanup(result) {
+        $('confirmModal').hidden = true;
+        yesBtn.removeEventListener('click', onYes);
+        noBtn.removeEventListener('click', onNo);
+        resolve(result);
+      }
+      var yesBtn = $('confirmYes');
+      var noBtn = $('confirmNo');
+      function onYes() { cleanup(true); }
+      function onNo() { cleanup(false); }
+      yesBtn.addEventListener('click', onYes);
+      noBtn.addEventListener('click', onNo);
+    });
+  }
+
+  function purgeQueue(queueName) {
+    jmsTypePrompt('Purge "' + queueName + '" — JMS Type (optional)').then(function (result) {
+      if (result.cancelled) return;
+      var filter = buildBulkFilter(result.jmsType);
+      var question = result.jmsType
+        ? 'Purge "' + queueName + '"? All ' + result.jmsType + ' messages will be deleted.'
+        : 'Purge "' + queueName + '"? All messages will be deleted.';
+      confirmDialog(question).then(function (confirmed) {
+        if (!confirmed) return;
+        apiCall(state.conn, 'delete-messages', {
+          method: 'POST',
+          body: [{ sourceQueue: queueName, filter: filter }],
+        }).then(loadQueues, function (err) {
+          showError($('queuesError'), err);
+        });
+      });
+    });
+  }
+
+  function moveAllMessages(queueName) {
+    jmsTypePrompt('Move All "' + queueName + '" — JMS Type (optional)').then(function (result) {
+      if (result.cancelled) return;
+      var filter = buildBulkFilter(result.jmsType);
+      openMovePicker(queueName, function (target) {
+        return apiCall(state.conn, 'move-messages', {
+          method: 'POST',
+          body: [{ sourceQueue: queueName, targetQueue: target, filter: filter }],
+        }).then(loadQueues);
+      }, $('queuesError'));
+    });
+  }
+
+  // ---- Move-target picker ----
+
+  var movePickerState = null;
+
+  function openMovePicker(sourceQueue, onConfirm, errorEl) {
+    clearError(errorEl);
+    $('movePickerFilter').value = '';
+    $('movePickerModal').hidden = false;
+    movePickerState = { onConfirm: onConfirm, errorEl: errorEl, sourceQueue: sourceQueue, allNames: [] };
+    apiCall(state.conn, 'list-queues').then(function (queues) {
+      movePickerState.allNames = sortMoveTargets((queues || []).map(function (q) { return q.name; }), sourceQueue);
+      renderMovePickerList(movePickerState.allNames);
+    }, function (err) {
+      $('movePickerModal').hidden = true;
+      showError(errorEl, err);
+    });
+  }
+
+  function renderMovePickerList(names) {
+    var list = $('movePickerList');
+    list.innerHTML = '';
+    names.forEach(function (name) {
+      var li = document.createElement('li');
+      li.textContent = name;
+      li.addEventListener('click', function () {
+        var picker = movePickerState;
+        $('movePickerModal').hidden = true;
+        picker.onConfirm(name).catch(function (err) {
+          showError(picker.errorEl, err);
+        });
+      });
+      list.appendChild(li);
+    });
+  }
+
+  $('movePickerFilter').addEventListener('input', function () {
+    var needle = $('movePickerFilter').value.toLowerCase();
+    var filtered = movePickerState
+      ? movePickerState.allNames.filter(function (name) { return name.toLowerCase().indexOf(needle) !== -1; })
+      : [];
+    renderMovePickerList(filtered);
+  });
+
+  $('movePickerCancel').addEventListener('click', function () {
+    $('movePickerModal').hidden = true;
+  });
+
+  // ---- Send message ----
+
+  var sendModalState = null;
+
+  function openSendModal(targetQueue) {
+    sendModalState = { targetQueue: targetQueue };
+    $('sendModalTitle').textContent = 'Send message to "' + targetQueue + '"';
+    $('sendBody').value = '';
+    clearError($('sendError'));
+    $('sendModal').hidden = false;
+  }
+
+  $('sendSubmit').addEventListener('click', function () {
+    var body = $('sendBody').value;
+    apiCall(state.conn, 'send-message', {
+      method: 'POST',
+      body: { targetQueue: sendModalState.targetQueue, jmsType: 'text', body: body },
+    }).then(function () {
+      $('sendModal').hidden = true;
+      if (state.currentQueue === sendModalState.targetQueue && !$('messagesView').hidden) {
+        loadMessages();
+      }
+      loadQueues();
+    }, function (err) {
+      showError($('sendError'), err);
+    });
+  });
+
+  $('sendCancel').addEventListener('click', function () {
+    $('sendModal').hidden = true;
+  });
+
+  // ---- Startup ----
+
+  var stored = loadStoredConnection();
+  if (stored) {
+    $('connUrl').value = stored.baseUrl;
+    $('connUser').value = stored.username;
+    $('connPass').value = stored.password;
+  }
+})(typeof module !== 'undefined' ? module.exports : (window.CloudtuiMQ = {}));
