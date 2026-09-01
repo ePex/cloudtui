@@ -601,6 +601,7 @@
     clearError($('messageDetailError'));
     var fields = $('messageDetailFields');
     fields.innerHTML =
+      '<dt>Queue</dt><dd>' + escapeHtml(message.sourceQueue || state.currentQueue) + '</dd>' +
       '<dt>Message ID</dt><dd>' + escapeHtml(message.messageId) + '</dd>' +
       '<dt>JMS Type</dt><dd>' + escapeHtml(message.jmsType) + '</dd>' +
       '<dt>Timestamp</dt><dd>' + escapeHtml(message.timestamp) + '</dd>';

@@ -46,7 +46,7 @@ through a click-first UI instead of a keyboard-driven one.
   on every `list-messages` call, the page applies a sane client-side
   default (matching the TUI's 500) when the user hasn't set one, and shows
   the effective cap in use — same reasoning as spec/11's client already
-  applies. The detail view shows three sections — Message ID/JMS
+  applies. The detail view shows three sections — Queue/Message ID/JMS
   Type/Timestamp, then a **Headers** section listing every entry from
   `mq-proxy`'s `headers` map (sorted `Key: value`, mirroring the TUI's
   own Headers section, spec/08 — `mq-proxy` always returns this map,
