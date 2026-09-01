@@ -6,7 +6,7 @@
 <title>cloudtui — AMQ Web Console</title>
 <style>
   :root {
-    color-scheme: light;
+    color-scheme: light dark;
     --bg: #f6f7f9;
     --panel: #ffffff;
     --border: #d7dbe0;
@@ -14,6 +14,23 @@
     --muted: #6b7280;
     --accent: #2563eb;
     --danger: #b91c1c;
+  }
+  /* Follows the OS/browser preference automatically — no manual toggle,
+     matching the rest of the page's no-theming-system scope. Declaring
+     `color-scheme: light dark` above also stops the browser from
+     force-inverting the page on its own (some browsers do this to any
+     page that only declares "light" support), which otherwise renders
+     worse than either palette below on its own. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1c2028;
+      --border: #333844;
+      --text: #e6e8eb;
+      --muted: #9aa1ac;
+      --accent: #60a5fa;
+      --danger: #f87171;
+    }
   }
   * { box-sizing: border-box; }
   /* Several elements below set their own `display` (flex, for the topbar

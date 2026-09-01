@@ -98,7 +98,15 @@
     filter + sort compose. Unit tests for the filter-predicate and
     sort-comparator functions.
 
-12. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+12. [x] Dark mode: follows the OS/browser `prefers-color-scheme`
+    automatically (no manual toggle — no theming/settings system exists
+    on this page). CSS custom properties get a dark palette under
+    `@media (prefers-color-scheme: dark)`; `color-scheme: light dark` on
+    `:root` so native form controls (inputs/textareas) adapt too, and so
+    the browser stops force-inverting the page on its own. Manual test
+    only (no unit-testable logic — pure CSS).
+
+13. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
