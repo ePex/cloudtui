@@ -90,7 +90,15 @@
     before any button had been clicked. Fixed with a single `[hidden] {
     display: none !important; }` rule in `index.html`.
 
-11. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+11. [x] Queue list filter + column sort: a live substring filter input
+    (client-side, over the already-fetched list — `list-queues` has no
+    server-side filter param) narrows by queue name; clicking a column
+    header sorts by that column ascending, clicking again toggles to
+    descending. Both operate on the same in-memory queue array, so
+    filter + sort compose. Unit tests for the filter-predicate and
+    sort-comparator functions.
+
+12. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
