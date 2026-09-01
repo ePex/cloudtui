@@ -167,7 +167,7 @@
     <button id="backToQueuesBtn" type="button">&larr; Queues</button>
     <h2 id="messagesTitle"></h2>
     <label>JMS Type filter
-      <input id="msgFilterType" type="text" placeholder="(optional)">
+      <input id="msgFilterType" type="text" placeholder="*">
     </label>
     <label>Max count
       <input id="msgFilterMax" type="number" min="1" value="500">
@@ -197,7 +197,7 @@
 <div id="jmsTypePromptModal" class="modal" hidden>
   <div class="modal-box">
     <h3 id="jmsTypePromptTitle"></h3>
-    <input id="jmsTypePromptInput" type="text" placeholder="JMS Type (optional)" list="jmsTypeSuggestions" autocomplete="off">
+    <input id="jmsTypePromptInput" type="text" placeholder="*" list="jmsTypeSuggestions" autocomplete="off">
     <datalist id="jmsTypeSuggestions"></datalist>
     <div class="modal-actions">
       <button id="jmsTypePromptCancel" type="button">Cancel</button>

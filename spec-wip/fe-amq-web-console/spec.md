@@ -46,7 +46,12 @@ through a click-first UI instead of a keyboard-driven one.
   on every `list-messages` call, the page applies a sane client-side
   default (matching the TUI's 500) when the user hasn't set one, and shows
   the effective cap in use — same reasoning as spec/11's client already
-  applies.
+  applies. Its JMS Type filter field shows `*` as its placeholder (a
+  familiar "matches everything" convention) rather than blank/"(optional)"
+  — a pure UI convention, not a real wildcard: leaving it empty already
+  meant "no filter" and still does; `*` is never actually sent to
+  `mq-proxy`. The purge/move-all JMS Type prompt's field uses the same
+  `*` placeholder for the same reason.
 - **Actions — full parity with spec/09**:
   - Purge a queue (confirm dialog, optional JMS Type filter, with
     autocomplete — see below).

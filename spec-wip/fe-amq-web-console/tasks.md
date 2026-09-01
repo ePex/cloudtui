@@ -126,7 +126,13 @@
     the list empty rather than erroring. `extractDistinctJmsTypes`/
     `buildJmsTypeScanParams` are pure, unit-tested functions.
 
-16. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+16. [x] JMS Type filter fields (message list filter and the purge/move-all
+    prompt) show `*` as their placeholder instead of blank/"(optional)" —
+    a familiar "matches everything" convention. Pure UI/copy change, no
+    behavior change: empty still means "no filter" on both, `*` is never
+    actually sent to `mq-proxy`.
+
+17. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
