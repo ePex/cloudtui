@@ -52,8 +52,11 @@ through a click-first UI instead of a keyboard-driven one.
   - Delete a single message.
   - Move a single message (target-queue picker).
   - Move all messages / drain a queue (optional JMS Type filter).
-  - Send a new message (plain text body only, matching spec/09's TUI
-    scope — no headers/properties/templates here either).
+  - Send a new message: body plus an optional JMS Type field (unlike
+    spec/09's TUI, which has no JMS Type field and hardcodes `"text"` —
+    this page exposes one since `mq-proxy`'s `send-message` DTO requires
+    it, and it's a normal, common thing to want to set; a blank entry
+    still defaults to `"text"`). No headers/properties/templates.
 - Errors (auth failure, network failure, mq-proxy validation errors) are
   surfaced inline in the UI, not just logged to the browser console —
   the audience is explicitly non-technical.

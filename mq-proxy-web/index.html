@@ -224,7 +224,12 @@
 <div id="sendModal" class="modal" hidden>
   <div class="modal-box">
     <h3 id="sendModalTitle"></h3>
-    <textarea id="sendBody" rows="6" placeholder="Message body"></textarea>
+    <label>JMS Type
+      <input id="sendJmsType" type="text" placeholder="text">
+    </label>
+    <label>Body
+      <textarea id="sendBody" rows="6" placeholder="Message body"></textarea>
+    </label>
     <div class="modal-actions">
       <button id="sendCancel" type="button">Cancel</button>
       <button id="sendSubmit" type="button">Send</button>
