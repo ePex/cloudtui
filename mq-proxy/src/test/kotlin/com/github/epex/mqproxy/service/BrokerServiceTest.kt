@@ -72,12 +72,16 @@ class BrokerServiceTest {
         return msg
     }
 
+    // browser.enumeration uses `answers` (not a fixed `returns`) so every access gets
+    // a fresh Enumeration over `messages` - matching real JMS QueueBrowser.getEnumeration()
+    // behavior, and required for browseMessages' stale-cursor fallback, which re-reads
+    // the enumeration on a second pass after the first is fully consumed.
     private fun stubBrowser(session: Session, queueName: String, selector: String?, messages: List<Message>): QueueBrowser {
         val queue = mockk<Queue>()
         val browser = mockk<QueueBrowser>()
         every { session.createQueue(queueName) } returns queue
         every { session.createBrowser(queue, selector) } returns browser
-        every { browser.enumeration } returns Collections.enumeration(messages)
+        every { browser.enumeration } answers { Collections.enumeration(messages) }
         every { browser.close() } just Runs
         return browser
     }
@@ -171,12 +175,13 @@ class BrokerServiceTest {
 
         val result = service.browseMessages("orders", QueueMessageFilter())
 
-        assertThat(result).hasSize(1)
-        assertThat(result[0].sourceQueue).isEqualTo("orders")
-        assertThat(result[0].messageId).isEqualTo("ID:test-1")
-        assertThat(result[0].jmsType).isEqualTo("order-created")
-        assertThat(result[0].body).isEqualTo("hello")
-        assertThat(result[0].timestamp).startsWith("2023-")
+        assertThat(result.data).hasSize(1)
+        assertThat(result.data[0].sourceQueue).isEqualTo("orders")
+        assertThat(result.data[0].messageId).isEqualTo("ID:test-1")
+        assertThat(result.data[0].jmsType).isEqualTo("order-created")
+        assertThat(result.data[0].body).isEqualTo("hello")
+        assertThat(result.data[0].timestamp).startsWith("2023-")
+        assertThat(result.hasMore).isFalse()
     }
 
     @Test
@@ -187,7 +192,8 @@ class BrokerServiceTest {
 
         val result = service.browseMessages("empty.queue", QueueMessageFilter())
 
-        assertThat(result).isEmpty()
+        assertThat(result.data).isEmpty()
+        assertThat(result.hasMore).isFalse()
     }
 
     @Test
@@ -211,7 +217,66 @@ class BrokerServiceTest {
 
         val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 1))
 
-        assertThat(result.map { it.messageId }).containsExactly("ID:1")
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:1")
+        assertThat(result.hasMore).isTrue()
+    }
+
+    @Test
+    fun `browseMessages hasMore is false when exactly maxCount messages remain`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        stubBrowser(session, "orders", null, listOf(msg1))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 1))
+
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:1")
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `browseMessages with afterMessageId returns only messages after the cursor`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        val msg3 = stubTextMessage(session, id = "ID:3")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2, msg3))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(afterMessageId = "ID:1"))
+
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:2", "ID:3")
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `browseMessages with afterMessageId equal to the last message returns an empty page`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(afterMessageId = "ID:2"))
+
+        assertThat(result.data).isEmpty()
+        assertThat(result.hasMore).isFalse()
+        // The cursor was found, so no stale-cursor fallback pass should have run.
+        verify(exactly = 1) { session.createBrowser(any(), any()) }
+    }
+
+    @Test
+    fun `browseMessages with a stale afterMessageId falls back to page one`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(afterMessageId = "ID:gone"))
+
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:1", "ID:2")
+        verify(exactly = 2) { session.createBrowser(any(), any()) }
     }
 
     @Test
@@ -223,7 +288,7 @@ class BrokerServiceTest {
 
         val result = service.browseMessages("orders", QueueMessageFilter(), returnBody = false)
 
-        assertThat(result[0].body).isNull()
+        assertThat(result.data[0].body).isNull()
     }
 
     @Test
@@ -235,7 +300,7 @@ class BrokerServiceTest {
 
         val result = service.browseMessages("orders", QueueMessageFilter())
 
-        assertThat(result[0].body).isEqualTo("hello")
+        assertThat(result.data[0].body).isEqualTo("hello")
     }
 
     // -------------------------------------------------------------------------
