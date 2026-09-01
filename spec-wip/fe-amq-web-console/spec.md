@@ -48,15 +48,28 @@ through a click-first UI instead of a keyboard-driven one.
   the effective cap in use — same reasoning as spec/11's client already
   applies.
 - **Actions — full parity with spec/09**:
-  - Purge a queue (confirm dialog, optional JMS Type filter).
+  - Purge a queue (confirm dialog, optional JMS Type filter, with
+    autocomplete — see below).
   - Delete a single message.
   - Move a single message (target-queue picker).
-  - Move all messages / drain a queue (optional JMS Type filter).
+  - Move all messages / drain a queue (optional JMS Type filter, same
+    autocomplete).
   - Send a new message: body plus an optional JMS Type field (unlike
     spec/09's TUI, which has no JMS Type field and hardcodes `"text"` —
     this page exposes one since `mq-proxy`'s `send-message` DTO requires
     it, and it's a normal, common thing to want to set; a blank entry
     still defaults to `"text"`). No headers/properties/templates.
+- **JMS Type autocomplete** (purge and move-all, which share one prompt
+  component): the moment the prompt opens, it scans the queue in the
+  background (`list-messages`, `returnBody=false`, capped at 500 —
+  mirroring the TUI's own automatic-scan cap, spec/08) and populates a
+  native `<datalist>` with the distinct JMS Types found. The scan never
+  blocks or gates Continue/Cancel — a blank field still proceeds
+  immediately regardless of whether the scan has finished, and a failed
+  scan just leaves the suggestion list empty rather than surfacing an
+  error (a nice-to-have, not a required step). Unlike the TUI, there's
+  no second opt-in "scan more" tier — a single fixed-cap automatic scan
+  was judged sufficient for this simpler surface.
 - Errors (auth failure, network failure, mq-proxy validation errors) are
   surfaced inline in the UI, not just logged to the browser console —
   the audience is explicitly non-technical.

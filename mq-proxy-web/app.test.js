@@ -65,6 +65,29 @@ test('buildListMessagesParams nests filter fields, keeps sourceQueue/returnBody 
   });
 });
 
+test('buildJmsTypeScanParams: scans without bodies, capped at the shared auto-scan count', () => {
+  assert.deepEqual(app.buildJmsTypeScanParams('orders'), {
+    sourceQueue: 'orders',
+    returnBody: false,
+    filter: { maxCount: 500 },
+  });
+});
+
+test('extractDistinctJmsTypes: sorted, de-duplicated, non-empty values only', () => {
+  const messages = [
+    { jmsType: 'order-created' },
+    { jmsType: 'order-cancelled' },
+    { jmsType: 'order-created' },
+    { jmsType: '' },
+    {},
+  ];
+  assert.deepEqual(app.extractDistinctJmsTypes(messages), ['order-cancelled', 'order-created']);
+});
+
+test('extractDistinctJmsTypes: an empty message list yields an empty list', () => {
+  assert.deepEqual(app.extractDistinctJmsTypes([]), []);
+});
+
 test('buildBulkFilter: a blank JMS Type means "match everything" (empty filter, no maxCount)', () => {
   assert.deepEqual(app.buildBulkFilter(''), {});
   assert.deepEqual(app.buildBulkFilter('   '), {});

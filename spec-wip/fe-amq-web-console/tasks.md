@@ -118,7 +118,15 @@
     messages table's Body preview/JMS Type columns. Fixed with
     `overflow-wrap: anywhere` on `th, td`. Manual test only (pure CSS).
 
-15. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+15. [x] JMS Type autocomplete for the shared purge/move-all prompt: on
+    open, scan the queue in the background (`list-messages`,
+    `returnBody=false`, capped at 500 — mirrors the TUI's automatic-scan
+    cap, spec/08) and populate a native `<datalist>` with the distinct
+    JMS Types found. Never blocks Continue/Cancel; a failed scan leaves
+    the list empty rather than erroring. `extractDistinctJmsTypes`/
+    `buildJmsTypeScanParams` are pure, unit-tested functions.
+
+16. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
