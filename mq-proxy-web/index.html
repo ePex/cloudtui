@@ -16,6 +16,14 @@
     --danger: #b91c1c;
   }
   * { box-sizing: border-box; }
+  /* Several elements below set their own `display` (flex, for the topbar
+     and modals) which, being an author-stylesheet rule, otherwise beats
+     the browser's default `[hidden] { display: none }` UA rule outright —
+     the cascade favors author origin over user-agent origin regardless of
+     selector specificity. Without this, every modal (and the topbar)
+     would render at page load despite the `hidden` attribute. Found live:
+     the send-message modal covered the entire page on first load. */
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
