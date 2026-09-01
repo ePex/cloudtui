@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] `mq-proxy` DTO changes: `QueueMessageFilter.afterMessageId: String?
+1. [x] `mq-proxy` DTO changes: `QueueMessageFilter.afterMessageId: String?
    = null`; `ListResponse.hasMore: Boolean = false` (shared across
    `list-queues`/`delete-messages`/`move-messages` too — unused,
    harmless default there).
