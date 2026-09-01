@@ -137,6 +137,24 @@
     return { messageId: messageId, maxCount: 1 };
   }
 
+  // delete-messages/move-messages both accept an array of per-message
+  // request objects (spec/11) — "the shape exists for bulk-operation
+  // parity", which multi-select finally puts to real use: one array
+  // element per selected message, each still scoped to exactly one
+  // message via buildSingleMessageFilter (never a wider filter, so a
+  // bulk action can never accidentally affect an unselected message).
+  function buildBulkDeleteBody(sourceQueue, messageIds) {
+    return messageIds.map(function (id) {
+      return { sourceQueue: sourceQueue, filter: buildSingleMessageFilter(id) };
+    });
+  }
+
+  function buildBulkMoveBody(sourceQueue, targetQueue, messageIds) {
+    return messageIds.map(function (id) {
+      return { sourceQueue: sourceQueue, targetQueue: targetQueue, filter: buildSingleMessageFilter(id) };
+    });
+  }
+
   var DLQ_IMQ_PREFIX = /^(dlq\.|imq\.)/;
   var SYSTEM_PREFIX = /^(activemq\.|statistics\.)/;
 
@@ -236,6 +254,8 @@
   exports.buildBulkFilter = buildBulkFilter;
   exports.resolveJmsType = resolveJmsType;
   exports.buildSingleMessageFilter = buildSingleMessageFilter;
+  exports.buildBulkDeleteBody = buildBulkDeleteBody;
+  exports.buildBulkMoveBody = buildBulkMoveBody;
   exports.tierForQueue = tierForQueue;
   exports.sortMoveTargets = sortMoveTargets;
   exports.truncate = truncate;
@@ -261,6 +281,8 @@
     currentMessage: null,
     queues: [],
     queueSort: { column: 'name', direction: 'asc' },
+    messages: [],
+    selectedMessageIds: new Set(),
   };
 
   function $(id) { return document.getElementById(id); }
@@ -438,6 +460,7 @@
 
   function openMessages(queueName) {
     state.currentQueue = queueName;
+    state.selectedMessageIds = new Set();
     $('msgFilterType').value = '';
     $('msgFilterMax').value = String(DEFAULT_MAX_COUNT);
     showView('messagesView');
@@ -450,12 +473,15 @@
     var jmsType = $('msgFilterType').value.trim();
     $('messagesTitle').textContent = queueName + ' (max=' + maxCount + ')';
     clearError($('messagesError'));
+    state.selectedMessageIds = new Set();
     var tbody = $('messagesTable').querySelector('tbody');
-    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
     return apiCall(state.conn, 'list-messages', {
       query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount }),
     }).then(function (messages) {
-      renderMessages(messages || []);
+      state.messages = messages || [];
+      renderMessages(state.messages);
+      updateBulkActionsUI();
     }, function (err) {
       tbody.innerHTML = '';
       showError($('messagesError'), err);
@@ -469,14 +495,89 @@
       var tr = document.createElement('tr');
       tr.className = 'message-row';
       tr.innerHTML =
+        '<td><input type="checkbox"></td>' +
         '<td>' + escapeHtml(m.messageId) + '</td>' +
         '<td>' + escapeHtml(m.jmsType) + '</td>' +
         '<td>' + escapeHtml(m.timestamp) + '</td>' +
         '<td>' + escapeHtml(truncate(m.body, 80)) + '</td>';
+      var checkbox = tr.querySelector('input[type="checkbox"]');
+      checkbox.checked = state.selectedMessageIds.has(m.messageId);
+      checkbox.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (checkbox.checked) {
+          state.selectedMessageIds.add(m.messageId);
+        } else {
+          state.selectedMessageIds.delete(m.messageId);
+        }
+        updateBulkActionsUI();
+      });
       tr.addEventListener('click', function () { openMessageDetail(m); });
       tbody.appendChild(tr);
     });
   }
+
+  // Keeps the "N selected" label, the Delete/Move selected buttons'
+  // disabled state, and the header checkbox's checked/indeterminate
+  // state all in sync with state.selectedMessageIds — called after
+  // every selection change instead of a full re-render, since the
+  // table rows themselves don't need to change.
+  function updateBulkActionsUI() {
+    var count = state.selectedMessageIds.size;
+    var total = state.messages.length;
+    $('messagesSelectedCount').textContent = count + ' selected';
+    $('deleteSelectedMessagesBtn').disabled = count === 0;
+    $('moveSelectedMessagesBtn').disabled = count === 0;
+    var headerCheckbox = $('selectAllMessagesCheckbox');
+    headerCheckbox.checked = total > 0 && count === total;
+    headerCheckbox.indeterminate = count > 0 && count < total;
+  }
+
+  function selectAllMessages() {
+    state.selectedMessageIds = new Set(state.messages.map(function (m) { return m.messageId; }));
+    renderMessages(state.messages);
+    updateBulkActionsUI();
+  }
+
+  function selectNoneMessages() {
+    state.selectedMessageIds = new Set();
+    renderMessages(state.messages);
+    updateBulkActionsUI();
+  }
+
+  $('selectAllMessagesBtn').addEventListener('click', selectAllMessages);
+  $('selectNoneMessagesBtn').addEventListener('click', selectNoneMessages);
+  $('selectAllMessagesCheckbox').addEventListener('change', function () {
+    if ($('selectAllMessagesCheckbox').checked) {
+      selectAllMessages();
+    } else {
+      selectNoneMessages();
+    }
+  });
+
+  $('deleteSelectedMessagesBtn').addEventListener('click', function () {
+    var queueName = state.currentQueue;
+    var ids = Array.from(state.selectedMessageIds);
+    confirmDialog('Delete ' + ids.length + ' selected message' + (ids.length === 1 ? '' : 's') + '?').then(function (confirmed) {
+      if (!confirmed) return;
+      apiCall(state.conn, 'delete-messages', {
+        method: 'POST',
+        body: buildBulkDeleteBody(queueName, ids),
+      }).then(loadMessages, function (err) {
+        showError($('messagesError'), err);
+      });
+    });
+  });
+
+  $('moveSelectedMessagesBtn').addEventListener('click', function () {
+    var queueName = state.currentQueue;
+    var ids = Array.from(state.selectedMessageIds);
+    openMovePicker(queueName, function (target) {
+      return apiCall(state.conn, 'move-messages', {
+        method: 'POST',
+        body: buildBulkMoveBody(queueName, target, ids),
+      }).then(loadMessages);
+    }, $('messagesError'));
+  });
 
   $('applyMsgFilterBtn').addEventListener('click', loadMessages);
   $('sendFromMessagesBtn').addEventListener('click', function () { openSendModal(state.currentQueue); });

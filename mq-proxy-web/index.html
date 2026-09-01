@@ -81,6 +81,9 @@
   tr.message-row { cursor: pointer; }
   tr.message-row:hover, td.queue-name:hover { text-decoration: underline; }
   td.row-actions button { margin-right: 0.35rem; }
+  #messagesBulkActions { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
+  #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
   p.error { color: var(--danger); font-size: 0.9rem; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.9rem; }
   dt { color: var(--muted); }
@@ -174,9 +177,19 @@
     </label>
     <button id="applyMsgFilterBtn" type="button">Apply</button>
     <button id="sendFromMessagesBtn" type="button">Send message&hellip;</button>
+    <div id="messagesBulkActions">
+      <button id="selectAllMessagesBtn" type="button">Select all</button>
+      <button id="selectNoneMessagesBtn" type="button">Select none</button>
+      <span id="messagesSelectedCount">0 selected</span>
+      <button id="deleteSelectedMessagesBtn" type="button" disabled>Delete selected</button>
+      <button id="moveSelectedMessagesBtn" type="button" disabled>Move selected&hellip;</button>
+    </div>
     <table id="messagesTable">
       <thead>
-        <tr><th>Message ID</th><th>JMS Type</th><th>Timestamp</th><th>Body preview</th></tr>
+        <tr>
+          <th><input id="selectAllMessagesCheckbox" type="checkbox"></th>
+          <th>Message ID</th><th>JMS Type</th><th>Timestamp</th><th>Body preview</th>
+        </tr>
       </thead>
       <tbody></tbody>
     </table>

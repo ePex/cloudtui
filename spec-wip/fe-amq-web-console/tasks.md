@@ -132,7 +132,22 @@
     behavior change: empty still means "no filter" on both, `*` is never
     actually sent to `mq-proxy`.
 
-17. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+17. [x] Multi-select on the message list: a checkbox per row, a header
+    checkbox (checked/indeterminate/unchecked synced to selection vs.
+    total) plus explicit "Select all"/"Select none" buttons, and
+    "Delete selected"/"Move selected…" actions (disabled when nothing
+    selected) sending one `delete-messages`/`move-messages` array
+    element per selected message. `buildBulkDeleteBody`/
+    `buildBulkMoveBody` are pure, unit-tested functions. Selection
+    resets on every list reload. Verified live: selected 2 of 5 seeded
+    messages, bulk-deleted them, confirmed via a direct `list-messages`
+    call that exactly those two were gone and the other three remained;
+    the header checkbox's indeterminate state was also confirmed
+    visually. Move selected wasn't separately live-driven this round —
+    same code path as delete (`openMovePicker`, already verified
+    elsewhere) with `buildBulkMoveBody` covered by its own unit test.
+
+18. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.

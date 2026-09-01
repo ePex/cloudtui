@@ -52,11 +52,24 @@ through a click-first UI instead of a keyboard-driven one.
   meant "no filter" and still does; `*` is never actually sent to
   `mq-proxy`. The purge/move-all JMS Type prompt's field uses the same
   `*` placeholder for the same reason.
-- **Actions — full parity with spec/09**:
+- **Multi-select** (a capability the TUI doesn't have — spec/09's
+  purge/move-all act on a whole queue via a native JMX/broker selector,
+  never on a specific set of messages): every message row has a
+  checkbox; a header checkbox and "Select all"/"Select none" buttons
+  operate on the currently-loaded list (client-side — selection isn't
+  a server concept). Selecting one or more messages enables "Delete
+  selected"/"Move selected…", each sending one `delete-messages`/
+  `move-messages` call with one array element per selected message
+  (`filter.messageId` + `maxCount: 1` each) — the bulk-array shape
+  spec/11 already documents as existing "for bulk-operation parity"
+  but, until now, never actually used by either client. Selection is
+  cleared on every reload (Apply, opening a different queue, or after
+  a bulk action completes).
+- **Actions — full parity with spec/09**, plus multi-select above:
   - Purge a queue (confirm dialog, optional JMS Type filter, with
     autocomplete — see below).
-  - Delete a single message.
-  - Move a single message (target-queue picker).
+  - Delete a single message, or a multi-selected set.
+  - Move a single message (target-queue picker), or a multi-selected set.
   - Move all messages / drain a queue (optional JMS Type filter, same
     autocomplete).
   - Send a new message: body plus an optional JMS Type field (unlike
