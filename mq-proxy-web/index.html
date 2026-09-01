@@ -85,7 +85,12 @@
   #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
   #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
   p.error { color: var(--danger); font-size: 0.9rem; }
+  /* Same fix as th/td above, needed here too: a header value with no
+     natural break point (a long URL, a raw JSON error body) overflowed
+     its grid column instead of wrapping, widening the whole layout past
+     its container and visually overlapping neighboring rows. */
   dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.9rem; }
+  dt, dd { overflow-wrap: anywhere; }
   dt { color: var(--muted); }
   dt.section-label { grid-column: 1 / -1; color: var(--text); font-weight: bold; margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
   pre#messageDetailBody {
