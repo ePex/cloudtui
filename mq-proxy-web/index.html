@@ -68,7 +68,12 @@
   button { cursor: pointer; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 0.9rem; }
   button:hover { border-color: var(--accent); }
   table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  /* overflow-wrap: without it, a long unbroken token (a UUID, an
+     ALL_CAPS_WITH_UNDERSCORES JMS type, raw JSON with no spaces) has no
+     natural break point and overflows its column into whatever's next
+     to it instead of wrapping — found live, on the messages table's
+     Body preview column. */
+  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
   td.queue-name { cursor: pointer; color: var(--accent); }
   th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
   th.sortable:hover { color: var(--accent); }

@@ -112,7 +112,13 @@
     DTO requires the field even though leaving it unset is a normal
     case). `resolveJmsType` is a pure, unit-tested function.
 
-14. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+14. [x] Bugfix: table cells overflow into neighboring content instead of
+    wrapping, for values with no natural break point (a UUID, an
+    `ALL_CAPS_WITH_UNDERSCORES` JMS type, raw JSON) — found live on the
+    messages table's Body preview/JMS Type columns. Fixed with
+    `overflow-wrap: anywhere` on `th, td`. Manual test only (pure CSS).
+
+15. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
