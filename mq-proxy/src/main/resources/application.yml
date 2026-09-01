@@ -16,3 +16,5 @@ proxy:
   auth:
     username: ${PROXY_AUTH_USERNAME:cloudtui}
     password: ${PROXY_AUTH_PASSWORD:changeme}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

@@ -5,6 +5,7 @@ import com.github.epex.mqproxy.api.model.MessageSummary
 import com.github.epex.mqproxy.api.model.MovedMessageDto
 import com.github.epex.mqproxy.api.model.QueueMessageFilter
 import com.github.epex.mqproxy.api.model.QueueSummary
+import com.github.epex.mqproxy.config.CorsProperties
 import com.github.epex.mqproxy.config.ProxyAuthProperties
 import com.github.epex.mqproxy.service.BrokerService
 import com.ninjasquad.springmockk.MockkBean
@@ -22,7 +23,7 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 
 @WebMvcTest(QueueController::class)
-@EnableConfigurationProperties(ProxyAuthProperties::class)
+@EnableConfigurationProperties(ProxyAuthProperties::class, CorsProperties::class)
 class QueueControllerTest {
 
     @Autowired

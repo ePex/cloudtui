@@ -34,6 +34,14 @@ local/self-hosted ActiveMQ or an AWS AMQ instance.
   with no broker reachable yet.
 - HTTP Basic auth on all `/api/**` endpoints (`proxy.auth.username`/
   `proxy.auth.password`), CSRF disabled (stateless REST API).
+- CORS is configurable (`proxy.cors.allowed-origins`/
+  `CORS_ALLOWED_ORIGINS`, comma-separated `http(s)://` origins) so a
+  browser page hosted elsewhere — e.g. the AMQ web console, spec/21 —
+  can call the API cross-origin; the `null` origin (what a browser sends
+  for a `file://`-opened page) is always allowed unconditionally. No
+  `allowCredentials` — the API is called with an explicit `Authorization`
+  header, not cookies, so this isn't a "credentialed" CORS request in the
+  spec sense.
 - Dockerfile (`eclipse-temurin:21-jre` base) for containerized deployment,
   built/run via podman; runs as a sidecar alongside the TUI or as a shared
   network service.

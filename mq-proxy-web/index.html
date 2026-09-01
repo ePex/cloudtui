@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cloudtui — AMQ Web Console</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #d7dbe0;
+    --text: #1c2128;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --danger: #b91c1c;
+  }
+  /* Follows the OS/browser preference automatically — no manual toggle,
+     matching the rest of the page's no-theming-system scope. Declaring
+     `color-scheme: light dark` above also stops the browser from
+     force-inverting the page on its own (some browsers do this to any
+     page that only declares "light" support), which otherwise renders
+     worse than either palette below on its own. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1c2028;
+      --border: #333844;
+      --text: #e6e8eb;
+      --muted: #9aa1ac;
+      --accent: #60a5fa;
+      --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  /* Several elements below set their own `display` (flex, for the topbar
+     and modals) which, being an author-stylesheet rule, otherwise beats
+     the browser's default `[hidden] { display: none }` UA rule outright —
+     the cascade favors author origin over user-agent origin regardless of
+     selector specificity. Without this, every modal (and the topbar)
+     would render at page load despite the `hidden` attribute. Found live:
+     the send-message modal covered the entire page on first load. */
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header#topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
+  h1 { font-size: 1.25rem; }
+  h2 { font-size: 1.1rem; margin-top: 0; }
+  label { display: block; margin: 0.5rem 0; font-size: 0.9rem; }
+  input, textarea { width: 100%; padding: 0.4rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.95rem; }
+  button { cursor: pointer; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 0.9rem; }
+  button:hover { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
+  /* overflow-wrap: without it, a long unbroken token (a UUID, an
+     ALL_CAPS_WITH_UNDERSCORES JMS type, raw JSON with no spaces) has no
+     natural break point and overflows its column into whatever's next
+     to it instead of wrapping — found live, on the messages table's
+     Body preview column. */
+  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
+  td.queue-name { cursor: pointer; color: var(--accent); }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--accent); }
+  th.sortable .sort-indicator { color: var(--muted); font-size: 0.75em; margin-left: 0.25em; }
+  tr.message-row { cursor: pointer; }
+  tr.message-row:hover, td.queue-name:hover { text-decoration: underline; }
+  td.row-actions button { margin-right: 0.35rem; }
+  #messagesBulkActions { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
+  #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
+  p.error { color: var(--danger); font-size: 0.9rem; }
+  /* Same fix as th/td above, needed here too: a header value with no
+     natural break point (a long URL, a raw JSON error body) overflowed
+     its grid column instead of wrapping, widening the whole layout past
+     its container and visually overlapping neighboring rows. */
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.9rem; }
+  dt, dd { overflow-wrap: anywhere; }
+  dt { color: var(--muted); }
+  dt.section-label { grid-column: 1 / -1; color: var(--text); font-weight: bold; margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+  pre#messageDetailBody {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-box {
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 1.25rem;
+    width: 90%;
+    max-width: 420px;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
+  #movePickerList { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+  #movePickerList li { padding: 0.4rem 0.6rem; cursor: pointer; }
+  #movePickerList li:hover { background: var(--bg); }
+</style>
+</head>
+<body>
+
+<header id="topbar" hidden>
+  <span id="connLabel"></span>
+  <button id="disconnectBtn" type="button">Disconnect</button>
+</header>
+
+<main>
+  <section id="connectView">
+    <h1>cloudtui — AMQ Web Console</h1>
+    <p>Connect to a running <code>mq-proxy</code> instance to browse and manage its ActiveMQ queues.</p>
+    <form id="connectForm">
+      <label>mq-proxy URL
+        <input id="connUrl" type="text" placeholder="http://localhost:8080" required>
+      </label>
+      <label>Username
+        <input id="connUser" type="text" required>
+      </label>
+      <label>Password
+        <input id="connPass" type="password" required>
+      </label>
+      <button type="submit">Connect</button>
+    </form>
+    <p id="connectError" class="error" hidden></p>
+  </section>
+
+  <section id="queuesView" hidden>
+    <h2>Queues</h2>
+    <button id="refreshQueuesBtn" type="button">Refresh</button>
+    <label>Filter
+      <input id="queueFilter" type="text" placeholder="Filter by queue name&hellip;">
+    </label>
+    <table id="queuesTable">
+      <thead>
+        <tr>
+          <th data-column="name" class="sortable">Name</th>
+          <th data-column="messageCount" class="sortable">Pending</th>
+          <th data-column="consumerCount" class="sortable">Consumers</th>
+          <th data-column="enqueuedCount" class="sortable">Enqueued</th>
+          <th data-column="dequeuedCount" class="sortable">Dequeued</th>
+          <th data-column="producerCount" class="sortable">Producers</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="queuesError" class="error" hidden></p>
+  </section>
+
+  <section id="messagesView" hidden>
+    <button id="backToQueuesBtn" type="button">&larr; Queues</button>
+    <h2 id="messagesTitle"></h2>
+    <label>JMS Type filter
+      <input id="msgFilterType" type="text" placeholder="*">
+    </label>
+    <label>Max count
+      <input id="msgFilterMax" type="number" min="1" value="500">
+    </label>
+    <button id="applyMsgFilterBtn" type="button">Apply</button>
+    <button id="sendFromMessagesBtn" type="button">Send message&hellip;</button>
+    <div id="messagesBulkActions">
+      <button id="selectAllMessagesBtn" type="button">Select all</button>
+      <button id="selectNoneMessagesBtn" type="button">Select none</button>
+      <span id="messagesSelectedCount">0 selected</span>
+      <button id="deleteSelectedMessagesBtn" type="button" disabled>Delete selected</button>
+      <button id="moveSelectedMessagesBtn" type="button" disabled>Move selected&hellip;</button>
+    </div>
+    <table id="messagesTable">
+      <thead>
+        <tr>
+          <th><input id="selectAllMessagesCheckbox" type="checkbox"></th>
+          <th>Message ID</th><th>JMS Type</th><th>Timestamp</th><th>Body preview</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="messagesError" class="error" hidden></p>
+  </section>
+
+  <section id="messageDetailView" hidden>
+    <button id="backToMessagesBtn" type="button">&larr; Messages</button>
+    <h2>Message detail</h2>
+    <dl id="messageDetailFields"></dl>
+    <pre id="messageDetailBody"></pre>
+    <button id="deleteMessageBtn" type="button">Delete</button>
+    <button id="moveMessageBtn" type="button">Move&hellip;</button>
+    <p id="messageDetailError" class="error" hidden></p>
+  </section>
+</main>
+
+<div id="jmsTypePromptModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3 id="jmsTypePromptTitle"></h3>
+    <input id="jmsTypePromptInput" type="text" placeholder="*" list="jmsTypeSuggestions" autocomplete="off">
+    <datalist id="jmsTypeSuggestions"></datalist>
+    <div class="modal-actions">
+      <button id="jmsTypePromptCancel" type="button">Cancel</button>
+      <button id="jmsTypePromptContinue" type="button">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal" hidden>
+  <div class="modal-box">
+    <p id="confirmMessage"></p>
+    <div class="modal-actions">
+      <button id="confirmNo" type="button">No</button>
+      <button id="confirmYes" type="button">Yes</button>
+    </div>
+  </div>
+</div>
+
+<div id="movePickerModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3>Move to&hellip;</h3>
+    <input id="movePickerFilter" type="text" placeholder="Filter queues&hellip;">
+    <ul id="movePickerList"></ul>
+    <div class="modal-actions">
+      <button id="movePickerCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="sendModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3 id="sendModalTitle"></h3>
+    <label>JMS Type
+      <input id="sendJmsType" type="text" placeholder="text">
+    </label>
+    <label>Body
+      <textarea id="sendBody" rows="6" placeholder="Message body"></textarea>
+    </label>
+    <div class="modal-actions">
+      <button id="sendCancel" type="button">Cancel</button>
+      <button id="sendSubmit" type="button">Send</button>
+    </div>
+    <p id="sendError" class="error" hidden></p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

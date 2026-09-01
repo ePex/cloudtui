@@ -17,6 +17,7 @@ Two separate GitHub Actions workflows (kept separate rather than one conditional
 - Runs both:
   - the **`tui` job**: `task test:tui`, `task build:tui` — exercises the cross-platform requirement directly.
   - the **`mq-proxy` job**: `task test:proxy` (`./gradlew test`) then `task build:proxy:jar` (`./gradlew bootJar`) — the JAR-only build, not the full `task build:proxy` (which additionally depends on `build:proxy:jar` and then runs `podman build` to produce a container image, an artifact-publishing concern, not a build check).
+  - the **`mq-proxy-web` job**: `task test:mq-proxy-web` (`node --test`, spec/21) — no OS-specific branching needed, since all three GitHub-hosted runners ship Node by default and `node --test` behaves identically on each.
 - Uses the repo's own `Taskfile.yml` commands (`task test:tui`, `task test:proxy`, `task build:tui`), never ad hoc `go build`/`go test` invocations — so "what CI runs" and "what a developer runs locally" never drift apart.
 - `Taskfile.yml`'s `test:proxy`/`build:proxy`/`run:proxy` tasks pick `mq-proxy/gradlew.bat` on Windows and `./gradlew` elsewhere (`{{if eq OS "windows"}}...{{end}}`, the same pattern `build:tui` already uses for `{{exeExt}}`) — without this, those tasks would fail to launch at all on native Windows (no shebang interpreter for the Unix `gradlew` script).
 - A separate `shellcheck` job (ubuntu-latest only) lints `scripts/install.sh` — the one install script written in POSIX `sh` rather than Go, so it needs its own lint step outside `task test:tui`. `scripts/install.ps1` (PowerShell) has no equivalent CI lint step; verified manually instead (see Installing below).
@@ -56,7 +57,7 @@ the Releases page) versus building from source (`task run:tui`).
 - `.github/workflows/ci.yml` — CI workflow.
 - `.github/workflows/release.yml` — release workflow.
 - `.goreleaser.yaml` (repo root, scoped to build from `tui/`) — GoReleaser config; `homebrew_casks:`/`scoops:` blocks target `ePex/homebrew-tap`/`ePex/scoop-bucket`.
-- `Taskfile.yml` — `test:tui`, `build:tui`, `test:proxy`, `build:proxy:jar`, `build:proxy`, `run:proxy` tasks; the last four branch on OS for the Gradle wrapper.
+- `Taskfile.yml` — `test:tui`, `build:tui`, `test:proxy`, `build:proxy:jar`, `build:proxy`, `run:proxy`, `test:mq-proxy-web` tasks; the Gradle-wrapper ones (`test:proxy`/`build:proxy*`/`run:proxy`) branch on OS, `test:mq-proxy-web` does not need to.
 - `LICENSE` — MIT License text, copyright Philipp Holz.
 - `scripts/install.sh`, `scripts/install.ps1` — install scripts, see Installing above.
 - `HOMEBREW_TAP_GITHUB_TOKEN`, `SCOOP_BUCKET_GITHUB_TOKEN` — repo secrets on `ePex/cloudtui`, each a PAT scoped to just its one target repo.
