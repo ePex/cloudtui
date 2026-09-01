@@ -156,7 +156,17 @@
     directly, confirmed the API response carried 4 header entries, and
     confirmed the detail view now shows all 4, sorted.
 
-19. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+19. [x] Bugfix: same class of bug as task 14, different element — the
+    message detail view's `<dl>` (Headers section, task 18) had no
+    `overflow-wrap`, so a header value with no natural break point (a
+    long URL, a raw JSON error body — real values seen in production
+    Camel error headers) overflowed its grid column and blew out the
+    whole layout instead of wrapping. Fixed with `overflow-wrap:
+    anywhere` on `dt, dd`. Verified live by seeding a message with a
+    ~230-character unbroken URL as a header value and confirming it now
+    wraps cleanly within its own column.
+
+20. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
