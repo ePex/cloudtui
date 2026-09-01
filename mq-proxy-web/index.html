@@ -53,6 +53,9 @@
   table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
   th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
   td.queue-name { cursor: pointer; color: var(--accent); }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--accent); }
+  th.sortable .sort-indicator { color: var(--muted); font-size: 0.75em; margin-left: 0.25em; }
   tr.message-row { cursor: pointer; }
   tr.message-row:hover, td.queue-name:hover { text-decoration: underline; }
   td.row-actions button { margin-right: 0.35rem; }
@@ -118,9 +121,20 @@
   <section id="queuesView" hidden>
     <h2>Queues</h2>
     <button id="refreshQueuesBtn" type="button">Refresh</button>
+    <label>Filter
+      <input id="queueFilter" type="text" placeholder="Filter by queue name&hellip;">
+    </label>
     <table id="queuesTable">
       <thead>
-        <tr><th>Name</th><th>Pending</th><th>Consumers</th><th>Enqueued</th><th>Dequeued</th><th>Producers</th><th>Actions</th></tr>
+        <tr>
+          <th data-column="name" class="sortable">Name</th>
+          <th data-column="messageCount" class="sortable">Pending</th>
+          <th data-column="consumerCount" class="sortable">Consumers</th>
+          <th data-column="enqueuedCount" class="sortable">Enqueued</th>
+          <th data-column="dequeuedCount" class="sortable">Dequeued</th>
+          <th data-column="producerCount" class="sortable">Producers</th>
+          <th>Actions</th>
+        </tr>
       </thead>
       <tbody></tbody>
     </table>

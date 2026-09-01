@@ -141,6 +141,28 @@
     return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
   }
 
+  // Client-side only — list-queues (spec/11) has no server-side filter
+  // param, so this narrows the already-fetched list. Case-insensitive
+  // substring match on queue name.
+  function filterQueues(queues, needle) {
+    var trimmed = (needle || '').trim().toLowerCase();
+    if (!trimmed) return queues.slice();
+    return queues.filter(function (q) { return q.name.toLowerCase().indexOf(trimmed) !== -1; });
+  }
+
+  var QUEUE_SORT_COLUMNS = ['name', 'messageCount', 'consumerCount', 'enqueuedCount', 'dequeuedCount', 'producerCount'];
+
+  // column: one of QUEUE_SORT_COLUMNS. direction: 'asc' or 'desc'. `name`
+  // compares as text (localeCompare); every other column is numeric.
+  // Returns a new array — never mutates the input.
+  function sortQueues(queues, column, direction) {
+    var sign = direction === 'desc' ? -1 : 1;
+    return queues.slice().sort(function (a, b) {
+      var cmp = column === 'name' ? a.name.localeCompare(b.name) : a[column] - b[column];
+      return cmp * sign;
+    });
+  }
+
   // ---------------------------------------------------------------------
   // API client
   // ---------------------------------------------------------------------
@@ -183,6 +205,8 @@
   exports.tierForQueue = tierForQueue;
   exports.sortMoveTargets = sortMoveTargets;
   exports.truncate = truncate;
+  exports.filterQueues = filterQueues;
+  exports.sortQueues = sortQueues;
   exports.apiCall = apiCall;
 
   // ---------------------------------------------------------------------
@@ -201,6 +225,8 @@
     conn: null,
     currentQueue: null,
     currentMessage: null,
+    queues: [],
+    queueSort: { column: 'name', direction: 'asc' },
   };
 
   function $(id) { return document.getElementById(id); }
@@ -288,12 +314,50 @@
     var tbody = $('queuesTable').querySelector('tbody');
     tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
     return apiCall(state.conn, 'list-queues').then(function (queues) {
-      renderQueues(queues || []);
+      state.queues = queues || [];
+      applyQueueView();
     }, function (err) {
       tbody.innerHTML = '';
       showError($('queuesError'), err);
     });
   }
+
+  // Applies the current filter text + sort column/direction to
+  // state.queues (the last-fetched raw list) and re-renders — never
+  // refetches, so typing in the filter or clicking a header is instant.
+  function applyQueueView() {
+    var filtered = filterQueues(state.queues, $('queueFilter').value);
+    var sorted = sortQueues(filtered, state.queueSort.column, state.queueSort.direction);
+    renderQueues(sorted);
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators() {
+    Array.prototype.forEach.call($('queuesTable').querySelectorAll('th.sortable'), function (th) {
+      var indicator = th.querySelector('.sort-indicator');
+      if (indicator) indicator.remove();
+      if (th.dataset.column === state.queueSort.column) {
+        var span = document.createElement('span');
+        span.className = 'sort-indicator';
+        span.textContent = state.queueSort.direction === 'asc' ? '▲' : '▼';
+        th.appendChild(span);
+      }
+    });
+  }
+
+  Array.prototype.forEach.call($('queuesTable').querySelectorAll('th.sortable'), function (th) {
+    th.addEventListener('click', function () {
+      var column = th.dataset.column;
+      if (state.queueSort.column === column) {
+        state.queueSort.direction = state.queueSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.queueSort = { column: column, direction: 'asc' };
+      }
+      applyQueueView();
+    });
+  });
+
+  $('queueFilter').addEventListener('input', applyQueueView);
 
   function renderQueues(queues) {
     var tbody = $('queuesTable').querySelector('tbody');

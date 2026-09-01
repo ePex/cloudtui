@@ -27,7 +27,11 @@ through a click-first UI instead of a keyboard-driven one.
   doesn't re-enter it every time — a deliberate convenience-over-security
   trade-off (see "Security considerations" below).
 - **Queue list**: name, pending/consumer/enqueue/dequeue/producer counts
-  (the fields `list-queues` already returns — spec/11).
+  (the fields `list-queues` already returns — spec/11). A live
+  substring filter narrows by queue name (client-side — `list-queues`
+  has no server-side filter param), and clicking a column header sorts
+  by that column (ascending, click again for descending), all
+  client-side over the already-fetched list.
 - **Message browsing**: list + detail view for a queue's messages
   (conceptually mirrors spec/08), calling `list-messages` with
   `returnBody=true`. Since `mq-proxy` requires a positive `filter.maxCount`

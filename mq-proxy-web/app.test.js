@@ -114,6 +114,47 @@ test('truncate leaves short strings untouched and ellipsizes long ones', () => {
   assert.equal(app.truncate(null, 80), '');
 });
 
+const SAMPLE_QUEUES = [
+  { name: 'orders', messageCount: 5, consumerCount: 2, enqueuedCount: 10, dequeuedCount: 5, producerCount: 1 },
+  { name: 'dlq.orders', messageCount: 20, consumerCount: 0, enqueuedCount: 20, dequeuedCount: 0, producerCount: 0 },
+  { name: 'archive', messageCount: 1, consumerCount: 1, enqueuedCount: 100, dequeuedCount: 99, producerCount: 3 },
+];
+
+test('filterQueues: blank needle returns every queue, unfiltered', () => {
+  assert.deepEqual(app.filterQueues(SAMPLE_QUEUES, ''), SAMPLE_QUEUES);
+  assert.deepEqual(app.filterQueues(SAMPLE_QUEUES, '   '), SAMPLE_QUEUES);
+});
+
+test('filterQueues: case-insensitive substring match on queue name', () => {
+  const result = app.filterQueues(SAMPLE_QUEUES, 'ORD');
+  assert.deepEqual(result.map((q) => q.name), ['orders', 'dlq.orders']);
+});
+
+test('filterQueues: no matches returns an empty array', () => {
+  assert.deepEqual(app.filterQueues(SAMPLE_QUEUES, 'nonexistent'), []);
+});
+
+test('sortQueues: name column sorts alphabetically ascending by default', () => {
+  const sorted = app.sortQueues(SAMPLE_QUEUES, 'name', 'asc');
+  assert.deepEqual(sorted.map((q) => q.name), ['archive', 'dlq.orders', 'orders']);
+});
+
+test('sortQueues: descending reverses the order', () => {
+  const sorted = app.sortQueues(SAMPLE_QUEUES, 'name', 'desc');
+  assert.deepEqual(sorted.map((q) => q.name), ['orders', 'dlq.orders', 'archive']);
+});
+
+test('sortQueues: a numeric column (e.g. messageCount) sorts numerically, not lexically', () => {
+  const sorted = app.sortQueues(SAMPLE_QUEUES, 'messageCount', 'asc');
+  assert.deepEqual(sorted.map((q) => q.messageCount), [1, 5, 20]);
+});
+
+test('sortQueues does not mutate its input', () => {
+  const original = SAMPLE_QUEUES.map((q) => ({ ...q }));
+  app.sortQueues(SAMPLE_QUEUES, 'name', 'asc');
+  assert.deepEqual(SAMPLE_QUEUES, original);
+});
+
 test('apiCall sends Basic auth, unwraps envelope data, and rejects on a non-ok response', async () => {
   const calls = [];
   global.fetch = async (url, opts) => {
