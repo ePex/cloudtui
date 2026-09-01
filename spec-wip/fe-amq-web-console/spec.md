@@ -19,6 +19,14 @@ through a click-first UI instead of a keyboard-driven one.
   not bundled into the `mq-proxy` JAR. It has no server-side component of
   its own — every operation is a direct browser call to a running
   `mq-proxy` instance's REST API.
+- **Dark mode**: follows the OS/browser's `prefers-color-scheme`
+  automatically — no manual toggle, no settings/theming system. CSS
+  custom properties swap to a dark palette under a media query;
+  `color-scheme: light dark` on `:root` so native form controls
+  (inputs/textareas) adapt too, and so the browser doesn't force-invert
+  the page on its own (which otherwise renders worse than either palette
+  on its own — confirmed live, some browsers do this to any page that
+  only declares light support).
 - **Connecting**: on load, a form asks for the `mq-proxy` base URL plus its
   HTTP Basic username/password (the single `proxy.auth.username`/
   `proxy.auth.password` pair configured on that `mq-proxy` instance —
@@ -61,8 +69,11 @@ through a click-first UI instead of a keyboard-driven one.
   whatever `mq-proxy`'s single shared Basic-auth pair provides.
 - No pagination/"load more" for messages — mirrors `mq-proxy`'s own
   stated out-of-scope (spec/11).
-- No keyboard-driven power-user UX, no theming system — click-first,
+- No keyboard-driven power-user UX, no theme picker/settings — click-first,
   matching the target audience; not trying to be a lightweight TUI clone.
+  (Light/dark *does* follow the OS preference automatically — see the
+  connect/queues/messages bullets above — that's not a theming system,
+  just standard `prefers-color-scheme` support.)
 - No offline/PWA support.
 
 ## `mq-proxy` CORS change (part of this same PR)
