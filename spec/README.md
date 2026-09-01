@@ -10,7 +10,7 @@ a feature area's behavior changes, its `spec.md` is updated in place
 rather than gaining a new dated entry. Bugfixes and change requests don't
 get their own folder here — they're folded into the area they correct.
 
-Numbering is a 1–20 reading order (foundational/infra first), not a
+Numbering is a 1–21 reading order (foundational/infra first), not a
 chronological counter — see the table below.
 
 | Folder | Covers |
@@ -35,6 +35,7 @@ chronological counter — see the table below.
 | [18-datadog-logs](18-datadog-logs/spec.md) | Datadog Logs search |
 | [19-log-investigation-crosslinks](19-log-investigation-crosslinks/spec.md) | Log investigation cross-links: correlation jump + shared time-range modal |
 | [20-aws-codepipeline-monitor](20-aws-codepipeline-monitor/spec.md) | AWS CodePipeline monitor with desktop notifications |
+| [21-amq-web-console](21-amq-web-console/spec.md) | Static web console for browsing/managing ActiveMQ queues via mq-proxy |
 
 ## Relationship to `spec-wip/`
 

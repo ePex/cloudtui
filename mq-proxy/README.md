@@ -65,6 +65,7 @@ All settings can be provided via `application.yml` or environment variables.
 | `SERVER_PORT`          | `server.port`             | `8080`                     | HTTP port the proxy listens on     |
 | `PROXY_AUTH_USERNAME`  | `proxy.auth.username`     | `cloudtui`                 | HTTP Basic auth username for proxy |
 | `PROXY_AUTH_PASSWORD`  | `proxy.auth.password`     | `changeme`                 | HTTP Basic auth password for proxy |
+| `CORS_ALLOWED_ORIGINS` | `proxy.cors.allowed-origins` | *(none)*                | Comma-separated `http(s)://` origins allowed to call the API cross-origin (e.g. wherever [`mq-proxy-web`](../mq-proxy-web) is hosted). The `null` origin — what a browser sends for a page opened directly via `file://` — is always allowed and does not need to be listed here. |
 
 Example `application.yml` override:
 

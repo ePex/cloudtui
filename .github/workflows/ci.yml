@@ -42,3 +42,14 @@ jobs:
       - uses: go-task/setup-task@v2
       - run: task test:proxy
       - run: task build:proxy:jar
+
+  mq-proxy-web:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: go-task/setup-task@v2
+      - run: task test:mq-proxy-web
