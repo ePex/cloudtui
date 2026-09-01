@@ -190,6 +190,16 @@
     return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
   }
 
+  // mq-proxy always returns a message's JMS properties as a headers map
+  // (spec/11), independent of returnBody — sorted [key, value] pairs for
+  // the message detail view's Headers section (mirrors the TUI's own
+  // "all captured JMS fields as sorted Key: value lines", spec/08).
+  function sortedHeaderEntries(headers) {
+    return Object.keys(headers || {}).sort().map(function (key) {
+      return [key, headers[key]];
+    });
+  }
+
   // Client-side only — list-queues (spec/11) has no server-side filter
   // param, so this narrows the already-fetched list. Case-insensitive
   // substring match on queue name.
@@ -259,6 +269,7 @@
   exports.tierForQueue = tierForQueue;
   exports.sortMoveTargets = sortMoveTargets;
   exports.truncate = truncate;
+  exports.sortedHeaderEntries = sortedHeaderEntries;
   exports.filterQueues = filterQueues;
   exports.sortQueues = sortQueues;
   exports.apiCall = apiCall;
@@ -593,6 +604,12 @@
       '<dt>Message ID</dt><dd>' + escapeHtml(message.messageId) + '</dd>' +
       '<dt>JMS Type</dt><dd>' + escapeHtml(message.jmsType) + '</dd>' +
       '<dt>Timestamp</dt><dd>' + escapeHtml(message.timestamp) + '</dd>';
+    var headerEntries = sortedHeaderEntries(message.headers);
+    if (headerEntries.length > 0) {
+      fields.innerHTML += '<dt class="section-label">Headers</dt>' + headerEntries.map(function (entry) {
+        return '<dt>' + escapeHtml(entry[0]) + '</dt><dd>' + escapeHtml(entry[1]) + '</dd>';
+      }).join('');
+    }
     $('messageDetailBody').textContent = message.body || '';
     showView('messageDetailView');
   }

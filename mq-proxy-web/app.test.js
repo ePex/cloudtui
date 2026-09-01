@@ -166,6 +166,20 @@ test('truncate leaves short strings untouched and ellipsizes long ones', () => {
   assert.equal(app.truncate(null, 80), '');
 });
 
+test('sortedHeaderEntries: sorted [key, value] pairs from the headers map', () => {
+  assert.deepEqual(app.sortedHeaderEntries({ correlationId: 'abc', groupId: 'g1', jmsxUserId: 'svc' }), [
+    ['correlationId', 'abc'],
+    ['groupId', 'g1'],
+    ['jmsxUserId', 'svc'],
+  ]);
+});
+
+test('sortedHeaderEntries: no headers (null/undefined/empty) yields an empty list', () => {
+  assert.deepEqual(app.sortedHeaderEntries(null), []);
+  assert.deepEqual(app.sortedHeaderEntries(undefined), []);
+  assert.deepEqual(app.sortedHeaderEntries({}), []);
+});
+
 const SAMPLE_QUEUES = [
   { name: 'orders', messageCount: 5, consumerCount: 2, enqueuedCount: 10, dequeuedCount: 5, producerCount: 1 },
   { name: 'dlq.orders', messageCount: 20, consumerCount: 0, enqueuedCount: 20, dequeuedCount: 0, producerCount: 0 },
