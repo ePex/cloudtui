@@ -166,7 +166,13 @@
     ~230-character unbroken URL as a header value and confirming it now
     wraps cleanly within its own column.
 
-20. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+20. [x] Bugfix: message detail view never showed which queue the message
+    belongs to, even though `mq-proxy`'s `MessageSummary.sourceQueue`
+    already carries it (spec/11) — added as the first field, above
+    Message ID (falls back to `state.currentQueue` if ever unset).
+    Verified live.
+
+21. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
