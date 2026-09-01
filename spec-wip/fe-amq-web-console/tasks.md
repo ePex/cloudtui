@@ -147,7 +147,16 @@
     same code path as delete (`openMovePicker`, already verified
     elsewhere) with `buildBulkMoveBody` covered by its own unit test.
 
-18. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+18. [x] Bugfix: message detail view never rendered `mq-proxy`'s `headers`
+    map at all — only Message ID/JMS Type/Timestamp/body were shown.
+    Added a Headers section (sorted `Key: value`, omitted when empty),
+    mirroring the TUI's own three-section detail view (spec/08).
+    `sortedHeaderEntries` is a pure, unit-tested function. Verified
+    live: sent a message with `groupId`/custom `headers` via `mq-proxy`
+    directly, confirmed the API response carried 4 header entries, and
+    confirmed the detail view now shows all 4, sorted.
+
+19. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.

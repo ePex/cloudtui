@@ -46,7 +46,13 @@ through a click-first UI instead of a keyboard-driven one.
   on every `list-messages` call, the page applies a sane client-side
   default (matching the TUI's 500) when the user hasn't set one, and shows
   the effective cap in use — same reasoning as spec/11's client already
-  applies. Its JMS Type filter field shows `*` as its placeholder (a
+  applies. The detail view shows three sections — Message ID/JMS
+  Type/Timestamp, then a **Headers** section listing every entry from
+  `mq-proxy`'s `headers` map (sorted `Key: value`, mirroring the TUI's
+  own Headers section, spec/08 — `mq-proxy` always returns this map,
+  independent of `returnBody`), then the body — omitting the Headers
+  section entirely when the map is empty. Its JMS Type filter field
+  shows `*` as its placeholder (a
   familiar "matches everything" convention) rather than blank/"(optional)"
   — a pure UI convention, not a real wildcard: leaving it empty already
   meant "no filter" and still does; `*` is never actually sent to
