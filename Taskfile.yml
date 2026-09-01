@@ -75,7 +75,13 @@ tasks:
 
   test:
     desc: Run all tests.
-    deps: [test:tui, test:proxy]
+    deps: [test:tui, test:proxy, test:mq-proxy-web]
+
+  test:mq-proxy-web:
+    desc: Run mq-proxy-web's unit tests (Node's built-in test runner, no npm dependencies).
+    dir: mq-proxy-web
+    cmds:
+      - node --test
 
   test:tui:
     desc: Run tui unit tests.

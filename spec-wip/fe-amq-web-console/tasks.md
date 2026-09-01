@@ -45,13 +45,13 @@
    checks — configured origin allowed, unlisted origin rejected, `null`
    always allowed.
 
-8. [ ] Wire `mq-proxy-web`'s tests into the Taskfile
+8. [x] Wire `mq-proxy-web`'s tests into the Taskfile
    (`test:mq-proxy-web` → `node --test mq-proxy-web/`) and into CI
    (`.github/workflows/ci.yml`, a new job alongside the existing
    `tui`/`mq-proxy` jobs — no OS-specific branching needed, `node --test`
    behaves the same on all three runners).
 
-9. [ ] Docs: `mq-proxy-web/README.md` (how to open the page, how to run
+9. [x] Docs: `mq-proxy-web/README.md` (how to open the page, how to run
    `task test:mq-proxy-web`); `mq-proxy/README.md` gets the new
    `proxy.cors.allowed-origins`/`CORS_ALLOWED_ORIGINS` keys documented
    alongside `BROKER_URL` etc.
