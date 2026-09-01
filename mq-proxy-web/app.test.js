@@ -114,6 +114,24 @@ test('buildSingleMessageFilter targets exactly one message', () => {
   assert.deepEqual(app.buildSingleMessageFilter('ID:m1'), { messageId: 'ID:m1', maxCount: 1 });
 });
 
+test('buildBulkDeleteBody: one request element per selected message, each scoped to exactly that message', () => {
+  assert.deepEqual(app.buildBulkDeleteBody('orders', ['ID:m1', 'ID:m2']), [
+    { sourceQueue: 'orders', filter: { messageId: 'ID:m1', maxCount: 1 } },
+    { sourceQueue: 'orders', filter: { messageId: 'ID:m2', maxCount: 1 } },
+  ]);
+});
+
+test('buildBulkDeleteBody: an empty selection yields an empty request body', () => {
+  assert.deepEqual(app.buildBulkDeleteBody('orders', []), []);
+});
+
+test('buildBulkMoveBody: one request element per selected message, carrying the shared target queue', () => {
+  assert.deepEqual(app.buildBulkMoveBody('orders', 'archive', ['ID:m1', 'ID:m2']), [
+    { sourceQueue: 'orders', targetQueue: 'archive', filter: { messageId: 'ID:m1', maxCount: 1 } },
+    { sourceQueue: 'orders', targetQueue: 'archive', filter: { messageId: 'ID:m2', maxCount: 1 } },
+  ]);
+});
+
 test('tierForQueue: DLQ-stripped match against the source is preferred (tier 0)', () => {
   assert.equal(app.tierForQueue('foo.bar', 'dlq.foo.bar'), 0);
   assert.equal(app.tierForQueue('foo.bar', 'imq.foo.bar'), 0);
