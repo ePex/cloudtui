@@ -71,6 +71,17 @@ test('buildBulkFilter: a blank JMS Type means "match everything" (empty filter, 
   assert.deepEqual(app.buildBulkFilter(undefined), {});
 });
 
+test('resolveJmsType: a blank entry defaults to "text" (mq-proxy requires the field)', () => {
+  assert.equal(app.resolveJmsType(''), 'text');
+  assert.equal(app.resolveJmsType('   '), 'text');
+  assert.equal(app.resolveJmsType(undefined), 'text');
+});
+
+test('resolveJmsType: a typed value is used as-is (trimmed)', () => {
+  assert.equal(app.resolveJmsType('order-created'), 'order-created');
+  assert.equal(app.resolveJmsType('  order-created  '), 'order-created');
+});
+
 test('buildBulkFilter: a typed JMS Type narrows via filter.jmsType, still no maxCount', () => {
   assert.deepEqual(app.buildBulkFilter('order-created'), { jmsType: 'order-created' });
   assert.deepEqual(app.buildBulkFilter('  order-created  '), { jmsType: 'order-created' });

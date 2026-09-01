@@ -99,6 +99,16 @@
     return trimmed ? { jmsType: trimmed } : {};
   }
 
+  // send-message's jmsType field is required by mq-proxy's DTO (spec/11)
+  // even though a blank entry is a normal, common case here — unlike the
+  // TUI (spec/09), which hardcodes "text" since it has no JMS Type field
+  // at all, this page exposes one but still needs a sane default when
+  // it's left blank.
+  function resolveJmsType(jmsType) {
+    var trimmed = (jmsType || '').trim();
+    return trimmed || 'text';
+  }
+
   // Filter for acting on exactly one already-known message (single
   // delete/move) — matches the TUI proxy client's MessageFilter{MessageID,
   // MaxCount: 1} pattern (tui/internal/queue/proxy/proxy.go).
@@ -201,6 +211,7 @@
   exports.buildQueryString = buildQueryString;
   exports.buildListMessagesParams = buildListMessagesParams;
   exports.buildBulkFilter = buildBulkFilter;
+  exports.resolveJmsType = resolveJmsType;
   exports.buildSingleMessageFilter = buildSingleMessageFilter;
   exports.tierForQueue = tierForQueue;
   exports.sortMoveTargets = sortMoveTargets;
@@ -619,6 +630,7 @@
   function openSendModal(targetQueue) {
     sendModalState = { targetQueue: targetQueue };
     $('sendModalTitle').textContent = 'Send message to "' + targetQueue + '"';
+    $('sendJmsType').value = '';
     $('sendBody').value = '';
     clearError($('sendError'));
     $('sendModal').hidden = false;
@@ -626,9 +638,10 @@
 
   $('sendSubmit').addEventListener('click', function () {
     var body = $('sendBody').value;
+    var jmsType = resolveJmsType($('sendJmsType').value);
     apiCall(state.conn, 'send-message', {
       method: 'POST',
-      body: { targetQueue: sendModalState.targetQueue, jmsType: 'text', body: body },
+      body: { targetQueue: sendModalState.targetQueue, jmsType: jmsType, body: body },
     }).then(function () {
       $('sendModal').hidden = true;
       if (state.currentQueue === sendModalState.targetQueue && !$('messagesView').hidden) {

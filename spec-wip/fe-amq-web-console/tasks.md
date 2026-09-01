@@ -106,7 +106,13 @@
     the browser stops force-inverting the page on its own. Manual test
     only (no unit-testable logic — pure CSS).
 
-13. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
+13. [x] Send: add a JMS Type field to the send modal (a departure from
+    spec/09's TUI, which has no such field and hardcodes `"text"`) — a
+    blank entry still defaults to `"text"` (`mq-proxy`'s `send-message`
+    DTO requires the field even though leaving it unset is a normal
+    case). `resolveJmsType` is a pure, unit-tested function.
+
+14. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
     (new CI job) and `spec/10-mq-proxy-service` (CORS) in place; delete
     `spec-wip/fe-amq-web-console/`. Mark the PR ready for review.
