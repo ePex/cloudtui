@@ -5,7 +5,7 @@
    `list-queues`/`delete-messages`/`move-messages` too — unused,
    harmless default there).
 
-2. [ ] `BrokerService.browseMessages`: extract the enumeration walk into
+2. [x] `BrokerService.browseMessages`: extract the enumeration walk into
    `doBrowse` (browser, filter, returnBody, afterMessageId) returning
    the page plus whether the cursor was found; skip messages up to and
    including a match on `afterMessageId`, collect up to `maxCount`
