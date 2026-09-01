@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] Scaffold `mq-proxy-web/`: `index.html` (connect form — base URL,
+1. [x] Scaffold `mq-proxy-web/`: `index.html` (connect form — base URL,
    username, password; validates via a `list-queues` call before
    switching views; "Forget connection" clears `localStorage`) and
    `app.js` (UMD-lite skeleton: `buildAuthHeader`, `parseEnvelope`, a
@@ -11,28 +11,28 @@
    `mq-proxy`, confirm success/failure both render inline (no browser
    console needed to see the result).
 
-2. [ ] Queue list view: `list-queues` call + table (name,
+2. [x] Queue list view: `list-queues` call + table (name,
    pending/consumer/enqueue/dequeue/producer counts), row click
    navigates to that queue's messages. Unit tests for the response
    → row-data mapping.
 
-3. [ ] Message list + detail views: `list-messages` (nested `filter.*`,
+3. [x] Message list + detail views: `list-messages` (nested `filter.*`,
    `returnBody=true`, default `maxCount=500` shown/editable), row click
    opens detail (headers + body). Unit tests for the nested query-string
    builder.
 
-4. [ ] Purge action: optional JMS Type prompt → confirm dialog →
+4. [x] Purge action: optional JMS Type prompt → confirm dialog →
    `delete-messages` (`maxCount` omitted on a blank filter, set on a
    typed one). Unit tests for the blank-vs-filtered branching.
 
-5. [ ] Move single message (from detail view) and move-all/drain (from
+5. [x] Move single message (from detail view) and move-all/drain (from
    queue list): target-queue picker with the same four-tier DLQ-priority
    ordering as the TUI (spec/09) — preferred stripped-prefix match,
    regular, `dlq.`/`imq.`-prefixed, `activemq.`/`statistics.*`-prefixed.
    Move-all reuses the JMS Type prompt from task 4. Unit tests for the
    tier-ordering function.
 
-6. [ ] Send message: modal with a plain-text body field →
+6. [x] Send message: modal with a plain-text body field →
    `send-message`. Manual test: send, confirm it shows up in the queue's
    message list.
 

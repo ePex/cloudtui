@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cloudtui — AMQ Web Console</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #d7dbe0;
+    --text: #1c2128;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header#topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
+  h1 { font-size: 1.25rem; }
+  h2 { font-size: 1.1rem; margin-top: 0; }
+  label { display: block; margin: 0.5rem 0; font-size: 0.9rem; }
+  input, textarea { width: 100%; padding: 0.4rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.95rem; }
+  button { cursor: pointer; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 0.9rem; }
+  button:hover { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
+  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  td.queue-name { cursor: pointer; color: var(--accent); }
+  tr.message-row { cursor: pointer; }
+  tr.message-row:hover, td.queue-name:hover { text-decoration: underline; }
+  td.row-actions button { margin-right: 0.35rem; }
+  p.error { color: var(--danger); font-size: 0.9rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.9rem; }
+  dt { color: var(--muted); }
+  pre#messageDetailBody {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-box {
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 1.25rem;
+    width: 90%;
+    max-width: 420px;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
+  #movePickerList { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+  #movePickerList li { padding: 0.4rem 0.6rem; cursor: pointer; }
+  #movePickerList li:hover { background: var(--bg); }
+</style>
+</head>
+<body>
+
+<header id="topbar" hidden>
+  <span id="connLabel"></span>
+  <button id="disconnectBtn" type="button">Disconnect</button>
+</header>
+
+<main>
+  <section id="connectView">
+    <h1>cloudtui — AMQ Web Console</h1>
+    <p>Connect to a running <code>mq-proxy</code> instance to browse and manage its ActiveMQ queues.</p>
+    <form id="connectForm">
+      <label>mq-proxy URL
+        <input id="connUrl" type="text" placeholder="http://localhost:8080" required>
+      </label>
+      <label>Username
+        <input id="connUser" type="text" required>
+      </label>
+      <label>Password
+        <input id="connPass" type="password" required>
+      </label>
+      <button type="submit">Connect</button>
+    </form>
+    <p id="connectError" class="error" hidden></p>
+  </section>
+
+  <section id="queuesView" hidden>
+    <h2>Queues</h2>
+    <button id="refreshQueuesBtn" type="button">Refresh</button>
+    <table id="queuesTable">
+      <thead>
+        <tr><th>Name</th><th>Pending</th><th>Consumers</th><th>Enqueued</th><th>Dequeued</th><th>Producers</th><th>Actions</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="queuesError" class="error" hidden></p>
+  </section>
+
+  <section id="messagesView" hidden>
+    <button id="backToQueuesBtn" type="button">&larr; Queues</button>
+    <h2 id="messagesTitle"></h2>
+    <label>JMS Type filter
+      <input id="msgFilterType" type="text" placeholder="(optional)">
+    </label>
+    <label>Max count
+      <input id="msgFilterMax" type="number" min="1" value="500">
+    </label>
+    <button id="applyMsgFilterBtn" type="button">Apply</button>
+    <button id="sendFromMessagesBtn" type="button">Send message&hellip;</button>
+    <table id="messagesTable">
+      <thead>
+        <tr><th>Message ID</th><th>JMS Type</th><th>Timestamp</th><th>Body preview</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="messagesError" class="error" hidden></p>
+  </section>
+
+  <section id="messageDetailView" hidden>
+    <button id="backToMessagesBtn" type="button">&larr; Messages</button>
+    <h2>Message detail</h2>
+    <dl id="messageDetailFields"></dl>
+    <pre id="messageDetailBody"></pre>
+    <button id="deleteMessageBtn" type="button">Delete</button>
+    <button id="moveMessageBtn" type="button">Move&hellip;</button>
+    <p id="messageDetailError" class="error" hidden></p>
+  </section>
+</main>
+
+<div id="jmsTypePromptModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3 id="jmsTypePromptTitle"></h3>
+    <input id="jmsTypePromptInput" type="text" placeholder="JMS Type (optional)">
+    <div class="modal-actions">
+      <button id="jmsTypePromptCancel" type="button">Cancel</button>
+      <button id="jmsTypePromptContinue" type="button">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal" hidden>
+  <div class="modal-box">
+    <p id="confirmMessage"></p>
+    <div class="modal-actions">
+      <button id="confirmNo" type="button">No</button>
+      <button id="confirmYes" type="button">Yes</button>
+    </div>
+  </div>
+</div>
+
+<div id="movePickerModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3>Move to&hellip;</h3>
+    <input id="movePickerFilter" type="text" placeholder="Filter queues&hellip;">
+    <ul id="movePickerList"></ul>
+    <div class="modal-actions">
+      <button id="movePickerCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="sendModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3 id="sendModalTitle"></h3>
+    <textarea id="sendBody" rows="6" placeholder="Message body"></textarea>
+    <div class="modal-actions">
+      <button id="sendCancel" type="button">Cancel</button>
+      <button id="sendSubmit" type="button">Send</button>
+    </div>
+    <p id="sendError" class="error" hidden></p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
