@@ -56,12 +56,39 @@
    `proxy.cors.allowed-origins`/`CORS_ALLOWED_ORIGINS` keys documented
    alongside `BROKER_URL` etc.
 
-10. [ ] Manual end-to-end pass against a live `mq-proxy` + broker (using
+10. [x] Manual end-to-end pass against a live `mq-proxy` + broker (using
     the dev-verification tooling, spec/13, to seed/inspect state): full
     connect → browse → purge → move single → move-all → send → delete
     flow, once served from a local static server (`http://`) and once
     opened directly via `file://` double-click — confirming the CORS
     config (task 7) actually permits both.
+
+    Done against a live local broker, driving the real page in Chrome
+    (served from a local static server on `http://localhost:8085`, with
+    `mq-proxy` started with `CORS_ALLOWED_ORIGINS=http://localhost:8085`),
+    using two disposable queues created/removed via `devtool add-queue`/
+    `remove-queue` (spec/13). Verified end-to-end: connect, queue list,
+    open messages, send, message detail, move (single, via the picker's
+    `/`-filter and DLQ-exclusion-of-source behavior), purge (JMS Type
+    prompt → confirm dialog → actually empties the queue, checked via
+    `list-messages`). This is also what caught the real bug below.
+    `file://` itself could not be driven by the browser-automation tool in
+    this environment (it categorically refuses `file://` navigation) — the
+    part of `file://` support that actually needed verifying, `mq-proxy`
+    correctly answering a `null`-origin CORS preflight with a 200 and
+    matching `Access-Control-Allow-Origin: null`, was confirmed directly
+    via `curl -H "Origin: null" -H "Access-Control-Request-Method: GET" -X
+    OPTIONS`. A follow-up manual double-click check is still worth doing
+    on a machine where that's easy.
+
+    **Bug found and fixed**: every modal (`#jmsTypePromptModal`,
+    `#confirmModal`, `#movePickerModal`, `#sendModal`) and the topbar set
+    their own `display` (`flex`) in the stylesheet, which — being an
+    author-origin rule — overrides the browser's default `[hidden] {
+    display: none }` UA rule regardless of selector specificity. The
+    send-message modal was covering the entire page on first load,
+    before any button had been clicked. Fixed with a single `[hidden] {
+    display: none !important; }` rule in `index.html`.
 
 11. [ ] Merge-back: add `spec/21-amq-web-console/spec.md` (new area,
     condensed end-state of this feature); update `spec/02-ci-and-release`
