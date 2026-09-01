@@ -36,7 +36,7 @@
    `send-message`. Manual test: send, confirm it shows up in the queue's
    message list.
 
-7. [ ] `mq-proxy` CORS: `CorsConfigurationSource` bean in
+7. [x] `mq-proxy` CORS: `CorsConfigurationSource` bean in
    `SecurityConfig` — configurable allowed-origins list
    (`proxy.cors.allowed-origins` in `application.yml`, env override
    `CORS_ALLOWED_ORIGINS`) plus the unconditional `null` origin; allowed
