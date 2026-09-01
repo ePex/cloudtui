@@ -20,3 +20,26 @@ gate in `CLAUDE.md`.
   of those views its own loading indicator first (mirroring
   `QueuesView.Load()`), then implementing `ui.ReauthStatusShower` on top
   — the interface doesn't help without something to revert *to*.
+
+- **In-queue message search/filter.** The message browser (spec/08)
+  lists every message on a queue with no way to narrow by body/header
+  content; a grep-style filter would help on queues with thousands of
+  messages, similar to the search CloudWatch/Datadog Logs already offer.
+
+- **Bulk message actions.** Purge/move/send (spec/09) act on a single
+  message or the whole queue; there's no multi-select for "requeue
+  these 5 poison messages" without operating on the entire queue.
+
+- **Connection health at a glance.** Home shows queues per active
+  connection, but switching to a named connection (spec/12) that's
+  unreachable is a fail-and-wait; a quick reachability indicator next
+  to each connection would surface that up front.
+
+- **Bookmarks/pins for AWS resources.** SSM Parameters, Secrets
+  Manager, and CloudWatch/Datadog saved queries all start from a flat
+  list each session — pinning frequently-checked entries would save
+  re-finding them.
+
+- **Export search results to a file.** CloudWatch/Datadog Logs results
+  and the message browser have no "save to file" action, which would
+  help when pasting results into an incident doc.
