@@ -88,6 +88,27 @@
     };
   }
 
+  // How many messages the JMS Type autocomplete scans to populate its
+  // suggestions — mirrors the TUI's own automatic-scan cap
+  // (jmsTypeAutoScanCount, spec/08) rather than introducing a different
+  // number. returnBody is left false: only the jmsType header is needed,
+  // so there's no reason to pull message bodies over the wire for this.
+  var JMS_TYPE_SCAN_MAX_COUNT = 500;
+
+  function buildJmsTypeScanParams(sourceQueue) {
+    return { sourceQueue: sourceQueue, returnBody: false, filter: { maxCount: JMS_TYPE_SCAN_MAX_COUNT } };
+  }
+
+  // Sorted, de-duplicated, non-empty JMS Type values found across a list
+  // of messages — used to populate the JMS Type prompt's autocomplete.
+  function extractDistinctJmsTypes(messages) {
+    var seen = {};
+    messages.forEach(function (m) {
+      if (m.jmsType) seen[m.jmsType] = true;
+    });
+    return Object.keys(seen).sort();
+  }
+
   // Shared by purge and move-all/drain: a blank JMS Type means "match
   // everything" (filter.maxCount stays unset, never sent), a typed one
   // narrows via filter.jmsType — maxCount is deliberately never set here
@@ -210,6 +231,8 @@
   exports.errorMessageFrom = errorMessageFrom;
   exports.buildQueryString = buildQueryString;
   exports.buildListMessagesParams = buildListMessagesParams;
+  exports.buildJmsTypeScanParams = buildJmsTypeScanParams;
+  exports.extractDistinctJmsTypes = extractDistinctJmsTypes;
   exports.buildBulkFilter = buildBulkFilter;
   exports.resolveJmsType = resolveJmsType;
   exports.buildSingleMessageFilter = buildSingleMessageFilter;
@@ -505,11 +528,29 @@
 
   // ---- Purge / move-all (shared JMS Type prompt) ----
 
-  function jmsTypePrompt(title) {
+  // sourceQueue: the queue to scan for JMS Type autocomplete suggestions.
+  // The scan runs in the background the moment the prompt opens and
+  // populates the <datalist> whenever it resolves — it never blocks or
+  // gates Continue/Cancel, which stay usable immediately regardless of
+  // whether the scan has finished (or failed; a failed scan just leaves
+  // the datalist empty, silently — it's a nice-to-have, not worth
+  // surfacing an error for).
+  function jmsTypePrompt(title, sourceQueue) {
     return new Promise(function (resolve) {
       $('jmsTypePromptTitle').textContent = title;
       $('jmsTypePromptInput').value = '';
+      $('jmsTypeSuggestions').innerHTML = '';
       $('jmsTypePromptModal').hidden = false;
+      apiCall(state.conn, 'list-messages', { query: buildJmsTypeScanParams(sourceQueue) }).then(function (messages) {
+        var datalist = $('jmsTypeSuggestions');
+        extractDistinctJmsTypes(messages || []).forEach(function (jmsType) {
+          var option = document.createElement('option');
+          option.value = jmsType;
+          datalist.appendChild(option);
+        });
+      }, function () {
+        // scan failed — leave the datalist empty, see comment above.
+      });
       function cleanup(result) {
         $('jmsTypePromptModal').hidden = true;
         continueBtn.removeEventListener('click', onContinue);
@@ -545,7 +586,7 @@
   }
 
   function purgeQueue(queueName) {
-    jmsTypePrompt('Purge "' + queueName + '" — JMS Type (optional)').then(function (result) {
+    jmsTypePrompt('Purge "' + queueName + '" — JMS Type (optional)', queueName).then(function (result) {
       if (result.cancelled) return;
       var filter = buildBulkFilter(result.jmsType);
       var question = result.jmsType
@@ -564,7 +605,7 @@
   }
 
   function moveAllMessages(queueName) {
-    jmsTypePrompt('Move All "' + queueName + '" — JMS Type (optional)').then(function (result) {
+    jmsTypePrompt('Move All "' + queueName + '" — JMS Type (optional)', queueName).then(function (result) {
       if (result.cancelled) return;
       var filter = buildBulkFilter(result.jmsType);
       openMovePicker(queueName, function (target) {
