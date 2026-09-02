@@ -61,8 +61,26 @@ test('buildListMessagesParams nests filter fields, keeps sourceQueue/returnBody 
   assert.deepEqual(params, {
     sourceQueue: 'orders',
     returnBody: true,
-    filter: { jmsType: 'order-created', messageId: undefined, maxCount: 50 },
+    filter: { jmsType: 'order-created', messageId: undefined, maxCount: 50, afterMessageId: undefined },
   });
+});
+
+test('buildListMessagesParams nests afterMessageId as the pagination cursor', () => {
+  const params = app.buildListMessagesParams('orders', { maxCount: 50, afterMessageId: 'ID:m1' });
+  assert.deepEqual(params.filter.afterMessageId, 'ID:m1');
+});
+
+test('appendMessages concatenates without mutating either input array', () => {
+  const existing = [{ messageId: 'ID:1' }];
+  const newPage = [{ messageId: 'ID:2' }, { messageId: 'ID:3' }];
+  const result = app.appendMessages(existing, newPage);
+  assert.deepEqual(result, [{ messageId: 'ID:1' }, { messageId: 'ID:2' }, { messageId: 'ID:3' }]);
+  assert.deepEqual(existing, [{ messageId: 'ID:1' }]);
+  assert.deepEqual(newPage, [{ messageId: 'ID:2' }, { messageId: 'ID:3' }]);
+});
+
+test('appendMessages onto an empty list just returns the new page', () => {
+  assert.deepEqual(app.appendMessages([], [{ messageId: 'ID:1' }]), [{ messageId: 'ID:1' }]);
 });
 
 test('buildJmsTypeScanParams: scans without bodies, capped at the shared auto-scan count', () => {
