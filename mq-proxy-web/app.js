@@ -633,7 +633,10 @@
       apiCall(state.conn, 'delete-messages', {
         method: 'POST',
         body: buildBulkDeleteBody(queueName, ids),
-      }).then(loadMessages, function (err) {
+      }).then(function () {
+        loadMessages();
+        loadQueues();
+      }, function (err) {
         showError($('messagesError'), err);
       });
     });
@@ -646,7 +649,10 @@
       return apiCall(state.conn, 'move-messages', {
         method: 'POST',
         body: buildBulkMoveBody(queueName, target, ids),
-      }).then(loadMessages);
+      }).then(function () {
+        loadMessages();
+        loadQueues();
+      });
     }, $('messagesError'));
   });
 
@@ -686,6 +692,7 @@
       }).then(function () {
         showView('messagesView');
         loadMessages();
+        loadQueues();
       }, function (err) {
         showError($('messageDetailError'), err);
       });
@@ -701,6 +708,7 @@
       }).then(function () {
         showView('messagesView');
         loadMessages();
+        loadQueues();
       });
     }, $('messageDetailError'));
   });
