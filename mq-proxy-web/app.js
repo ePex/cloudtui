@@ -84,8 +84,17 @@
         jmsType: opts.jmsType || undefined,
         messageId: opts.messageId || undefined,
         maxCount: opts.maxCount || undefined,
+        afterMessageId: opts.afterMessageId || undefined,
       },
     };
+  }
+
+  // Appends a "Load more" page onto the already-rendered list — a plain
+  // concat, but pulled out as its own pure function since loadMessages
+  // and loadMoreMessages both need the identical "existing + new" step.
+  // Never mutates either input array.
+  function appendMessages(existing, newPage) {
+    return existing.concat(newPage);
   }
 
   // How many messages the JMS Type autocomplete scans to populate its
@@ -259,6 +268,7 @@
   exports.errorMessageFrom = errorMessageFrom;
   exports.buildQueryString = buildQueryString;
   exports.buildListMessagesParams = buildListMessagesParams;
+  exports.appendMessages = appendMessages;
   exports.buildJmsTypeScanParams = buildJmsTypeScanParams;
   exports.extractDistinctJmsTypes = extractDistinctJmsTypes;
   exports.buildBulkFilter = buildBulkFilter;

@@ -22,7 +22,7 @@
    `ListResponse`. `QueueControllerTest`: `hasMore` present in the JSON
    response. Regenerate `mq-proxy/openapi.yaml` (`task openapi:proxy`).
 
-4. [ ] `mq-proxy-web`: `buildListMessagesParams` gains an optional
+4. [x] `mq-proxy-web`: `buildListMessagesParams` gains an optional
    `opts.afterMessageId` nested into `filter.afterMessageId` (same
    pattern as `jmsType`/`maxCount`). New pure `appendMessages(existing,
    newPage)` (concat, no mutation). Unit tests for both.
