@@ -26,19 +26,22 @@
   // Normalizes mq-proxy's two response envelope shapes (spec/11):
   // list endpoints return { data, errors: [...] }, single-item endpoints
   // return { data, error } or { data, error: null }. Always returns
-  // { data, errors: [] } with errors as an array, empty when there were
-  // none, so every call site has one shape to check.
+  // { data, errors: [], hasMore } with errors as an array, empty when
+  // there were none, so every call site has one shape to check. hasMore
+  // (spec/11's pagination) is only meaningful on list-messages responses
+  // — everywhere else it's just the server's own unused-there default,
+  // false.
   function parseEnvelope(json) {
     if (!json || typeof json !== 'object') {
-      return { data: undefined, errors: [] };
+      return { data: undefined, errors: [], hasMore: false };
     }
     if (Array.isArray(json.errors)) {
-      return { data: json.data, errors: json.errors };
+      return { data: json.data, errors: json.errors, hasMore: json.hasMore === true };
     }
     if (json.error) {
-      return { data: json.data, errors: [json.error] };
+      return { data: json.data, errors: [json.error], hasMore: json.hasMore === true };
     }
-    return { data: json.data, errors: [] };
+    return { data: json.data, errors: [], hasMore: json.hasMore === true };
   }
 
   function errorMessageFrom(envelope, fallback) {
@@ -258,6 +261,15 @@
         if (envelope.errors.length > 0) {
           throw new Error(errorMessageFrom(envelope, 'mq-proxy reported an error'));
         }
+        // Callers that need hasMore (currently only list-messages'
+        // pagination, loadMessages/loadMoreMessages) read it off the
+        // resolved data itself rather than apiCall growing a second
+        // return channel every other call site would have to ignore —
+        // harmless on data of any shape (array or object), a no-op
+        // where the server doesn't send hasMore at all.
+        if (envelope.data && typeof envelope.data === 'object') {
+          envelope.data.hasMore = envelope.hasMore;
+        }
         return envelope.data;
       });
     });
@@ -303,6 +315,7 @@
     queues: [],
     queueSort: { column: 'name', direction: 'asc' },
     messages: [],
+    messagesHasMore: false,
     selectedMessageIds: new Set(),
   };
 
@@ -495,19 +508,56 @@
     $('messagesTitle').textContent = queueName + ' (max=' + maxCount + ')';
     clearError($('messagesError'));
     state.selectedMessageIds = new Set();
+    state.messagesHasMore = false;
+    $('loadMoreMessagesBtn').hidden = true;
     var tbody = $('messagesTable').querySelector('tbody');
     tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
     return apiCall(state.conn, 'list-messages', {
       query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount }),
     }).then(function (messages) {
       state.messages = messages || [];
+      state.messagesHasMore = !!(messages && messages.hasMore);
       renderMessages(state.messages);
+      updateLoadMoreButton();
       updateBulkActionsUI();
     }, function (err) {
       tbody.innerHTML = '';
       showError($('messagesError'), err);
     });
   }
+
+  // "Load more" — fetches the next page after the last currently-rendered
+  // message and appends it, rather than replacing state.messages (which
+  // loadMessages does for every other reload: Apply, opening a queue, or
+  // after an action completes). The cursor is read directly off the last
+  // rendered row rather than tracked as separate state, so it can't drift
+  // out of sync with what's actually on screen.
+  function loadMoreMessages() {
+    var queueName = state.currentQueue;
+    var maxCount = parseInt($('msgFilterMax').value, 10) || DEFAULT_MAX_COUNT;
+    var jmsType = $('msgFilterType').value.trim();
+    var lastMessage = state.messages[state.messages.length - 1];
+    if (!lastMessage) return;
+    clearError($('messagesError'));
+    return apiCall(state.conn, 'list-messages', {
+      query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount, afterMessageId: lastMessage.messageId }),
+    }).then(function (page) {
+      page = page || [];
+      state.messages = appendMessages(state.messages, page);
+      state.messagesHasMore = !!page.hasMore;
+      renderMessages(state.messages);
+      updateLoadMoreButton();
+      updateBulkActionsUI();
+    }, function (err) {
+      showError($('messagesError'), err);
+    });
+  }
+
+  function updateLoadMoreButton() {
+    $('loadMoreMessagesBtn').hidden = !state.messagesHasMore;
+  }
+
+  $('loadMoreMessagesBtn').addEventListener('click', loadMoreMessages);
 
   function renderMessages(messages) {
     var tbody = $('messagesTable').querySelector('tbody');
