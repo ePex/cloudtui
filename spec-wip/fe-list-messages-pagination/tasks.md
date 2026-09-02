@@ -27,7 +27,7 @@
    pattern as `jmsType`/`maxCount`). New pure `appendMessages(existing,
    newPage)` (concat, no mutation). Unit tests for both.
 
-5. [ ] `mq-proxy-web`: `state.messagesHasMore`; `loadMessages()` always
+5. [x] `mq-proxy-web`: `state.messagesHasMore`; `loadMessages()` always
    starts a fresh first page (`state.messages` replaced,
    `state.messagesHasMore` set from the response); new
    `loadMoreMessages()` fetches with `afterMessageId` = the last
@@ -36,6 +36,39 @@
    below the messages table, `hidden` unless `messagesHasMore` is
    `true`. Existing row-selection state (spec/21) is preserved across
    an append since it's keyed by `messageId`, not row index.
+
+   `apiCall` and `parseEnvelope` needed a small extension not called
+   out explicitly in `plan.md`: `apiCall` previously resolved with just
+   `envelope.data`, discarding `hasMore` (a sibling field, not nested
+   under `data`) entirely — so `hasMore` is now attached onto the
+   resolved `data` itself (harmless on any shape, array or object; a
+   no-op wherever the server doesn't send it) rather than growing
+   `apiCall`'s return contract for every other call site to ignore.
+
+   Verified live end-to-end: seeded 5 messages, set max count to 2,
+   confirmed "Load more" appears, selected one message, clicked "Load
+   more" twice and confirmed the selection survived both appends while
+   new rows arrived unselected, and confirmed the button correctly
+   disappears once all 5 are loaded. Also independently confirmed via
+   `curl` against the live broker: page 1 (`hasMore=true`), page 2 via
+   `afterMessageId` (`hasMore=true`), and the stale-cursor fallback
+   (an unknown `afterMessageId` returns all 5 from the start).
+
+   **Testing gotcha, not a code bug**: mid-session, a stray static file
+   server from an earlier task's manual testing was still squatting on
+   port 8085, silently serving the *old* pre-pagination `mq-proxy-web/`
+   from a different checkout — the new server never actually started,
+   so every request looked "successful" but returned stale files.
+   Separately, even after fixing that, the browser's own HTTP cache
+   kept serving an old cached `app.js` across normal navigations
+   (`python -m http.server` sends no cache-control headers, so Chrome's
+   heuristic caching applies) — a cache-busting query string on
+   `index.html`'s URL doesn't affect the separately-cached `app.js` it
+   loads via `<script src>`; a real hard reload (which bypasses cache
+   for every subresource of the navigation, not just the document) was
+   what actually fixed it. Worth remembering for the next live-testing
+   round: check for stray old servers first, and hard-reload (not just
+   re-navigate) after any `app.js` change.
 
 6. [ ] Manual end-to-end verification against a live `mq-proxy` + broker
    (spec/13 dev tooling): seed a queue with more messages than a small
