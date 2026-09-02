@@ -95,6 +95,35 @@ class QueueControllerTest {
 
     @Test
     @WithMockUser
+    fun `listMessages returns hasMore true when a page boundary was hit`() {
+        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 1)) } returns BrokerService.BrowseResult(
+            data = listOf(MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap())),
+            hasMore = true,
+        )
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=1")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.hasMore") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages passes afterMessageId through as the pagination cursor`() {
+        every {
+            brokerService.browseMessages(
+                "orders",
+                QueueMessageFilter(afterMessageId = "ID:m1", maxCount = 50),
+            )
+        } returns BrokerService.BrowseResult(data = emptyList(), hasMore = false)
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.afterMessageId=ID:m1&filter.maxCount=50")
+            .andExpect { status { isOk() } }
+    }
+
+    @Test
+    @WithMockUser
     fun `listMessages passes jmsType and messageId filters through`() {
         every {
             brokerService.browseMessages(

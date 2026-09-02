@@ -18,7 +18,7 @@
    stale cursor falls back to page one; `hasMore` correct exactly at
    the `maxCount` boundary.
 
-3. [ ] `QueueController.listMessages` passes `hasMore` through in its
+3. [x] `QueueController.listMessages` passes `hasMore` through in its
    `ListResponse`. `QueueControllerTest`: `hasMore` present in the JSON
    response. Regenerate `mq-proxy/openapi.yaml` (`task openapi:proxy`).
 

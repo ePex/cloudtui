@@ -21,16 +21,16 @@ paths:
               $ref: "#/components/schemas/SendMessageRequest"
         required: true
       responses:
-        "500":
-          description: Internal Server Error
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
                 type: object
                 additionalProperties:
                   type: string
-        "400":
-          description: Bad Request
+        "500":
+          description: Internal Server Error
           content:
             '*/*':
               schema:
@@ -57,16 +57,16 @@ paths:
                 $ref: "#/components/schemas/MoveMessagesRequest"
         required: true
       responses:
-        "500":
-          description: Internal Server Error
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
                 type: object
                 additionalProperties:
                   type: string
-        "400":
-          description: Bad Request
+        "500":
+          description: Internal Server Error
           content:
             '*/*':
               schema:
@@ -93,16 +93,16 @@ paths:
                 $ref: "#/components/schemas/DeleteMessagesRequest"
         required: true
       responses:
-        "500":
-          description: Internal Server Error
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
                 type: object
                 additionalProperties:
                   type: string
-        "400":
-          description: Bad Request
+        "500":
+          description: Internal Server Error
           content:
             '*/*':
               schema:
@@ -121,16 +121,16 @@ paths:
       - queue-controller
       operationId: listQueues
       responses:
-        "500":
-          description: Internal Server Error
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
                 type: object
                 additionalProperties:
                   type: string
-        "400":
-          description: Bad Request
+        "500":
+          description: Internal Server Error
           content:
             '*/*':
               schema:
@@ -155,16 +155,16 @@ paths:
         schema:
           $ref: "#/components/schemas/ListMessagesQuery"
       responses:
-        "500":
-          description: Internal Server Error
+        "400":
+          description: Bad Request
           content:
             '*/*':
               schema:
                 type: object
                 additionalProperties:
                   type: string
-        "400":
-          description: Bad Request
+        "500":
+          description: Internal Server Error
           content:
             '*/*':
               schema:
@@ -251,6 +251,8 @@ components:
         maxCount:
           type: integer
           format: int32
+        afterMessageId:
+          type: string
     ListResponseMovedMessageDto:
       type: object
       properties:
@@ -262,9 +264,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ApiError"
+        hasMore:
+          type: boolean
       required:
       - data
       - errors
+      - hasMore
     MovedMessageDto:
       type: object
       properties:
@@ -300,9 +305,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ApiError"
+        hasMore:
+          type: boolean
       required:
       - data
       - errors
+      - hasMore
     ListResponseQueueSummary:
       type: object
       properties:
@@ -314,9 +322,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ApiError"
+        hasMore:
+          type: boolean
       required:
       - data
       - errors
+      - hasMore
     QueueSummary:
       type: object
       properties:
@@ -367,9 +378,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ApiError"
+        hasMore:
+          type: boolean
       required:
       - data
       - errors
+      - hasMore
     MessageSummary:
       type: object
       properties:
