@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] `mq-proxy-web/app.js`: add a `loadQueues()` call to the success
+1. [x] `mq-proxy-web/app.js`: add a `loadQueues()` call to the success
    path of all four message-level move/delete handlers —
    `deleteSelectedMessagesBtn`, `moveSelectedMessagesBtn`,
    `deleteMessageBtn`, `moveMessageBtn` — alongside their existing
@@ -8,17 +8,14 @@
    for the two single-message handlers). No new pure functions; no new
    `app.test.js` cases (DOM-wiring-only, see plan.md).
 
-   **Manual verification** (`file://` or served, spec/21) against a
-   live `mq-proxy` + broker:
-   - Open a queue, select one or more messages, "Delete selected" (or
-     single-message Delete from detail view) — confirm, then navigate
-     back to the queue list without clicking "Refresh" and confirm its
-     counts already reflect the deletion.
-   - Same for "Move selected…" / single-message "Move…" — confirm the
-     queue list's counts for *both* the source and target queue are
-     current without a manual refresh.
-   - Confirm Purge and Move all… (queue-list-level, already correct)
-     still work as before — no regression.
+   `mq-proxy-web`'s unit suite still passes in full (43/43) — this
+   change touches only DOM-wired click handlers, none of the tested
+   pure functions.
+
+   **Manual verification** (`file://`, spec/21) against a live
+   `mq-proxy` + broker: user confirmed working — the queue list's
+   counts are current after message-level delete/move without needing
+   the manual "Refresh" button.
 
 2. [ ] Merge-back, done together with `fe-list-messages-pagination`'s
    own task 7 in a single commit (per the user's request to merge both
