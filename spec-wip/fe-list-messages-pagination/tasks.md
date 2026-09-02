@@ -70,7 +70,7 @@
    round: check for stray old servers first, and hard-reload (not just
    re-navigate) after any `app.js` change.
 
-6. [ ] Manual end-to-end verification against a live `mq-proxy` + broker
+6. [x] Manual end-to-end verification against a live `mq-proxy` + broker
    (spec/13 dev tooling): seed a queue with more messages than a small
    `maxCount`, confirm "Load more" appears and appends without losing
    already-checked selections, and disappears once exhausted; delete
@@ -78,6 +78,31 @@
    confirm the stale-cursor fallback returns a sane page instead of
    erroring; confirm the JMS Type filter still composes correctly with
    pagination (each page respects the same filter).
+
+   **JMS Type filter + pagination**: seeded 5 messages alternating
+   `order-created`/`other`/`order-created`/`other`/`order-created`;
+   filtering to `order-created` with max count 2 correctly returned
+   only the 2 matching messages for page 1 (skipping `other` entirely
+   — the JMS selector applies at the broker level, before pagination),
+   and "Load more" correctly fetched the 3rd matching message as page
+   2, still excluding both `other` messages, then hid itself. Confirmed
+   via `curl` first, then via the actual UI.
+
+   **Stale-cursor fallback, driven through the real UI (not just
+   curl)**: loaded page 1 (max count 2, no filter) so the last rendered
+   row's `messageId` became the pending "Load more" cursor, deleted
+   that exact message directly via `mq-proxy`'s API (simulating a
+   concurrent purge/consume racing the page), then clicked the
+   already-queued "Load more". No error surfaced, matching the design
+   — but since the fallback silently restarts from page one and the UI
+   *appends* rather than replaces, the result includes a **visible
+   duplicate of the first message and the already-deleted cursor
+   message still shown** (stale, since appending never re-validates
+   already-rendered rows). This is the accepted trade-off spec.md
+   already named (simplicity over reconciliation — no error, but no
+   attempt to dedupe/re-sync an in-flight append either) rather than a
+   bug to fix here; recorded explicitly so it isn't rediscovered as a
+   surprise later.
 
 7. [ ] Merge-back: update `spec/11-mq-proxy-backend-integration` (drop
    the "no pagination/load more" line from its Out of scope, document
