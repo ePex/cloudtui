@@ -105,7 +105,7 @@ func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *Sec
 			sv.load()
 			return nil
 		case '/':
-			sv.filterInput.SetText(sv.filter)
+			ui.SetInputFieldText(sv.filterInput, sv.filter)
 			sv.host.SetFocus(sv.filterInput)
 			return nil
 		case 'f':

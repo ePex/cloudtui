@@ -138,7 +138,7 @@ func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSe
 			})
 			return nil
 		case '/':
-			sv.patternInput.SetText(sv.pattern)
+			ui.SetInputFieldText(sv.patternInput, sv.pattern)
 			sv.host.SetFocus(sv.patternInput)
 			return nil
 		case 'w':
@@ -228,7 +228,7 @@ func (sv *LogSearchView) setHeader() {
 func (sv *LogSearchView) Open(logGroupName, initialPattern string, initialTimeRange *ui.TimeRange) {
 	sv.logGroupName = logGroupName
 	sv.pattern = initialPattern
-	sv.patternInput.SetText(initialPattern)
+	ui.SetInputFieldText(sv.patternInput, initialPattern)
 	if initialTimeRange != nil {
 		sv.tr = *initialTimeRange
 	} else {

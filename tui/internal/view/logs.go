@@ -108,7 +108,7 @@ func NewLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *LogsView {
 			lv.load()
 			return nil
 		case '/':
-			lv.filterInput.SetText(lv.filter)
+			ui.SetInputFieldText(lv.filterInput, lv.filter)
 			lv.host.SetFocus(lv.filterInput)
 			return nil
 		case 'f':
