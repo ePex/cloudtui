@@ -19,10 +19,11 @@ export function showView(id) {
   $('topbar').hidden = id === 'connectView';
 }
 
-export function makeButton(label, onClick) {
+export function makeButton(label, onClick, className) {
   var btn = document.createElement('button');
   btn.textContent = label;
   btn.type = 'button';
+  if (className) btn.className = className;
   btn.addEventListener('click', onClick);
   return btn;
 }
