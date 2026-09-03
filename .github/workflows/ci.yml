@@ -53,3 +53,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: go-task/setup-task@v2
       - run: task test:mq-proxy-web
+      - run: task build:mq-proxy-web
