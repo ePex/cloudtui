@@ -278,7 +278,7 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	}
 	ce.form.SetTitle(title)
 
-	ce.form.GetFormItemByLabel("Name").(*tview.InputField).SetText(conn.Name)
+	ui.SetInputFieldText(ce.form.GetFormItemByLabel("Name").(*tview.InputField), conn.Name)
 	backendIdx := 0
 	if conn.Backend == "proxy" {
 		backendIdx = 1
@@ -308,11 +308,11 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	} else {
 		ce.brokerName = conn.Queue.BrokerName
 		if item, ok := ce.form.GetFormItemByLabel("Broker Name").(*tview.InputField); ok {
-			item.SetText(conn.Queue.BrokerName)
+			ui.SetInputFieldText(item, conn.Queue.BrokerName)
 		}
 	}
-	ce.form.GetFormItemByLabel("URL").(*tview.InputField).SetText(urlVal)
-	ce.form.GetFormItemByLabel("Username").(*tview.InputField).SetText(username)
+	ui.SetInputFieldText(ce.form.GetFormItemByLabel("URL").(*tview.InputField), urlVal)
+	ui.SetInputFieldText(ce.form.GetFormItemByLabel("Username").(*tview.InputField), username)
 
 	sourceIdx := 0
 	if passwordSecret != "" {
@@ -324,7 +324,7 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 	ce.form.GetFormItemByLabel(labelAuthenticationMode).(*tview.DropDown).SetCurrentOption(sourceIdx)
 	if sourceIdx == 1 {
 		profileItem := ce.form.GetFormItemByLabel(labelAWSProfile).(*tview.InputField)
-		profileItem.SetText(passwordSecretProfile)
+		ui.SetInputFieldText(profileItem, passwordSecretProfile)
 		// SetText doesn't itself refresh an active SetAutocompleteFunc
 		// drop-down — without this, the field keeps whatever suggestions
 		// were current at wireAWSProfileAutocomplete's eager wiring call
@@ -335,9 +335,9 @@ func (ce *ConnEditor) Show(conn config.Connection, isNew bool, origName string) 
 		// profile with that stale selection — same fix as MessageFilter's
 		// jmsTypeItem in messagefilter.go's own Show().
 		profileItem.Autocomplete()
-		ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField).SetText(passwordSecret)
+		ui.SetInputFieldText(ce.form.GetFormItemByLabel(labelSecretName).(*tview.InputField), passwordSecret)
 	} else {
-		ce.form.GetFormItemByLabel(labelPassword).(*tview.InputField).SetText(password)
+		ui.SetInputFieldText(ce.form.GetFormItemByLabel(labelPassword).(*tview.InputField), password)
 	}
 
 	// The form remembers its focusedElement index across Show() calls

@@ -20,13 +20,18 @@
    workaround's continued necessity. Full suite (`go build ./... && go
    vet ./... && go test ./...`) passes.
 
-2. [ ] Switch the 15 `dialog`-package call sites to
+2. [x] Switch the 15 `dialog`-package call sites to
    `ui.SetInputFieldText`: `connections.go` (Name, Broker Name, URL,
    Username, AWS Profile, Secret Name, Password — 7),
    `datadogsettings.go` (Site, Access Token — 2), `messagefilter.go`
    (JMS Type, From Date, To Date, Max Count — 4), `timerangemodal.go`
    (From, To — 2). Leave the field-clearing (`SetText("")`) and
    `*tview.TextView` call sites untouched (see `plan.md`).
+
+   Verified the 4 excluded raw `SetText` calls (`cm.hints`, `tm.tabs` —
+   both `*tview.TextView` — and the two `SetText("")` clears in
+   `messagefilter.go`) are the only ones remaining. Full `dialog`
+   package test suite passes, no regressions.
 
 3. [ ] Switch the 9 `view`-package filter/search-input call sites to
    `ui.SetInputFieldText`: `logsearch.go` (2), `datadoglogs.go` (1),

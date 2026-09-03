@@ -45,8 +45,8 @@ func NewDatadogEditor(host ui.Host) *DatadogEditor {
 // config.
 func (de *DatadogEditor) Show() {
 	datadog := de.host.Config().Datadog
-	de.form.GetFormItem(0).(*tview.InputField).SetText(datadog.Site)
-	de.form.GetFormItem(1).(*tview.InputField).SetText(datadog.AccessToken)
+	ui.SetInputFieldText(de.form.GetFormItem(0).(*tview.InputField), datadog.Site)
+	ui.SetInputFieldText(de.form.GetFormItem(1).(*tview.InputField), datadog.AccessToken)
 
 	de.host.ShowPage("datadog-editor")
 	de.host.SetFocus(de.form)
