@@ -33,14 +33,33 @@
    `messagefilter.go`) are the only ones remaining. Full `dialog`
    package test suite passes, no regressions.
 
-3. [ ] Switch the 9 `view`-package filter/search-input call sites to
+3. [x] Switch the 9 `view`-package filter/search-input call sites to
    `ui.SetInputFieldText`: `logsearch.go` (2), `datadoglogs.go` (1),
    `messages.go` (1), `logs.go`, `queues.go`, `ssmparams.go`,
-   `secrets.go`, `codepipelinelist.go` (1 each).
+   `secrets.go`, `codepipelinelist.go` (1 each). Full test suite
+   (`go build ./... && go vet ./... && go test ./...`) passes.
 
-   **Manual verification** (`task run:tui`): open the connection
-   editor on an existing connection whose Name/URL/Secret Name is
-   longer than the field's width — confirm the cursor is now visible
-   at the end of the value instead of hidden. Spot-check at least one
-   filter input (e.g. Queues view's filter) with a long restored
-   filter string.
+   **Manual verification**, driven live via `tmux` (`.claude/skills/
+   verify-live/`): built the binary, drove the real TUI. tmux exposes
+   the *actual* terminal's cursor state (`#{cursor_flag}`,
+   `#{cursor_x}`/`#{cursor_y}`) — not just visible text — so this
+   checks the exact thing `tview`'s `Draw()` decides, not an
+   approximation.
+   - Created a test connection, edited its Name to a value well over
+     the field's 30-column width, saved, then **reopened the editor**
+     (the actual repro: repopulating an already-drawn field
+     programmatically) — the field showed the end of the value and
+     `cursor_flag` reported visible, at the same `cursor_x` a real
+     keystroke would land on. Before the fix this showed the start of
+     the value with the cursor hidden. Deleted the test connection
+     afterward.
+   - Same check against the Queues view's filter (no fixed
+     `SetFieldWidth` there — used a long-enough string to overflow the
+     pane's width): applied a long filter, reopened it via `/` a
+     second time (the same "restore last-applied filter text" path,
+     `queues.go`) — cursor visible at the end, matching live typing.
+     Cleared the filter afterward.
+   - Switched the active connection to the local `default` (Jolokia)
+     entry for this check rather than the real AWS-backed one already
+     active, to avoid triggering AWS SSO; restored the original
+     connection before quitting. `config.yaml` verified unchanged.

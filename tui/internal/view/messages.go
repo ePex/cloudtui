@@ -189,7 +189,7 @@ func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMes
 			mv.Load()
 			return nil
 		case event.Rune() == '/':
-			mv.searchInput.SetText(mv.quickSearch)
+			ui.SetInputFieldText(mv.searchInput, mv.quickSearch)
 			mv.host.SetFocus(mv.searchInput)
 			return nil
 		case event.Rune() == 'f':
