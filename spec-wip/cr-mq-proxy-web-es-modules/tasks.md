@@ -29,7 +29,7 @@
    `task test:mq-proxy-web` still passes all 43 existing cases
    unaffected.
 
-2. [ ] Module split: `app.js`/`app.test.js` → `src/{dom,api,state,
+2. [x] Module split: `app.js`/`app.test.js` → `src/{dom,api,state,
    connection,movepicker,queues,messages,dialogs,main}.js` +
    co-located `src/*.test.js` (see `plan.md` for the exact function-
    to-module mapping), native ES module imports throughout, no UMD
@@ -37,13 +37,37 @@
    becomes `<script type="module" src="./src/main.js"></script>`.
    Purely structural — same functions, same logic, no behavior change.
 
-   Verification: `task test:mq-proxy-web` passes with the same 43
-   cases (relocated, not reduced); `task build:mq-proxy-web` succeeds;
-   manually open the built `dist/index.html` via `file://` against a
-   live `mq-proxy` and walk the golden path (connect, browse queues,
-   browse/filter/paginate messages, select/delete/move messages, purge,
-   move all, send, message detail) to confirm nothing regressed in the
-   move from one file to many.
+   Static wiring (`addEventListener` calls that don't depend on a
+   specific row/item) moved into an `initXxx()` function exported by
+   each concern module (`initConnection`, `initQueues`, `initMessages`,
+   `initMovePicker`, `initDialogs`), each called once from `main.js` —
+   keeps `main.js` a thin entry point rather than a dumping ground for
+   logic that belongs with its own concern (a deliberate refinement of
+   `plan.md`'s "main.js wires everything" wording, not a behavior
+   change). `queues.js`/`messages.js`/`dialogs.js` end up mutually
+   importing each other (e.g. a queue row's click opens `messages.js`,
+   while a message action calls back into `queues.js`'s `loadQueues`
+   to refresh counts) — safe for `export function` declarations in ES
+   modules (hoisted, live bindings; confirmed via `esbuild`'s own
+   bundling producing zero warnings/errors), so left as direct imports
+   rather than threading callbacks through every call site to avoid
+   the cycle.
+
+   Verification: `task test:mq-proxy-web` passes all 43 cases
+   (relocated, not reduced); `task build:mq-proxy-web` succeeds; live
+   end-to-end walk (via `claude-in-chrome`, serving the built
+   `dist/index.html` over a local static server against a live
+   `mq-proxy`, `CORS_ALLOWED_ORIGINS` set for that origin since the
+   Chrome extension can't reach `file://` directly — same constraint
+   as task 1) of connect, queue list filter + column sort, open a
+   queue, send a message, message detail, single delete, bulk
+   select/delete/move (move-picker's DLQ-tier ordering confirmed
+   correct), purge with a JMS-Type-scoped confirm, and queue-count
+   auto-refresh after every mutating action (the earlier
+   bugfix-stale-queue-counts behavior, still correct through the
+   split). Test data sent/moved/purged during verification was
+   scoped to distinctive JMS Types/bodies and cleaned up afterward,
+   leaving a pre-existing unrelated message on the broker untouched.
 
 3. [ ] Visual refresh (CSS/markup only, no logic changes): fuller
    palette, card/shadow treatment for `section`/`.modal-box`, topbar
