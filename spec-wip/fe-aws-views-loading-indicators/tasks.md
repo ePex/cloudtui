@@ -35,11 +35,14 @@ own.
    `TestLogsViewLoadDiscardsStaleResponse`. `go build`/`go vet`/`go
    test ./...` all pass.
 
-4. [ ] `CodePipelineListView`: same pattern
+4. [x] `CodePipelineListView`: same pattern
    (`loadingPipelinesStatus`). Tests:
    `TestCodePipelineListViewShowReauthWaitingThenDone`,
    `TestCodePipelineListViewLoadShowsLoadingStatusImmediately`,
-   `TestCodePipelineListViewLoadDiscardsStaleResponse`.
+   `TestCodePipelineListViewLoadDiscardsStaleResponse`. This view has
+   no favorite/star column, so its status/error/loading cell is column
+   0, not column 1 like the other three views. `go build`/`go vet`/`go
+   test ./...` all pass, including `-race` for this view's package.
 
 5. [ ] `CodePipelineDetailView`: same pattern, but the loading message
    is per-pipeline (`fmt.Sprintf("Loading %s…", dv.pipelineName)`, no

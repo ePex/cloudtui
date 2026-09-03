@@ -32,11 +32,17 @@ type CodePipelineListView struct {
 	filter      string
 	all         []awscodepipeline.Pipeline
 	filtered    []awscodepipeline.Pipeline
+	loadSeq     int // incremented per load() call; guards against a stale response landing after a newer one
 }
 
 var _ ui.View = (*CodePipelineListView)(nil)
 var _ ui.Shortcuttable = (*CodePipelineListView)(nil)
 var _ ui.Themeable = (*CodePipelineListView)(nil)
+var _ ui.ReauthStatusShower = (*CodePipelineListView)(nil)
+
+// loadingPipelinesStatus is load()'s placeholder text — also what
+// ShowReauthDone reverts to, so both stay in sync.
+const loadingPipelinesStatus = "Loading pipelines…"
 
 // ApplyPalette recolors the CodePipeline list view for a live theme switch.
 func (lv *CodePipelineListView) ApplyPalette(p config.Palette) {
@@ -172,19 +178,22 @@ func (lv *CodePipelineListView) load() {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	lv.loadSeq++
+	seq := lv.loadSeq
 	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
+	lv.showStatus(loadingPipelinesStatus)
 	go func() {
 		ctx := context.Background()
 		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
 		pipelines, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
 			func() {
 				lv.host.QueueUpdateDraw(func() {
-					lv.showStatus(reauthWaitingMsg)
+					lv.ShowReauthWaiting(reauthWaitingMsg)
 				})
 			},
 			func(code, url string) {
 				lv.host.QueueUpdateDraw(func() {
-					lv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
+					lv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.Pipeline, error) {
@@ -192,6 +201,9 @@ func (lv *CodePipelineListView) load() {
 			},
 		)
 		lv.host.QueueUpdateDraw(func() {
+			if seq != lv.loadSeq {
+				return // superseded by a newer load()
+			}
 			if err != nil {
 				slog.Error("codepipeline: failed to list pipelines", "error", err)
 				lv.showError(err)
@@ -200,6 +212,16 @@ func (lv *CodePipelineListView) load() {
 			lv.repaint(pipelines)
 		})
 	}()
+}
+
+// ShowReauthWaiting implements ui.ReauthStatusShower.
+func (lv *CodePipelineListView) ShowReauthWaiting(msg string) {
+	lv.showStatus(msg)
+}
+
+// ShowReauthDone implements ui.ReauthStatusShower.
+func (lv *CodePipelineListView) ShowReauthDone() {
+	lv.showStatus(loadingPipelinesStatus)
 }
 
 func (lv *CodePipelineListView) applyFilter(s string) {
