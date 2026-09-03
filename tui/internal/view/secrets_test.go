@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -269,6 +270,92 @@ func TestSecretsViewFavoritesDoNotLeakAcrossProfiles(t *testing.T) {
 
 	if got := sv.table.GetCell(1, 0).Text; got != "" {
 		t.Errorf("star cell under a different profile = %q, want empty (favorite shouldn't leak)", got)
+	}
+}
+
+func TestSecretsViewShowReauthWaitingThenDone(t *testing.T) {
+	_, sv := newTestSecretsView(t)
+	sv.repaint([]awssecrets.Secret{{Name: "/app/db"}}) // some prior state to overwrite
+
+	const msg = "AWS SSO session expired — opening browser to log in…"
+	sv.ShowReauthWaiting(msg)
+	if got := sv.table.GetCell(1, 1).Text; got != msg {
+		t.Errorf("row(1,1) after ShowReauthWaiting(%q) = %q, want it unchanged", msg, got)
+	}
+
+	sv.ShowReauthDone()
+	if got := sv.table.GetCell(1, 1).Text; got != loadingSecretsStatus {
+		t.Errorf("row(1,1) after ShowReauthDone() = %q, want %q", got, loadingSecretsStatus)
+	}
+}
+
+func TestSecretsViewLoadShowsLoadingStatusImmediately(t *testing.T) {
+	host, sv := newTestSecretsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	unblock := make(chan struct{})
+	host.listSecretsFn = func(context.Context, string) ([]awssecrets.Secret, error) {
+		<-unblock
+		return nil, nil
+	}
+
+	sv.load()
+
+	cell := sv.table.GetCell(1, 1)
+	if cell == nil || cell.Text != loadingSecretsStatus {
+		t.Errorf("row(1,1) after load() = %+v, want text %q", cell, loadingSecretsStatus)
+	}
+	close(unblock) // let the goroutine finish so it doesn't leak past the test
+}
+
+// newTestSecretsViewWithDrawSignal is newTestSecretsView's draw-signaling
+// counterpart — see queues_test.go's drawSignalingHost/
+// newTestQueuesViewWithDrawSignal for why this exists.
+func newTestSecretsViewWithDrawSignal(t *testing.T, bufSize int) (*drawSignalingHost, *SecretsView) {
+	t.Helper()
+	base := newFakeViewHost()
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	return host, NewSecretsView(host, func(awssecrets.Secret) {})
+}
+
+// TestSecretsViewLoadDiscardsStaleResponse is the key regression test for
+// loadSeq — see queues_test.go's TestQueuesViewLoadDiscardsStaleResponse,
+// the pattern this mirrors.
+func TestSecretsViewLoadDiscardsStaleResponse(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstCalled := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	host, sv := newTestSecretsViewWithDrawSignal(t, 2)
+	host.cfg.ActiveAWSProfile = "work"
+	host.listSecretsFn = func(context.Context, string) ([]awssecrets.Secret, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(firstCalled)
+			<-releaseFirst
+			return []awssecrets.Secret{{Name: "/stale"}}, nil
+		}
+		return []awssecrets.Secret{{Name: "/fresh"}}, nil
+	}
+
+	sv.load()     // call 1 — will become "stale"; blocks inside listSecretsFn
+	<-firstCalled // call 1's fetch has started (and is now blocked on releaseFirst)
+
+	sv.load()    // call 2 — "fresh"; proceeds and draws immediately
+	<-host.drawn // call 2's draw has landed (guaranteed first: call 1 can't proceed yet)
+
+	if got := sv.table.GetCell(1, 1).Text; got != "/fresh" {
+		t.Fatalf("row(1,1) after call 2's draw = %q, want %q", got, "/fresh")
+	}
+
+	close(releaseFirst) // let call 1 (stale) proceed to its now-discarded draw attempt
+	<-host.drawn        // call 1's draw attempt has landed (and should have no-opped)
+
+	if got := sv.table.GetCell(1, 1).Text; got != "/fresh" {
+		t.Errorf("row(1,1) after stale call 1's draw = %q, want unchanged %q", got, "/fresh")
 	}
 }
 

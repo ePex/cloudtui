@@ -23,10 +23,11 @@ own.
    this doesn't block anything here; flagged for a separate
    `BACKLOG.md` item rather than fixed as a drive-by.
 
-2. [ ] `SecretsView`: same pattern (`loadingSecretsStatus`). Tests:
+2. [x] `SecretsView`: same pattern (`loadingSecretsStatus`). Tests:
    `TestSecretsViewShowReauthWaitingThenDone`,
    `TestSecretsViewLoadShowsLoadingStatusImmediately`,
-   `TestSecretsViewLoadDiscardsStaleResponse`.
+   `TestSecretsViewLoadDiscardsStaleResponse`. `go build`/`go vet`/
+   `go test ./...` all pass.
 
 3. [ ] `LogsView`: same pattern (`loadingLogGroupsStatus`). Tests:
    `TestLogsViewShowReauthWaitingThenDone`,
