@@ -29,11 +29,17 @@ type SSMParamsView struct {
 	filter      string
 	all         []awsssm.Parameter // full unfiltered list from last load
 	filtered    []awsssm.Parameter // currently displayed subset, row-indexed
+	loadSeq     int                // incremented per load() call; guards against a stale response landing after a newer one
 }
 
 var _ ui.View = (*SSMParamsView)(nil)
 var _ ui.Shortcuttable = (*SSMParamsView)(nil)
 var _ ui.Themeable = (*SSMParamsView)(nil)
+var _ ui.ReauthStatusShower = (*SSMParamsView)(nil)
+
+// loadingParametersStatus is load()'s placeholder text — also what
+// ShowReauthDone reverts to, so both stay in sync.
+const loadingParametersStatus = "Loading parameters…"
 
 // ApplyPalette recolors the SSM parameters view for a live theme switch.
 func (pv *SSMParamsView) ApplyPalette(p config.Palette) {
@@ -166,16 +172,22 @@ func (pv *SSMParamsView) setHeader() {
 // load fetches parameters from host.ListParameters in a goroutine (a real AWS
 // API call, unlike awsprofile's local file read) and repaints via
 // QueueUpdateDraw. Requires an active AWS profile; errors clearly rather
-// than calling into awsssm with an empty one. If the call fails because
-// the profile's cached SSO token is missing/expired, awsauth.WithReauth
-// opens the browser to log in and retries once before giving up — see
-// spec/36-fe-aws-sso-reauth.
+// than calling into awsssm with an empty one. Shows a loading placeholder
+// immediately, since a real AWS API call has normal network latency — see
+// queues.go's Load() for the same reasoning. loadSeq guards against a slow,
+// superseded response clobbering a newer one if load() is called again
+// before the first call resolves. If the call fails because the profile's
+// cached SSO token is missing/expired, awsauth.WithReauth opens the browser
+// to log in and retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (pv *SSMParamsView) load() {
 	profile := pv.host.Config().ActiveAWSProfile
 	if profile == "" {
 		pv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	pv.loadSeq++
+	seq := pv.loadSeq
+	pv.showStatus(loadingParametersStatus)
 	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
@@ -183,12 +195,12 @@ func (pv *SSMParamsView) load() {
 		params, err := awsauth.WithReauth(ctx, profile, authType, pv.host.AWSSSOLogin,
 			func() {
 				pv.host.QueueUpdateDraw(func() {
-					pv.showStatus(reauthWaitingMsg)
+					pv.ShowReauthWaiting(reauthWaitingMsg)
 				})
 			},
 			func(code, url string) {
 				pv.host.QueueUpdateDraw(func() {
-					pv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
+					pv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awsssm.Parameter, error) {
@@ -196,6 +208,9 @@ func (pv *SSMParamsView) load() {
 			},
 		)
 		pv.host.QueueUpdateDraw(func() {
+			if seq != pv.loadSeq {
+				return // superseded by a newer load()
+			}
 			if err != nil {
 				slog.Error("ssm parameters: failed to list parameters", "error", err)
 				pv.showError(err)
@@ -204,6 +219,18 @@ func (pv *SSMParamsView) load() {
 			pv.repaint(params)
 		})
 	}()
+}
+
+// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower —
+// same shape as QueuesView's, though reached differently: this view's
+// re-auth goes through awsauth.WithReauth's direct per-call-site callbacks
+// (above), not the secretbackend/app.go-dispatched path QueuesView uses.
+func (pv *SSMParamsView) ShowReauthWaiting(msg string) {
+	pv.showStatus(msg)
+}
+
+func (pv *SSMParamsView) ShowReauthDone() {
+	pv.showStatus(loadingParametersStatus)
 }
 
 func (pv *SSMParamsView) applyFilter(s string) {

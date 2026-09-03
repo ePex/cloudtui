@@ -4,13 +4,24 @@ Each task applies the identical pattern from `plan.md` to one view —
 independent of the others, so each can be reviewed/committed on its
 own.
 
-1. [ ] `SSMParamsView`: `loadingParametersStatus` constant, `loadSeq`
+1. [x] `SSMParamsView`: `loadingParametersStatus` constant, `loadSeq`
    field, `load()` restructured to show the placeholder immediately
    and guard its `QueueUpdateDraw` callback, `ShowReauthWaiting`/
    `ShowReauthDone` implementing `ui.ReauthStatusShower`. Tests:
    `TestSSMParamsViewShowReauthWaitingThenDone`,
    `TestSSMParamsViewLoadShowsLoadingStatusImmediately`,
-   `TestSSMParamsViewLoadDiscardsStaleResponse`.
+   `TestSSMParamsViewLoadDiscardsStaleResponse` (the latter via a new
+   `newTestSSMParamsViewWithDrawSignal` helper reusing queues_test.go's
+   `drawSignalingHost`, same package). `go build`/`go vet`/`go test
+   ./...` all pass.
+
+   **FYI, not fixed here (pre-existing, unrelated)**: `go test -race
+   ./internal/view/...` reports data races in several unrelated tests
+   (favorites sorting, Datadog logs, CodePipeline poll, etc.) —
+   confirmed present on a clean `main` checkout too, before this
+   change. Neither CI nor `Taskfile.yml` run tests with `-race`, so
+   this doesn't block anything here; flagged for a separate
+   `BACKLOG.md` item rather than fixed as a drive-by.
 
 2. [ ] `SecretsView`: same pattern (`loadingSecretsStatus`). Tests:
    `TestSecretsViewShowReauthWaitingThenDone`,
