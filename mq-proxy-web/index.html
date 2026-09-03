@@ -82,17 +82,21 @@
   }
   #connLabel { color: var(--muted); font-size: 0.9rem; }
   main {
-    max-width: 960px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 1.5rem 1rem;
+    padding: 2rem 1.5rem;
   }
   section {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 1.25rem 1.5rem;
+    padding: 1.75rem 2rem;
     box-shadow: 0 1px 3px var(--shadow);
   }
+  /* The connect form is the one view that shouldn't stretch to the
+     page's full width — everything else (queue/message tables) wants
+     the room, but a wide login-style form looks sparse and odd. */
+  #connectView { max-width: 480px; }
   h1 { font-size: 1.3rem; }
   h2 { font-size: 1.15rem; margin-top: 0; }
   label { display: block; margin: 0.5rem 0; font-size: 0.9rem; }
@@ -145,7 +149,7 @@
      natural break point and overflows its column into whatever's next
      to it instead of wrapping — found live, on the messages table's
      Body preview column. */
-  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
+  th, td { text-align: left; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
   thead th { background: var(--panel-alt); font-weight: 600; border-bottom: 2px solid var(--border); }
   tbody tr:nth-child(even) { background: var(--panel-alt); }
   tbody tr:hover { background: var(--bg); }
