@@ -62,11 +62,27 @@ for `KeyEnd`, which calls `moveCursor()`, which always ends with
 would trigger, with no dependency on the field currently having focus
 (`Box.WrapInputHandler` has no focus guard).
 
-A small helper, e.g. `ui.SetInputFieldText(field *tview.InputField,
-text string)` in `tui/internal/ui`, wraps `SetText` + the synthetic
-`KeyEnd` in one call. Every call site above that populates a field
-with a previously-stored value switches from `field.SetText(x)` to
-`ui.SetInputFieldText(field, x)`.
+**Correction, found via live testing after task 1 first shipped**:
+the above is necessary but not sufficient. `moveCursor()` is a
+complete no-op while `TextArea.lastWidth` is still `0` — which is the
+case until the field has been drawn for real at least once. The very
+common case of editing *any* connection for the first time in a
+session hits exactly this: the synthetic keypress fired immediately
+after `SetText()` did nothing (field never drawn yet), and worse, left
+the cursor "resolved" in a way that permanently blocked `tview`'s own
+(very limited — it only resolves position, never scroll offset) first
+draw self-heal. The fix now establishes `lastWidth` itself first, via
+a throwaway off-screen `Draw()` using the field's own current rect —
+`tview.Box` defaults to a non-zero rect from construction (`NewBox`:
+15×10), so this works even before the field has ever been part of a
+visible layout. See `tui/internal/ui/inputfield.go`'s doc comment for
+the full mechanism.
+
+A small helper, `ui.SetInputFieldText(field *tview.InputField, text
+string)` in `tui/internal/ui`, wraps `SetText` + the throwaway draw +
+the synthetic `KeyEnd` in one call. Every call site above that
+populates a field with a previously-stored value switches from
+`field.SetText(x)` to `ui.SetInputFieldText(field, x)`.
 
 ## Scope
 

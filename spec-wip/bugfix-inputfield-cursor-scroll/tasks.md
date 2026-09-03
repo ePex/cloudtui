@@ -8,17 +8,27 @@
    asserting `screen.GetCursor()` reports the cursor visible; a control
    case with a short value.
 
-   One design detail not in `plan.md`: `TextArea.lastWidth` (used by
-   `findCursor`'s clamp math) is only ever set inside `Draw()` — a
-   field populated *before* its first `Draw()` never hits this bug at
-   all, since `Draw()`'s own first-time handling resolves and clamps
-   the cursor itself in that case. The test draws the field once
-   before populating it, matching the real scenario (an already-drawn
-   field gets repopulated, e.g. reopening the connection editor). A
-   third test (`TestInputFieldSetTextHidesCursorForOverflowingValue`)
-   pins the upstream bug itself as a regression signal for the
-   workaround's continued necessity. Full suite (`go build ./... && go
-   vet ./... && go test ./...`) passes.
+   **Correction, found via the user's own live testing after this task
+   first shipped**: the initial implementation only fired the
+   synthetic `KeyEnd` keypress, no throwaway draw. That's a no-op
+   against a field that's never been drawn for real yet
+   (`TextArea.lastWidth` stays `0`, and `moveCursor()` bails out
+   completely in that case) — which is the *common* real-world case
+   (editing any connection for the first time in a session), not the
+   edge case. Worse, it left the cursor "resolved" in a way that
+   permanently blocked `tview`'s own first-draw handling (which only
+   ever resolves *position*, never scroll offset — it doesn't actually
+   self-heal the way the first version of this doc comment claimed).
+   Fixed by having `SetInputFieldText` establish `lastWidth` itself via
+   a throwaway off-screen `Draw()` first — see the corrected `spec.md`
+   and `inputfield.go`'s doc comment. Added
+   `TestSetInputFieldTextShowsCursorForNeverDrawnField` (plus a
+   dynamic-width variant) as the primary regression test — it fails
+   against the old implementation, passes against the fix. Full suite
+   (`go build ./... && go vet ./... && go test ./...`) passes. Also
+   re-verified live via `tmux`/`cursor_flag` in a single fresh session
+   (no priming), matching the user's exact repro: edit an existing
+   connection, tab straight to a long field.
 
 2. [x] Switch the 15 `dialog`-package call sites to
    `ui.SetInputFieldText`: `connections.go` (Name, Broker Name, URL,
