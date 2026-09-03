@@ -128,7 +128,7 @@ func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog
 		case 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		case '/':
-			qv.filterInput.SetText(qv.filter)
+			ui.SetInputFieldText(qv.filterInput, qv.filter)
 			qv.host.SetFocus(qv.filterInput)
 			return nil
 		case 'o':

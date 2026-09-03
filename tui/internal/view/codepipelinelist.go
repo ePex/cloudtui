@@ -114,7 +114,7 @@ func NewCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) 
 			lv.load()
 			return nil
 		case '/':
-			lv.filterInput.SetText(lv.filter)
+			ui.SetInputFieldText(lv.filterInput, lv.filter)
 			lv.host.SetFocus(lv.filterInput)
 			return nil
 		case 'w':

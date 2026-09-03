@@ -197,7 +197,7 @@ func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, on
 			})
 			return nil
 		case '/':
-			dv.queryInput.SetText(dv.query)
+			ui.SetInputFieldText(dv.queryInput, dv.query)
 			dv.host.SetFocus(dv.queryInput)
 			return nil
 		case 'S':
