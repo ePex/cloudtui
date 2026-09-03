@@ -106,7 +106,7 @@ func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSM
 			pv.load()
 			return nil
 		case '/':
-			pv.filterInput.SetText(pv.filter)
+			ui.SetInputFieldText(pv.filterInput, pv.filter)
 			pv.host.SetFocus(pv.filterInput)
 			return nil
 		case 'f':

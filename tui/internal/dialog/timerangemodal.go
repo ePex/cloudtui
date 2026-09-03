@@ -102,8 +102,8 @@ func (tm *TimeRangeModal) Show(current ui.TimeRange, onApply func(ui.TimeRange))
 	// harmlessly clears the other tab's stale state from a previous
 	// view/session instead of leaving it stuck on whatever was there last.
 	tm.relativeList.SetCurrentItem(current.PresetIdx)
-	tm.absoluteForm.GetFormItem(0).(*tview.InputField).SetText(formatTimeRangeDateTime(current.From))
-	tm.absoluteForm.GetFormItem(1).(*tview.InputField).SetText(formatTimeRangeDateTime(current.To))
+	ui.SetInputFieldText(tm.absoluteForm.GetFormItem(0).(*tview.InputField), formatTimeRangeDateTime(current.From))
+	ui.SetInputFieldText(tm.absoluteForm.GetFormItem(1).(*tview.InputField), formatTimeRangeDateTime(current.To))
 
 	tm.host.ShowPage("time-range")
 	tm.visible = true
