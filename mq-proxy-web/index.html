@@ -82,6 +82,7 @@
   tr.message-row:hover, td.queue-name:hover { text-decoration: underline; }
   td.row-actions button { margin-right: 0.35rem; }
   #messagesBulkActions { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  #loadMoreMessagesBtn { margin-top: 0.5rem; }
   #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
   #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
   p.error { color: var(--danger); font-size: 0.9rem; }
@@ -199,6 +200,7 @@
       </thead>
       <tbody></tbody>
     </table>
+    <button id="loadMoreMessagesBtn" type="button" hidden>Load more&hellip;</button>
     <p id="messagesError" class="error" hidden></p>
   </section>
 

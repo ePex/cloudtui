@@ -10,22 +10,27 @@ test('buildAuthHeader encodes username:password as HTTP Basic', () => {
 
 test('parseEnvelope normalizes a list-style { data, errors } response', () => {
   const result = app.parseEnvelope({ data: [1, 2], errors: [] });
-  assert.deepEqual(result, { data: [1, 2], errors: [] });
+  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: false });
 });
 
 test('parseEnvelope normalizes an item-style { data, error } response', () => {
   const result = app.parseEnvelope({ data: null, error: { code: 'not_found', message: 'no such queue' } });
-  assert.deepEqual(result, { data: null, errors: [{ code: 'not_found', message: 'no such queue' }] });
+  assert.deepEqual(result, { data: null, errors: [{ code: 'not_found', message: 'no such queue' }], hasMore: false });
 });
 
 test('parseEnvelope treats a null error as no errors', () => {
   const result = app.parseEnvelope({ data: { messageId: 'ID:1' }, error: null });
-  assert.deepEqual(result, { data: { messageId: 'ID:1' }, errors: [] });
+  assert.deepEqual(result, { data: { messageId: 'ID:1' }, errors: [], hasMore: false });
+});
+
+test('parseEnvelope carries hasMore through for list-messages pagination', () => {
+  const result = app.parseEnvelope({ data: [1, 2], errors: [], hasMore: true });
+  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: true });
 });
 
 test('parseEnvelope tolerates a missing/malformed body', () => {
-  assert.deepEqual(app.parseEnvelope(null), { data: undefined, errors: [] });
-  assert.deepEqual(app.parseEnvelope(undefined), { data: undefined, errors: [] });
+  assert.deepEqual(app.parseEnvelope(null), { data: undefined, errors: [], hasMore: false });
+  assert.deepEqual(app.parseEnvelope(undefined), { data: undefined, errors: [], hasMore: false });
 });
 
 test('errorMessageFrom prefers the first error message, falls back otherwise', () => {
@@ -61,8 +66,26 @@ test('buildListMessagesParams nests filter fields, keeps sourceQueue/returnBody 
   assert.deepEqual(params, {
     sourceQueue: 'orders',
     returnBody: true,
-    filter: { jmsType: 'order-created', messageId: undefined, maxCount: 50 },
+    filter: { jmsType: 'order-created', messageId: undefined, maxCount: 50, afterMessageId: undefined },
   });
+});
+
+test('buildListMessagesParams nests afterMessageId as the pagination cursor', () => {
+  const params = app.buildListMessagesParams('orders', { maxCount: 50, afterMessageId: 'ID:m1' });
+  assert.deepEqual(params.filter.afterMessageId, 'ID:m1');
+});
+
+test('appendMessages concatenates without mutating either input array', () => {
+  const existing = [{ messageId: 'ID:1' }];
+  const newPage = [{ messageId: 'ID:2' }, { messageId: 'ID:3' }];
+  const result = app.appendMessages(existing, newPage);
+  assert.deepEqual(result, [{ messageId: 'ID:1' }, { messageId: 'ID:2' }, { messageId: 'ID:3' }]);
+  assert.deepEqual(existing, [{ messageId: 'ID:1' }]);
+  assert.deepEqual(newPage, [{ messageId: 'ID:2' }, { messageId: 'ID:3' }]);
+});
+
+test('appendMessages onto an empty list just returns the new page', () => {
+  assert.deepEqual(app.appendMessages([], [{ messageId: 'ID:1' }]), [{ messageId: 'ID:1' }]);
 });
 
 test('buildJmsTypeScanParams: scans without bodies, capped at the shared auto-scan count', () => {
@@ -234,9 +257,22 @@ test('apiCall sends Basic auth, unwraps envelope data, and rejects on a non-ok r
     { baseUrl: 'http://localhost:8080/', username: 'cloudtui', password: 'changeme' },
     'list-queues',
   );
-  assert.deepEqual(data, [{ name: 'orders' }]);
+  assert.deepEqual([...data], [{ name: 'orders' }]);
   assert.equal(calls[0].url, 'http://localhost:8080/api/management/command/list-queues');
   assert.equal(calls[0].opts.headers.Authorization, app.buildAuthHeader('cloudtui', 'changeme'));
+  delete global.fetch;
+});
+
+test('apiCall surfaces hasMore on the resolved data, for list-messages pagination', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ data: [{ messageId: 'ID:1' }], errors: [], hasMore: true }),
+  });
+  const data = await app.apiCall(
+    { baseUrl: 'http://localhost:8080', username: 'cloudtui', password: 'changeme' },
+    'list-messages',
+  );
+  assert.equal(data.hasMore, true);
   delete global.fetch;
 });
 

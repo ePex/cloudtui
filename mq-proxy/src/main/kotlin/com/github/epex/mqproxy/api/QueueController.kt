@@ -43,13 +43,12 @@ class QueueController(private val brokerService: BrokerService) {
     fun listMessages(@ModelAttribute query: ListMessagesQuery): ListResponse<MessageSummary> {
         val maxCount = query.filter.maxCount
         require(maxCount != null && maxCount > 0) { "filter.maxCount is required and must be > 0" }
-        return ListResponse(
-            data = brokerService.browseMessages(
-                query.sourceQueue,
-                query.filter,
-                returnBody = query.returnBody ?: true,
-            ),
+        val result = brokerService.browseMessages(
+            query.sourceQueue,
+            query.filter,
+            returnBody = query.returnBody ?: true,
         )
+        return ListResponse(data = result.data, hasMore = result.hasMore)
     }
 
     @PostMapping("/send-message")
