@@ -3,6 +3,7 @@ package view
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -126,5 +127,96 @@ func TestCodePipelineDetailViewShowStatusRendersDeviceCodeMessage(t *testing.T) 
 
 	if got := dv.table.GetCell(1, 0).Text; !strings.Contains(got, "Verify code WDJB-MJHT at") {
 		t.Errorf("status cell = %q, want it to contain the device verification code/URL", got)
+	}
+}
+
+func TestCodePipelineDetailViewShowReauthWaitingThenDone(t *testing.T) {
+	_, dv := newTestCodePipelineDetailView(t)
+	dv.pipelineName = "my-pipeline"
+	dv.Render([]awscodepipeline.StageStatus{{Name: "Source", Status: "Succeeded"}}) // some prior state to overwrite
+
+	const msg = "AWS SSO session expired — opening browser to log in…"
+	dv.ShowReauthWaiting(msg)
+	if got := dv.table.GetCell(1, 0).Text; got != msg {
+		t.Errorf("row(1,0) after ShowReauthWaiting(%q) = %q, want it unchanged", msg, got)
+	}
+
+	dv.ShowReauthDone()
+	want := "Loading my-pipeline…"
+	if got := dv.table.GetCell(1, 0).Text; got != want {
+		t.Errorf("row(1,0) after ShowReauthDone() = %q, want %q", got, want)
+	}
+}
+
+func TestCodePipelineDetailViewLoadShowsLoadingStatusImmediately(t *testing.T) {
+	host, dv := newTestCodePipelineDetailView(t)
+	dv.pipelineName = "my-pipeline"
+	host.cfg.ActiveAWSProfile = "work"
+	unblock := make(chan struct{})
+	host.getPipelineStateFn = func(context.Context, string, string) ([]awscodepipeline.StageStatus, error) {
+		<-unblock
+		return nil, nil
+	}
+
+	dv.load()
+
+	want := "Loading my-pipeline…"
+	if got := dv.table.GetCell(1, 0).Text; got != want {
+		t.Errorf("row(1,0) after load() = %q, want %q", got, want)
+	}
+	close(unblock) // let the goroutine finish so it doesn't leak past the test
+}
+
+// newTestCodePipelineDetailViewWithDrawSignal is
+// newTestCodePipelineDetailView's draw-signaling counterpart — see
+// queues_test.go's drawSignalingHost/newTestQueuesViewWithDrawSignal for
+// why this exists.
+func newTestCodePipelineDetailViewWithDrawSignal(t *testing.T, bufSize int) (*drawSignalingHost, *CodePipelineDetailView) {
+	t.Helper()
+	base := newFakeViewHost()
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	return host, NewCodePipelineDetailView(host, func() {})
+}
+
+// TestCodePipelineDetailViewLoadDiscardsStaleResponse is the key
+// regression test for loadSeq — see queues_test.go's
+// TestQueuesViewLoadDiscardsStaleResponse, the pattern this mirrors.
+func TestCodePipelineDetailViewLoadDiscardsStaleResponse(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstCalled := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	host, dv := newTestCodePipelineDetailViewWithDrawSignal(t, 2)
+	dv.pipelineName = "my-pipeline"
+	host.cfg.ActiveAWSProfile = "work"
+	host.getPipelineStateFn = func(context.Context, string, string) ([]awscodepipeline.StageStatus, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(firstCalled)
+			<-releaseFirst
+			return []awscodepipeline.StageStatus{{Name: "stale"}}, nil
+		}
+		return []awscodepipeline.StageStatus{{Name: "fresh"}}, nil
+	}
+
+	dv.load()     // call 1 — will become "stale"; blocks inside getPipelineStateFn
+	<-firstCalled // call 1's fetch has started (and is now blocked on releaseFirst)
+
+	dv.load()    // call 2 — "fresh"; proceeds and draws immediately
+	<-host.drawn // call 2's draw has landed (guaranteed first: call 1 can't proceed yet)
+
+	if got := dv.table.GetCell(1, 0).Text; got != "fresh" {
+		t.Fatalf("row(1,0) after call 2's draw = %q, want %q", got, "fresh")
+	}
+
+	close(releaseFirst) // let call 1 (stale) proceed to its now-discarded draw attempt
+	<-host.drawn        // call 1's draw attempt has landed (and should have no-opped)
+
+	if got := dv.table.GetCell(1, 0).Text; got != "fresh" {
+		t.Errorf("row(1,0) after stale call 1's draw = %q, want unchanged %q", got, "fresh")
 	}
 }

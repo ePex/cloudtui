@@ -26,10 +26,12 @@ type CodePipelineDetailView struct {
 	host         ui.ViewHost
 	pipelineName string
 	stages       []awscodepipeline.StageStatus
+	loadSeq      int // incremented per load() call; guards against a stale response landing after a newer one
 }
 
 var _ ui.Shortcuttable = (*CodePipelineDetailView)(nil)
 var _ ui.Themeable = (*CodePipelineDetailView)(nil)
+var _ ui.ReauthStatusShower = (*CodePipelineDetailView)(nil)
 
 // ApplyPalette recolors the CodePipeline detail view for a live theme switch.
 func (dv *CodePipelineDetailView) ApplyPalette(p config.Palette) {
@@ -133,19 +135,22 @@ func (dv *CodePipelineDetailView) load() {
 		return
 	}
 	pipelineName := dv.pipelineName
+	dv.loadSeq++
+	seq := dv.loadSeq
 	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
+	dv.showStatus(fmt.Sprintf("Loading %s…", pipelineName))
 	go func() {
 		ctx := context.Background()
 		authType, _ := dv.host.AWSAuthTypeFor(ctx, profile)
 		stages, err := awsauth.WithReauth(ctx, profile, authType, dv.host.AWSSSOLogin,
 			func() {
 				dv.host.QueueUpdateDraw(func() {
-					dv.showStatus(reauthWaitingMsg)
+					dv.ShowReauthWaiting(reauthWaitingMsg)
 				})
 			},
 			func(code, url string) {
 				dv.host.QueueUpdateDraw(func() {
-					dv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
+					dv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awscodepipeline.StageStatus, error) {
@@ -153,6 +158,9 @@ func (dv *CodePipelineDetailView) load() {
 			},
 		)
 		dv.host.QueueUpdateDraw(func() {
+			if seq != dv.loadSeq {
+				return // superseded by a newer load()
+			}
 			if err != nil {
 				slog.Error("codepipeline: failed to get pipeline state", "pipeline", pipelineName, "error", err)
 				dv.showError(err)
@@ -161,6 +169,16 @@ func (dv *CodePipelineDetailView) load() {
 			dv.Render(stages)
 		})
 	}()
+}
+
+// ShowReauthWaiting implements ui.ReauthStatusShower.
+func (dv *CodePipelineDetailView) ShowReauthWaiting(msg string) {
+	dv.showStatus(msg)
+}
+
+// ShowReauthDone implements ui.ReauthStatusShower.
+func (dv *CodePipelineDetailView) ShowReauthDone() {
+	dv.showStatus(fmt.Sprintf("Loading %s…", dv.pipelineName))
 }
 
 // Render displays stages' current status. Also called by

@@ -44,12 +44,15 @@ own.
    0, not column 1 like the other three views. `go build`/`go vet`/`go
    test ./...` all pass, including `-race` for this view's package.
 
-5. [ ] `CodePipelineDetailView`: same pattern, but the loading message
+5. [x] `CodePipelineDetailView`: same pattern, but the loading message
    is per-pipeline (`fmt.Sprintf("Loading %s…", dv.pipelineName)`, no
    constant) and `load()` is called from `Open()`. Tests:
    `TestCodePipelineDetailViewShowReauthWaitingThenDone`,
    `TestCodePipelineDetailViewLoadShowsLoadingStatusImmediately`,
-   `TestCodePipelineDetailViewLoadDiscardsStaleResponse`.
+   `TestCodePipelineDetailViewLoadDiscardsStaleResponse`. Same
+   column-0 cell layout as `CodePipelineListView`. `go build`/`go
+   vet`/`go test ./...` all pass, including `-race` for this view's
+   package.
 
 6. [ ] Merge-back: document the immediate loading placeholder +
    `ui.ReauthStatusShower` support in `spec/15-aws-parameter-store`
