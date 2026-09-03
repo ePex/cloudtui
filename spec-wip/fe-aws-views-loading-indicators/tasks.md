@@ -29,10 +29,11 @@ own.
    `TestSecretsViewLoadDiscardsStaleResponse`. `go build`/`go vet`/
    `go test ./...` all pass.
 
-3. [ ] `LogsView`: same pattern (`loadingLogGroupsStatus`). Tests:
+3. [x] `LogsView`: same pattern (`loadingLogGroupsStatus`). Tests:
    `TestLogsViewShowReauthWaitingThenDone`,
    `TestLogsViewLoadShowsLoadingStatusImmediately`,
-   `TestLogsViewLoadDiscardsStaleResponse`.
+   `TestLogsViewLoadDiscardsStaleResponse`. `go build`/`go vet`/`go
+   test ./...` all pass.
 
 4. [ ] `CodePipelineListView`: same pattern
    (`loadingPipelinesStatus`). Tests:
