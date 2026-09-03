@@ -78,9 +78,9 @@ function renderQueues(queues) {
       openMessages(q.name);
     });
     var actions = tr.querySelector('.row-actions');
-    actions.appendChild(makeButton('Purge', function () { purgeQueue(q.name); }));
+    actions.appendChild(makeButton('Purge', function () { purgeQueue(q.name); }, 'btn-danger'));
     actions.appendChild(makeButton('Move all…', function () { moveAllMessages(q.name); }));
-    actions.appendChild(makeButton('Send…', function () { openSendModal(q.name); }));
+    actions.appendChild(makeButton('Send…', function () { openSendModal(q.name); }, 'btn-primary'));
     tbody.appendChild(tr);
   });
 }

@@ -69,18 +69,41 @@
    scoped to distinctive JMS Types/bodies and cleaned up afterward,
    leaving a pre-existing unrelated message on the broker untouched.
 
-3. [ ] Visual refresh (CSS/markup only, no logic changes): fuller
-   palette, card/shadow treatment for `section`/`.modal-box`, topbar
-   visual identity, `.btn-primary`/`.btn-danger` distinction applied to
-   the real Connect/Save/Send vs. Delete/Purge buttons, table
-   zebra-striping and refined header styling. Both light and dark
+3. [x] Visual refresh (CSS/markup only, plus one small non-behavioral
+   JS touch — see below): fuller palette (`--panel-alt`, `--accent`/
+   `--accent-hover`/`--accent-text`, `--danger`/`--danger-hover`/
+   `--danger-text`, `--shadow`/`--shadow-lg`), card/shadow treatment
+   for `section`/`.modal-box`, a topbar brand mark (`.brand`, a small
+   accent-colored square + wordmark), `.btn-primary`/`.btn-danger`
+   applied to the real Connect/Send/Continue vs. Delete/Purge/confirm-
+   Yes buttons, table zebra-striping (`tbody tr:nth-child(even)`) and
+   refined `<thead>` styling, a focus ring on inputs, and an
+   alert-style treatment for `p.error`. Both light and dark
    (`prefers-color-scheme`) palettes updated together.
 
-   Manual verification: open the built `dist/index.html`, check both
-   an OS light-mode and dark-mode session (toggle the OS setting, or
-   use browser devtools' rendering emulation), confirm every existing
-   view/dialog still functions identically and looks like a
-   deliberate, cohesive refresh rather than a broken one-off page.
+   `dom.js`'s `makeButton` gained an optional third `className`
+   parameter (was: label, onClick) so the dynamically-created queue-row
+   Purge/Send buttons (`queues.js`) could get `btn-danger`/`btn-primary`
+   too — the one non-CSS/markup change, purely visual, no behavior
+   change.
+
+   Manual verification: `task test:mq-proxy-web` still passes all 43
+   cases (the `makeButton` signature change isn't covered by existing
+   tests — DOM rendering/click-handling was never unit tested in this
+   file, matching spec/21's established scope). Live-checked the built
+   `dist/index.html` in dark mode via `claude-in-chrome` (connect
+   screen, topbar with brand, queue list zebra-striping and danger/
+   primary buttons, send modal, message detail, confirm dialog) — all
+   render as intended. Light mode's underlying CSS was verified
+   correct via computed-style inspection (`getComputedStyle`) rather
+   than a screenshot: this sandboxed Chrome session's own screenshot
+   pipeline appears to force a hue-shifted dark-ish repaint of *all*
+   colors regardless of actual page/OS preference (confirmed by
+   toggling real OS light/dark producing no screenshot difference,
+   while non-color computed properties like `border-radius: 12px` and
+   the `--bg`/`--panel`/`--accent` custom property values themselves
+   all resolved exactly as authored) — an environment artifact of this
+   session, not a bug in the page.
 
 4. [ ] `README.md` update: document the `src/` module structure, the
    build step (`task build:mq-proxy-web`, needs Node + npm), and that
