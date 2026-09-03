@@ -1,17 +1,33 @@
 # Tasks
 
-1. [ ] Build tooling scaffolding: `mq-proxy-web/package.json` +
+1. [x] Build tooling scaffolding: `mq-proxy-web/package.json` +
    `package-lock.json` (esbuild devDependency, pin latest stable —
    check `npm view esbuild version`), `build.mjs` (esbuild JS API,
    IIFE bundle inlined into `index.html` → `dist/index.html`),
-   `.gitignore` entries (`node_modules/`, `dist/`), new
+   `.gitignore` entries (`node_modules/`, `dist/` — `dist/` was
+   already globally ignored, only `node_modules/` was new), new
    `build:mq-proxy-web` Taskfile task, new CI step
    (`.github/workflows/ci.yml`) running it after `test:mq-proxy-web`
    on all 3 OSes. Verified with a trivial placeholder `src/main.js`
-   (e.g. sets some visible DOM text) — `task build:mq-proxy-web`
-   produces a working `dist/index.html`, opened directly via `file://`
-   to confirm the IIFE bundle actually runs (not just that the build
-   command exits 0).
+   (sets a visible marker in `document.title`) — `task
+   build:mq-proxy-web` produces a working `dist/index.html`; the
+   Chrome extension can't reach `file://` URLs directly, so verified
+   the bundle actually executes by serving `dist/` over a local static
+   server instead (the classic, non-`type="module"` inline `<script>`
+   the build produces is what makes it `file://`-safe in the first
+   place — the same format `app.js`'s current UMD wrapper already
+   relies on — so serving it over http is sufficient to confirm the
+   bundle logic itself runs correctly).
+
+   **Gotcha found**: `package.json`'s `"type": "module"` applies to
+   every `.js` file in the tree, not just new ones — it broke the
+   still-CommonJS `app.js`/`app.test.js` (not yet migrated; that's
+   task 2). Left `"type": "module"` out of `package.json` for now;
+   `build.mjs` needs no such field (`.mjs` always forces ES module
+   treatment regardless), and task 2 adds it back once `app.js`/
+   `app.test.js` are deleted and nothing conflicts with it anymore.
+   `task test:mq-proxy-web` still passes all 43 existing cases
+   unaffected.
 
 2. [ ] Module split: `app.js`/`app.test.js` → `src/{dom,api,state,
    connection,movepicker,queues,messages,dialogs,main}.js` +
