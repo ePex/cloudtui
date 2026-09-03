@@ -105,13 +105,16 @@
    all resolved exactly as authored) — an environment artifact of this
    session, not a bug in the page.
 
-4. [ ] `README.md` update: document the `src/` module structure, the
-   build step (`task build:mq-proxy-web`, needs Node + npm), and that
-   `dist/index.html` — not the repo-root `index.html` template — is
-   now the actual distributable end users should be pointed at.
-   Rewrite the "Why two files, not one" section to explain the new
-   split: source is multi-file and testable, the *build output* is
-   what's single-file.
+4. [x] `README.md` update: "Using it" now points at `dist/index.html`
+   (built) as the distributable; new "Building it" section
+   (`task build:mq-proxy-web`, needs Node + npm) with a "Developing"
+   subsection on serving `src/` directly for build-free iteration; new
+   "Source layout" section listing each `src/*.js` module's
+   responsibility; "Tests" section updated for `src/*.test.js`; "Why
+   two files, not one" rewritten as "Why the source is many files but
+   the distributable is one", explaining the new split resolves the
+   same original tension (testability vs. a single-file artifact) the
+   old UMD wrapper worked around, the more standard way.
 
 5. [ ] Merge-back: update `spec/21-amq-web-console` to document the
    `src/` ES-module structure, the build step and `dist/index.html`
