@@ -78,8 +78,9 @@ class QueueControllerTest {
     @Test
     @WithMockUser
     fun `listMessages returns 200 with message list`() {
-        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 50)) } returns listOf(
-            MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap()),
+        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 50)) } returns BrokerService.BrowseResult(
+            data = listOf(MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap())),
+            hasMore = false,
         )
 
         mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=50")
@@ -88,7 +89,37 @@ class QueueControllerTest {
                 jsonPath("$.data[0].messageId") { value("ID:m1") }
                 jsonPath("$.data[0].jmsType") { value("text") }
                 jsonPath("$.data[0].body") { value("hello") }
+                jsonPath("$.hasMore") { value(false) }
             }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns hasMore true when a page boundary was hit`() {
+        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 1)) } returns BrokerService.BrowseResult(
+            data = listOf(MessageSummary("orders", "ID:m1", "text", "hello", "2024-01-01T00:00:00Z", emptyMap())),
+            hasMore = true,
+        )
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=1")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.hasMore") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages passes afterMessageId through as the pagination cursor`() {
+        every {
+            brokerService.browseMessages(
+                "orders",
+                QueueMessageFilter(afterMessageId = "ID:m1", maxCount = 50),
+            )
+        } returns BrokerService.BrowseResult(data = emptyList(), hasMore = false)
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.afterMessageId=ID:m1&filter.maxCount=50")
+            .andExpect { status { isOk() } }
     }
 
     @Test
@@ -99,7 +130,7 @@ class QueueControllerTest {
                 "orders",
                 QueueMessageFilter(jmsType = "order-created", messageId = "ID:m1", maxCount = 50),
             )
-        } returns emptyList()
+        } returns BrokerService.BrowseResult(data = emptyList(), hasMore = false)
 
         mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.jmsType=order-created&filter.messageId=ID:m1&filter.maxCount=50")
             .andExpect { status { isOk() } }

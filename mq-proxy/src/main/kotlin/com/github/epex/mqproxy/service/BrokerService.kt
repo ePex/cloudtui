@@ -72,23 +72,67 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     // Message browsing
     // -------------------------------------------------------------------------
 
-    fun browseMessages(queueName: String, filter: QueueMessageFilter, returnBody: Boolean = true): List<MessageSummary> {
+    /**
+     * Pages through [browseMessages] starting just after [QueueMessageFilter.afterMessageId]
+     * (spec/11's pagination). [hasMore] is true when at least one more matching
+     * message exists beyond this page.
+     */
+    data class BrowseResult(val data: List<MessageSummary>, val hasMore: Boolean)
+
+    fun browseMessages(queueName: String, filter: QueueMessageFilter, returnBody: Boolean = true): BrowseResult {
         log.info("broker: browseMessages queue={} filter={} returnBody={}", queueName, filter, returnBody)
         val connection = connectionFactory.createConnection()
         connection.start()
         return try {
             val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
-            val messages = mutableListOf<MessageSummary>()
-            val enum = browser.enumeration
-            while (enum.hasMoreElements() && (filter.maxCount == null || messages.size < filter.maxCount)) {
-                val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
-                messages += msg.toSummary(queueName, returnBody)
-            }
-            browser.close()
-            messages
+            val (result, foundCursor) = doBrowse(session, queueName, filter, returnBody, filter.afterMessageId)
+            // The cursor message is gone (a page raced a concurrent purge/consume) -
+            // silently restart from the beginning rather than surfacing an error to
+            // a non-technical user (spec-wip/fe-list-messages-pagination).
+            if (foundCursor) result else doBrowse(session, queueName, filter, returnBody, null).first
         } finally {
             connection.close()
+        }
+    }
+
+    /**
+     * One JMS QueueBrowser pass: skips messages up to and including [afterMessageId]
+     * (if set), then collects up to [QueueMessageFilter.maxCount] after it. The
+     * second return value is whether [afterMessageId] was actually found in this
+     * pass - false means it's stale/gone, and the caller should retry unfiltered.
+     */
+    private fun doBrowse(
+        session: Session,
+        queueName: String,
+        filter: QueueMessageFilter,
+        returnBody: Boolean,
+        afterMessageId: String?,
+    ): Pair<BrowseResult, Boolean> {
+        val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
+        try {
+            val enum = browser.enumeration
+            var skipping = afterMessageId != null
+            var foundCursor = afterMessageId == null
+            val messages = mutableListOf<MessageSummary>()
+            var hasMore = false
+            while (enum.hasMoreElements()) {
+                val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
+                if (skipping) {
+                    if (msg.jmsMessageID == afterMessageId) {
+                        skipping = false
+                        foundCursor = true
+                    }
+                    continue
+                }
+                if (filter.maxCount != null && messages.size >= filter.maxCount) {
+                    hasMore = true
+                    break
+                }
+                messages += msg.toSummary(queueName, returnBody)
+            }
+            return BrowseResult(messages, hasMore) to foundCursor
+        } finally {
+            browser.close()
         }
     }
 

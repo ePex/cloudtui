@@ -38,7 +38,14 @@ one.
   name, and clicking a column header sorts by it (ascending, click again
   for descending) — both client-side over the already-fetched list, and
   they compose. Each row: click the name to browse its messages, or use
-  its Purge/Move all…/Send… actions.
+  its Purge/Move all…/Send… actions. Every mutating action anywhere in
+  the app that can change a queue's counts — Purge, Move all…, and the
+  message-list/detail actions below (single or bulk delete/move) —
+  refreshes the queue list in the background (`loadQueues()`) on
+  success, so its counts are already current by the time the user
+  navigates back to it; no manual "Refresh" click needed after any of
+  the app's own actions (it still exists for external changes the app
+  can't know about).
 - **Message list**: `list-messages` with `returnBody=true` and a
   client-side default `filter.maxCount` of 500 (editable, shown in the
   view's title) — mirrors the TUI client's own default, satisfying
@@ -46,6 +53,14 @@ one.
   this endpoint (spec/11). An optional JMS Type filter narrows further
   (placeholder `*`, a "matches everything" convention — leaving it blank
   already meant "no filter" and still does; `*` is never actually sent).
+  A **"Load more"** button below the table, shown only when the last
+  response's `hasMore` (spec/11) was true, fetches the next page
+  (`filter.afterMessageId` = the last rendered row's message ID) and
+  appends to the currently-rendered list rather than replacing it —
+  already-checked selections (below) survive the append since they're
+  keyed by message ID, not row index. Applying the filter, opening a
+  different queue, or a delete/move action completing all reset back to
+  a single first page (all of which already trigger a full reload).
   Every row has a checkbox; a header checkbox
   (checked/indeterminate/unchecked synced to selection vs. total) plus
   "Select all"/"Select none" buttons operate on the currently-loaded list
@@ -183,6 +198,17 @@ mq-proxy-web/
   existed — each element type needed its own explicit rule; `overflow-wrap`
   doesn't inherit across element boundaries in a way that would have
   covered both from one declaration.
+- **A stale "Load more" cursor can surface a visible duplicate/stale
+  row, by design.** `filter.afterMessageId`'s server-side fallback
+  (spec/11) silently restarts from the beginning of the queue when the
+  cursor message is gone (e.g. deleted by a concurrent action between
+  page fetches) — but the client still *appends* that fallback page
+  rather than replacing what's already rendered, so the already-deleted
+  cursor message and a duplicate of the first message can both remain
+  visible until the next full reload. Confirmed live, driven through the
+  real UI (not just `curl`): no error surfaces, matching the design —
+  simplicity over reconciliation was the deliberate trade-off, not a bug
+  to fix.
 
 ## Out of scope (deliberate)
 
@@ -191,6 +217,7 @@ mq-proxy-web/
   `mq-proxy` connection at a time per browser.
 - No login system of its own beyond `mq-proxy`'s single shared Basic-auth
   pair, no per-user roles or audit trail.
-- No pagination/"load more" for messages (mirrors spec/11).
+- No page-number-based navigation (jump to page 5) for messages —
+  "Load more" only, matching the cursor's forward-only nature (spec/11).
 - No keyboard-driven power-user UX, no theme picker/settings.
 - No offline/PWA support.
