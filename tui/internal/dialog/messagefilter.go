@@ -173,7 +173,7 @@ func (mf *MessageFilter) Show() {
 	mf.scanning = false
 
 	f := mf.host.MessagesFilter()
-	mf.jmsTypeItem.SetText(f.JMSType)
+	ui.SetInputFieldText(mf.jmsTypeItem, f.JMSType)
 	// SetText doesn't itself refresh an active SetAutocompleteFunc
 	// drop-down (only a live keystroke does) — without this, the field
 	// shows whatever suggestions were current at SetAutocompleteFunc's
@@ -181,13 +181,13 @@ func (mf *MessageFilter) Show() {
 	// empty aside from the sentinel), same gotcha as the ':' prompt (see
 	// spec/01) and its fix.
 	mf.jmsTypeItem.Autocomplete()
-	mf.form.GetFormItem(1).(*tview.InputField).SetText(formatFilterDate(f.FromDate))
-	mf.form.GetFormItem(2).(*tview.InputField).SetText(formatFilterDate(f.ToDate))
+	ui.SetInputFieldText(mf.form.GetFormItem(1).(*tview.InputField), formatFilterDate(f.FromDate))
+	ui.SetInputFieldText(mf.form.GetFormItem(2).(*tview.InputField), formatFilterDate(f.ToDate))
 	maxCount := ""
 	if f.MaxCount > 0 {
 		maxCount = fmt.Sprintf("%d", f.MaxCount)
 	}
-	mf.form.GetFormItem(3).(*tview.InputField).SetText(maxCount)
+	ui.SetInputFieldText(mf.form.GetFormItem(3).(*tview.InputField), maxCount)
 
 	mf.host.ShowPage("message-filter")
 	mf.host.SetFocus(mf.form)
