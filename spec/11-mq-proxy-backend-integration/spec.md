@@ -39,13 +39,26 @@ Kotlin side, `@ModelAttribute`), which is why the shape is:
 - `returnBody` — optional, top-level, default `false` (message bodies are
   *not* included unless explicitly requested).
 - `filter.*` — nested, not flat: `filter.jmsType`, `filter.messageId`,
-  `filter.fromDate`, `filter.toDate`, `filter.maxCount`.
+  `filter.fromDate`, `filter.toDate`, `filter.maxCount`,
+  `filter.afterMessageId`.
 - **`filter.maxCount` is required and must be a positive integer** — a
   request without it, or with `maxCount <= 0`, is rejected with 400. This
   is the one endpoint where the cap is non-optional (see Gotchas).
+- **`filter.afterMessageId`** (optional): a pagination cursor, distinct
+  from `filter.messageId` (which means "return only this one message").
+  Unset behaves as before (start from the beginning of the queue); set,
+  the server skips every message up to and including a match, then
+  returns up to `filter.maxCount` messages starting after it. A cursor
+  that no longer matches any message on the queue (e.g. a concurrent
+  purge/consume raced the page) silently falls back to starting from the
+  beginning rather than erroring.
 
 Each returned message includes the real JMS `jmsType` header (not
-inferred).
+inferred). The response also carries **`hasMore: Boolean`**, true when at
+least one more message exists beyond the returned page — shared on
+`mq-proxy`'s `ListResponse<T>` (also used by `list-queues`, where it's
+simply unused and defaults `false`) rather than forking a
+message-specific response type.
 
 ### `send-message` (POST)
 
@@ -156,9 +169,10 @@ tooling. Manual/on-demand only — not wired into CI (needs a live broker).
 
 ## Out of scope (deliberate)
 
-- No pagination/"load more" — `maxCount` caps what's fetched; no follow-up
-  affordance to fetch the next batch, and no in-UI indication that more
-  messages exist beyond the cap.
+- **The Go client above does not send `filter.afterMessageId` or read
+  `hasMore`** — the TUI can already re-browse with a different `maxCount`
+  from its own UI, so pagination wasn't needed there; `filter.afterMessageId`/
+  `hasMore` exist for `mq-proxy-web`'s "Load more" (spec/21), not the TUI.
 - No configurable TUI-side default `maxCount` (fixed at 500).
 - No retry for POST requests, no backoff/retry-count configuration for
   GET retries, no proactive connection warm-up on activation.
