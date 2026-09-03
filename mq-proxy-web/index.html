@@ -7,13 +7,20 @@
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #f6f7f9;
+    --bg: #f3f4f7;
     --panel: #ffffff;
-    --border: #d7dbe0;
-    --text: #1c2128;
+    --panel-alt: #f7f8fb;
+    --border: #e1e4ea;
+    --text: #1a1d24;
     --muted: #6b7280;
-    --accent: #2563eb;
-    --danger: #b91c1c;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-text: #ffffff;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --danger-text: #ffffff;
+    --shadow: rgba(15, 23, 42, 0.08);
+    --shadow-lg: rgba(15, 23, 42, 0.16);
   }
   /* Follows the OS/browser preference automatically — no manual toggle,
      matching the rest of the page's no-theming-system scope. Declaring
@@ -23,13 +30,20 @@
      worse than either palette below on its own. */
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #14161a;
-      --panel: #1c2028;
-      --border: #333844;
-      --text: #e6e8eb;
+      --bg: #0f1115;
+      --panel: #1a1d24;
+      --panel-alt: #20232b;
+      --border: #2c313c;
+      --text: #e8e9ed;
       --muted: #9aa1ac;
-      --accent: #60a5fa;
+      --accent: #818cf8;
+      --accent-hover: #a5b4fc;
+      --accent-text: #14161a;
       --danger: #f87171;
+      --danger-hover: #fca5a5;
+      --danger-text: #14161a;
+      --shadow: rgba(0, 0, 0, 0.35);
+      --shadow-lg: rgba(0, 0, 0, 0.55);
     }
   }
   * { box-sizing: border-box; }
@@ -51,30 +65,95 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 1rem;
+    padding: 0.65rem 1.25rem;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 2px var(--shadow);
   }
+  .topbar-left { display: flex; align-items: center; gap: 0.85rem; }
+  .brand { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
+  .brand::before {
+    content: "";
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  #connLabel { color: var(--muted); font-size: 0.9rem; }
   main {
-    max-width: 960px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 1.5rem 1rem;
+    padding: 2rem 1.5rem;
   }
-  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; }
-  h1 { font-size: 1.25rem; }
-  h2 { font-size: 1.1rem; margin-top: 0; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+  /* The connect form is the one view that shouldn't stretch to the
+     page's full width — everything else (queue/message tables) wants
+     the room, but a wide login-style form looks sparse and odd. */
+  #connectView { max-width: 480px; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1.15rem; margin-top: 0; }
   label { display: block; margin: 0.5rem 0; font-size: 0.9rem; }
-  input, textarea { width: 100%; padding: 0.4rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.95rem; }
-  button { cursor: pointer; padding: 0.35rem 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 0.9rem; }
+  input, textarea {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    background: var(--panel);
+    color: var(--text);
+  }
+  input:focus, textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+  button {
+    cursor: pointer;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.1s ease, border-color 0.1s ease;
+  }
   button:hover { border-color: var(--accent); }
-  table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
+  button:disabled { cursor: default; opacity: 0.5; border-color: var(--border); }
+  /* Primary: the page's main create/submit actions (Connect, Send,
+     Continue). Danger: destructive actions (Delete, Purge, the confirm
+     dialog's Yes) — this page's confirmDialog is only ever used to guard
+     a destructive action, so its Yes button always gets this treatment. */
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-danger {
+    background: transparent;
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  .btn-danger:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--danger-text); }
+  table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; border-radius: 8px; overflow: hidden; }
   /* overflow-wrap: without it, a long unbroken token (a UUID, an
      ALL_CAPS_WITH_UNDERSCORES JMS type, raw JSON with no spaces) has no
      natural break point and overflows its column into whatever's next
      to it instead of wrapping — found live, on the messages table's
      Body preview column. */
-  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
-  td.queue-name { cursor: pointer; color: var(--accent); }
+  th, td { text-align: left; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; overflow-wrap: anywhere; }
+  thead th { background: var(--panel-alt); font-weight: 600; border-bottom: 2px solid var(--border); }
+  tbody tr:nth-child(even) { background: var(--panel-alt); }
+  tbody tr:hover { background: var(--bg); }
+  td.queue-name { cursor: pointer; color: var(--accent); font-weight: 500; }
   th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
   th.sortable:hover { color: var(--accent); }
   th.sortable .sort-indicator { color: var(--muted); font-size: 0.75em; margin-left: 0.25em; }
@@ -85,7 +164,14 @@
   #loadMoreMessagesBtn { margin-top: 0.5rem; }
   #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
   #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
-  p.error { color: var(--danger); font-size: 0.9rem; }
+  p.error {
+    color: var(--danger);
+    font-size: 0.9rem;
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+  }
   /* Same fix as th/td above, needed here too: a header value with no
      natural break point (a long URL, a raw JSON error body) overflowed
      its grid column instead of wrapping, widening the whole layout past
@@ -99,7 +185,7 @@
     word-break: break-word;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 0.75rem;
     margin-top: 0.75rem;
   }
@@ -113,21 +199,26 @@
   }
   .modal-box {
     background: var(--panel);
-    border-radius: 8px;
-    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
     width: 90%;
     max-width: 420px;
+    box-shadow: 0 8px 24px var(--shadow-lg);
   }
   .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
-  #movePickerList { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
-  #movePickerList li { padding: 0.4rem 0.6rem; cursor: pointer; }
-  #movePickerList li:hover { background: var(--bg); }
+  #movePickerList { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+  #movePickerList li { padding: 0.45rem 0.65rem; cursor: pointer; }
+  #movePickerList li:hover { background: var(--panel-alt); }
 </style>
 </head>
 <body>
 
 <header id="topbar" hidden>
-  <span id="connLabel"></span>
+  <div class="topbar-left">
+    <span class="brand">cloudtui</span>
+    <span id="connLabel"></span>
+  </div>
   <button id="disconnectBtn" type="button">Disconnect</button>
 </header>
 
@@ -145,7 +236,7 @@
       <label>Password
         <input id="connPass" type="password" required>
       </label>
-      <button type="submit">Connect</button>
+      <button type="submit" class="btn-primary">Connect</button>
     </form>
     <p id="connectError" class="error" hidden></p>
   </section>
@@ -183,12 +274,12 @@
       <input id="msgFilterMax" type="number" min="1" value="500">
     </label>
     <button id="applyMsgFilterBtn" type="button">Apply</button>
-    <button id="sendFromMessagesBtn" type="button">Send message&hellip;</button>
+    <button id="sendFromMessagesBtn" type="button" class="btn-primary">Send message&hellip;</button>
     <div id="messagesBulkActions">
       <button id="selectAllMessagesBtn" type="button">Select all</button>
       <button id="selectNoneMessagesBtn" type="button">Select none</button>
       <span id="messagesSelectedCount">0 selected</span>
-      <button id="deleteSelectedMessagesBtn" type="button" disabled>Delete selected</button>
+      <button id="deleteSelectedMessagesBtn" type="button" class="btn-danger" disabled>Delete selected</button>
       <button id="moveSelectedMessagesBtn" type="button" disabled>Move selected&hellip;</button>
     </div>
     <table id="messagesTable">
@@ -209,7 +300,7 @@
     <h2>Message detail</h2>
     <dl id="messageDetailFields"></dl>
     <pre id="messageDetailBody"></pre>
-    <button id="deleteMessageBtn" type="button">Delete</button>
+    <button id="deleteMessageBtn" type="button" class="btn-danger">Delete</button>
     <button id="moveMessageBtn" type="button">Move&hellip;</button>
     <p id="messageDetailError" class="error" hidden></p>
   </section>
@@ -222,7 +313,7 @@
     <datalist id="jmsTypeSuggestions"></datalist>
     <div class="modal-actions">
       <button id="jmsTypePromptCancel" type="button">Cancel</button>
-      <button id="jmsTypePromptContinue" type="button">Continue</button>
+      <button id="jmsTypePromptContinue" type="button" class="btn-primary">Continue</button>
     </div>
   </div>
 </div>
@@ -232,7 +323,7 @@
     <p id="confirmMessage"></p>
     <div class="modal-actions">
       <button id="confirmNo" type="button">No</button>
-      <button id="confirmYes" type="button">Yes</button>
+      <button id="confirmYes" type="button" class="btn-danger">Yes</button>
     </div>
   </div>
 </div>
@@ -259,12 +350,12 @@
     </label>
     <div class="modal-actions">
       <button id="sendCancel" type="button">Cancel</button>
-      <button id="sendSubmit" type="button">Send</button>
+      <button id="sendSubmit" type="button" class="btn-primary">Send</button>
     </div>
     <p id="sendError" class="error" hidden></p>
   </div>
 </div>
 
-<script src="app.js"></script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>

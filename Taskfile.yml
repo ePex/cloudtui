@@ -83,6 +83,13 @@ tasks:
     cmds:
       - node --test
 
+  build:mq-proxy-web:
+    desc: Bundle mq-proxy-web's src/ into a single self-contained dist/index.html.
+    dir: mq-proxy-web
+    cmds:
+      - npm ci
+      - npm run build
+
   test:tui:
     desc: Run tui unit tests.
     dir: tui

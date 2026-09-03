@@ -14,16 +14,29 @@ one.
 
 ## Behavior / user flow
 
-- `mq-proxy-web/index.html` + `mq-proxy-web/app.js` — two files, no
-  build step, no npm dependency. Works both opened directly via `file://`
-  (double-click) and served over `http(s)://` from any static file
-  server.
-- **Dark mode**: follows the OS/browser's `prefers-color-scheme`
-  automatically — no manual toggle, no settings/theming system.
-  `color-scheme: light dark` on `:root` so native form controls
-  (inputs/textareas) adapt too, and so the browser doesn't force-invert
-  the page on its own (worse-looking than either declared palette —
-  confirmed live).
+- Source is `mq-proxy-web/src/*.js` — real ES modules, one per concern
+  (connect screen, queue list, message list/detail, move picker,
+  dialogs, the `mq-proxy` API client, shared DOM helpers, and
+  `main.js` wiring it together) — built by `esbuild`
+  (`task build:mq-proxy-web`) into a single, self-contained
+  `dist/index.html`: the actual distributable, not committed to the
+  repo. **Using** it needs neither install nor a build step (that's
+  what `dist/index.html` is for); only *building* it does. Works both
+  opened directly via `file://` (double-click) and served over
+  `http(s)://` from any static file server.
+- **Visual design**: a card-based layout (soft shadows, rounded
+  corners) with a small topbar brand mark, and `.btn-primary`/
+  `.btn-danger` styling distinguishing the page's main create/submit
+  actions (Connect, Send, the JMS Type prompt's Continue) from
+  destructive ones (Delete, Purge, the confirm dialog's Yes) —
+  zebra-striped tables throughout. Follows the OS/browser's
+  `prefers-color-scheme` automatically for both light and dark — no
+  manual toggle, no settings/theming system. `color-scheme: light dark`
+  on `:root` so native form controls (inputs/textareas) adapt too, and
+  so the browser doesn't force-invert the page on its own
+  (worse-looking than either declared palette — confirmed live).
+  System fonts only, no network font fetch — the page has to keep
+  working fully offline over `file://`.
 - **Connect**: a form for the `mq-proxy` base URL plus its HTTP Basic
   username/password (the single `proxy.auth.username`/`password` pair
   configured on that `mq-proxy` instance — spec/10; not per-broker JMS
@@ -137,9 +150,21 @@ different origin — like this one — can call its API:
 
 ```
 mq-proxy-web/
-  index.html   # markup + inline <style>, loads app.js as a classic <script src>
-  app.js       # all logic (connection, API calls, rendering, actions)
-  app.test.js  # unit tests for app.js's pure functions (node --test)
+  src/
+    dom.js          # $, escapeHtml, truncate, showError/clearError/showView, ...
+    api.js          # mq-proxy REST client + request/response shaping
+    state.js        # the page's single shared mutable state object
+    connection.js   # connect screen, localStorage
+    queues.js       # queue list: filter/sort/render, purge, move all
+    messages.js     # message list/detail: pagination, bulk actions
+    movepicker.js   # move-target picker, DLQ-tier ordering
+    dialogs.js      # JMS Type prompt, confirm dialog, send modal
+    main.js         # entry point — wires every view's static controls
+    *.test.js       # co-located tests, import directly from the module next to them
+  index.html   # dev template: markup + inline <style>, <script type="module" src="./src/main.js">
+  package.json # esbuild devDependency
+  build.mjs    # bundles + inlines src/main.js into index.html -> dist/index.html
+  dist/        # build output (gitignored) — dist/index.html is the distributable
   README.md
 ```
 
@@ -148,26 +173,45 @@ mq-proxy-web/
 - `mq-proxy/src/main/kotlin/.../config/SecurityConfig.kt` — CORS wiring
   (see above).
 - `Taskfile.yml`: `test:mq-proxy-web` (`node --test`, run from
-  `mq-proxy-web/`), included in `task test`.
+  `mq-proxy-web/`, no `npm install` needed — tests only import local
+  files), included in `task test`; `build:mq-proxy-web` (`npm ci && npm
+  run build`) producing `dist/index.html`.
 - `.github/workflows/ci.yml`: a `mq-proxy-web` job, matrixed over the
   same three OSes as `tui`/`mq-proxy` — no OS-specific branching needed,
   since all three GitHub-hosted runners ship Node by default and `node
-  --test` behaves identically on each.
+  --test`/`npm` behave identically on each. Runs `test:mq-proxy-web`
+  then `build:mq-proxy-web`, so a broken build fails CI the same way a
+  broken test does.
 
 ## Implementation notes
 
-- `app.js` is loaded as a **classic** `<script src="app.js">`, not an ES
-  module — Chrome blocks ES module loading over `file://` as a
-  cross-origin fetch, which would break the double-click-to-open case. A
-  small UMD-lite wrapper (`(function (exports) {...})(typeof module !==
-  'undefined' ? module.exports : (window.CloudtuiMQ = {}))`) lets the
-  same file work as a browser global *and* a Node `require()`-able
-  CommonJS module for `app.test.js`, without a bundler.
-- DOM wiring in `app.js` is skipped entirely when `document` is
-  undefined (i.e. under Node for the tests) — only the pure logic
-  (auth header, envelope parsing, query building, purge/move-all filter
-  branching, DLQ move-target ordering, bulk request bodies, header
-  sorting) is unit tested; DOM rendering/click-handling is not.
+- `src/*.js` are real ES modules (native `import`/`export`), bundled by
+  `esbuild`'s JS API (`build.mjs`) into a single **IIFE** — not
+  `type="module"` output — and inlined into `index.html`'s script tag as
+  `dist/index.html`. The IIFE format is what keeps the *built* file a
+  classic script, safe to open via `file://` (Chrome blocks ES module
+  loading over `file://` as a cross-origin fetch, which would break the
+  double-click-to-open case) — the same constraint an earlier version's
+  single `app.js` + UMD-lite wrapper worked around without a build step
+  at all. The checked-in `index.html` (the dev template) uses
+  `<script type="module" src="./src/main.js">` instead, so source can be
+  iterated on directly by serving the folder — no build needed to see a
+  change, only to produce the real distributable.
+- Circular imports exist between `queues.js`, `messages.js`, and
+  `dialogs.js` (e.g. a queue row's click opens `messages.js`, while a
+  message action calls back into `queues.js`'s `loadQueues` to refresh
+  counts) — safe here since every cross-reference is a hoisted
+  `export function` invoked only at runtime, never at module-evaluation
+  time; confirmed via `esbuild` producing zero bundling
+  warnings/errors. Left as direct imports rather than threading
+  callbacks through every call site to avoid the cycle.
+- DOM wiring lives in each module's own `initXxx()` function (e.g.
+  `initQueues`, `initMessages`), called once from `main.js` — keeps
+  `main.js` a thin entry point rather than a dumping ground for logic
+  that belongs with its own concern. Only the pure logic (auth header,
+  envelope parsing, query building, purge/move-all filter branching, DLQ
+  move-target ordering, bulk request bodies, header sorting) is unit
+  tested; DOM rendering/click-handling is not.
 - CORS preflight behavior is tested with a full `@SpringBootTest`
   (`webEnvironment = RANDOM_PORT`) hitting a real embedded server, not a
   `@WebMvcTest` slice — a slice test gave false 401s for this specific
