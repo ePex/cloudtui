@@ -20,7 +20,7 @@ import (
 // available, no reveal-gating needed.
 type LogDetailView struct {
 	textView *tview.TextView
-	host     ui.ViewHost
+	host     ui.CloudWatchLogsHost
 	event    awslogs.LogEvent
 }
 
@@ -42,7 +42,7 @@ func (dv *LogDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func NewLogDetailView(a ui.ViewHost, onBack func()) *LogDetailView {
+func NewLogDetailView(a ui.CloudWatchLogsHost, onBack func()) *LogDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Log Event ")
 	tv.SetDynamicColors(true)

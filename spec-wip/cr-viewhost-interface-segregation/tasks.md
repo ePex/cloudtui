@@ -30,7 +30,7 @@ commit.
 
 3. [x] `secrets.go`, `secretdetail.go` → `ui.SecretsHost`. Full suite green.
 
-4. [ ] `logs.go`, `logsearch.go`, `logdetail.go` →
+4. [x] `logs.go`, `logsearch.go`, `logdetail.go` →
    `ui.CloudWatchLogsHost`. Full suite green.
 
 5. [ ] `datadoglogs.go`, `datadoglogdetail.go` → `ui.DatadogLogsHost`.
