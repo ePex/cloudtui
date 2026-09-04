@@ -4,7 +4,7 @@ Each task is an independent, isolated diff. `go build ./...`/`go vet
 ./...`/`go test ./...` must pass after every task; `gofmt` before
 every commit.
 
-1. [ ] New `internal/view/statuscell.go` (`clearTableBody`,
+1. [x] New `internal/view/statuscell.go` (`clearTableBody`,
    `showStatusCell`, per `plan.md`) + `statuscell_test.go` testing both
    directly. Not yet called from any view.
 
