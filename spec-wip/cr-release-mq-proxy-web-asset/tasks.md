@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] `.github/workflows/release.yml`: add `go-task/setup-task@v2`
+1. [x] `.github/workflows/release.yml`: add `go-task/setup-task@v2`
    between `setup-go` and `goreleaser-action`, per `plan.md` step 1.
 
 2. [ ] `.goreleaser.yaml`: add the `before.hooks` entry that builds
