@@ -53,11 +53,18 @@
    `codepipelinelist_test.go` unchanged and passing. `go build`/`go
    vet`/`go test ./...` pass.
 
-7. [ ] `CodePipelineDetailView.load()`: same rewrite, with
+7. [x] `CodePipelineDetailView.load()`: same rewrite, with
    `loadingMsg` computed per-call
    (`fmt.Sprintf("Loading %s…", dv.pipelineName)`) instead of a shared
-   constant, per `plan.md`. `codepipelinedetail_test.go` unchanged and
-   passing. `go build`/`go vet`/`go test ./...` pass.
+   constant, per `plan.md`, plus the same logging-closure adjustment.
+   `pipelineName` captured once in `load()` before calling
+   `runAWSLoad` (as before), not re-read from `dv.pipelineName` inside
+   the fetch/error closures, so a concurrent `Open()` for a different
+   pipeline can't make an in-flight load report against the wrong
+   name. `codepipelinedetail_test.go` unchanged and passing (no
+   `TestCodePipelineDetailViewLoadErrorsWithoutActiveProfile`
+   equivalent exists for this view — pre-existing gap, not introduced
+   here). `go build`/`go vet`/`go test ./...` pass.
 
 8. [ ] Merge-back: document `runAWSLoad`/`awsauth.Do` as a "Notable
    design decision worth preserving" in

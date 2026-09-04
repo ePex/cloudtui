@@ -8,7 +8,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -123,55 +122,36 @@ func (dv *CodePipelineDetailView) toggleWatch() {
 	dv.updateTitle()
 }
 
-// load fetches the pipeline's current stage status in a goroutine (a
-// real AWS API call) and renders via QueueUpdateDraw. If the call fails
-// because the profile's cached SSO token is missing/expired,
-// awsauth.WithReauth opens the browser to log in and retries once
-// before giving up — see spec/36-fe-aws-sso-reauth.
+// load fetches the pipeline's current stage status via the shared
+// runAWSLoad helper (internal/view/awsload.go) and renders via
+// QueueUpdateDraw. pipelineName is captured once here, on the caller's
+// goroutine, and closed over rather than re-read from dv.pipelineName
+// inside the fetch/error closures below — those run after Open() may
+// already have switched dv.pipelineName to a different pipeline, so
+// re-reading it there would report the wrong pipeline's error/fetch
+// against a possibly-different one. If the call fails because the
+// profile's cached SSO token is missing/expired, runAWSLoad's use of
+// awsauth.Do opens the browser to log in and retries once before giving
+// up — see spec/36-fe-aws-sso-reauth.
 func (dv *CodePipelineDetailView) load() {
-	profile := dv.host.Config().ActiveAWSProfile
-	if profile == "" {
-		dv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
-		return
-	}
 	pipelineName := dv.pipelineName
-	dv.loadSeq++
-	seq := dv.loadSeq
-	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
-	dv.showStatus(fmt.Sprintf("Loading %s…", pipelineName))
-	go func() {
-		ctx := context.Background()
-		authType, _ := dv.host.AWSAuthTypeFor(ctx, profile)
-		stages, err := awsauth.WithReauth(ctx, profile, authType, dv.host.AWSSSOLogin,
-			func() {
-				dv.host.QueueUpdateDraw(func() {
-					dv.ShowReauthWaiting(reauthWaitingMsg)
-				})
-			},
-			func(code, url string) {
-				dv.host.QueueUpdateDraw(func() {
-					dv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
-				})
-			},
-			func(ctx context.Context) ([]awscodepipeline.StageStatus, error) {
-				return dv.host.GetPipelineState(ctx, profile, pipelineName)
-			},
-		)
-		dv.host.QueueUpdateDraw(func() {
-			if seq != dv.loadSeq {
-				return // superseded by a newer load()
-			}
-			if err != nil {
-				slog.Error("codepipeline: failed to get pipeline state", "pipeline", pipelineName, "error", err)
-				dv.showError(err)
-				return
-			}
-			dv.Render(stages)
-		})
-	}()
+	runAWSLoad(dv.host, &dv.loadSeq, dv.showStatus,
+		func(err error) {
+			slog.Error("codepipeline: failed to get pipeline state", "pipeline", pipelineName, "error", err)
+			dv.showError(err)
+		},
+		fmt.Sprintf("Loading %s…", pipelineName),
+		func(ctx context.Context, profile string) ([]awscodepipeline.StageStatus, error) {
+			return dv.host.GetPipelineState(ctx, profile, pipelineName)
+		},
+		dv.Render,
+	)
 }
 
-// ShowReauthWaiting implements ui.ReauthStatusShower.
+// ShowReauthWaiting implements ui.ReauthStatusShower for structural
+// consistency with QueuesView, though load() itself no longer calls it —
+// runAWSLoad calls showStatus directly for the same effect (see
+// awsload.go's doc comment for why).
 func (dv *CodePipelineDetailView) ShowReauthWaiting(msg string) {
 	dv.showStatus(msg)
 }
