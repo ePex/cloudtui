@@ -1,8 +1,11 @@
 package view
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
 )
@@ -298,5 +301,90 @@ func TestStartStopWatchingPipeline(t *testing.T) {
 	w.StopWatchingPipeline("my-pipeline")
 	if w.IsWatchingPipeline("my-pipeline") {
 		t.Error("IsWatchingPipeline() = true after stopping, want false")
+	}
+}
+
+// fakeTicker is pollTicker's test double: c is a channel a test sends
+// synthetic ticks on directly, so pollPipeline's loop advances without
+// waiting on real wall-clock time. stopped closes once Stop() is
+// called, letting a test wait on it deterministically instead of
+// polling.
+type fakeTicker struct {
+	c       chan time.Time
+	stopped chan struct{}
+}
+
+func newFakeTicker() *fakeTicker {
+	return &fakeTicker{c: make(chan time.Time, 1), stopped: make(chan struct{})}
+}
+
+func (f *fakeTicker) C() <-chan time.Time { return f.c }
+func (f *fakeTicker) Stop()               { close(f.stopped) }
+
+// newTestPipelineWatcherWithDrawSignal is newTestPipelineWatcher's
+// draw-signaling counterpart — see queues_test.go's drawSignalingHost/
+// newTestQueuesViewWithDrawSignal for why this exists: it lets a test
+// block until pollPipeline's QueueUpdateDraw dispatch has actually
+// landed instead of guessing with a sleep.
+func newTestPipelineWatcherWithDrawSignal(t *testing.T, bufSize int) (*drawSignalingHost, *fakeNotifier, *PipelineWatcher) {
+	t.Helper()
+	base := newFakeViewHost()
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	fn := &fakeNotifier{}
+	listV := NewCodePipelineListView(host, func(string) {})
+	detailV := NewCodePipelineDetailView(host, func() {})
+	return host, fn, NewPipelineWatcher(host, fn.notify, listV, detailV)
+}
+
+// TestPollPipelineTicksDispatchPolls is the actual regression coverage
+// for pollPipeline's loop itself — see TestStartStopWatchingPipeline's
+// own comment above: it only ever asserts on state set before the
+// first real tick, which is pipelinePollInterval (20s) away, so the
+// loop's tick-driven behavior has never actually been exercised.
+// Substituting a fakeTicker lets ticks be sent synchronously, proving
+// pollPipeline dispatches a poll via QueueUpdateDraw on each one — more
+// than once, so the loop is shown to continue rather than fire a
+// single poll and stop — and that Stop() reaches the injected ticker
+// once the watch ends.
+func TestPollPipelineTicksDispatchPolls(t *testing.T) {
+	host, _, w := newTestPipelineWatcherWithDrawSignal(t, 4)
+
+	ft := newFakeTicker()
+	w.newTicker = func(time.Duration) pollTicker { return ft }
+
+	var mu sync.Mutex
+	pollCalls := 0
+	host.getPipelineStateFn = func(context.Context, string, string) ([]awscodepipeline.StageStatus, error) {
+		mu.Lock()
+		pollCalls++
+		mu.Unlock()
+		return []awscodepipeline.StageStatus{{Name: "Source", Status: "InProgress"}}, nil
+	}
+
+	w.StartWatchingPipeline("my-pipeline")
+
+	ft.c <- time.Now()
+	<-host.drawn
+	mu.Lock()
+	got := pollCalls
+	mu.Unlock()
+	if got != 1 {
+		t.Fatalf("pollCalls after first tick = %d, want 1", got)
+	}
+
+	ft.c <- time.Now()
+	<-host.drawn
+	mu.Lock()
+	got = pollCalls
+	mu.Unlock()
+	if got != 2 {
+		t.Fatalf("pollCalls after second tick = %d, want 2 (the loop must continue, not fire once and stop)", got)
+	}
+
+	w.StopWatchingPipeline("my-pipeline")
+	select {
+	case <-ft.stopped:
+	case <-time.After(2 * time.Second):
+		t.Error("fakeTicker.Stop() was not called after StopWatchingPipeline")
 	}
 }
