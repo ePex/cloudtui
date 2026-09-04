@@ -13,7 +13,7 @@ every commit.
    `clearTableBody(pv.table)`. `ssmparams_test.go` unchanged and
    passing.
 
-3. [ ] `secrets.go`: same rewrite. `secrets_test.go` unchanged and
+3. [x] `secrets.go`: same rewrite. `secrets_test.go` unchanged and
    passing.
 
 4. [ ] `logs.go`: same rewrite. `logs_test.go` unchanged and passing.

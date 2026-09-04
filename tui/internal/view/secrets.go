@@ -232,9 +232,7 @@ func (sv *SecretsView) repaint(secrets []awssecrets.Secret) {
 	filtered = sortFavoritesFirst(filtered, isFavorite)
 	sv.filtered = filtered
 
-	for sv.table.GetRowCount() > 1 {
-		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
-	}
+	clearTableBody(sv.table)
 
 	p := sv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
@@ -272,32 +270,18 @@ func (sv *SecretsView) repaint(secrets []awssecrets.Secret) {
 }
 
 func (sv *SecretsView) showError(err error) {
-	sv.all = nil
-	sv.filtered = nil
-	for sv.table.GetRowCount() > 1 {
-		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
-	}
-	sv.table.SetCell(1, 1,
-		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
-			SetTextColor(tcell.ColorRed).
-			SetExpansion(3),
-	)
-	sv.table.SetTitle(" Secrets Manager ")
+	showStatusCell(sv.table, 1, fmt.Sprintf("Error: %v", err), tcell.ColorRed, " Secrets Manager ", func() {
+		sv.all = nil
+		sv.filtered = nil
+	})
 }
 
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
 func (sv *SecretsView) showStatus(msg string) {
-	sv.all = nil
-	sv.filtered = nil
-	for sv.table.GetRowCount() > 1 {
-		sv.table.RemoveRow(sv.table.GetRowCount() - 1)
-	}
-	sv.table.SetCell(1, 1,
-		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(sv.host.Config().Colors.Accent)).
-			SetExpansion(3),
-	)
-	sv.table.SetTitle(" Secrets Manager ")
+	showStatusCell(sv.table, 1, msg, tcell.GetColor(sv.host.Config().Colors.Accent), " Secrets Manager ", func() {
+		sv.all = nil
+		sv.filtered = nil
+	})
 }
