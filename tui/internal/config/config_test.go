@@ -40,63 +40,31 @@ func TestDefault(t *testing.T) {
 	}
 }
 
-func TestDarkThemePaletteFieldsNonEmpty(t *testing.T) {
-	p := themeOrFatal(t, "dark")
-	for _, tc := range []struct{ name, val string }{
-		{"Background", p.Background},
-		{"Border", p.Border},
-		{"Label", p.Label},
-		{"Text", p.Text},
-		{"Value", p.Value},
-		{"Accent", p.Accent},
-		{"SelectionBg", p.SelectionBg},
-		{"SelectionText", p.SelectionText},
-		{"StatusBarBg", p.StatusBarBg},
-		{"StatusBarText", p.StatusBarText},
-	} {
-		if tc.val == "" {
-			t.Errorf("dark theme palette.%s is empty", tc.name)
-		}
-	}
-}
-
-func TestCyberpunkThemePaletteFieldsNonEmpty(t *testing.T) {
-	p := themeOrFatal(t, "cyberpunk")
-	for _, tc := range []struct{ name, val string }{
-		{"Background", p.Background},
-		{"Border", p.Border},
-		{"Label", p.Label},
-		{"Text", p.Text},
-		{"Value", p.Value},
-		{"Accent", p.Accent},
-		{"SelectionBg", p.SelectionBg},
-		{"SelectionText", p.SelectionText},
-		{"StatusBarBg", p.StatusBarBg},
-		{"StatusBarText", p.StatusBarText},
-	} {
-		if tc.val == "" {
-			t.Errorf("cyberpunk theme palette.%s is empty", tc.name)
-		}
-	}
-}
-
-func TestGoforeThemePaletteFieldsNonEmpty(t *testing.T) {
-	p := themeOrFatal(t, "gofore")
-	for _, tc := range []struct{ name, val string }{
-		{"Background", p.Background},
-		{"Border", p.Border},
-		{"Label", p.Label},
-		{"Text", p.Text},
-		{"Value", p.Value},
-		{"Accent", p.Accent},
-		{"SelectionBg", p.SelectionBg},
-		{"SelectionText", p.SelectionText},
-		{"StatusBarBg", p.StatusBarBg},
-		{"StatusBarText", p.StatusBarText},
-	} {
-		if tc.val == "" {
-			t.Errorf("gofore theme palette.%s is empty", tc.name)
-		}
+// TestThemePaletteFieldsNonEmpty covers every built-in theme
+// (AvailableThemes, not a hardcoded name list) so a future theme added
+// the normal way — dropping a .yaml file in themes/ — is covered
+// automatically instead of needing its own copy-pasted test function.
+func TestThemePaletteFieldsNonEmpty(t *testing.T) {
+	for _, name := range AvailableThemes() {
+		t.Run(name, func(t *testing.T) {
+			p := themeOrFatal(t, name)
+			for _, tc := range []struct{ name, val string }{
+				{"Background", p.Background},
+				{"Border", p.Border},
+				{"Label", p.Label},
+				{"Text", p.Text},
+				{"Value", p.Value},
+				{"Accent", p.Accent},
+				{"SelectionBg", p.SelectionBg},
+				{"SelectionText", p.SelectionText},
+				{"StatusBarBg", p.StatusBarBg},
+				{"StatusBarText", p.StatusBarText},
+			} {
+				if tc.val == "" {
+					t.Errorf("%s theme palette.%s is empty", name, tc.name)
+				}
+			}
+		})
 	}
 }
 
@@ -443,37 +411,29 @@ func TestActiveConnEmptyConnections(t *testing.T) {
 	}
 }
 
-func TestSecretAWSProfileJolokia(t *testing.T) {
-	c := Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}
-	if got := c.SecretAWSProfile(); got != "work" {
-		t.Errorf("SecretAWSProfile() = %q, want %q", got, "work")
+func TestSecretAWSProfile(t *testing.T) {
+	cases := []struct {
+		name string
+		conn Connection
+		want string
+	}{
+		{"jolokia backend", Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}, "work"},
+		{"proxy backend", Connection{Backend: "proxy", Proxy: ProxyConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}, "work"},
+		{"empty when plain password", Connection{Backend: "jolokia", Queue: QueueConfig{Password: "hunter2"}}, ""},
+		// Regression case for a hand-edited config that sets
+		// PasswordSecretAWSProfile without PasswordSecret (the connection
+		// editor's own validation prevents this, but a hand-edited
+		// config.yaml can bypass it) — such a connection isn't actually
+		// using a secret, so the profile must not be reported as if it
+		// were in use.
+		{"empty when PasswordSecret unset", Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecretAWSProfile: "work"}}, ""},
 	}
-}
-
-func TestSecretAWSProfileProxy(t *testing.T) {
-	c := Connection{Backend: "proxy", Proxy: ProxyConfig{PasswordSecret: "my/secret", PasswordSecretAWSProfile: "work"}}
-	if got := c.SecretAWSProfile(); got != "work" {
-		t.Errorf("SecretAWSProfile() = %q, want %q", got, "work")
-	}
-}
-
-func TestSecretAWSProfileEmptyWhenPlainPassword(t *testing.T) {
-	c := Connection{Backend: "jolokia", Queue: QueueConfig{Password: "hunter2"}}
-	if got := c.SecretAWSProfile(); got != "" {
-		t.Errorf("SecretAWSProfile() with a plain password = %q, want empty", got)
-	}
-}
-
-// TestSecretAWSProfileEmptyWhenPasswordSecretUnset is a regression test
-// for a hand-edited config that sets PasswordSecretAWSProfile without
-// PasswordSecret (the connection editor's own validation prevents this,
-// but a hand-edited config.yaml can bypass it) — such a connection isn't
-// actually using a secret, so the profile must not be reported as if it
-// were in use.
-func TestSecretAWSProfileEmptyWhenPasswordSecretUnset(t *testing.T) {
-	c := Connection{Backend: "jolokia", Queue: QueueConfig{PasswordSecretAWSProfile: "work"}}
-	if got := c.SecretAWSProfile(); got != "" {
-		t.Errorf("SecretAWSProfile() with PasswordSecret unset = %q, want empty", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.conn.SecretAWSProfile(); got != tc.want {
+				t.Errorf("SecretAWSProfile() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
