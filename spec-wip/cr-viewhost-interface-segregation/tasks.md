@@ -41,8 +41,9 @@ commit.
 
 7. [x] `messages.go` → `ui.MessagesHost`. Full suite green.
 
-8. [ ] `queues.go`, `message_detail.go`, `settings.go`, `log.go` →
-   plain `ui.Host`. Full suite green.
+8. [x] `queues.go`, `message_detail.go`, `settings.go` → plain
+   `ui.Host` (`log.go` needed no change — confirmed it takes no host
+   parameter at all). Full suite green.
 
 9. [ ] Cleanup: confirm via grep that no file references `ui.ViewHost`
    any more (every view migrated in tasks 2-8), then delete the
