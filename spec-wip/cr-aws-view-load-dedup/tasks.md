@@ -11,7 +11,7 @@
    `TestWithReauthNotNeeded`). `go build`/`go vet`/`go test ./...`
    pass; no other file touched yet.
 
-2. [ ] `runAWSLoad[T any]` (new `internal/view/awsload.go`): the
+2. [x] `runAWSLoad[T any]` (new `internal/view/awsload.go`): the
    shared load/reauth/staleness-guard shape, per `plan.md`, built on
    top of `awsauth.Do` from task 1. New `awsload_test.go` testing it
    directly against `fakeViewHost`: empty-profile guard, loading
