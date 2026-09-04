@@ -24,6 +24,18 @@ one.
   what `dist/index.html` is for); only *building* it does. Works both
   opened directly via `file://` (double-click) and served over
   `http(s)://` from any static file server.
+- **Published as a release asset**: every tagged release
+  (`.github/workflows/release.yml` → `.goreleaser.yaml`'s
+  `before.hooks`) builds the distributable and publishes it as
+  `mq-console.html` on that release's GitHub Releases page, alongside
+  the TUI binaries. This is the actual path a non-technical user
+  follows in practice — download `mq-console.html` from the latest
+  release and open it — rather than running `task build:mq-proxy-web`
+  themselves (which needs Node/npm, exactly the tooling this page
+  exists to let them avoid). The filename carries no version suffix
+  (the release page itself is already scoped to one version, and a
+  stable name keeps a `.../releases/latest/download/mq-console.html`
+  link valid across releases).
 - **Visual design**: a card-based layout (soft shadows, rounded
   corners) with a small topbar brand mark, and `.btn-primary`/
   `.btn-danger` styling distinguishing the page's main create/submit
