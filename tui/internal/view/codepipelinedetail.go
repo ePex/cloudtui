@@ -105,9 +105,7 @@ func (dv *CodePipelineDetailView) setHeader() {
 func (dv *CodePipelineDetailView) Open(pipelineName string) {
 	dv.pipelineName = pipelineName
 	dv.stages = nil
-	for dv.table.GetRowCount() > 1 {
-		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
-	}
+	clearTableBody(dv.table)
 	dv.setHeader()
 	dv.table.SetTitle(fmt.Sprintf(" %s ", pipelineName))
 	dv.load()
@@ -167,9 +165,7 @@ func (dv *CodePipelineDetailView) ShowReauthDone() {
 // spec/43-fe-codepipeline-monitor decision 10.
 func (dv *CodePipelineDetailView) Render(stages []awscodepipeline.StageStatus) {
 	dv.stages = stages
-	for dv.table.GetRowCount() > 1 {
-		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
-	}
+	clearTableBody(dv.table)
 
 	p := dv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
@@ -199,32 +195,18 @@ func (dv *CodePipelineDetailView) updateTitle() {
 }
 
 func (dv *CodePipelineDetailView) showError(err error) {
-	dv.stages = nil
-	for dv.table.GetRowCount() > 1 {
-		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
-	}
-	dv.table.SetCell(1, 0,
-		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
-			SetTextColor(tcell.ColorRed).
-			SetExpansion(3),
-	)
-	dv.table.SetTitle(fmt.Sprintf(" %s ", dv.pipelineName))
+	showStatusCell(dv.table, 0, fmt.Sprintf("Error: %v", err), tcell.ColorRed, fmt.Sprintf(" %s ", dv.pipelineName), func() {
+		dv.stages = nil
+	})
 }
 
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
 func (dv *CodePipelineDetailView) showStatus(msg string) {
-	dv.stages = nil
-	for dv.table.GetRowCount() > 1 {
-		dv.table.RemoveRow(dv.table.GetRowCount() - 1)
-	}
-	dv.table.SetCell(1, 0,
-		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(dv.host.Config().Colors.Accent)).
-			SetExpansion(3),
-	)
-	dv.table.SetTitle(fmt.Sprintf(" %s ", dv.pipelineName))
+	showStatusCell(dv.table, 0, msg, tcell.GetColor(dv.host.Config().Colors.Accent), fmt.Sprintf(" %s ", dv.pipelineName), func() {
+		dv.stages = nil
+	})
 }
 
 // StatusLabel shows "(never run)" for a stage with no execution yet,

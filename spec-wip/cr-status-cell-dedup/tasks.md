@@ -21,7 +21,7 @@ every commit.
 5. [x] `codepipelinelist.go`: same rewrite (column 0, static title).
    `codepipelinelist_test.go` unchanged and passing.
 
-6. [ ] `codepipelinedetail.go`: same rewrite (column 0, per-pipeline
+6. [x] `codepipelinedetail.go`: same rewrite (column 0, per-pipeline
    dynamic title, single `stages` field nulled) — plus `Open()` and
    `Render()`'s inline clear-loops also replaced with
    `clearTableBody(dv.table)`. `codepipelinedetail_test.go` unchanged
