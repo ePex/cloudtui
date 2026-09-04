@@ -22,7 +22,7 @@ commit.
    ./...` pass, full suite, no exceptions — this task is purely
    additive.
 
-2. [ ] `ssmparams.go`, `paramdetail.go`: `host`/`a` type
+2. [x] `ssmparams.go`, `paramdetail.go`: `host`/`a` type
    `ui.ViewHost` → `ui.SSMParamsHost`. `*App` already structurally
    satisfies it (no assertion needed yet — added in task 9), so
    `app.go`'s `NewSSMParamsView(a, ...)` call site needs no change.

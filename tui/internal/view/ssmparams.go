@@ -24,7 +24,7 @@ type SSMParamsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	host        ui.ViewHost
+	host        ui.SSMParamsHost
 	filter      string
 	all         []awsssm.Parameter // full unfiltered list from last load
 	filtered    []awsssm.Parameter // currently displayed subset, row-indexed
@@ -68,7 +68,7 @@ func (pv *SSMParamsView) Shortcuts() []ui.Shortcut {
 }
 
 // NewSSMParamsView constructs the SSM Parameters view.
-func NewSSMParamsView(a ui.ViewHost, onSelect func(param awsssm.Parameter)) *SSMParamsView {
+func NewSSMParamsView(a ui.SSMParamsHost, onSelect func(param awsssm.Parameter)) *SSMParamsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" SSM Parameters ")
 	table.SetSelectable(true, false)
