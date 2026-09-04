@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // themeOrFatal loads the named palette or fatals the test.
@@ -437,7 +439,14 @@ func TestSecretAWSProfile(t *testing.T) {
 	}
 }
 
-func TestLoadConnectionsNewFormat(t *testing.T) {
+// TestLoadLegacyEmbeddedConnections covers a config.yaml written
+// before the settings/connections/favorites split — a connections:
+// key embedded directly in the settings file, no split
+// connections/*.yaml files present yet. This is the "legacy fallback"
+// path now (see Load's doc comment) — it was "the new format" back
+// when connections: replaced the pre-FE22 top-level backend/queue/proxy
+// fields, hence the test's name predating this split.
+func TestLoadLegacyEmbeddedConnections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := "activeConnection: aws\nconnections:\n  - name: aws\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n      username: cloudtui\n      password: changeme\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -526,6 +535,101 @@ func TestLoadMigrationFromLegacyQueueFields(t *testing.T) {
 	}
 	if conn.Queue.BrokerName != "mybroker" {
 		t.Errorf("migrated Queue.BrokerName = %q, want mybroker", conn.Queue.BrokerName)
+	}
+}
+
+// TestLoadPrefersSplitConnectionsOverLegacyEmbedded confirms the
+// precedence documented on Load: once connections/*.yaml exist, they
+// win over whatever's still embedded in config.yaml — a stale
+// hand-edit left in the settings file after migration must not
+// silently override the real, current connections files.
+func TestLoadPrefersSplitConnectionsOverLegacyEmbedded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	legacyContent := "activeConnection: stale\nconnections:\n  - name: stale\n    backend: jolokia\n    queue:\n      url: http://stale:8161/api/jolokia\n"
+	if err := os.WriteFile(path, []byte(legacyContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(connectionsDir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveConnectionList(filepath.Join(connectionsDir(path), "jolokia.yaml"), []Connection{
+		{Name: "current", Backend: "jolokia", Queue: QueueConfig{URL: "http://current:8161/api/jolokia"}},
+	}); err != nil {
+		t.Fatalf("saveConnectionList() error = %v", err)
+	}
+	if err := saveConnectionList(filepath.Join(connectionsDir(path), "proxy.yaml"), nil); err != nil {
+		t.Fatalf("saveConnectionList() error = %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(got.Connections) != 1 || got.Connections[0].Name != "current" {
+		t.Errorf("Connections = %+v, want just the split-file's \"current\" connection, not the stale embedded one", got.Connections)
+	}
+}
+
+// TestLoadPrefersSplitFavoritesOverLegacyEmbedded is
+// TestLoadPrefersSplitConnectionsOverLegacyEmbedded's favorites
+// counterpart.
+func TestLoadPrefersSplitFavoritesOverLegacyEmbedded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	legacyContent := "awsFavorites:\n  ssmParameters:\n    work:\n      - /stale/param\n"
+	if err := os.WriteFile(path, []byte(legacyContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	current := AWSFavorites{}.Toggle(FavoriteSSMParameter, "work", "/current/param")
+	favData, err := yaml.Marshal(current)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(favoritesPath(path), favData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.AWSFavorites.IsFavorite(FavoriteSSMParameter, "work", "/stale/param") {
+		t.Error("stale favorite from the legacy embedded content leaked through")
+	}
+	if !got.AWSFavorites.IsFavorite(FavoriteSSMParameter, "work", "/current/param") {
+		t.Error("current favorite from favorites.yaml is missing")
+	}
+}
+
+// TestLoadPartiallyMigratedState covers a config caught mid-migration
+// (e.g. a crash between Save's file writes, or a user who hand-copied
+// just one file): favorites.yaml exists and split-file connections
+// don't yet — each half of the split should load independently and
+// correctly from whichever source has it, not fail or silently drop
+// data because the *other* half isn't migrated yet.
+func TestLoadPartiallyMigratedState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	legacyContent := "activeConnection: aws\nconnections:\n  - name: aws\n    backend: proxy\n    proxy:\n      url: http://localhost:8080\n"
+	if err := os.WriteFile(path, []byte(legacyContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fav := AWSFavorites{}.Toggle(FavoriteSecret, "work", "prod/db")
+	favData, err := yaml.Marshal(fav)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(favoritesPath(path), favData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if conn := got.ActiveConn(); conn.Name != "aws" || conn.Proxy.URL != "http://localhost:8080" {
+		t.Errorf("ActiveConn() = %+v, want the legacy-embedded \"aws\" connection (connections/*.yaml don't exist yet)", conn)
+	}
+	if !got.AWSFavorites.IsFavorite(FavoriteSecret, "work", "prod/db") {
+		t.Error("favorites.yaml's favorite is missing, even though it already exists as a split file")
 	}
 }
 
@@ -714,6 +818,29 @@ func TestSaveLoadRoundTripWithPasswordSecret(t *testing.T) {
 	if got.Connections[1].Proxy.PasswordSecret != "/cloudtui/aws-staging/mq-password" {
 		t.Errorf("Connections[1].Proxy.PasswordSecret = %q, want %q", got.Connections[1].Proxy.PasswordSecret, "/cloudtui/aws-staging/mq-password")
 	}
+
+	// Save must partition by Backend into the two split files, not just
+	// produce an in-memory result that happens to round-trip correctly.
+	jolokiaConns, existed, err := loadConnectionList(filepath.Join(connectionsDir(path), "jolokia.yaml"))
+	if err != nil {
+		t.Fatalf("loadConnectionList(jolokia.yaml) error = %v", err)
+	}
+	if !existed {
+		t.Fatal("connections/jolokia.yaml does not exist after Save()")
+	}
+	if len(jolokiaConns) != 1 || jolokiaConns[0].Name != "default" {
+		t.Errorf("connections/jolokia.yaml content = %+v, want just the default jolokia connection", jolokiaConns)
+	}
+	proxyConns, existed, err := loadConnectionList(filepath.Join(connectionsDir(path), "proxy.yaml"))
+	if err != nil {
+		t.Fatalf("loadConnectionList(proxy.yaml) error = %v", err)
+	}
+	if !existed {
+		t.Fatal("connections/proxy.yaml does not exist after Save()")
+	}
+	if len(proxyConns) != 1 || proxyConns[0].Name != "aws-staging" {
+		t.Errorf("connections/proxy.yaml content = %+v, want just the aws-staging proxy connection", proxyConns)
+	}
 }
 
 func TestSaveLoadRoundTripWithActiveAWSProfile(t *testing.T) {
@@ -880,6 +1007,19 @@ func TestSaveLoadRoundTripWithAWSFavorites(t *testing.T) {
 	}
 	if !got.AWSFavorites.IsFavorite(FavoriteLogGroup, "personal", "/aws/lambda/my-fn") {
 		t.Error("log group favorite not preserved across round-trip")
+	}
+
+	// Save must write favorites.yaml as its own file, not just produce
+	// an in-memory result that happens to round-trip correctly.
+	fav, existed, err := loadFavorites(favoritesPath(path))
+	if err != nil {
+		t.Fatalf("loadFavorites() error = %v", err)
+	}
+	if !existed {
+		t.Fatal("favorites.yaml does not exist after Save()")
+	}
+	if !fav.IsFavorite(FavoriteSSMParameter, "work", "/app/db/password") {
+		t.Error("favorites.yaml on disk is missing the SSM parameter favorite")
 	}
 }
 

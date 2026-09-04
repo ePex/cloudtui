@@ -1,0 +1,26 @@
+# favorites.example.yaml — favorited items in the SSM Parameters, Secrets
+# Manager, and CloudWatch Logs views, toggled in-app with 'f'.
+#
+# Copy to favorites.yaml (same directory as config.yaml) to customise —
+# you normally never hand-edit this, it's shown here for reference (e.g.
+# if you want to pre-seed favorites, or copy/share them between machines
+# or with a teammate working in the same AWS accounts — this file has no
+# secrets in it, just names, so it's safe to hand off on its own). A bare
+# document — no wrapper key, unlike the old combined config.yaml format.
+#
+# Favorited rows sort above non-favorited ones and show a star in the
+# list. Scoped per AWS profile (a name is only meaningful within the
+# account a profile points at) and per item kind (ssmParameters/secrets/
+# logGroups are independent — the same name favorited in one has no
+# bearing on the others). Each is a map of profile name to a list of
+# favorited item names; omit entirely (or leave a kind/profile unlisted)
+# for "no favorites yet".
+# ssmParameters:
+#   my-profile:
+#     - /app/db/password
+# secrets:
+#   my-profile:
+#     - prod/db
+# logGroups:
+#   my-profile:
+#     - /aws/lambda/my-fn
