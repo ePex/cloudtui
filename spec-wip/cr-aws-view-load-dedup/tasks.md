@@ -40,11 +40,12 @@
 
    `go build`/`go vet`/`go test ./...` pass.
 
-4. [ ] `SecretsView.load()`: same rewrite, including the same
+4. [x] `SecretsView.load()`: same rewrite, including the same
    logging-closure adjustment noted in task 3. `secrets_test.go` unchanged
    and passing. `go build`/`go vet`/`go test ./...` pass.
 
-5. [ ] `LogsView.load()`: same rewrite. `logs_test.go` unchanged and
+5. [ ] `LogsView.load()`: same rewrite, including the same
+   logging-closure adjustment. `logs_test.go` unchanged and
    passing. `go build`/`go vet`/`go test ./...` pass.
 
 6. [ ] `CodePipelineListView.load()`: same rewrite.
