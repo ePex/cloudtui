@@ -18,7 +18,7 @@ every commit.
 
 4. [x] `logs.go`: same rewrite. `logs_test.go` unchanged and passing.
 
-5. [ ] `codepipelinelist.go`: same rewrite (column 0, static title).
+5. [x] `codepipelinelist.go`: same rewrite (column 0, static title).
    `codepipelinelist_test.go` unchanged and passing.
 
 6. [ ] `codepipelinedetail.go`: same rewrite (column 0, per-pipeline

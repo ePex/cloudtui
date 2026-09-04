@@ -237,9 +237,7 @@ func (lv *CodePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 	}
 	lv.filtered = filtered
 
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
+	clearTableBody(lv.table)
 
 	p := lv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
@@ -279,32 +277,18 @@ func (lv *CodePipelineListView) repaint(pipelines []awscodepipeline.Pipeline) {
 }
 
 func (lv *CodePipelineListView) showError(err error) {
-	lv.all = nil
-	lv.filtered = nil
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
-	lv.table.SetCell(1, 0,
-		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
-			SetTextColor(tcell.ColorRed).
-			SetExpansion(3),
-	)
-	lv.table.SetTitle(" AWS CodePipeline ")
+	showStatusCell(lv.table, 0, fmt.Sprintf("Error: %v", err), tcell.ColorRed, " AWS CodePipeline ", func() {
+		lv.all = nil
+		lv.filtered = nil
+	})
 }
 
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
 func (lv *CodePipelineListView) showStatus(msg string) {
-	lv.all = nil
-	lv.filtered = nil
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
-	lv.table.SetCell(1, 0,
-		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(lv.host.Config().Colors.Accent)).
-			SetExpansion(3),
-	)
-	lv.table.SetTitle(" AWS CodePipeline ")
+	showStatusCell(lv.table, 0, msg, tcell.GetColor(lv.host.Config().Colors.Accent), " AWS CodePipeline ", func() {
+		lv.all = nil
+		lv.filtered = nil
+	})
 }
