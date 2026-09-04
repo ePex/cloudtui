@@ -10,16 +10,17 @@ provably unused. `go build ./...`/`go vet ./...`/`go test ./...` must
 pass after every single task, no exceptions; `gofmt` before every
 commit.
 
-1. [ ] Add `AWSAuthHost`, `SSMParamsHost`, `SecretsHost`,
+1. [x] Add `AWSAuthHost`, `SSMParamsHost`, `SecretsHost`,
    `CloudWatchLogsHost`, `DatadogLogsHost`, `CodePipelineHost`,
    `MessagesHost` to `internal/ui/viewhost.go` **alongside** the
    existing `ViewHost` (not touched yet). Narrow
-   `internal/view/awsload.go`'s `runAWSLoad` `host` param to
-   `Host`+`AWSAuthHost` — safe immediately, since every current caller
-   passes a `ui.ViewHost`-typed value, which already structurally
-   satisfies the narrower parameter type. `go build ./...`/`go vet
-   ./...`/`go test ./...` pass, full suite, no exceptions — this task
-   is purely additive.
+   `internal/view/awsload.go`'s `runAWSLoad` `host` param to a new
+   unexported `awsLoadHost` interface (`ui.Host`+`ui.AWSAuthHost`) —
+   safe immediately, since every current caller passes a
+   `ui.ViewHost`-typed value, which already structurally satisfies the
+   narrower parameter type. `go build ./...`/`go vet ./...`/`go test
+   ./...` pass, full suite, no exceptions — this task is purely
+   additive.
 
 2. [ ] `ssmparams.go`, `paramdetail.go`: `host`/`a` type
    `ui.ViewHost` → `ui.SSMParamsHost`. `*App` already structurally
