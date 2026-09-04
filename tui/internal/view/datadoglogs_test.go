@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -20,6 +21,24 @@ func newTestDatadogLogsView(t *testing.T) (*fakeViewHost, *dialog.TimeRangeModal
 	host := newFakeViewHost()
 	timeRangeModal := dialog.NewTimeRangeModal(host)
 	return host, timeRangeModal, NewDatadogLogsView(host, timeRangeModal, func(datadoglogs.LogEvent) {})
+}
+
+// newTestDatadogLogsViewWithDrawSignal is newTestDatadogLogsView's
+// draw-signaling counterpart — see queues_test.go's drawSignalingHost/
+// newTestQueuesViewWithDrawSignal for why this exists. Needed here
+// specifically for tests that call SetCurrentOption on a dropdown
+// already wired with the real onSelect (via rebuildFilterOptions/
+// refreshFilterDropdowns): tview's DropDown.SetCurrentOption invokes
+// that callback synchronously, which calls search() and spawns a
+// goroutine neither the caller nor tview waits for — without this,
+// that goroutine leaks past the test and its later QueueUpdateDraw
+// call races the next thing that touches the same dropdown.
+func newTestDatadogLogsViewWithDrawSignal(t *testing.T, bufSize int) (*drawSignalingHost, *DatadogLogsView) {
+	t.Helper()
+	base := newFakeViewHost()
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	timeRangeModal := dialog.NewTimeRangeModal(host)
+	return host, NewDatadogLogsView(host, timeRangeModal, func(datadoglogs.LogEvent) {})
 }
 
 func TestEffectiveQuery(t *testing.T) {
@@ -136,17 +155,40 @@ func TestRebuildFilterOptionsAccumulatesAcrossNarrowedSearches(t *testing.T) {
 // immediately (same reasoning as this file's other tests that only
 // check state set before search()'s goroutine is spawned).
 func TestRebuildFilterOptionsSelectingAnOptionRefocusesTable(t *testing.T) {
-	host, _, dv := newTestDatadogLogsView(t)
+	host, dv := newTestDatadogLogsViewWithDrawSignal(t, 1)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
 	host.SetFocus(dv.serviceFilterDD)
 
+	// Block search()'s fetch so its goroutine can't touch the dropdown
+	// until explicitly released below. SetCurrentOption fires the real
+	// onSelect (wired by refreshFilterDropdowns), which calls search()
+	// synchronously as part of tview's own SetCurrentOption machinery
+	// — its spawned goroutine can otherwise reach QueueUpdateDraw/
+	// SetOptions() *while SetCurrentOption is still executing on this
+	// goroutine*, racing it directly. Waiting on host.drawn only
+	// *after* the SetCurrentOption call (an earlier version of this
+	// fix) is too late: the race window is inside the call, not after
+	// it — blocking the fetch is what actually prevents it.
+	unblock := make(chan struct{})
+	host.searchDatadogLogsFn = func(context.Context, config.DatadogConfig, string, time.Time, time.Time) ([]datadoglogs.LogEvent, bool, error) {
+		<-unblock
+		return nil, false, nil
+	}
+
 	// Simulate picking "activemq" (options: 0="(any)", 1="activemq").
+	// SetFocus(dv.table) below happens synchronously inside the
+	// onSelect callback, right after search() spawns (but before it
+	// can complete, since it's blocked) — so this assertion never
+	// depends on the blocked goroutine at all.
 	dv.serviceFilterDD.SetCurrentOption(1)
 
 	if got := host.focused; got != dv.table {
 		t.Errorf("focus after selecting a Service option = %v, want the results table", got)
 	}
+
+	close(unblock) // let search()'s goroutine finish so it doesn't leak past the test
+	<-host.drawn
 }
 
 // TestApplyFilterOptionsDoesNotFireCallbackDuringReconciliation guards
@@ -593,10 +635,21 @@ func TestHandleFacetDiscoveryResultSkipsEmptyValues(t *testing.T) {
 // exercises applyFilterOptions's existing selection-preservation logic
 // through the new discovery call path.
 func TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive(t *testing.T) {
-	_, _, dv := newTestDatadogLogsView(t)
+	host, dv := newTestDatadogLogsViewWithDrawSignal(t, 1)
 	dv.results = []datadoglogs.LogEvent{{Service: "activemq"}}
 	dv.rebuildFilterOptions()
 	dv.serviceFilter = "activemq"
+
+	// Same SetCurrentOption-triggers-a-real-search()-goroutine hazard
+	// as TestRebuildFilterOptionsSelectingAnOptionRefocusesTable above
+	// — block the fetch so that goroutine can't touch the dropdown
+	// while this test's own code (including the direct
+	// handleFacetDiscoveryResult call below) is still running.
+	unblock := make(chan struct{})
+	host.searchDatadogLogsFn = func(context.Context, config.DatadogConfig, string, time.Time, time.Time) ([]datadoglogs.LogEvent, bool, error) {
+		<-unblock
+		return nil, false, nil
+	}
 	dv.serviceFilterDD.SetCurrentOption(1)
 
 	dv.handleFacetDiscoveryResult(dv.knownServices, []string{"activemq", "bar-proxy"}, nil)
@@ -608,4 +661,7 @@ func TestHandleFacetDiscoveryResultPreservesCurrentSelectionWhenValuesArrive(t *
 	if selected != "activemq" {
 		t.Errorf("dropdown's selected option = %q, want %q", selected, "activemq")
 	}
+
+	close(unblock) // let search()'s goroutine finish so it doesn't leak past the test
+	<-host.drawn
 }

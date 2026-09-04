@@ -27,21 +27,3 @@ gate in `CLAUDE.md`.
 - **Export search results to a file.** CloudWatch/Datadog Logs results
   and the message browser have no "save to file" action, which would
   help when pasting results into an incident doc.
-
-## From the 2026-09-04 architectural review
-
-Findings from a review of recent AWS-view work against Go/tview best
-practices (k9s's package layout, tview's concurrency wiki, a GitLab
-tview→Bubbletea migration rationale) and the independent `cloudtui-go`
-reimplementation. Items being actively picked up are removed from this
-list rather than checked off — see `spec-wip/` for the in-progress ones.
-
-- **Track the pre-existing `-race` findings in `datadoglogs_test.go`.**
-  `go test -race ./internal/view/...` reports real races in the
-  dropdown-refresh path — traced to `fakeViewHost.QueueUpdateDraw`
-  (`testfake_test.go:70`) running its callback inline instead of
-  serializing onto one goroutine the way the real tview
-  `Application.QueueUpdateDraw` does, so a leftover background goroutine
-  from one test can race the next test's direct widget access. Likely a
-  test-fixture gap, not a production bug, but worth confirming and
-  either fixing the fake or documenting why it's safe to leave.
