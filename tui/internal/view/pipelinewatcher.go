@@ -16,6 +16,22 @@ import (
 // spec/43-fe-codepipeline-monitor decision 9.
 const pipelinePollInterval = 20 * time.Second
 
+// pollTicker abstracts *time.Ticker's C/Stop surface so pollPipeline's
+// loop can be driven deterministically in tests instead of waiting on
+// real wall-clock time.
+type pollTicker interface {
+	C() <-chan time.Time
+	Stop()
+}
+
+// realPollTicker adapts *time.Ticker to pollTicker — time.Ticker's C is
+// a field, not a method, so it can't satisfy the interface directly.
+type realPollTicker struct {
+	*time.Ticker
+}
+
+func (t *realPollTicker) C() <-chan time.Time { return t.Ticker.C }
+
 // PipelineWatcher owns the background poll loop that keeps a
 // CodePipeline's stage status current once the user starts watching
 // it: notifying on stage transitions, stopping automatically once the
@@ -29,6 +45,7 @@ type PipelineWatcher struct {
 	notify     func(title, message string)
 	listV      *CodePipelineListView
 	detailV    *CodePipelineDetailView
+	newTicker  func(d time.Duration) pollTicker
 }
 
 // NewPipelineWatcher constructs a PipelineWatcher driving listV/detailV.
@@ -40,6 +57,9 @@ func NewPipelineWatcher(host ui.ViewHost, notify func(title, message string), li
 		notify:     notify,
 		listV:      listV,
 		detailV:    detailV,
+		newTicker: func(d time.Duration) pollTicker {
+			return &realPollTicker{time.NewTicker(d)}
+		},
 	}
 }
 
@@ -89,13 +109,13 @@ func (w *PipelineWatcher) StopWatchingPipeline(name string) {
 // single-writer pattern every other background-goroutine feature in
 // this app already uses for its own search()-style calls.
 func (w *PipelineWatcher) pollPipeline(name, profile string, stop chan struct{}) {
-	ticker := time.NewTicker(pipelinePollInterval)
+	ticker := w.newTicker(pipelinePollInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-stop:
 			return
-		case <-ticker.C:
+		case <-ticker.C():
 		}
 
 		ctx := context.Background()

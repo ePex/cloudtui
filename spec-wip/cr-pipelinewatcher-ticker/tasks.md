@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] `pollTicker`/`realPollTicker` + `PipelineWatcher.newTicker`
+1. [x] `pollTicker`/`realPollTicker` + `PipelineWatcher.newTicker`
    field, defaulted in `NewPipelineWatcher`; `pollPipeline` switched to
    call `w.newTicker(pipelinePollInterval)` instead of
    `time.NewTicker` directly, per `plan.md`. No test changes yet —
