@@ -39,3 +39,21 @@ func WithReauth[T any](
 
 	return call(ctx)
 }
+
+// Do is WithReauth with AuthType resolution folded in — every current
+// call site repeats "look up AuthType, then call WithReauth" by hand;
+// Do does both in one call. authTypeFor's error is discarded (same as
+// every existing call site's own `authType, _ := ...`) since WithReauth
+// degrades gracefully to "never reauth" for an unrecognized AuthType.
+func Do[T any](
+	ctx context.Context,
+	profile string,
+	authTypeFor func(ctx context.Context, profile string) (awsprofile.AuthType, error),
+	login func(ctx context.Context, profile string, onCode func(code, url string)) error,
+	onReauth func(),
+	onCode func(code, url string),
+	call func(ctx context.Context) (T, error),
+) (T, error) {
+	authType, _ := authTypeFor(ctx, profile)
+	return WithReauth(ctx, profile, authType, login, onReauth, onCode, call)
+}

@@ -9,7 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awssecrets"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -168,62 +167,37 @@ func (sv *SecretsView) setHeader() {
 	}
 }
 
-// load fetches secrets from host.ListSecrets in a goroutine (a real AWS API
-// call) and repaints via QueueUpdateDraw. Requires an active AWS profile;
-// errors clearly rather than calling into awssecrets with an empty one.
-// Shows a loading placeholder immediately, since a real AWS API call has
-// normal network latency — see queues.go's Load() for the same reasoning.
-// loadSeq guards against a slow, superseded response clobbering a newer
-// one if load() is called again before the first call resolves. If the
-// call fails because the profile's cached SSO token is missing/expired,
-// awsauth.WithReauth opens the browser to log in and retries once before
-// giving up — see spec/36-fe-aws-sso-reauth.
+// load fetches secrets from host.ListSecrets via the shared runAWSLoad
+// helper (internal/view/awsload.go) and repaints via QueueUpdateDraw.
+// Requires an active AWS profile; errors clearly rather than calling into
+// awssecrets with an empty one. Shows a loading placeholder immediately,
+// since a real AWS API call has normal network latency — see queues.go's
+// Load() for the same reasoning. loadSeq guards against a slow, superseded
+// response clobbering a newer one if load() is called again before the
+// first call resolves. If the call fails because the profile's cached SSO
+// token is missing/expired, runAWSLoad's use of awsauth.Do opens the
+// browser to log in and retries once before giving up — see
+// spec/36-fe-aws-sso-reauth.
 func (sv *SecretsView) load() {
-	profile := sv.host.Config().ActiveAWSProfile
-	if profile == "" {
-		sv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
-		return
-	}
-	sv.loadSeq++
-	seq := sv.loadSeq
-	sv.showStatus(loadingSecretsStatus)
-	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
-	go func() {
-		ctx := context.Background()
-		authType, _ := sv.host.AWSAuthTypeFor(ctx, profile)
-		secrets, err := awsauth.WithReauth(ctx, profile, authType, sv.host.AWSSSOLogin,
-			func() {
-				sv.host.QueueUpdateDraw(func() {
-					sv.ShowReauthWaiting(reauthWaitingMsg)
-				})
-			},
-			func(code, url string) {
-				sv.host.QueueUpdateDraw(func() {
-					sv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
-				})
-			},
-			func(ctx context.Context) ([]awssecrets.Secret, error) {
-				return sv.host.ListSecrets(ctx, profile)
-			},
-		)
-		sv.host.QueueUpdateDraw(func() {
-			if seq != sv.loadSeq {
-				return // superseded by a newer load()
-			}
-			if err != nil {
-				slog.Error("secrets manager: failed to list secrets", "error", err)
-				sv.showError(err)
-				return
-			}
-			sv.repaint(secrets)
-		})
-	}()
+	runAWSLoad(sv.host, &sv.loadSeq, sv.showStatus,
+		func(err error) {
+			slog.Error("secrets manager: failed to list secrets", "error", err)
+			sv.showError(err)
+		},
+		loadingSecretsStatus,
+		func(ctx context.Context, profile string) ([]awssecrets.Secret, error) {
+			return sv.host.ListSecrets(ctx, profile)
+		},
+		sv.repaint,
+	)
 }
 
-// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower —
-// same shape as QueuesView's, though reached differently: this view's
-// re-auth goes through awsauth.WithReauth's direct per-call-site callbacks
-// (above), not the secretbackend/app.go-dispatched path QueuesView uses.
+// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower for
+// structural consistency with QueuesView, though load() itself no longer
+// calls them — runAWSLoad calls showStatus directly for the same effect
+// (see awsload.go's doc comment for why). Kept for any future external
+// caller that reaches this view's status display the way QueuesView's
+// re-auth is dispatched via secretbackend/app.go.
 func (sv *SecretsView) ShowReauthWaiting(msg string) {
 	sv.showStatus(msg)
 }
