@@ -9,7 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awslogs"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -171,62 +170,37 @@ func (lv *LogsView) setHeader() {
 	}
 }
 
-// load fetches log groups from host.ListLogGroups in a goroutine (a real
-// AWS API call) and repaints via QueueUpdateDraw. Requires an active AWS
-// profile; errors clearly rather than calling into awslogs with an
-// empty one. Shows a loading placeholder immediately, since a real AWS
-// API call has normal network latency — see queues.go's Load() for the
-// same reasoning. loadSeq guards against a slow, superseded response
-// clobbering a newer one if load() is called again before the first call
-// resolves. If the call fails because the profile's cached SSO token is
-// missing/expired, awsauth.WithReauth opens the browser to log in and
-// retries once before giving up — see spec/36-fe-aws-sso-reauth.
+// load fetches log groups from host.ListLogGroups via the shared
+// runAWSLoad helper (internal/view/awsload.go) and repaints via
+// QueueUpdateDraw. Requires an active AWS profile; errors clearly rather
+// than calling into awslogs with an empty one. Shows a loading placeholder
+// immediately, since a real AWS API call has normal network latency — see
+// queues.go's Load() for the same reasoning. loadSeq guards against a
+// slow, superseded response clobbering a newer one if load() is called
+// again before the first call resolves. If the call fails because the
+// profile's cached SSO token is missing/expired, runAWSLoad's use of
+// awsauth.Do opens the browser to log in and retries once before giving
+// up — see spec/36-fe-aws-sso-reauth.
 func (lv *LogsView) load() {
-	profile := lv.host.Config().ActiveAWSProfile
-	if profile == "" {
-		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
-		return
-	}
-	lv.loadSeq++
-	seq := lv.loadSeq
-	lv.showStatus(loadingLogGroupsStatus)
-	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
-	go func() {
-		ctx := context.Background()
-		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
-		groups, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
-			func() {
-				lv.host.QueueUpdateDraw(func() {
-					lv.ShowReauthWaiting(reauthWaitingMsg)
-				})
-			},
-			func(code, url string) {
-				lv.host.QueueUpdateDraw(func() {
-					lv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
-				})
-			},
-			func(ctx context.Context) ([]awslogs.LogGroup, error) {
-				return lv.host.ListLogGroups(ctx, profile)
-			},
-		)
-		lv.host.QueueUpdateDraw(func() {
-			if seq != lv.loadSeq {
-				return // superseded by a newer load()
-			}
-			if err != nil {
-				slog.Error("cloudwatch logs: failed to list log groups", "error", err)
-				lv.showError(err)
-				return
-			}
-			lv.repaint(groups)
-		})
-	}()
+	runAWSLoad(lv.host, &lv.loadSeq, lv.showStatus,
+		func(err error) {
+			slog.Error("cloudwatch logs: failed to list log groups", "error", err)
+			lv.showError(err)
+		},
+		loadingLogGroupsStatus,
+		func(ctx context.Context, profile string) ([]awslogs.LogGroup, error) {
+			return lv.host.ListLogGroups(ctx, profile)
+		},
+		lv.repaint,
+	)
 }
 
-// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower —
-// same shape as QueuesView's, though reached differently: this view's
-// re-auth goes through awsauth.WithReauth's direct per-call-site callbacks
-// (above), not the secretbackend/app.go-dispatched path QueuesView uses.
+// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower for
+// structural consistency with QueuesView, though load() itself no longer
+// calls them — runAWSLoad calls showStatus directly for the same effect
+// (see awsload.go's doc comment for why). Kept for any future external
+// caller that reaches this view's status display the way QueuesView's
+// re-auth is dispatched via secretbackend/app.go.
 func (lv *LogsView) ShowReauthWaiting(msg string) {
 	lv.showStatus(msg)
 }
