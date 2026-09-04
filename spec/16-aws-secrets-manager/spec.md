@@ -19,6 +19,17 @@ CLI/console.
   a leftmost star column plus name/last-changed/rotation-enabled —
   **metadata only**, since `ListSecrets` structurally never returns a
   value. `/` filters by substring on name.
+- **Loading indicator**: every load shows an immediate accent-colored
+  "Loading secrets…" placeholder row rather than leaving stale data on
+  screen with no indication a fetch is in progress. If a second load
+  starts before the first resolves, the first's eventual result is
+  discarded — same `loadSeq` mechanism as spec/07-activemq-queue-list's
+  queues view, the pattern this mirrors.
+- **AWS SSO re-auth**: if a load's fetch hits an expired SSO session, the
+  "Loading secrets…" placeholder switches to "AWS SSO session expired —
+  opening browser to log in…" for the duration of the login, then reverts
+  once it completes, before the fetch itself retries — via
+  `ui.ReauthStatusShower`, same mechanism as spec/07's queues view.
 - `f` toggles the selected row's favorite status, scoped to the current
   AWS profile — favoriting is per profile because a secret name is only
   meaningful within the account a profile points at, and each AWS CLI

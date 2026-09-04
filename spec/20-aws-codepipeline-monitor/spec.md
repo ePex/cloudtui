@@ -16,6 +16,20 @@ checking the AWS Console.
   auto-reauth — a background poll can trigger a browser SSO login
   unexpectedly while the user is in a different view, consistent with how
   every other AWS-backed view behaves).
+- **Loading indicator**: every load of the pipeline list shows an
+  immediate accent-colored "Loading pipelines…" placeholder row rather
+  than leaving stale data on screen with no indication a fetch is in
+  progress; the detail view shows the equivalent per-pipeline
+  "Loading `<name>`…" on open/refresh. If a second load starts before the
+  first resolves (either screen), the first's eventual result is
+  discarded — same `loadSeq` mechanism as spec/07-activemq-queue-list's
+  queues view, the pattern this mirrors.
+- **AWS SSO re-auth**: if a load's fetch (either screen) hits an expired
+  SSO session, the placeholder switches to "AWS SSO session expired —
+  opening browser to log in…" for the duration of the login, then
+  reverts to the loading placeholder once it completes, before the fetch
+  itself retries — via `ui.ReauthStatusShower`, same mechanism as
+  spec/07's queues view.
 - `Enter` opens a per-pipeline stage-status detail view.
 - `w` (from either the list or the detail view) toggles watching that
   pipeline. A watched pipeline shows a "▶ watching" indicator in the
