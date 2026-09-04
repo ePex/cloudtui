@@ -48,7 +48,7 @@
    logging-closure adjustment. `logs_test.go` unchanged and
    passing. `go build`/`go vet`/`go test ./...` pass.
 
-6. [ ] `CodePipelineListView.load()`: same rewrite, including the same
+6. [x] `CodePipelineListView.load()`: same rewrite, including the same
    logging-closure adjustment.
    `codepipelinelist_test.go` unchanged and passing. `go build`/`go
    vet`/`go test ./...` pass.

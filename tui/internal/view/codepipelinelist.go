@@ -9,7 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/ePex/cloudtui/tui/internal/awsauth"
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -166,55 +165,31 @@ func (lv *CodePipelineListView) setHeader() {
 	}
 }
 
-// load fetches pipelines from host.ListPipelines in a goroutine (a real AWS
-// API call) and repaints via QueueUpdateDraw. Requires an active AWS
-// profile; errors clearly rather than calling into awscodepipeline with
-// an empty one. If the call fails because the profile's cached SSO
-// token is missing/expired, awsauth.WithReauth opens the browser to log
-// in and retries once before giving up — see spec/36-fe-aws-sso-reauth.
+// load fetches pipelines from host.ListPipelines via the shared
+// runAWSLoad helper (internal/view/awsload.go) and repaints via
+// QueueUpdateDraw. Requires an active AWS profile; errors clearly rather
+// than calling into awscodepipeline with an empty one. If the call fails
+// because the profile's cached SSO token is missing/expired, runAWSLoad's
+// use of awsauth.Do opens the browser to log in and retries once before
+// giving up — see spec/36-fe-aws-sso-reauth.
 func (lv *CodePipelineListView) load() {
-	profile := lv.host.Config().ActiveAWSProfile
-	if profile == "" {
-		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
-		return
-	}
-	lv.loadSeq++
-	seq := lv.loadSeq
-	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
-	lv.showStatus(loadingPipelinesStatus)
-	go func() {
-		ctx := context.Background()
-		authType, _ := lv.host.AWSAuthTypeFor(ctx, profile)
-		pipelines, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
-			func() {
-				lv.host.QueueUpdateDraw(func() {
-					lv.ShowReauthWaiting(reauthWaitingMsg)
-				})
-			},
-			func(code, url string) {
-				lv.host.QueueUpdateDraw(func() {
-					lv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
-				})
-			},
-			func(ctx context.Context) ([]awscodepipeline.Pipeline, error) {
-				return lv.host.ListPipelines(ctx, profile)
-			},
-		)
-		lv.host.QueueUpdateDraw(func() {
-			if seq != lv.loadSeq {
-				return // superseded by a newer load()
-			}
-			if err != nil {
-				slog.Error("codepipeline: failed to list pipelines", "error", err)
-				lv.showError(err)
-				return
-			}
-			lv.repaint(pipelines)
-		})
-	}()
+	runAWSLoad(lv.host, &lv.loadSeq, lv.showStatus,
+		func(err error) {
+			slog.Error("codepipeline: failed to list pipelines", "error", err)
+			lv.showError(err)
+		},
+		loadingPipelinesStatus,
+		func(ctx context.Context, profile string) ([]awscodepipeline.Pipeline, error) {
+			return lv.host.ListPipelines(ctx, profile)
+		},
+		lv.repaint,
+	)
 }
 
-// ShowReauthWaiting implements ui.ReauthStatusShower.
+// ShowReauthWaiting implements ui.ReauthStatusShower for structural
+// consistency with QueuesView, though load() itself no longer calls it —
+// runAWSLoad calls showStatus directly for the same effect (see
+// awsload.go's doc comment for why).
 func (lv *CodePipelineListView) ShowReauthWaiting(msg string) {
 	lv.showStatus(msg)
 }
