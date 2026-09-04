@@ -98,8 +98,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 
 - Current location: `tui/internal/view/queues.go` (`QueuesView`) — moved
   here from `internal/app/queues.go` by the later package split; see
-  spec/03 for the current `internal/view` package layout and the
-  `ui.ViewHost` interface this view depends on.
+  spec/03 for the current `internal/view` package layout — `QueuesView`
+  depends on plain `ui.Host` (it calls no resource-specific host
+  method at all).
 - The Jolokia client (`tui/internal/queue/jolokia/`) reads queue summaries,
   including Enqueue/DequeueCount, from the broker MBean over Jolokia HTTP
   using only `net/http` + `encoding/json` — no JMX library dependency.

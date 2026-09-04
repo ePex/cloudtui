@@ -100,8 +100,8 @@ window, `tr.label()` for title-bar display.
   doesn't over-match trailing punctuation/words. Matches only this exact
   `CorrelationID: <uuid>` text shape — no fuzzy matching, no other
   correlation-field labels.
-- `ui.ViewHost.SetPendingCloudWatchPattern(pattern string, timestamp
-  time.Time)` queues both values together; `App.pendingCloudWatchTimestamp
+- `ui.DatadogLogsHost.SetPendingCloudWatchPattern(pattern string,
+  timestamp time.Time)` queues both values together; `App.pendingCloudWatchTimestamp
   time.Time` holds the timestamp alongside `pendingCloudWatchPattern`,
   cleared/consumed in lockstep with it.
 - `App.OpenLogSearch` builds the absolute window when a timestamp was
