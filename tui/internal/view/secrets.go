@@ -23,7 +23,7 @@ type SecretsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	host        ui.ViewHost
+	host        ui.SecretsHost
 	filter      string
 	all         []awssecrets.Secret // full unfiltered list from last load
 	filtered    []awssecrets.Secret // currently displayed subset, row-indexed
@@ -67,7 +67,7 @@ func (sv *SecretsView) Shortcuts() []ui.Shortcut {
 }
 
 // NewSecretsView constructs the Secrets Manager view.
-func NewSecretsView(a ui.ViewHost, onSelect func(secret awssecrets.Secret)) *SecretsView {
+func NewSecretsView(a ui.SecretsHost, onSelect func(secret awssecrets.Secret)) *SecretsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Secrets Manager ")
 	table.SetSelectable(true, false)

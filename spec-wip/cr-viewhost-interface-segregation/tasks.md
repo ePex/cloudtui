@@ -28,7 +28,7 @@ commit.
    `app.go`'s `NewSSMParamsView(a, ...)` call site needs no change.
    Full suite green.
 
-3. [ ] `secrets.go`, `secretdetail.go` → `ui.SecretsHost`. Full suite green.
+3. [x] `secrets.go`, `secretdetail.go` → `ui.SecretsHost`. Full suite green.
 
 4. [ ] `logs.go`, `logsearch.go`, `logdetail.go` →
    `ui.CloudWatchLogsHost`. Full suite green.

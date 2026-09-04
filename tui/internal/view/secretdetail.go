@@ -32,7 +32,7 @@ import (
 // and 'c' after a prior 'r' just copies it again.
 type SecretDetailView struct {
 	textView *tview.TextView
-	host     ui.ViewHost
+	host     ui.SecretsHost
 	secret   awssecrets.Secret
 
 	fetched      bool   // GetSecretValue has completed successfully at least once
@@ -63,7 +63,7 @@ func (dv *SecretDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func NewSecretDetailView(a ui.ViewHost, onBack func()) *SecretDetailView {
+func NewSecretDetailView(a ui.SecretsHost, onBack func()) *SecretDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Secret ")
 	tv.SetDynamicColors(true)
