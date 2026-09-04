@@ -9,6 +9,12 @@ before:
     # for the whole release, unlike a build-level hook which would
     # repeat per goos/goarch target.
     - sh -c "cd tui && go test ./..."
+    # Builds mq-proxy-web's distributable and copies it to the
+    # well-known name release.extra_files below publishes — non-
+    # technical users need this as a plain downloadable file on the
+    # release page, not something they build themselves (needs
+    # Node/npm). See spec/21-amq-web-console.
+    - sh -c "task build:mq-proxy-web && cp mq-proxy-web/dist/index.html mq-proxy-web/dist/mq-console.html"
 
 builds:
   - id: tui
@@ -33,6 +39,10 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+
+release:
+  extra_files:
+    - glob: ./mq-proxy-web/dist/mq-console.html
 
 homebrew_casks:
   - name: cloudtui

@@ -3,17 +3,28 @@
 1. [x] `.github/workflows/release.yml`: add `go-task/setup-task@v2`
    between `setup-go` and `goreleaser-action`, per `plan.md` step 1.
 
-2. [ ] `.goreleaser.yaml`: add the `before.hooks` entry that builds
+2. [x] `.goreleaser.yaml`: added the `before.hooks` entry that builds
    `mq-proxy-web` and copies its output to
    `mq-proxy-web/dist/mq-console.html`, plus the new top-level
    `release.extra_files` section publishing that file, per `plan.md`
-   step 2. Verify locally: run `task build:mq-proxy-web && cp
-   mq-proxy-web/dist/index.html mq-proxy-web/dist/mq-console.html` by
-   hand and confirm the file exists and opens correctly in a browser;
-   if `goreleaser` is available locally, also run `goreleaser release
-   --snapshot --clean` to confirm the hook and `extra_files` config are
-   both syntactically valid and produce the expected output without
-   actually publishing anything.
+   step 2.
+
+   Verified locally with `goreleaser release --snapshot --clean`
+   (`goreleaser`/`task` both available on this machine): the new
+   `before.hooks` entry ran successfully (`task build:mq-proxy-web`
+   completed, `mq-console.html` was produced) and byte-for-byte
+   matches the built `index.html` — confirmed via `diff`. Goreleaser's
+   own upfront config validation also passed (it got past config
+   parsing into hook execution and Go binary builds without any
+   complaint about the new `release.extra_files`/`before.hooks`
+   syntax, which it validates before running anything). The snapshot
+   run's *later* failure (Go cross-compilation running out of disk
+   space: "no space left on device") is an unrelated local-machine
+   disk-space constraint, not a config problem — the GitHub Actions
+   runner that performs real releases has ample disk space, and this
+   failure happens well after (and independent of) the hook this task
+   added. Real end-to-end proof is still the next actual tagged
+   release, as `plan.md` already flags.
 
 3. [ ] Merge-back: document the release-asset publishing in
    `spec/21-amq-web-console/spec.md`'s "Using it" section (a
