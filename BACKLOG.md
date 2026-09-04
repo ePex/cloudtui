@@ -36,17 +36,6 @@ tview→Bubbletea migration rationale) and the independent `cloudtui-go`
 reimplementation. Items being actively picked up are removed from this
 list rather than checked off — see `spec-wip/` for the in-progress ones.
 
-- **`ViewHost` interface segregation.** `ui.ViewHost`
-  (`internal/ui/viewhost.go`) is a single 28-method interface embedding
-  `Host` plus every AWS/Datadog data-fetcher, navigation method, and
-  CodePipeline-watch method — every view depends on the whole thing even
-  though, e.g., `SSMParamsView` only calls about 7 of them.
-  `testfake_test.go` has grown to 200+ lines of mostly no-op stubs as a
-  direct result. Splitting into narrower per-concern interfaces
-  (mirroring k9s's `dao.Accessor`/`Loggable`/`Scalable` pattern) would
-  shrink both what each view depends on and the fakes needed to test it.
-  Larger, riskier refactor — touches every view's constructor signature.
-
 - **Dedup `showError`/`showStatus`/table-clear boilerplate.** The `for
   table.GetRowCount() > 1 { RemoveRow(...) }` clear-loop plus the
   single-row error/status rendering is repeated 3× per file across
