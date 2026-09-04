@@ -26,7 +26,7 @@ type LogsView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	host        ui.ViewHost
+	host        ui.CloudWatchLogsHost
 	filter      string
 	all         []awslogs.LogGroup // full unfiltered list from last load
 	filtered    []awslogs.LogGroup // currently displayed subset, row-indexed
@@ -70,7 +70,7 @@ func (lv *LogsView) Shortcuts() []ui.Shortcut {
 }
 
 // NewLogsView constructs the CloudWatch Logs (log group list) view.
-func NewLogsView(a ui.ViewHost, onSelect func(logGroupName string)) *LogsView {
+func NewLogsView(a ui.CloudWatchLogsHost, onSelect func(logGroupName string)) *LogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" CloudWatch Logs ")
 	table.SetSelectable(true, false)

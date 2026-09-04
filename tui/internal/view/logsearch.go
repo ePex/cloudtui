@@ -26,7 +26,7 @@ type LogSearchView struct {
 	table          *tview.Table
 	patternInput   *tview.InputField
 	flex           *tview.Flex
-	host           ui.ViewHost
+	host           ui.CloudWatchLogsHost
 	timeRangeModal *dialog.TimeRangeModal
 	onBack         func()
 	logGroupName   string
@@ -83,7 +83,7 @@ func (sv *LogSearchView) Shortcuts() []ui.Shortcut {
 }
 
 // NewLogSearchView constructs the CloudWatch Logs search view.
-func NewLogSearchView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event awslogs.LogEvent), onBack func()) *LogSearchView {
+func NewLogSearchView(a ui.CloudWatchLogsHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event awslogs.LogEvent), onBack func()) *LogSearchView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)

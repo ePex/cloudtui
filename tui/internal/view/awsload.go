@@ -8,6 +8,16 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
+// awsLoadHost is the minimal host surface runAWSLoad needs — every
+// caller's own host type (ui.SSMParamsHost, ui.SecretsHost,
+// ui.CloudWatchLogsHost, ui.CodePipelineHost) already embeds both
+// ui.Host and ui.AWSAuthHost, so none needs a wider type just to call
+// runAWSLoad.
+type awsLoadHost interface {
+	ui.Host
+	ui.AWSAuthHost
+}
+
 // runAWSLoad is the shared shape behind SSMParamsView, SecretsView,
 // LogsView, CodePipelineListView, and CodePipelineDetailView's load():
 // guard on an empty AWS profile, bump *loadSeq, show a loading
@@ -27,7 +37,7 @@ import (
 // so calling ShowReauthDone() here to display the *initial* loading
 // text (not "reauth done") would read wrong.
 func runAWSLoad[T any](
-	host ui.ViewHost,
+	host awsLoadHost,
 	loadSeq *int,
 	showStatus func(string),
 	showError func(error),

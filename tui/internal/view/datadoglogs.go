@@ -34,7 +34,7 @@ type DatadogLogsView struct {
 	envFilterDD     *tview.DropDown
 	queryInput      *tview.InputField
 	flex            *tview.Flex
-	host            ui.ViewHost
+	host            ui.DatadogLogsHost
 	timeRangeModal  *dialog.TimeRangeModal
 	query           string
 	serviceFilter   string
@@ -92,7 +92,7 @@ func (dv *DatadogLogsView) Shortcuts() []ui.Shortcut {
 }
 
 // NewDatadogLogsView constructs the Datadog Logs search view.
-func NewDatadogLogsView(a ui.ViewHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event datadoglogs.LogEvent)) *DatadogLogsView {
+func NewDatadogLogsView(a ui.DatadogLogsHost, timeRangeModal *dialog.TimeRangeModal, onSelect func(event datadoglogs.LogEvent)) *DatadogLogsView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Datadog Logs ")
 	table.SetSelectable(true, false)

@@ -39,7 +39,7 @@ type MessagesView struct {
 	table         *tview.Table
 	searchInput   *tview.InputField
 	flex          *tview.Flex
-	host          ui.ViewHost
+	host          ui.MessagesHost
 	messageFilter *dialog.MessageFilter
 	sendMessage   *dialog.SendMessageOverlay
 	confirm       *dialog.ConfirmDialog
@@ -131,7 +131,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 
 // NewMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func NewMessagesView(a ui.ViewHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *MessagesView {
+func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *MessagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)

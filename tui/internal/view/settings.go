@@ -17,7 +17,7 @@ import (
 // live config read/write and runtime overlay control.
 type SettingsView struct {
 	list          *tview.List
-	host          ui.ViewHost
+	host          ui.Host
 	themePicker   *dialog.ThemePicker
 	connManager   *dialog.ConnManager
 	awsProfiles   *dialog.AWSProfilesPicker
@@ -36,7 +36,7 @@ func (s *SettingsView) List() *tview.List          { return s.list }
 // a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
 // connection manager, item 2 → AWS profiles (read-only), item 3 → Datadog
 // editor.
-func NewSettingsView(a ui.ViewHost, themePicker *dialog.ThemePicker, connManager *dialog.ConnManager, awsProfiles *dialog.AWSProfilesPicker, datadogEditor *dialog.DatadogEditor) *SettingsView {
+func NewSettingsView(a ui.Host, themePicker *dialog.ThemePicker, connManager *dialog.ConnManager, awsProfiles *dialog.AWSProfilesPicker, datadogEditor *dialog.DatadogEditor) *SettingsView {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetBorder(true).SetTitle(" Settings ")
 

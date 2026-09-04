@@ -31,7 +31,7 @@ import (
 // silent 'c' just displays the cached value.
 type ParamDetailView struct {
 	textView  *tview.TextView
-	host      ui.ViewHost
+	host      ui.SSMParamsHost
 	param     awsssm.Parameter
 	displayed bool // the value has been rendered on screen; always true for String/StringList
 }
@@ -55,7 +55,7 @@ func (dv *ParamDetailView) Shortcuts() []ui.Shortcut {
 	return shortcuts
 }
 
-func NewParamDetailView(a ui.ViewHost, onBack func()) *ParamDetailView {
+func NewParamDetailView(a ui.SSMParamsHost, onBack func()) *ParamDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Parameter ")
 	tv.SetDynamicColors(true)

@@ -28,7 +28,7 @@ type QueuesView struct {
 	table         *tview.Table
 	filterInput   *tview.InputField
 	flex          *tview.Flex
-	host          ui.ViewHost
+	host          ui.Host
 	backend       queue.Backend
 	confirm       *dialog.ConfirmDialog
 	movePicker    *dialog.MovePicker
@@ -81,7 +81,7 @@ func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 }
 
 // NewQueuesView constructs the queues view backed by b.
-func NewQueuesView(a ui.ViewHost, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string)) *QueuesView {
+func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string)) *QueuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)

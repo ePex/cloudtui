@@ -23,7 +23,7 @@ import (
 // and returns to "messages" on Esc/Backspace.
 type MessageDetailView struct {
 	textView   *tview.TextView
-	host       ui.ViewHost
+	host       ui.Host
 	movePicker *dialog.MovePicker
 	confirm    *dialog.ConfirmDialog
 	onBack     func()
@@ -51,7 +51,7 @@ func (dv *MessageDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func NewMessageDetailView(a ui.ViewHost, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *MessageDetailView {
+func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *MessageDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Message Details ")
 	tv.SetDynamicColors(true)
