@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -269,6 +270,92 @@ func TestLogsViewFavoritesDoNotLeakAcrossProfiles(t *testing.T) {
 
 	if got := lv.table.GetCell(1, 0).Text; got != "" {
 		t.Errorf("star cell under a different profile = %q, want empty (favorite shouldn't leak)", got)
+	}
+}
+
+func TestLogsViewShowReauthWaitingThenDone(t *testing.T) {
+	_, lv := newTestLogsView(t)
+	lv.repaint([]awslogs.LogGroup{{Name: "/aws/lambda/foo"}}) // some prior state to overwrite
+
+	const msg = "AWS SSO session expired — opening browser to log in…"
+	lv.ShowReauthWaiting(msg)
+	if got := lv.table.GetCell(1, 1).Text; got != msg {
+		t.Errorf("row(1,1) after ShowReauthWaiting(%q) = %q, want it unchanged", msg, got)
+	}
+
+	lv.ShowReauthDone()
+	if got := lv.table.GetCell(1, 1).Text; got != loadingLogGroupsStatus {
+		t.Errorf("row(1,1) after ShowReauthDone() = %q, want %q", got, loadingLogGroupsStatus)
+	}
+}
+
+func TestLogsViewLoadShowsLoadingStatusImmediately(t *testing.T) {
+	host, lv := newTestLogsView(t)
+	host.cfg.ActiveAWSProfile = "work"
+	unblock := make(chan struct{})
+	host.listLogGroupsFn = func(context.Context, string) ([]awslogs.LogGroup, error) {
+		<-unblock
+		return nil, nil
+	}
+
+	lv.load()
+
+	cell := lv.table.GetCell(1, 1)
+	if cell == nil || cell.Text != loadingLogGroupsStatus {
+		t.Errorf("row(1,1) after load() = %+v, want text %q", cell, loadingLogGroupsStatus)
+	}
+	close(unblock) // let the goroutine finish so it doesn't leak past the test
+}
+
+// newTestLogsViewWithDrawSignal is newTestLogsView's draw-signaling
+// counterpart — see queues_test.go's drawSignalingHost/
+// newTestQueuesViewWithDrawSignal for why this exists.
+func newTestLogsViewWithDrawSignal(t *testing.T, bufSize int) (*drawSignalingHost, *LogsView) {
+	t.Helper()
+	base := newFakeViewHost()
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
+	return host, NewLogsView(host, func(string) {})
+}
+
+// TestLogsViewLoadDiscardsStaleResponse is the key regression test for
+// loadSeq — see queues_test.go's TestQueuesViewLoadDiscardsStaleResponse,
+// the pattern this mirrors.
+func TestLogsViewLoadDiscardsStaleResponse(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstCalled := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	host, lv := newTestLogsViewWithDrawSignal(t, 2)
+	host.cfg.ActiveAWSProfile = "work"
+	host.listLogGroupsFn = func(context.Context, string) ([]awslogs.LogGroup, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(firstCalled)
+			<-releaseFirst
+			return []awslogs.LogGroup{{Name: "/stale"}}, nil
+		}
+		return []awslogs.LogGroup{{Name: "/fresh"}}, nil
+	}
+
+	lv.load()     // call 1 — will become "stale"; blocks inside listLogGroupsFn
+	<-firstCalled // call 1's fetch has started (and is now blocked on releaseFirst)
+
+	lv.load()    // call 2 — "fresh"; proceeds and draws immediately
+	<-host.drawn // call 2's draw has landed (guaranteed first: call 1 can't proceed yet)
+
+	if got := lv.table.GetCell(1, 1).Text; got != "/fresh" {
+		t.Fatalf("row(1,1) after call 2's draw = %q, want %q", got, "/fresh")
+	}
+
+	close(releaseFirst) // let call 1 (stale) proceed to its now-discarded draw attempt
+	<-host.drawn        // call 1's draw attempt has landed (and should have no-opped)
+
+	if got := lv.table.GetCell(1, 1).Text; got != "/fresh" {
+		t.Errorf("row(1,1) after stale call 1's draw = %q, want unchanged %q", got, "/fresh")
 	}
 }
 

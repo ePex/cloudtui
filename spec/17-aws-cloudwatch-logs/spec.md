@@ -24,6 +24,20 @@ this is a query tool over a high-volume, time-ordered event stream.
      no persistent list of its own items to favorite.
   2. Search screen, entered per log group — filter pattern + time range →
      matching events.
+- **Loading indicator (log-group list)**: every load shows an immediate
+  accent-colored "Loading log groups…" placeholder row rather than
+  leaving stale data on screen with no indication a fetch is in progress.
+  If a second load starts before the first resolves, the first's
+  eventual result is discarded — same `loadSeq` mechanism as
+  spec/07-activemq-queue-list's queues view, the pattern this mirrors.
+  Not on the search screen, which has its own existing results/empty
+  states.
+- **AWS SSO re-auth (log-group list)**: if a load's fetch hits an
+  expired SSO session, the "Loading log groups…" placeholder switches to
+  "AWS SSO session expired — opening browser to log in…" for the
+  duration of the login, then reverts once it completes, before the
+  fetch itself retries — via `ui.ReauthStatusShower`, same mechanism as
+  spec/07's queues view.
 - Search uses `FilterLogEvents` (not CloudWatch Logs Insights — Insights
   is async, costs per GB scanned, and is substantially more work;
   deliberately deferred). The filter-pattern string is passed straight

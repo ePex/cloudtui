@@ -20,6 +20,17 @@ leaving the app or reaching for the AWS CLI/console.
   recursively from the root path (`/` via `GetParametersByPath`), showing
   a leftmost star column plus name/type/last-modified. `/` filters by
   substring on name, same convention as the queues list and AWS Profiles.
+- **Loading indicator**: every load shows an immediate accent-colored
+  "Loading parameters…" placeholder row rather than leaving stale data on
+  screen with no indication a fetch is in progress. If a second load
+  starts before the first resolves, the first's eventual result is
+  discarded — same `loadSeq` mechanism as spec/07-activemq-queue-list's
+  queues view, the pattern this mirrors.
+- **AWS SSO re-auth**: if a load's fetch hits an expired SSO session, the
+  "Loading parameters…" placeholder switches to "AWS SSO session expired —
+  opening browser to log in…" for the duration of the login, then reverts
+  once it completes, before the fetch itself retries — via
+  `ui.ReauthStatusShower`, same mechanism as spec/07's queues view.
 - `f` toggles the selected row's favorite status, scoped to the current
   AWS profile (see "Data & config" below) — favorited rows always sort
   above non-favorited ones (a stable partition on top of the loaded

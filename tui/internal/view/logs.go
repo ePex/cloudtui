@@ -31,11 +31,17 @@ type LogsView struct {
 	filter      string
 	all         []awslogs.LogGroup // full unfiltered list from last load
 	filtered    []awslogs.LogGroup // currently displayed subset, row-indexed
+	loadSeq     int                // incremented per load() call; guards against a stale response landing after a newer one
 }
 
 var _ ui.View = (*LogsView)(nil)
 var _ ui.Shortcuttable = (*LogsView)(nil)
 var _ ui.Themeable = (*LogsView)(nil)
+var _ ui.ReauthStatusShower = (*LogsView)(nil)
+
+// loadingLogGroupsStatus is load()'s placeholder text — also what
+// ShowReauthDone reverts to, so both stay in sync.
+const loadingLogGroupsStatus = "Loading log groups…"
 
 // ApplyPalette recolors the CloudWatch Logs view for a live theme switch.
 func (lv *LogsView) ApplyPalette(p config.Palette) {
@@ -168,7 +174,11 @@ func (lv *LogsView) setHeader() {
 // load fetches log groups from host.ListLogGroups in a goroutine (a real
 // AWS API call) and repaints via QueueUpdateDraw. Requires an active AWS
 // profile; errors clearly rather than calling into awslogs with an
-// empty one. If the call fails because the profile's cached SSO token is
+// empty one. Shows a loading placeholder immediately, since a real AWS
+// API call has normal network latency — see queues.go's Load() for the
+// same reasoning. loadSeq guards against a slow, superseded response
+// clobbering a newer one if load() is called again before the first call
+// resolves. If the call fails because the profile's cached SSO token is
 // missing/expired, awsauth.WithReauth opens the browser to log in and
 // retries once before giving up — see spec/36-fe-aws-sso-reauth.
 func (lv *LogsView) load() {
@@ -177,6 +187,9 @@ func (lv *LogsView) load() {
 		lv.showError(fmt.Errorf("no AWS profile selected — use :ap to select one"))
 		return
 	}
+	lv.loadSeq++
+	seq := lv.loadSeq
+	lv.showStatus(loadingLogGroupsStatus)
 	const reauthWaitingMsg = "AWS SSO session expired — opening browser to log in..."
 	go func() {
 		ctx := context.Background()
@@ -184,12 +197,12 @@ func (lv *LogsView) load() {
 		groups, err := awsauth.WithReauth(ctx, profile, authType, lv.host.AWSSSOLogin,
 			func() {
 				lv.host.QueueUpdateDraw(func() {
-					lv.showStatus(reauthWaitingMsg)
+					lv.ShowReauthWaiting(reauthWaitingMsg)
 				})
 			},
 			func(code, url string) {
 				lv.host.QueueUpdateDraw(func() {
-					lv.showStatus(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
+					lv.ShowReauthWaiting(fmt.Sprintf("%s Verify code %s at %s", reauthWaitingMsg, code, url))
 				})
 			},
 			func(ctx context.Context) ([]awslogs.LogGroup, error) {
@@ -197,6 +210,9 @@ func (lv *LogsView) load() {
 			},
 		)
 		lv.host.QueueUpdateDraw(func() {
+			if seq != lv.loadSeq {
+				return // superseded by a newer load()
+			}
 			if err != nil {
 				slog.Error("cloudwatch logs: failed to list log groups", "error", err)
 				lv.showError(err)
@@ -205,6 +221,18 @@ func (lv *LogsView) load() {
 			lv.repaint(groups)
 		})
 	}()
+}
+
+// ShowReauthWaiting and ShowReauthDone implement ui.ReauthStatusShower —
+// same shape as QueuesView's, though reached differently: this view's
+// re-auth goes through awsauth.WithReauth's direct per-call-site callbacks
+// (above), not the secretbackend/app.go-dispatched path QueuesView uses.
+func (lv *LogsView) ShowReauthWaiting(msg string) {
+	lv.showStatus(msg)
+}
+
+func (lv *LogsView) ShowReauthDone() {
+	lv.showStatus(loadingLogGroupsStatus)
 }
 
 func (lv *LogsView) applyFilter(s string) {
