@@ -106,8 +106,9 @@ interactive re-auth flow the way AWS SSO has (spec/14).
   not a key pair; one config for the whole app (no multi-org/site
   support). `DD_ACCESS_TOKEN` env var is injected only when the
   config-file field is empty, mirroring `MQPROXY_CLIENT_PASSWORD`'s
-  behavior in `config.Load`. Stored in `config.yaml` (gitignored), same
-  convention as connection passwords.
+  behavior in `config.Load`. Stored in `config.yaml` (gitignored) — the
+  settings file, alongside theme/appearance, not the connections files
+  (see spec/01-repo-and-tui-shell for the current file split).
 - `tui/internal/datadoglogs/`:
   - `Search(ctx, cfg config.DatadogConfig, query string, from, to
     time.Time) ([]LogEvent, hasMore bool, error)` — posts to

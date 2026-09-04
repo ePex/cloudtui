@@ -82,8 +82,10 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 - `queue.Backend` interface: `List(ctx context.Context) ([]Summary, error)`
   — implemented by both the Jolokia client and the mq-proxy client
   (spec/11); this view is backend-agnostic.
-- Jolokia backend connection config lives under `queue:` in `config.yaml`
-  (`brokerName`, `url`, `username`, `password`); `Default()` points at
+- Jolokia backend connection config lives under `queue:` in each entry of
+  `~/.cloudtui/connections/jolokia.yaml` (`brokerName`, `url`, `username`,
+  `password` — see spec/12-named-connections for the full connections
+  file layout); `Default()` points at
   `http://localhost:8161/api/jolokia` with `admin`/`` credentials matching
   the local dev broker. `password` is empty in the file; `Load()` injects
   `MQPROXY_CLIENT_PASSWORD` from the environment when the field is blank,

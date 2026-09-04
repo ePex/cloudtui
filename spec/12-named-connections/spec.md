@@ -6,7 +6,7 @@ _Condensed from spec/22, spec/27, spec/55, spec/56, spec/57 — see those folder
 
 Let the user define, switch between, and manage multiple broker connections
 (e.g. a local dev ActiveMQ and an AWS Amazon MQ in staging) from inside the
-app, without hand-editing `config.yaml` and restarting.
+app, without hand-editing config files and restarting.
 
 ## Behavior / user flow
 
@@ -56,32 +56,50 @@ app, without hand-editing `config.yaml` and restarting.
     Settings → AWS Profiles uses, filtered by prefix.
   - `Save`/`Cancel`, last, outside every section. `Esc` cancels without
     saving (same effect as the Cancel button).
-- Changes persist to `config.yaml` immediately on save.
+- Changes persist immediately on save — `activeConnection` to
+  `config.yaml` (the settings file), the connection itself to
+  `connections/jolokia.yaml` or `connections/proxy.yaml`, whichever
+  matches its `backend` (see spec/01-repo-and-tui-shell for the full
+  file split and why: connections are shareable/copyable independently
+  of appearance settings this way).
 
 ## Data & config
 
 ```yaml
+# ~/.cloudtui/config.yaml
 activeConnection: local
-connections:
-  - name: local
-    backend: jolokia
-    queue:
-      brokerName: localhost
-      url: http://localhost:8161/api/jolokia
-      username: admin
-      password: ""
-  - name: aws-staging
-    backend: proxy
-    proxy:
-      url: http://localhost:8080
-      username: cloudtui
-      passwordSecret: /cloudtui/aws-staging/mq-password    # resolved via Secrets Manager
-      passwordSecretAWSProfile: work                        # required whenever passwordSecret is set
-      # password: ""                                        # ignored when passwordSecret is set
+```
+
+```yaml
+# ~/.cloudtui/connections/jolokia.yaml — a bare list, no wrapper key
+# (the filename already scopes it to Jolokia connections)
+- name: local
+  backend: jolokia
+  queue:
+    brokerName: localhost
+    url: http://localhost:8161/api/jolokia
+    username: admin
+    password: ""
+```
+
+```yaml
+# ~/.cloudtui/connections/proxy.yaml
+- name: aws-staging
+  backend: proxy
+  proxy:
+    url: http://localhost:8080
+    username: cloudtui
+    passwordSecret: /cloudtui/aws-staging/mq-password    # resolved via Secrets Manager
+    passwordSecretAWSProfile: work                        # required whenever passwordSecret is set
+    # password: ""                                        # ignored when passwordSecret is set
 ```
 
 - `Connection` struct: `Name`, `Backend`, `Queue` (`QueueConfig`), `Proxy`
-  (`ProxyConfig`). No `Alias` field — `Name` is the only identifying label,
+  (`ProxyConfig`) — unchanged by the file split above; still one uniform
+  type regardless of which connections file an entry lives in, and the
+  `backend` field is still written even though the file it's in already
+  implies it (keeps `Connection` a single type everywhere else in the
+  codebase). No `Alias` field — `Name` is the only identifying label,
   used in the info panel, the manager list, and as the `activeConnection`
   key. `Connection.SecretAWSProfile()` returns the backend-appropriate
   `PasswordSecretAWSProfile` when the backend-appropriate `PasswordSecret`
@@ -92,12 +110,16 @@ connections:
   whenever `PasswordSecret` is set, `PasswordSecretAWSProfile string`
   (yaml `passwordSecretAWSProfile,omitempty`) — the AWS profile used to
   resolve that connection's own secret (see Password resolution below).
-- If `connections` is absent from the file, `Load()` synthesizes a single
-  connection named `"default"` from legacy top-level `backend`/`queue`/
-  `proxy` fields. Those legacy fields exist on `Config` only for this
-  migration and are never written back by `Save()` — a round-tripped file
-  always uses the `connections` shape. A stale `alias:` key on an old config
-  loads fine (unknown YAML fields are ignored) and disappears on next save.
+- Two migrations chain together on `Load()`, both purely in-memory
+  until the next `Save()` rewrites everything into the current shape:
+  if neither `connections/jolokia.yaml` nor `connections/proxy.yaml`
+  exists yet, a `connections:` key embedded directly in `config.yaml`
+  (the pre-split combined-file shape) is used instead; if that's also
+  absent, legacy top-level `backend`/`queue`/`proxy` fields (pre-FE22,
+  predating even the `connections:` key) synthesize a single connection
+  named `"default"`. A stale `alias:` key on an old config loads fine
+  either way (unknown YAML fields are ignored) and disappears on next
+  save.
 
 ### Password resolution (AWS-Secrets-Manager-backed passwords)
 
@@ -121,13 +143,13 @@ connections:
   first needs the password, on that call's existing async goroutine (no
   separate resolve step at activation time). An empty
   `passwordSecretAWSProfile` (only reachable via a hand-edited
-  `config.yaml` that bypasses the editor's required-field validation)
-  fails resolution immediately with "no AWS profile configured for this
-  connection's password secret — set passwordSecretAWSProfile" instead
-  of attempting a call.
+  `connections/jolokia.yaml`/`connections/proxy.yaml` that bypasses the
+  editor's required-field validation) fails resolution immediately with
+  "no AWS profile configured for this connection's password secret —
+  set passwordSecretAWSProfile" instead of attempting a call.
 - Resolved values are cached in memory only, keyed by `(profile,
-  secretName)` — never written to `config.yaml`, never persisted across
-  restarts.
+  secretName)` — never written to any config file, never persisted
+  across restarts.
 - Failure/refetch behavior differs by call type:
   - **Read-only calls** (list queues, browse/detail a message) that fail on
     a cached secret: invalidate the cache, refetch, rebuild the backend
@@ -179,7 +201,10 @@ connections:
 
 - `tui/internal/config/config.go` — `Connection`, `QueueConfig`,
   `ProxyConfig` structs; `Connections []Connection` / `ActiveConnection
-  string` on `Config`; `Load()` migration; `Save()`.
+  string` on `Config` (in-memory shape unchanged by the file split —
+  see spec/01-repo-and-tui-shell); `Load()`/`Save()` handle the
+  settings/connections/favorites file split and the migration chain
+  described above.
   `Connection.SecretAWSProfile()` returns the backend-appropriate
   `PasswordSecretAWSProfile` when the backend-appropriate
   `PasswordSecret` is non-empty, else `""`.

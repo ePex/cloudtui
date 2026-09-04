@@ -6,9 +6,10 @@
 # same broker state.
 #
 # Requires: tmux, Go, a reachable ActiveMQ broker matching the active
-# connection in ~/.cloudtui/config.yaml (Jolokia), and — for the backend-switch
-# phase — a JDK capable of running mq-proxy (Java 21+; export JAVA_HOME if
-# `java` on PATH resolves to something older, e.g. via sdkman's "current").
+# connection in ~/.cloudtui/connections/jolokia.yaml, and — for the
+# backend-switch phase — a JDK capable of running mq-proxy (Java 21+;
+# export JAVA_HOME if `java` on PATH resolves to something older, e.g.
+# via sdkman's "current").
 #
 # POSIX/macOS/Linux only: tmux has no native Windows build. See
 # .claude/skills/verify-live/ for the manual version of this same workflow
@@ -28,8 +29,15 @@ BIN="$(mktemp -t cloudtui-smoke.XXXXXX)"
 SRC_QUEUE="smoketest-src-$$"
 DST_QUEUE="smoketest-dst-$$"
 CONN_NAME="smoketest-proxy-$$"
-CONFIG_PATH="$HOME/.cloudtui/config.yaml"
-CONFIG_BACKUP=""
+# The whole ~/.cloudtui/ directory, not just config.yaml — settings,
+# connections/{jolokia,proxy}.yaml, and favorites.yaml are now separate
+# files (see spec/01-repo-and-tui-shell), and add-proxy-conn below
+# writes all of them (Save always rewrites every file). Backing up the
+# whole directory is simpler and more robust than reasoning about which
+# individual files a given devtool command touches — same rationale
+# this script already used for config.yaml alone before the split.
+CLOUDTUI_HOME="$HOME/.cloudtui"
+CLOUDTUI_HOME_BACKUP=""
 STARTED_PROXY=0
 EXISTING_CONN_COUNT=0
 
@@ -39,12 +47,13 @@ cleanup() {
   local status=$?
   log "cleaning up..."
   tmux kill-session -t "$SESSION" >/dev/null 2>&1 || true
-  # Restore config.yaml (and so the active jolokia connection) BEFORE
+  # Restore ~/.cloudtui/ (and so the active jolokia connection) BEFORE
   # removing test queues: devtool's add-queue/remove-queue refuse to run
   # against a non-jolokia active connection, and by this point the script
   # may have switched the active connection to the test proxy one.
-  if [[ -n "$CONFIG_BACKUP" ]]; then
-    mv -f "$CONFIG_BACKUP" "$CONFIG_PATH"
+  if [[ -n "$CLOUDTUI_HOME_BACKUP" ]]; then
+    rm -rf "$CLOUDTUI_HOME"
+    mv -f "$CLOUDTUI_HOME_BACKUP" "$CLOUDTUI_HOME"
   fi
   go run ./cmd/devtool remove-queue "$SRC_QUEUE" >/dev/null 2>&1 || true
   go run ./cmd/devtool remove-queue "$DST_QUEUE" >/dev/null 2>&1 || true
@@ -104,10 +113,15 @@ log "creating disposable queues: $SRC_QUEUE, $DST_QUEUE"
 go run ./cmd/devtool add-queue "$SRC_QUEUE"
 go run ./cmd/devtool add-queue "$DST_QUEUE"
 
-if [[ -f "$CONFIG_PATH" ]]; then
-  CONFIG_BACKUP="$(mktemp -t cloudtui-config-backup.XXXXXX)"
-  cp "$CONFIG_PATH" "$CONFIG_BACKUP"
-  EXISTING_CONN_COUNT=$(grep -c '^ *- name:' "$CONFIG_PATH" || true)
+if [[ -d "$CLOUDTUI_HOME" ]]; then
+  CLOUDTUI_HOME_BACKUP="$(mktemp -d -t cloudtui-home-backup.XXXXXX)"
+  cp -a "$CLOUDTUI_HOME/." "$CLOUDTUI_HOME_BACKUP/"
+  # Existing connections are split across connections/jolokia.yaml and
+  # connections/proxy.yaml now — count both (each entry is a top-level
+  # "- name: ..." list item, no wrapper key, so the same pattern that
+  # used to match config.yaml's indented connections: list still works
+  # unmodified against these unindented ones).
+  EXISTING_CONN_COUNT=$(cat "$CLOUDTUI_HOME/connections/jolokia.yaml" "$CLOUDTUI_HOME/connections/proxy.yaml" 2>/dev/null | grep -c '^ *- name:' || true)
 fi
 
 log "starting mq-proxy (needs JAVA_HOME pointed at a 21+ JDK)..."

@@ -41,10 +41,13 @@ JMX `sendTextMessage` requires it to already exist).
   than `mq-proxy`'s toolchain requires (Java 21+), producing
   `UnsupportedClassVersionError` otherwise.
 - `add-proxy-conn <name> <url> <username> <password>` — writes a proxy
-  connection directly into `config.yaml` via `AddProxyConnection` (pure,
-  unit-tested function), bypassing the connection-editor form entirely.
-  Exists because a script/tool has no reliable way to drive the editor
-  form's own focus-persistence quirks the way a human/agent can.
+  connection directly into `connections/proxy.yaml` via
+  `AddProxyConnection` (pure, unit-tested function — it appends to
+  `Config.Connections` in memory; `config.SaveDefault` does the actual
+  file split, same as every other mutation), bypassing the
+  connection-editor form entirely. Exists because a script/tool has no
+  reliable way to drive the editor form's own focus-persistence quirks
+  the way a human/agent can.
 
 ### `tui/scripts/smoke-test.sh` (`task smoke:test`) — golden-path regression check
 Drives the real TUI binary in tmux through the core path in one script (not
@@ -57,8 +60,11 @@ the same broker state.
   invocations don't collide with leftover state.
 - Starts `mq-proxy` itself and registers a temporary proxy connection via
   `devtool add-proxy-conn`.
-- Cleanup is a `trap cleanup EXIT`: **restores `config.yaml` from a full
-  backup taken before the run** (not surgical UI-driven undo) **before**
+- Cleanup is a `trap cleanup EXIT`: **restores the whole `~/.cloudtui/`
+  directory from a full backup taken before the run** (not surgical
+  UI-driven undo, and not just `config.yaml` — `add-proxy-conn` writes
+  `connections/proxy.yaml`, one of the sibling files `config.SaveDefault`
+  always rewrites together; see spec/01-repo-and-tui-shell) **before**
   removing the disposable queues — order matters, because
   `add-queue`/`remove-queue` refuse to run against a non-jolokia active
   connection, and by cleanup time the active connection may still be the
@@ -108,10 +114,12 @@ with no Esc-to-cancel) were only ever caught this way, not by unit tests.
   `$JAVA_HOME/bin/java` when set.
 - Cleanup ordering bug (found by actually running smoke-test.sh twice and
   checking the broker, not by reading the script): removing disposable
-  queues *before* restoring `config.yaml` leaves the active connection
+  queues *before* restoring `~/.cloudtui/` leaves the active connection
   pointed at the temporary proxy backend, so `devtool remove-queue` (Jolokia
-  -only) silently no-ops against it. Always restore `config.yaml` first,
+  -only) silently no-ops against it. Always restore `~/.cloudtui/` first,
   then remove queues.
-- Full-file backup/restore beats surgical UI-driven cleanup for
-  `config.yaml` — simpler and more robust than reasoning about which
-  connection to reactivate or list positions after the fact.
+- Full-directory backup/restore beats surgical UI-driven cleanup for
+  `~/.cloudtui/` — simpler and more robust than reasoning about which
+  connection to reactivate, list positions, or (once settings/
+  connections/favorites became separate files) which specific files a
+  given devtool command actually touched, after the fact.
