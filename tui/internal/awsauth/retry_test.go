@@ -151,6 +151,135 @@ func TestWithReauthPassesOnCodeThroughToLogin(t *testing.T) {
 	}
 }
 
+func TestDoSuccessFirstTry(t *testing.T) {
+	authTypeForCalls, loginCalls, callCalls := 0, 0, 0
+	authTypeFor := func(context.Context, string) (awsprofile.AuthType, error) {
+		authTypeForCalls++
+		return awsprofile.AuthSSO, nil
+	}
+	login := func(context.Context, string, func(string, string)) error {
+		loginCalls++
+		return nil
+	}
+	call := func(context.Context) (string, error) {
+		callCalls++
+		return "ok", nil
+	}
+
+	got, err := Do(t.Context(), "p", authTypeFor, login, nil, nil, call)
+	if err != nil {
+		t.Fatalf("Do() error = %v, want nil", err)
+	}
+	if got != "ok" {
+		t.Errorf("Do() = %q, want %q", got, "ok")
+	}
+	if authTypeForCalls != 1 {
+		t.Errorf("authTypeFor invoked %d times, want 1", authTypeForCalls)
+	}
+	if loginCalls != 0 {
+		t.Errorf("login invoked %d times, want 0", loginCalls)
+	}
+	if callCalls != 1 {
+		t.Errorf("call invoked %d times, want 1", callCalls)
+	}
+}
+
+func TestDoRetriesAfterSuccessfulLogin(t *testing.T) {
+	invalidToken := &sentinelReauthError{}
+	authTypeFor := func(context.Context, string) (awsprofile.AuthType, error) {
+		return awsprofile.AuthSSO, nil
+	}
+	loginCalls, onReauthCalls, callCalls := 0, 0, 0
+	login := func(context.Context, string, func(string, string)) error {
+		loginCalls++
+		return nil
+	}
+	onReauth := func() { onReauthCalls++ }
+	call := func(context.Context) (string, error) {
+		callCalls++
+		if callCalls == 1 {
+			return "", invalidToken
+		}
+		return "ok-after-retry", nil
+	}
+
+	got, err := Do(t.Context(), "p", authTypeFor, login, onReauth, nil, call)
+	if err != nil {
+		t.Fatalf("Do() error = %v, want nil", err)
+	}
+	if got != "ok-after-retry" {
+		t.Errorf("Do() = %q, want %q", got, "ok-after-retry")
+	}
+	if loginCalls != 1 {
+		t.Errorf("login invoked %d times, want 1", loginCalls)
+	}
+	if onReauthCalls != 1 {
+		t.Errorf("onReauth invoked %d times, want 1", onReauthCalls)
+	}
+	if callCalls != 2 {
+		t.Errorf("call invoked %d times, want 2", callCalls)
+	}
+}
+
+// TestDoIgnoresAuthTypeForError covers Do's `authType, _ :=` discard:
+// authTypeFor failing (e.g. a profile that can't be found) must not
+// short-circuit Do — call still proceeds, matching every existing call
+// site's own behavior today (they all discard this same error).
+func TestDoIgnoresAuthTypeForError(t *testing.T) {
+	authTypeForErr := errors.New("profile not found")
+	callCalls := 0
+	authTypeFor := func(context.Context, string) (awsprofile.AuthType, error) {
+		return awsprofile.AuthType(""), authTypeForErr
+	}
+	login := func(context.Context, string, func(string, string)) error { return nil }
+	call := func(context.Context) (string, error) {
+		callCalls++
+		return "ok", nil
+	}
+
+	got, err := Do(t.Context(), "p", authTypeFor, login, nil, nil, call)
+	if err != nil {
+		t.Fatalf("Do() error = %v, want nil (authTypeFor's error must be discarded)", err)
+	}
+	if got != "ok" {
+		t.Errorf("Do() = %q, want %q", got, "ok")
+	}
+	if callCalls != 1 {
+		t.Errorf("call invoked %d times, want 1", callCalls)
+	}
+}
+
+// TestDoPassesResolvedAuthTypeThroughToNeedsReauth confirms authTypeFor's
+// returned AuthType (not some fixed default) is what actually reaches
+// NeedsReauth: AuthStaticKeys never triggers reauth regardless of the
+// error, mirroring TestWithReauthNotNeeded.
+func TestDoPassesResolvedAuthTypeThroughToNeedsReauth(t *testing.T) {
+	originalErr := errors.New("cached SSO token is expired, or not present, and cannot be refreshed")
+	authTypeFor := func(context.Context, string) (awsprofile.AuthType, error) {
+		return awsprofile.AuthStaticKeys, nil
+	}
+	loginCalls, callCalls := 0, 0
+	login := func(context.Context, string, func(string, string)) error {
+		loginCalls++
+		return nil
+	}
+	call := func(context.Context) (string, error) {
+		callCalls++
+		return "", originalErr
+	}
+
+	_, err := Do(t.Context(), "p", authTypeFor, login, nil, nil, call)
+	if !errors.Is(err, originalErr) {
+		t.Errorf("Do() error = %v, want %v unchanged", err, originalErr)
+	}
+	if loginCalls != 0 {
+		t.Errorf("login invoked %d times, want 0 (AuthStaticKeys never reauths)", loginCalls)
+	}
+	if callCalls != 1 {
+		t.Errorf("call invoked %d times, want 1", callCalls)
+	}
+}
+
 // sentinelReauthError is a plain error whose message matches the
 // sso-session-style string NeedsReauth looks for (see awsauth_test.go
 // for detection-logic coverage) — used here purely to make WithReauth's

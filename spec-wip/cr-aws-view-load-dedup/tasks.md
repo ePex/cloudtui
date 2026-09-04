@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] `awsauth.Do[T any]` (`internal/awsauth/retry.go`): resolves
+1. [x] `awsauth.Do[T any]` (`internal/awsauth/retry.go`): resolves
    `AuthType` internally then delegates to `WithReauth`, per
    `plan.md`. Tests in `retry_test.go`, mirroring the existing
    `TestWithReauthXxx` style: success-first-try, retries-after-login,
