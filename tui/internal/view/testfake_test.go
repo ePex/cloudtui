@@ -17,13 +17,23 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-var _ ui.ViewHost = (*fakeViewHost)(nil)
+var _ ui.Host = (*fakeViewHost)(nil)
+var _ ui.SSMParamsHost = (*fakeViewHost)(nil)
+var _ ui.SecretsHost = (*fakeViewHost)(nil)
+var _ ui.CloudWatchLogsHost = (*fakeViewHost)(nil)
+var _ ui.DatadogLogsHost = (*fakeViewHost)(nil)
+var _ ui.CodePipelineHost = (*fakeViewHost)(nil)
+var _ ui.MessagesHost = (*fakeViewHost)(nil)
 
-// fakeViewHost is a minimal ui.ViewHost double for view-level tests: it
-// records what a view asked for instead of driving a real *App. Every
-// data-fetcher method returns zero values unless a test sets the matching
-// func field — same "inject a func, override per test" shape this codebase
-// already used for App.listParameters etc. pre-CR-80.
+// fakeViewHost is a single wide double satisfying every one of the ui
+// package's per-resource host interfaces at once (deliberately not
+// split into one fake per interface — see
+// spec-wip/cr-viewhost-interface-segregation/spec.md's "Out of scope"
+// for why): it records what a view asked for instead of driving a
+// real *App. Every data-fetcher method returns zero values unless a
+// test sets the matching func field — same "inject a func, override
+// per test" shape this codebase already used for App.listParameters
+// etc. pre-CR-80.
 type fakeViewHost struct {
 	cfg     config.Config
 	backend queue.Backend
@@ -99,30 +109,20 @@ func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCo
 	return f.scanJMSTypesFn(ctx, queueName, maxCount)
 }
 
-// -- ui.ViewHost chrome --
-func (f *fakeViewHost) SwitchToPage(name string)     { f.shownPage = name }
-func (f *fakeViewHost) UpdateContextPanel(v ui.View) {}
-func (f *fakeViewHost) SwitchTo(name string)         { f.shownPage = name }
-func (f *fakeViewHost) CopyToClipboard(data string)  { f.copiedData = data }
+// -- chrome methods needed by one or more of the narrow per-resource
+// interfaces (SwitchTo: DatadogLogsHost/MessagesHost; CopyToClipboard:
+// SSMParamsHost/SecretsHost/CloudWatchLogsHost/DatadogLogsHost) --
+func (f *fakeViewHost) SwitchTo(name string)        { f.shownPage = name }
+func (f *fakeViewHost) CopyToClipboard(data string) { f.copiedData = data }
 
-// -- ui.ViewHost cross-view navigation: never called by a view under test
-// in isolation (a view invokes its injected onSelect/onBack closure, not
-// host.OpenX) — pure stubs, present only to satisfy the interface. --
-func (f *fakeViewHost) OpenMessages(queueName string)                                   {}
-func (f *fakeViewHost) OpenMessageDetail(queueName string, msg queue.Message)           {}
-func (f *fakeViewHost) OpenParamDetail(param awsssm.Parameter)                          {}
-func (f *fakeViewHost) OpenSecretDetail(secret awssecrets.Secret)                       {}
-func (f *fakeViewHost) OpenLogSearch(logGroupName string)                               {}
-func (f *fakeViewHost) OpenLogEventDetail(event awslogs.LogEvent)                       {}
-func (f *fakeViewHost) OpenDatadogLogDetail(event datadoglogs.LogEvent)                 {}
-func (f *fakeViewHost) OpenCodePipelineDetail(pipelineName string)                      {}
 func (f *fakeViewHost) SetPendingCloudWatchPattern(pattern string, timestamp time.Time) {}
 
 func (f *fakeViewHost) IsWatchingPipeline(name string) bool { return f.watching[name] }
 func (f *fakeViewHost) StartWatchingPipeline(name string)   { f.watching[name] = true }
 func (f *fakeViewHost) StopWatchingPipeline(name string)    { delete(f.watching, name) }
 
-// -- ui.ViewHost data-fetchers: injectable func field, zero value if unset --
+// -- AWS/Datadog data-fetchers needed by one or more of the narrow
+// per-resource interfaces: injectable func field, zero value if unset --
 func (f *fakeViewHost) ListParameters(ctx context.Context, profile, path string) ([]awsssm.Parameter, error) {
 	if f.listParametersFn != nil {
 		return f.listParametersFn(ctx, profile, path)

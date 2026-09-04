@@ -225,11 +225,13 @@ func New(cfg config.Config) *App {
 	a.logV = view.NewLogView()
 	a.backend = secretbackend.New(a.secretResolver, cfg.ActiveConn())
 
-	// Dialogs used directly by the views below (rather than through
-	// ui.ViewHost — see spec/80/83) must exist before those views are
-	// constructed, since each takes the dialogs it needs as constructor
-	// parameters. Their overlay Primitives are still wired up in their
-	// original position further down.
+	// Dialogs used directly by the views below (rather than through one
+	// of internal/ui's per-resource host interfaces — see spec/80/83
+	// and spec/03's "ViewHost deliberately doesn't expose dialog
+	// access") must exist before those views are constructed, since
+	// each takes the dialogs it needs as constructor parameters. Their
+	// overlay Primitives are still wired up in their original position
+	// further down.
 	a.confirm = dialog.NewConfirmDialog(a)
 	a.movePicker = dialog.NewMovePicker(a)
 	a.sendMessage = dialog.NewSendMessageOverlay(a)

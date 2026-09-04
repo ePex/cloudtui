@@ -74,4 +74,9 @@ func (a *App) AWSSSOLogin(ctx context.Context, profile string, onCode func(code,
 	return a.awsSSOLogin(ctx, profile, onCode)
 }
 
-var _ ui.ViewHost = (*App)(nil)
+var _ ui.SSMParamsHost = (*App)(nil)
+var _ ui.SecretsHost = (*App)(nil)
+var _ ui.CloudWatchLogsHost = (*App)(nil)
+var _ ui.DatadogLogsHost = (*App)(nil)
+var _ ui.CodePipelineHost = (*App)(nil)
+var _ ui.MessagesHost = (*App)(nil)
