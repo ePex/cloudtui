@@ -8,7 +8,7 @@
    passes unmodified (this task is pure wiring, behavior-preserving by
    construction). `go build`/`go vet`/`go test ./...` pass.
 
-2. [ ] New `fakeTicker` test double + the loop test(s) in
+2. [x] New `fakeTicker` test double + the loop test(s) in
    `pipelinewatcher_test.go` described in `plan.md`: start a watch
    with `w.newTicker` overridden, send synthetic ticks, assert via
    `drawSignalingHost` that `pollPipeline`'s `QueueUpdateDraw`
