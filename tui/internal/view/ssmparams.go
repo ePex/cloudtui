@@ -233,9 +233,7 @@ func (pv *SSMParamsView) repaint(params []awsssm.Parameter) {
 	filtered = sortFavoritesFirst(filtered, isFavorite)
 	pv.filtered = filtered
 
-	for pv.table.GetRowCount() > 1 {
-		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
-	}
+	clearTableBody(pv.table)
 
 	p := pv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
@@ -269,32 +267,18 @@ func (pv *SSMParamsView) repaint(params []awsssm.Parameter) {
 }
 
 func (pv *SSMParamsView) showError(err error) {
-	pv.all = nil
-	pv.filtered = nil
-	for pv.table.GetRowCount() > 1 {
-		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
-	}
-	pv.table.SetCell(1, 1,
-		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
-			SetTextColor(tcell.ColorRed).
-			SetExpansion(3),
-	)
-	pv.table.SetTitle(" SSM Parameters ")
+	showStatusCell(pv.table, 1, fmt.Sprintf("Error: %v", err), tcell.ColorRed, " SSM Parameters ", func() {
+		pv.all = nil
+		pv.filtered = nil
+	})
 }
 
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
 func (pv *SSMParamsView) showStatus(msg string) {
-	pv.all = nil
-	pv.filtered = nil
-	for pv.table.GetRowCount() > 1 {
-		pv.table.RemoveRow(pv.table.GetRowCount() - 1)
-	}
-	pv.table.SetCell(1, 1,
-		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(pv.host.Config().Colors.Accent)).
-			SetExpansion(3),
-	)
-	pv.table.SetTitle(" SSM Parameters ")
+	showStatusCell(pv.table, 1, msg, tcell.GetColor(pv.host.Config().Colors.Accent), " SSM Parameters ", func() {
+		pv.all = nil
+		pv.filtered = nil
+	})
 }

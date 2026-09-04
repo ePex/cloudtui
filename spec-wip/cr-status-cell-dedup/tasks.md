@@ -8,7 +8,7 @@ every commit.
    `showStatusCell`, per `plan.md`) + `statuscell_test.go` testing both
    directly. Not yet called from any view.
 
-2. [ ] `ssmparams.go`: `showError`/`showStatus` rewritten to call
+2. [x] `ssmparams.go`: `showError`/`showStatus` rewritten to call
    `showStatusCell`; `repaint()`'s inline clear-loop replaced with
    `clearTableBody(pv.table)`. `ssmparams_test.go` unchanged and
    passing.
