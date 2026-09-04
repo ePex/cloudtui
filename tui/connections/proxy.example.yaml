@@ -1,0 +1,20 @@
+# connections/proxy.example.yaml — mq-proxy backend connections.
+#
+# Copy to connections/proxy.yaml (same directory as config.yaml) to
+# customise. Gitignored, so local changes are never committed. A bare
+# list — no wrapper key — since the filename already scopes it to
+# mq-proxy connections; see connections/jolokia.example.yaml for
+# Jolokia-backed ones.
+#
+# passwordSecret/passwordSecretAWSProfile work exactly as documented in
+# connections/jolokia.example.yaml.
+#
+# Example proxy connection (uncomment and fill in to use):
+# - name: aws-staging
+#   backend: proxy
+#   proxy:
+#     url: http://localhost:8080
+#     username: cloudtui
+#     password: changeme
+#     # passwordSecret: "/cloudtui/aws-staging/mq-password"
+#     # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set

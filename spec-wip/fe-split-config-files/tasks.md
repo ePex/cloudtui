@@ -52,14 +52,24 @@
    `go build`/`go vet`/`go test ./...` all pass, full suite, no
    exceptions.
 
-3. [ ] Split `tui/config.example.yaml` into 4 files
+3. [x] Split `tui/config.example.yaml` into 4 files
    (`tui/config.example.yaml` trimmed to settings,
    `tui/connections/jolokia.example.yaml`,
    `tui/connections/proxy.example.yaml`,
-   `tui/favorites.example.yaml`), per `plan.md`. Manual check: copy
-   each example to its real `~/.cloudtui/...` location (in a scratch
-   `$HOME` or similar) and confirm `cloudtui` starts cleanly and shows
-   the expected settings/connection/favorites.
+   `tui/favorites.example.yaml`), per `plan.md`.
+
+   Manual check performed: copied each example to its real
+   `~/.cloudtui/...`-shaped location in a scratch `$HOME`, loaded it
+   through `config.LoadDefault()` via a temporary, not-committed test
+   (deleted immediately after — not left in the tree) and printed the
+   result. Confirmed: theme "dark" loaded correctly, the one default
+   Jolokia connection loaded correctly (the example proxy connection
+   stays fully commented out, so it correctly produces no proxy
+   connections), and favorites loaded as empty (also fully commented
+   out by default) with no errors. Didn't launch the interactive TUI
+   itself (headless environment) — the config-loading path this task
+   actually changes is fully exercised by the above, which is the
+   part relevant to this CR.
 
 4. [ ] Merge-back: update `spec/01-repo-and-tui-shell/spec.md`,
    `spec/12-named-connections/spec.md`, and every other spec file a

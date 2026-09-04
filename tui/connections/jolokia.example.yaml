@@ -1,0 +1,33 @@
+# connections/jolokia.example.yaml — Jolokia broker connections.
+#
+# Copy to connections/jolokia.yaml (same directory as config.yaml) to
+# customise. Gitignored, so local changes are never committed. A bare
+# list — no wrapper key, unlike the old combined config.yaml format —
+# since the filename already scopes it to Jolokia connections; see
+# connections/proxy.example.yaml for mq-proxy-backed ones.
+#
+# Each connection has:
+#   name  — unique identifier (also the config.yaml activeConnection key,
+#           and what's shown in the top-left info panel and connection
+#           manager)
+#   queue — Jolokia backend settings
+#
+# Password can also be supplied via the MQPROXY_CLIENT_PASSWORD env var;
+# the env var is only applied when the password field is absent or empty.
+#
+# passwordSecret (optional): names an AWS Secrets Manager secret to use
+# as the password instead. Resolved at connect time via
+# passwordSecretAWSProfile (required whenever passwordSecret is set —
+# independent of config.yaml's activeAWSProfile, which only affects AWS
+# resource browsing, not connection passwords). When set, it takes
+# precedence over both password and MQPROXY_CLIENT_PASSWORD; the secret's
+# raw string value is used verbatim (no JSON key extraction).
+- name: default
+  backend: jolokia
+  queue:
+    brokerName: localhost
+    url: http://localhost:8161/api/jolokia
+    username: admin
+    # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
+    # passwordSecret: "/cloudtui/local/mq-password"   # or resolve from AWS Secrets Manager instead
+    # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set

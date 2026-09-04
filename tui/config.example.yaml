@@ -1,9 +1,19 @@
-# config.example.yaml — full cloudtui configuration schema.
+# config.example.yaml — cloudtui settings schema.
 #
 # Copy this file to config.yaml in the same directory to customise the logo,
 # theme, or individual palette colors. config.yaml is gitignored, so local
 # changes are never committed. If the file is absent, cloudtui uses its
 # built-in defaults (the dark theme, shown below).
+#
+# config.yaml holds appearance/settings only. Connections and AWS
+# favorites live in their own files, each shareable independently of
+# this one and of each other:
+#   connections/jolokia.example.yaml — Jolokia broker connections
+#   connections/proxy.example.yaml   — mq-proxy connections
+#   favorites.example.yaml           — starred SSM parameters/secrets/
+#                                       log groups
+# Copy each to the same-named file without ".example" to use it, same
+# as this file.
 
 # theme selects the active built-in palette. The value must match the name of
 # a theme file embedded in the binary (e.g. "dark", "cyberpunk"). Available
@@ -42,52 +52,16 @@ logo:
 # colors:
 #   accent: "#ff0000"
 
-# activeConnection: the name of the connection that is active on startup.
+# activeConnection: the name of the connection that is active on startup —
+# must match a "name" in connections/jolokia.example.yaml or
+# connections/proxy.example.yaml.
 activeConnection: default
-
-# connections: named broker connections. Each connection has:
-#   name    — unique identifier (also the activeConnection key, and what's
-#             shown in the top-left info panel and connection manager)
-#   backend — "jolokia" or "proxy"
-#   queue   — Jolokia backend settings (used when backend: jolokia)
-#   proxy   — mq-proxy backend settings (used when backend: proxy)
-#
-# Password fields can also be supplied via the MQPROXY_CLIENT_PASSWORD env var;
-# the env var is only applied when the password field is absent or empty.
-#
-# passwordSecret (optional, on queue: or proxy:): names an AWS Secrets
-# Manager secret to use as the password instead. Resolved at connect time
-# via passwordSecretAWSProfile (required whenever passwordSecret is set —
-# independent of activeAWSProfile below, which only affects AWS resource
-# browsing, not connection passwords). When set, it takes precedence over
-# both password and MQPROXY_CLIENT_PASSWORD; the secret's raw string value
-# is used verbatim (no JSON key extraction).
-connections:
-  - name: default
-    backend: jolokia
-    queue:
-      brokerName: localhost
-      url: http://localhost:8161/api/jolokia
-      username: admin
-      # password: ""   # set here or via MQPROXY_CLIENT_PASSWORD
-      # passwordSecret: "/cloudtui/local/mq-password"   # or resolve from AWS Secrets Manager instead
-      # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set
-
-  # Example proxy connection (uncomment and fill in to use):
-  # - name: aws-staging
-  #   backend: proxy
-  #   proxy:
-  #     url: http://localhost:8080
-  #     username: cloudtui
-  #     password: changeme
-  #     # passwordSecret: "/cloudtui/aws-staging/mq-password"
-  #     # passwordSecretAWSProfile: my-profile             # required when passwordSecret is set
 
 # activeAWSProfile: the AWS CLI profile selected in Settings -> AWS Profiles
 # (read from ~/.aws/config / ~/.aws/credentials, or their AWS_CONFIG_FILE /
-# AWS_SHARED_CREDENTIALS_FILE overrides). Independent of `connections` above —
-# this is discovery/selection only; it isn't wired to any broker connection
-# yet. Leave unset if you don't use AWS CLI profiles.
+# AWS_SHARED_CREDENTIALS_FILE overrides). Independent of the connections
+# files — this is discovery/selection only; it isn't wired to any broker
+# connection yet. Leave unset if you don't use AWS CLI profiles.
 # activeAWSProfile: my-profile
 
 # datadog: settings for the Datadog Logs view, editable via Settings -> Datadog.
@@ -102,27 +76,6 @@ connections:
 # datadog:
 #   site: datadoghq.eu
 #   accessToken: ""   # set here or via DD_ACCESS_TOKEN
-
-# awsFavorites: favorited items in the SSM Parameters, Secrets Manager, and
-# CloudWatch Logs views, toggled in-app with 'f' — you normally never hand-edit
-# this, it's shown here for reference (e.g. if you want to pre-seed or copy
-# favorites between machines). Favorited rows sort above non-favorited ones
-# and show a star in the list. Scoped per AWS profile (a name is only
-# meaningful within the account a profile points at) and per item kind
-# (ssmParameters/secrets/logGroups are independent — the same name favorited
-# in one has no bearing on the others). Each is a map of profile name to a
-# list of favorited item names; omit entirely (or leave a kind/profile
-# unlisted) for "no favorites yet".
-# awsFavorites:
-#   ssmParameters:
-#     my-profile:
-#       - /app/db/password
-#   secrets:
-#     my-profile:
-#       - prod/db
-#   logGroups:
-#     my-profile:
-#       - /aws/lambda/my-fn
 
 # ─── Switching themes ─────────────────────────────────────────────────────────
 # Change the theme: field above to any available theme name.
