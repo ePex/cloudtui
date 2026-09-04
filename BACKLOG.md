@@ -36,13 +36,6 @@ tview→Bubbletea migration rationale) and the independent `cloudtui-go`
 reimplementation. Items being actively picked up are removed from this
 list rather than checked off — see `spec-wip/` for the in-progress ones.
 
-- **Dedup `showError`/`showStatus`/table-clear boilerplate.** The `for
-  table.GetRowCount() > 1 { RemoveRow(...) }` clear-loop plus the
-  single-row error/status rendering is repeated 3× per file across
-  `ssmparams.go`, `secrets.go`, `logs.go`, `codepipelinelist.go`, and
-  `codepipelinedetail.go` — same shape of duplication as the load/reauth
-  helper being extracted now, smaller win, worth a follow-up pass.
-
 - **Track the pre-existing `-race` findings in `datadoglogs_test.go`.**
   `go test -race ./internal/view/...` reports real races in the
   dropdown-refresh path — traced to `fakeViewHost.QueueUpdateDraw`
