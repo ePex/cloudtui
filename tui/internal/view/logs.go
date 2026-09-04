@@ -235,9 +235,7 @@ func (lv *LogsView) repaint(groups []awslogs.LogGroup) {
 	filtered = sortFavoritesFirst(filtered, isFavorite)
 	lv.filtered = filtered
 
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
+	clearTableBody(lv.table)
 
 	p := lv.host.Config().Colors
 	nameColor := tcell.GetColor(p.Value)
@@ -275,32 +273,18 @@ func (lv *LogsView) repaint(groups []awslogs.LogGroup) {
 }
 
 func (lv *LogsView) showError(err error) {
-	lv.all = nil
-	lv.filtered = nil
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
-	lv.table.SetCell(1, 1,
-		tview.NewTableCell(fmt.Sprintf("Error: %v", err)).
-			SetTextColor(tcell.ColorRed).
-			SetExpansion(3),
-	)
-	lv.table.SetTitle(" CloudWatch Logs ")
+	showStatusCell(lv.table, 1, fmt.Sprintf("Error: %v", err), tcell.ColorRed, " CloudWatch Logs ", func() {
+		lv.all = nil
+		lv.filtered = nil
+	})
 }
 
 // showStatus displays an in-progress, non-error message (e.g. while an
 // SSO re-auth is running) — same shape as showError but accent-colored
 // so it doesn't read as a failure.
 func (lv *LogsView) showStatus(msg string) {
-	lv.all = nil
-	lv.filtered = nil
-	for lv.table.GetRowCount() > 1 {
-		lv.table.RemoveRow(lv.table.GetRowCount() - 1)
-	}
-	lv.table.SetCell(1, 1,
-		tview.NewTableCell(msg).
-			SetTextColor(tcell.GetColor(lv.host.Config().Colors.Accent)).
-			SetExpansion(3),
-	)
-	lv.table.SetTitle(" CloudWatch Logs ")
+	showStatusCell(lv.table, 1, msg, tcell.GetColor(lv.host.Config().Colors.Accent), " CloudWatch Logs ", func() {
+		lv.all = nil
+		lv.filtered = nil
+	})
 }
