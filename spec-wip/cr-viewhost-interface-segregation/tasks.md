@@ -39,7 +39,7 @@ commit.
 6. [x] `codepipelinelist.go`, `codepipelinedetail.go`,
    `pipelinewatcher.go` → `ui.CodePipelineHost`. Full suite green.
 
-7. [ ] `messages.go` → `ui.MessagesHost`. Full suite green.
+7. [x] `messages.go` → `ui.MessagesHost`. Full suite green.
 
 8. [ ] `queues.go`, `message_detail.go`, `settings.go`, `log.go` →
    plain `ui.Host`. Full suite green.
