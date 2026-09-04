@@ -22,7 +22,7 @@ import (
 // App.handlePipelinePoll) — see spec/43-fe-codepipeline-monitor.
 type CodePipelineDetailView struct {
 	table        *tview.Table
-	host         ui.ViewHost
+	host         ui.CodePipelineHost
 	pipelineName string
 	stages       []awscodepipeline.StageStatus
 	loadSeq      int // incremented per load() call; guards against a stale response landing after a newer one
@@ -52,7 +52,7 @@ func (dv *CodePipelineDetailView) Shortcuts() []ui.Shortcut {
 
 // NewCodePipelineDetailView constructs the CodePipeline stage-status
 // detail view.
-func NewCodePipelineDetailView(a ui.ViewHost, onBack func()) *CodePipelineDetailView {
+func NewCodePipelineDetailView(a ui.CodePipelineHost, onBack func()) *CodePipelineDetailView {
 	table := tview.NewTable()
 	table.SetBorder(true)
 	table.SetSelectable(true, false)

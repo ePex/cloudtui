@@ -27,7 +27,7 @@ type CodePipelineListView struct {
 	table       *tview.Table
 	filterInput *tview.InputField
 	flex        *tview.Flex
-	host        ui.ViewHost
+	host        ui.CodePipelineHost
 	filter      string
 	all         []awscodepipeline.Pipeline
 	filtered    []awscodepipeline.Pipeline
@@ -76,7 +76,7 @@ func (lv *CodePipelineListView) Shortcuts() []ui.Shortcut {
 }
 
 // NewCodePipelineListView constructs the CodePipeline list view.
-func NewCodePipelineListView(a ui.ViewHost, onSelect func(pipelineName string)) *CodePipelineListView {
+func NewCodePipelineListView(a ui.CodePipelineHost, onSelect func(pipelineName string)) *CodePipelineListView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" AWS CodePipeline ")
 	table.SetSelectable(true, false)

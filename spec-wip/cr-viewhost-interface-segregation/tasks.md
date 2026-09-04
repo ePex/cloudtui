@@ -36,7 +36,7 @@ commit.
 5. [x] `datadoglogs.go`, `datadoglogdetail.go` → `ui.DatadogLogsHost`.
    Full suite green.
 
-6. [ ] `codepipelinelist.go`, `codepipelinedetail.go`,
+6. [x] `codepipelinelist.go`, `codepipelinedetail.go`,
    `pipelinewatcher.go` → `ui.CodePipelineHost`. Full suite green.
 
 7. [ ] `messages.go` → `ui.MessagesHost`. Full suite green.

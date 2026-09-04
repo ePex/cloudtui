@@ -41,7 +41,7 @@ func (t *realPollTicker) C() <-chan time.Time { return t.Ticker.C }
 type PipelineWatcher struct {
 	watched    map[string]chan struct{}
 	lastStages map[string]map[string]string
-	host       ui.ViewHost
+	host       ui.CodePipelineHost
 	notify     func(title, message string)
 	listV      *CodePipelineListView
 	detailV    *CodePipelineDetailView
@@ -49,7 +49,7 @@ type PipelineWatcher struct {
 }
 
 // NewPipelineWatcher constructs a PipelineWatcher driving listV/detailV.
-func NewPipelineWatcher(host ui.ViewHost, notify func(title, message string), listV *CodePipelineListView, detailV *CodePipelineDetailView) *PipelineWatcher {
+func NewPipelineWatcher(host ui.CodePipelineHost, notify func(title, message string), listV *CodePipelineListView, detailV *CodePipelineDetailView) *PipelineWatcher {
 	return &PipelineWatcher{
 		watched:    map[string]chan struct{}{},
 		lastStages: map[string]map[string]string{},
