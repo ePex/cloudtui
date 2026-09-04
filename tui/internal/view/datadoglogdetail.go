@@ -21,7 +21,7 @@ import (
 // logDetailView).
 type DatadogLogDetailView struct {
 	textView *tview.TextView
-	host     ui.ViewHost
+	host     ui.DatadogLogsHost
 	event    datadoglogs.LogEvent
 }
 
@@ -61,7 +61,7 @@ func extractCorrelationID(message string) (string, bool) {
 	return m[1], true
 }
 
-func NewDatadogLogDetailView(a ui.ViewHost, onBack func()) *DatadogLogDetailView {
+func NewDatadogLogDetailView(a ui.DatadogLogsHost, onBack func()) *DatadogLogDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Datadog Log Event ")
 	tv.SetDynamicColors(true)

@@ -33,7 +33,7 @@ commit.
 4. [x] `logs.go`, `logsearch.go`, `logdetail.go` →
    `ui.CloudWatchLogsHost`. Full suite green.
 
-5. [ ] `datadoglogs.go`, `datadoglogdetail.go` → `ui.DatadogLogsHost`.
+5. [x] `datadoglogs.go`, `datadoglogdetail.go` → `ui.DatadogLogsHost`.
    Full suite green.
 
 6. [ ] `codepipelinelist.go`, `codepipelinedetail.go`,
