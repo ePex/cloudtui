@@ -1,6 +1,10 @@
-// Package config loads the tui shell's customisable appearance settings from
-// ~/.cloudtui/config.yaml, falling back to built-in defaults when it's
-// absent.
+// Package config loads the tui shell's settings, connections, and AWS
+// favorites from ~/.cloudtui/ — config.yaml (appearance/settings),
+// connections/jolokia.yaml and connections/proxy.yaml, and
+// favorites.yaml — falling back to built-in defaults when they're
+// absent. Split into separate files so connections and favorites can
+// be copied or shared independently of appearance settings and each
+// other; see settingsFile's doc comment.
 package config
 
 import (
@@ -42,6 +46,22 @@ type Config struct {
 	Logo             []string      `yaml:"logo"`
 	Colors           Palette       `yaml:"colors"`
 	AWSFavorites     AWSFavorites  `yaml:"awsFavorites,omitempty"`
+}
+
+// settingsFile is config.yaml's on-disk shape: everything except
+// Connections and AWSFavorites, which live in their own files under
+// the same directory (connections/jolokia.yaml, connections/proxy.yaml,
+// favorites.yaml — see favoritesPath/connectionsDir) so they can be
+// copied or shared independently of appearance settings and each
+// other. Config itself is unchanged and still holds all of it in
+// memory; only Load/Save's on-disk representation is split.
+type settingsFile struct {
+	ActiveConnection string        `yaml:"activeConnection"`
+	ActiveAWSProfile string        `yaml:"activeAWSProfile"`
+	Datadog          DatadogConfig `yaml:"datadog"`
+	Theme            string        `yaml:"theme"`
+	Logo             []string      `yaml:"logo"`
+	Colors           Palette       `yaml:"colors"`
 }
 
 // FavoriteKind identifies which of AWSFavorites' three namespaces a
@@ -407,12 +427,74 @@ func Default() Config {
 	}
 }
 
-// Load reads and parses the YAML config at path, merging it on top of
-// Default() so a partial file still gets defaults for unset fields.
-// A missing file is not an error — Default() is used as-is.
+// favoritesPath returns the favorites.yaml path sibling to settingsPath
+// (the config.yaml path Load/Save/LoadDefault/SaveDefault already take/
+// resolve) — so callers don't need a second path parameter.
+func favoritesPath(settingsPath string) string {
+	return filepath.Join(filepath.Dir(settingsPath), "favorites.yaml")
+}
+
+// connectionsDir returns the connections/ directory sibling to
+// settingsPath, holding jolokia.yaml and proxy.yaml.
+func connectionsDir(settingsPath string) string {
+	return filepath.Join(filepath.Dir(settingsPath), "connections")
+}
+
+// loadConnectionList reads path's connections list (a bare YAML
+// sequence, no wrapper key — the filename already scopes it to one
+// backend type). A missing file returns (nil, false, nil), not an
+// error, so Load can distinguish "not yet migrated to the split
+// format" (existed == false for both jolokia.yaml and proxy.yaml) from
+// "migrated, but no connections of this type" (existed == true, list
+// empty).
+func loadConnectionList(path string) (conns []Connection, existed bool, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("reading connections %s: %w", path, err)
+	}
+	if err := yaml.Unmarshal(data, &conns); err != nil {
+		return nil, false, fmt.Errorf("parsing connections %s: %w", path, err)
+	}
+	return conns, true, nil
+}
+
+// loadFavorites reads path's favorites (bare AWSFavorites document, no
+// wrapper key). A missing file returns (zero AWSFavorites, false,
+// nil), not an error.
+func loadFavorites(path string) (fav AWSFavorites, existed bool, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return AWSFavorites{}, false, nil
+		}
+		return AWSFavorites{}, false, fmt.Errorf("reading favorites %s: %w", path, err)
+	}
+	if err := yaml.Unmarshal(data, &fav); err != nil {
+		return AWSFavorites{}, false, fmt.Errorf("parsing favorites %s: %w", path, err)
+	}
+	return fav, true, nil
+}
+
+// Load reads and parses the YAML config at path (settings) plus its
+// sibling connections/jolokia.yaml, connections/proxy.yaml, and
+// favorites.yaml (see favoritesPath/connectionsDir), merging on top of
+// Default() so a partial/missing file still gets defaults for unset
+// fields. A missing settings file is not an error — Default() is used
+// as-is.
 //
 // The effective Colors palette is derived from the active theme plus any
 // explicit per-field overrides present in the file's colors: block.
+//
+// Legacy fallback: a config.yaml written before this file split (still
+// carrying embedded connections:/awsFavorites: keys, or even older
+// pre-FE22 top-level backend/queue/proxy fields) loads correctly as
+// long as the corresponding split file(s) don't exist yet — split
+// files always win if present, so a stale hand-edit left in config.yaml
+// after migration can't silently override the real, current files.
+// Purely in-memory: nothing is rewritten until the next Save.
 //
 // If MQPROXY_CLIENT_PASSWORD is set and Queue.Password is empty, the env var
 // value is injected so credentials stay out of config.yaml.
@@ -425,14 +507,28 @@ func Load(path string) (Config, error) {
 	}
 
 	if len(data) > 0 {
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
+		sf := settingsFile{
+			ActiveConnection: cfg.ActiveConnection,
+			ActiveAWSProfile: cfg.ActiveAWSProfile,
+			Datadog:          cfg.Datadog,
+			Theme:            cfg.Theme,
+			Logo:             cfg.Logo,
+			Colors:           cfg.Colors,
+		}
+		if err := yaml.Unmarshal(data, &sf); err != nil {
 			return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
 		}
+		cfg.ActiveConnection = sf.ActiveConnection
+		cfg.ActiveAWSProfile = sf.ActiveAWSProfile
+		cfg.Datadog = sf.Datadog
+		cfg.Theme = sf.Theme
+		cfg.Logo = sf.Logo
 
-		// Second unmarshal into a zero Config captures only the fields explicitly
-		// present in the YAML (no Default() noise), so raw.Colors holds the
-		// user's actual color overrides rather than a blend of defaults and overrides.
-		var raw Config
+		// Second unmarshal into a zero settingsFile captures only the fields
+		// explicitly present in the YAML (no Default() noise), so
+		// raw.Colors holds the user's actual color overrides rather than a
+		// blend of defaults and overrides.
+		var raw settingsFile
 		if err := yaml.Unmarshal(data, &raw); err != nil {
 			return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
 		}
@@ -443,30 +539,69 @@ func Load(path string) (Config, error) {
 			base, _ = PaletteForTheme("dark")
 		}
 		cfg.Colors = ApplyPaletteOverrides(base, raw.Colors)
+	}
 
-		// Migration: if file has no connections key, synthesise from legacy
-		// top-level backend/queue/proxy fields (pre-FE22 format).
-		if len(raw.Connections) == 0 {
-			var legacy struct {
+	// Connections: split files win if either exists; otherwise fall back
+	// to whatever's embedded in the settings file (current or pre-FE22
+	// legacy shape).
+	jolokiaPath := filepath.Join(connectionsDir(path), "jolokia.yaml")
+	proxyPath := filepath.Join(connectionsDir(path), "proxy.yaml")
+	jolokiaConns, jolokiaExisted, err := loadConnectionList(jolokiaPath)
+	if err != nil {
+		return Config{}, err
+	}
+	proxyConns, proxyExisted, err := loadConnectionList(proxyPath)
+	if err != nil {
+		return Config{}, err
+	}
+	switch {
+	case jolokiaExisted || proxyExisted:
+		cfg.Connections = append(append([]Connection{}, jolokiaConns...), proxyConns...)
+	case len(data) > 0:
+		var legacy struct {
+			Connections []Connection `yaml:"connections"`
+		}
+		_ = yaml.Unmarshal(data, &legacy)
+		if len(legacy.Connections) > 0 {
+			cfg.Connections = legacy.Connections
+		} else {
+			// Pre-FE22: no connections: key at all, just top-level
+			// backend/queue/proxy fields.
+			var legacyFields struct {
 				Backend string      `yaml:"backend"`
 				Queue   QueueConfig `yaml:"queue"`
 				Proxy   ProxyConfig `yaml:"proxy"`
 			}
-			_ = yaml.Unmarshal(data, &legacy)
-			// Only migrate if the file actually had legacy content.
-			if legacy.Queue.URL != "" || legacy.Backend != "" || legacy.Proxy.URL != "" {
-				if legacy.Backend == "" {
-					legacy.Backend = "jolokia"
+			_ = yaml.Unmarshal(data, &legacyFields)
+			if legacyFields.Queue.URL != "" || legacyFields.Backend != "" || legacyFields.Proxy.URL != "" {
+				if legacyFields.Backend == "" {
+					legacyFields.Backend = "jolokia"
 				}
 				cfg.Connections = []Connection{{
 					Name:    "default",
-					Backend: legacy.Backend,
-					Queue:   legacy.Queue,
-					Proxy:   legacy.Proxy,
+					Backend: legacyFields.Backend,
+					Queue:   legacyFields.Queue,
+					Proxy:   legacyFields.Proxy,
 				}}
 				cfg.ActiveConnection = "default"
 			}
 		}
+	}
+
+	// Favorites: split file wins if it exists; otherwise fall back to
+	// whatever's embedded in the settings file.
+	fav, favExisted, err := loadFavorites(favoritesPath(path))
+	if err != nil {
+		return Config{}, err
+	}
+	if favExisted {
+		cfg.AWSFavorites = fav
+	} else if len(data) > 0 {
+		var legacyFav struct {
+			AWSFavorites AWSFavorites `yaml:"awsFavorites"`
+		}
+		_ = yaml.Unmarshal(data, &legacyFav)
+		cfg.AWSFavorites = legacyFav.AWSFavorites
 	}
 
 	// Env-var password injection: applies to all connections so switching
@@ -551,14 +686,77 @@ func LoadDefault() (Config, error) {
 	return Load(path)
 }
 
-// Save writes cfg to path as YAML.
+// saveConnectionList writes conns to path as a bare YAML sequence (no
+// wrapper key). Always writes the file, even for an empty/nil conns —
+// so once a config has been through one Save, jolokia.yaml/proxy.yaml
+// existing (however empty) is what Load uses to tell "migrated, no
+// connections of this type" apart from "not yet migrated" (see
+// loadConnectionList).
+func saveConnectionList(path string, conns []Connection) error {
+	data, err := yaml.Marshal(conns)
+	if err != nil {
+		return fmt.Errorf("encoding connections: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing connections %s: %w", path, err)
+	}
+	return nil
+}
+
+// Save writes cfg to path (settings) and its sibling
+// connections/jolokia.yaml, connections/proxy.yaml, and favorites.yaml
+// (see favoritesPath/connectionsDir) as YAML. Connections are
+// partitioned by Backend; anything not recognized as "proxy" is
+// written to jolokia.yaml, matching ActiveConn()/SecretAWSProfile()'s
+// existing "proxy is the one special case, everything else behaves
+// like jolokia" convention.
+//
+// Not atomic across the 4 files (this codebase has no atomic-write
+// mechanism for any single file either) — a failure partway through
+// can leave them inconsistent with each other. Not addressed here;
+// see spec-wip/fe-split-config-files's plan.md (now spec/01) for why.
 func Save(path string, cfg Config) error {
-	data, err := yaml.Marshal(cfg)
+	sf := settingsFile{
+		ActiveConnection: cfg.ActiveConnection,
+		ActiveAWSProfile: cfg.ActiveAWSProfile,
+		Datadog:          cfg.Datadog,
+		Theme:            cfg.Theme,
+		Logo:             cfg.Logo,
+		Colors:           cfg.Colors,
+	}
+	data, err := yaml.Marshal(sf)
 	if err != nil {
 		return fmt.Errorf("encoding config: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing config %s: %w", path, err)
+	}
+
+	dir := connectionsDir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating connections directory %s: %w", dir, err)
+	}
+	var jolokiaConns, proxyConns []Connection
+	for _, c := range cfg.Connections {
+		if c.Backend == "proxy" {
+			proxyConns = append(proxyConns, c)
+		} else {
+			jolokiaConns = append(jolokiaConns, c)
+		}
+	}
+	if err := saveConnectionList(filepath.Join(dir, "jolokia.yaml"), jolokiaConns); err != nil {
+		return err
+	}
+	if err := saveConnectionList(filepath.Join(dir, "proxy.yaml"), proxyConns); err != nil {
+		return err
+	}
+
+	favData, err := yaml.Marshal(cfg.AWSFavorites)
+	if err != nil {
+		return fmt.Errorf("encoding favorites: %w", err)
+	}
+	if err := os.WriteFile(favoritesPath(path), favData, 0o644); err != nil {
+		return fmt.Errorf("writing favorites %s: %w", favoritesPath(path), err)
 	}
 	return nil
 }

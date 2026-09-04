@@ -1,17 +1,27 @@
 # Tasks
 
-1. [ ] `internal/config/config.go`: add `settingsFile` struct and the
-   `favoritesPath`/`connectionsDir` path helpers; rewrite `Load` to
-   read the 3-file layout (with the legacy-embedded fallback when
-   neither connections nor favorites files exist) and `Save` to write
-   it, per `plan.md`. `Config`'s own fields, `Default()`,
+1. [x] `internal/config/config.go`: added `settingsFile` struct and the
+   `favoritesPath`/`connectionsDir` path helpers (plus
+   `loadConnectionList`/`loadFavorites`/`saveConnectionList`); rewrote
+   `Load` to read the 3-file layout (with the legacy-embedded fallback
+   when neither connections nor favorites files exist) and `Save` to
+   write it, per `plan.md`. `Config`'s own fields, `Default()`,
    `ApplyPaletteOverrides`, `PaletteUserOverrides`,
    `PaletteForTheme`/`AvailableThemes`, `ActiveConn()`,
    `SecretAWSProfile()`, `AWSFavorites`' methods, `DefaultPath()`,
    `migrateLegacyConfig`, `LoadDefault`/`SaveDefault` signatures all
-   stay as they are. `go build`/`go vet` pass (test updates are task
-   2, so `go test` may not be green yet at the end of this task —
-   note that explicitly rather than pretending otherwise).
+   unchanged, confirmed via full diff review.
+
+   `go build`/`go vet` pass. `go test ./...` (full repo) **also
+   already passes**, ahead of task 2's schedule — the existing
+   round-trip tests are Save-then-Load through the same code path, so
+   they pass regardless of on-disk layout, and the existing legacy
+   hand-written-YAML tests still hit the fallback path correctly since
+   no split files exist for them. Task 2 is still needed: today's
+   round-trip tests only assert on the in-memory result, not the
+   actual multi-file structure on disk, and the "new format" test
+   needs reframing as legacy-fallback coverage — passing today isn't
+   the same as *testing the new behavior*.
 
 2. [ ] `internal/config/config_test.go`: update the round-trip tests
    to verify the new multi-file output
