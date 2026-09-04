@@ -19,15 +19,29 @@
    `loadSeq`, reauth waiting/done messages shown in order. Not yet
    called from any view. `go build`/`go vet`/`go test ./...` pass.
 
-3. [ ] `SSMParamsView.load()` rewritten to call `runAWSLoad`, per
+3. [x] `SSMParamsView.load()` rewritten to call `runAWSLoad`, per
    `plan.md`'s example. `ShowReauthWaiting`/`ShowReauthDone` stay,
-   unchanged in behavior. `ssmparams_test.go` expected to need no
-   changes — confirm all its existing assertions still pass
-   unmodified; if any turn out to have been coupled to the old
-   internal shape, fix that coupling as part of this task. `go
-   build`/`go vet`/`go test ./...` pass.
+   unchanged in behavior. `ssmparams_test.go` needed no changes — all
+   20 existing assertions pass unmodified.
 
-4. [ ] `SecretsView.load()`: same rewrite. `secrets_test.go` unchanged
+   **Deviation from `plan.md` found during implementation**: the
+   original `load()` only called `slog.Error` on the *fetch*-failure
+   path, not the empty-profile guard. `runAWSLoad` uses one `showError`
+   callback for both, so this view's `showError` argument is now a
+   small closure (`func(err error) { slog.Error(...); pv.showError(err)
+   }`) instead of `pv.showError` directly — meaning the empty-profile
+   case now also logs (at ERROR level, same message). Not user-visible
+   (nothing renders logs in the TUI), not asserted by any test, and
+   arguably more consistent (every `showError` call now logs its
+   cause). Judged not worth a `showError`/`onFetchError` parameter
+   split in `runAWSLoad` just to preserve that one asymmetry — noting
+   it here since it's a real, if minor, behavior change. The same
+   pattern applies to the remaining 4 views (tasks 4-7).
+
+   `go build`/`go vet`/`go test ./...` pass.
+
+4. [ ] `SecretsView.load()`: same rewrite, including the same
+   logging-closure adjustment noted in task 3. `secrets_test.go` unchanged
    and passing. `go build`/`go vet`/`go test ./...` pass.
 
 5. [ ] `LogsView.load()`: same rewrite. `logs_test.go` unchanged and
