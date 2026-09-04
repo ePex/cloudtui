@@ -23,21 +23,34 @@
    needs reframing as legacy-fallback coverage — passing today isn't
    the same as *testing the new behavior*.
 
-2. [ ] `internal/config/config_test.go`: update the round-trip tests
-   to verify the new multi-file output
-   (`TestSaveLoadRoundTripWithConnection`, `...WithPasswordSecret`,
-   `...WithActiveAWSProfile`, `...WithDatadogConfig`,
-   `...WithAWSFavorites`); reframe `TestLoadConnectionsNewFormat` as a
-   legacy-fallback test; add new tests for: `Save` partitioning mixed
-   jolokia+proxy connections correctly, `Load` merging them back, the
-   new-format-files-win-over-legacy-embedded-content precedence, and
-   loading a partially-split state (e.g. only `favorites.yaml` present,
-   connections still embedded) sensibly. Every test *not* about file
-   layout (theme loading, palette overrides, env var injection,
-   `ActiveConn()`, `SecretAWSProfile()`, ...) needs no changes — confirm
-   this explicitly rather than assuming it. `go build`/`go vet`/`go
-   test ./...` all pass, full suite, no exceptions — this is the task
-   that brings the module back to green.
+2. [x] `internal/config/config_test.go`: strengthened
+   `TestSaveLoadRoundTripWithPasswordSecret` (mixed jolokia+proxy
+   connections) and `TestSaveLoadRoundTripWithAWSFavorites` to assert
+   directly on the on-disk split files via
+   `loadConnectionList`/`loadFavorites`, not just the round-tripped
+   in-memory result. Renamed/reframed `TestLoadConnectionsNewFormat` →
+   `TestLoadLegacyEmbeddedConnections` (doc comment explains why: it
+   was "new" relative to the pre-FE22 top-level fields, now it's the
+   legacy-fallback path relative to the split). Added
+   `TestLoadPrefersSplitConnectionsOverLegacyEmbedded`,
+   `TestLoadPrefersSplitFavoritesOverLegacyEmbedded`, and
+   `TestLoadPartiallyMigratedState` (favorites.yaml present,
+   connections still legacy-embedded — each half loads independently
+   and correctly). Confirmed every test not about file layout (theme
+   loading, palette overrides, env var injection, `ActiveConn()`,
+   `SecretAWSProfile()`, `TestLoadMigrationFromLegacyFields`/
+   `...QueueFields`, ...) needed no changes.
+
+   One bug caught by the new tests during writing (in the test, not
+   production): `TestLoadPrefersSplitConnectionsOverLegacyEmbedded`
+   initially called `saveConnectionList` directly without
+   `os.MkdirAll`-ing `connections/` first — `Save()` itself always
+   does this before calling `saveConnectionList`, so production is
+   unaffected; fixed by adding the same `MkdirAll` call to the test's
+   setup.
+
+   `go build`/`go vet`/`go test ./...` all pass, full suite, no
+   exceptions.
 
 3. [ ] Split `tui/config.example.yaml` into 4 files
    (`tui/config.example.yaml` trimmed to settings,
