@@ -63,7 +63,13 @@ message-specific response type.
 ### `send-message` (POST)
 
 Structured body DTO: `targetQueue`, `jmsType`, `headers` (map), `groupId`,
-`body`, `correlationId` — not an untyped JSON blob.
+`body`, `correlationId` — not an untyped JSON blob. `jmsType` and `body`
+are required; `headers`/`groupId`/`correlationId` are optional (`null`/
+absent means "don't set this" on the outgoing message). A `headers` entry
+named after one of the three fields governed by their own dedicated
+argument (`JMSType`, `JMSCorrelationID`, `JMSXGroupID`) is dropped by
+`BrokerService.sendMessage` rather than applied — the dedicated field
+always wins, headers are strictly additive.
 
 ### `delete-messages` / `move-messages` (POST)
 
@@ -96,6 +102,10 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   value.
 - Sends `returnBody=true` always when browsing (the message browser needs
   the body for its preview column — spec/08).
+- `SendMessage` populates `send-message`'s `jmsType`/`headers`/`groupId`/
+  `correlationId` fields directly from `queue.SendMessageRequest` (spec/09) —
+  a 1:1 passthrough, no client-side precedence logic needed since
+  `BrokerService.sendMessage` already handles the reserved-key rule above.
 - **GET requests retry exactly once** on a pure transport-level failure
   (`http.Client.Do` returns a non-nil error — connection refused, DNS
   failure, timeout waiting for headers — meaning no response was ever
@@ -166,6 +176,18 @@ tooling. Manual/on-demand only — not wired into CI (needs a live broker).
   `mq-proxy` stringifies all JMS headers/properties; the reference API
   preserves real types. The `tui` client already tolerates this — not
   something to "fix."
+- **`list-messages`'s response has no `correlationId` field at all** —
+  unlike `send-message`'s response, which does. `queue.Message.CorrelationID`
+  is therefore never populated for a message browsed via the proxy
+  backend (`toQueueMessage`, `proxy.go`), and the TUI's message detail
+  view (spec/08), whose header-field lookup table is shaped around
+  Jolokia's own raw-response key names anyway, shows nothing useful for
+  `JMSCorrelationID`/`JMSDeliveryMode`/etc. on any proxy-backend message
+  regardless. `PropertiesText` still surfaces `JMSXGroupID` and custom
+  headers correctly (both travel as `headers` on the wire), so a sent
+  Correlation ID is not lost server-side — it's just not visible again
+  through this UI once sent, a pre-existing gap found live while
+  verifying spec-wip/fe-send-message-metadata, not fixed as part of it.
 
 ## Out of scope (deliberate)
 

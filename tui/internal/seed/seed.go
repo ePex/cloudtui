@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
 // Sender is the subset of queue.Backend needed to seed a queue.
 type Sender interface {
-	SendMessage(ctx context.Context, queueName, body string) error
+	SendMessage(ctx context.Context, queueName string, req queue.SendMessageRequest) error
 }
 
 // Run sends count sample JSON messages to queueName via sender, in order,
@@ -24,7 +26,7 @@ func Run(ctx context.Context, sender Sender, queueName string, count int, progre
 		if err != nil {
 			return fmt.Errorf("encoding message %d: %w", i, err)
 		}
-		if err := sender.SendMessage(ctx, queueName, body); err != nil {
+		if err := sender.SendMessage(ctx, queueName, queue.SendMessageRequest{JMSType: "text", Body: body}); err != nil {
 			return fmt.Errorf("sending message %d/%d: %w", i, count, err)
 		}
 		if progress != nil {

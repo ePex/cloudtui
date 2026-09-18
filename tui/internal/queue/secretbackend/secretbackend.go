@@ -337,12 +337,12 @@ func (b *Backend) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue 
 	return n, nil
 }
 
-func (b *Backend) SendMessage(ctx context.Context, queueName, body string) error {
+func (b *Backend) SendMessage(ctx context.Context, queueName string, req queue.SendMessageRequest) error {
 	cur, err := b.current(ctx)
 	if err != nil {
 		return err
 	}
-	if err := cur.SendMessage(ctx, queueName, body); err != nil {
+	if err := cur.SendMessage(ctx, queueName, req); err != nil {
 		b.refresh()
 		return err
 	}

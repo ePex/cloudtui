@@ -531,4 +531,39 @@ class BrokerServiceTest {
         verify(exactly = 0) { textMsg.jmsCorrelationID = any() }
         verify(exactly = 0) { textMsg.setStringProperty(any(), any()) }
     }
+
+    @Test
+    fun `sendMessage drops a custom header that collides with a reserved key`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val queue = mockk<Queue>()
+        val producer = mockk<MessageProducer>()
+        val textMsg = mockk<TextMessage>()
+
+        every { session.createQueue("outbox") } returns queue
+        every { session.createProducer(queue) } returns producer
+        every { session.createTextMessage("hello world") } returns textMsg
+        every { textMsg.jmsType = "order-created" } just Runs
+        every { textMsg.setStringProperty("JMSXGroupID", "real-group") } just Runs
+        every { producer.send(textMsg) } just Runs
+        every { producer.close() } just Runs
+        every { textMsg.jmsMessageID } returns "ID:sent-3"
+
+        service.sendMessage(
+            SendMessageRequest(
+                targetQueue = "outbox",
+                jmsType = "order-created",
+                headers = mapOf("JMSXGroupID" to "spoofed-group", "JMSType" to "spoofed-type"),
+                groupId = "real-group",
+                body = "hello world",
+            ),
+        )
+
+        // The dedicated groupId field's value is the only one ever applied —
+        // a colliding "JMSXGroupID"/"JMSType" entry in headers is dropped,
+        // never reaching setStringProperty at all (an unstubbed mockk call
+        // for the spoofed value would throw, not just fail an assertion).
+        verify(exactly = 1) { textMsg.setStringProperty("JMSXGroupID", "real-group") }
+        verify(exactly = 0) { textMsg.setStringProperty("JMSXGroupID", "spoofed-group") }
+    }
 }
