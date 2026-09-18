@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -88,7 +89,7 @@ func (sm *SendMessageOverlay) doSend(queueName string) {
 	body := sm.area.GetText()
 	sm.close()
 	go func() {
-		err := host.Backend().SendMessage(context.Background(), queueName, body)
+		err := host.Backend().SendMessage(context.Background(), queueName, queue.SendMessageRequest{JMSType: "text", Body: body})
 		host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("send message: failed", "queue", queueName, "error", err)

@@ -186,7 +186,9 @@ func (f *fakeBrowseBackend) MoveMessage(context.Context, string, string, string)
 func (f *fakeBrowseBackend) MoveAllMessages(context.Context, string, string) (int, error) {
 	panic("not used")
 }
-func (f *fakeBrowseBackend) SendMessage(context.Context, string, string) error { panic("not used") }
+func (f *fakeBrowseBackend) SendMessage(context.Context, string, queue.SendMessageRequest) error {
+	panic("not used")
+}
 func (f *fakeBrowseBackend) DeleteMessages(context.Context, string, queue.MessageFilter) (int, error) {
 	panic("not used")
 }
