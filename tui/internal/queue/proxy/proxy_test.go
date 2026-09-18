@@ -545,7 +545,8 @@ func TestSendMessage(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.TargetQueue != "orders" || req.JMSType != "text" || req.Body != `{"text":"hello"}` {
+		if req.TargetQueue != "orders" || req.JMSType != "order.created" || req.Body != `{"text":"hello"}` ||
+			req.CorrelationID != "corr-1" || req.GroupID != "group-1" || req.Headers["custom"] != "value" {
 			t.Errorf("unexpected request %+v", req)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -555,7 +556,14 @@ func TestSendMessage(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.SendMessage(context.Background(), "orders", `{"text":"hello"}`); err != nil {
+	sendReq := queue.SendMessageRequest{
+		JMSType:       "order.created",
+		Body:          `{"text":"hello"}`,
+		CorrelationID: "corr-1",
+		GroupID:       "group-1",
+		Headers:       map[string]string{"custom": "value"},
+	}
+	if err := c.SendMessage(context.Background(), "orders", sendReq); err != nil {
 		t.Fatalf("SendMessage() error = %v", err)
 	}
 }
@@ -566,7 +574,7 @@ func TestSendMessageError(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
+	if err := c.SendMessage(context.Background(), "orders", queue.SendMessageRequest{JMSType: "text", Body: "{}"}); err == nil {
 		t.Fatal("SendMessage() error = nil, want non-nil")
 	}
 }
@@ -580,7 +588,7 @@ func TestSendMessageEnvelopeError(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
+	if err := c.SendMessage(context.Background(), "orders", queue.SendMessageRequest{JMSType: "text", Body: "{}"}); err == nil {
 		t.Fatal("SendMessage() error = nil, want non-nil for a populated error field")
 	}
 }
@@ -661,7 +669,7 @@ func TestPostDoesNotRetryOnTransportError(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.SendMessage(context.Background(), "orders", `{}`); err == nil {
+	if err := c.SendMessage(context.Background(), "orders", queue.SendMessageRequest{JMSType: "text", Body: "{}"}); err == nil {
 		t.Fatal("SendMessage() error = nil, want an error from the single failed attempt")
 	}
 	if got := calls.Load(); got != 1 {

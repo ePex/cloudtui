@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/ePex/cloudtui/tui/internal/queue"
 )
 
 type fakeSender struct {
@@ -13,12 +15,12 @@ type fakeSender struct {
 	sendErr error
 }
 
-func (f *fakeSender) SendMessage(_ context.Context, _, body string) error {
+func (f *fakeSender) SendMessage(_ context.Context, _ string, req queue.SendMessageRequest) error {
 	n := len(f.bodies) + 1
 	if f.failAt != 0 && n == f.failAt {
 		return f.sendErr
 	}
-	f.bodies = append(f.bodies, body)
+	f.bodies = append(f.bodies, req.Body)
 	return nil
 }
 

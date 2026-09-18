@@ -66,7 +66,7 @@ func (f *fakeQueueBackend) MoveAllMessages(ctx context.Context, sourceQueue, tar
 	return f.moveAllMessagesFn(ctx, sourceQueue, targetQueue)
 }
 
-func (f *fakeQueueBackend) SendMessage(_ context.Context, _, _ string) error {
+func (f *fakeQueueBackend) SendMessage(_ context.Context, _ string, _ queue.SendMessageRequest) error {
 	return nil
 }
 

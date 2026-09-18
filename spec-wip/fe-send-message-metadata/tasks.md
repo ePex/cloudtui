@@ -1,6 +1,6 @@
 # Tasks
 
-1. [ ] **Widen the `Backend.SendMessage` interface and wire up mq-proxy +
+1. [x] **Widen the `Backend.SendMessage` interface and wire up mq-proxy +
    plumbing.** Add `queue.SendMessageRequest` and change
    `Backend.SendMessage`'s signature (`internal/queue/backend.go`).
    Update `proxy.Client.SendMessage` (`internal/queue/proxy/proxy.go`) to
@@ -21,7 +21,7 @@
    Everything compiles, existing tests pass, mq-proxy backend sending is
    now feature-complete end to end (Jolokia isn't yet).
 
-2. [ ] **Jolokia: build the headers map with the reserved-key precedence
+2. [x] **Jolokia: build the headers map with the reserved-key precedence
    rule.** In `internal/queue/jolokia/mutate.go`, replace the hardcoded
    empty map with one built from `req.Headers` (reserved keys `JMSType`/
    `JMSCorrelationID`/`JMSXGroupID` dropped) plus the three dedicated

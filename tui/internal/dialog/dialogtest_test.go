@@ -57,7 +57,9 @@ func (f *fakeQueueBackend) MoveMessage(_ context.Context, _, _, _ string) error 
 func (f *fakeQueueBackend) MoveAllMessages(_ context.Context, _, _ string) (int, error) {
 	return 0, nil
 }
-func (f *fakeQueueBackend) SendMessage(_ context.Context, _, _ string) error { return nil }
+func (f *fakeQueueBackend) SendMessage(_ context.Context, _ string, _ queue.SendMessageRequest) error {
+	return nil
+}
 func (f *fakeQueueBackend) DeleteMessages(_ context.Context, _ string, _ queue.MessageFilter) (int, error) {
 	return 0, nil
 }

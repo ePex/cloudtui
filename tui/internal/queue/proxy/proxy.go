@@ -254,8 +254,15 @@ func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue s
 }
 
 // SendMessage implements queue.Backend.
-func (c *Client) SendMessage(ctx context.Context, queueName, body string) error {
-	req := sendMessageRequest{TargetQueue: queueName, JMSType: "text", Body: body}
+func (c *Client) SendMessage(ctx context.Context, queueName string, sendReq queue.SendMessageRequest) error {
+	req := sendMessageRequest{
+		TargetQueue:   queueName,
+		JMSType:       sendReq.JMSType,
+		Headers:       sendReq.Headers,
+		GroupID:       sendReq.GroupID,
+		Body:          sendReq.Body,
+		CorrelationID: sendReq.CorrelationID,
+	}
 	var env itemEnvelope[sendMessageResponse]
 	if err := c.postJSON(ctx, "/api/management/command/send-message", req, &env); err != nil {
 		return fmt.Errorf("send message to %q: %w", queueName, err)

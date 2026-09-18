@@ -36,6 +36,18 @@ type MessageFilter struct {
 	MaxCount  int // 0 = unlimited
 }
 
+// SendMessageRequest carries the fields for composing a new message.
+// JMSType and Body are required by callers; CorrelationID, GroupID, and
+// Headers are optional — a zero value means "don't set this" on the
+// outgoing message.
+type SendMessageRequest struct {
+	JMSType       string
+	Body          string
+	CorrelationID string
+	GroupID       string
+	Headers       map[string]string
+}
+
 // Backend is the interface all queue data sources must implement.
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
@@ -44,7 +56,7 @@ type Backend interface {
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 	MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error)
-	SendMessage(ctx context.Context, queueName, body string) error
+	SendMessage(ctx context.Context, queueName string, req SendMessageRequest) error
 	DeleteMessages(ctx context.Context, queueName string, filter MessageFilter) (int, error)
 	MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter MessageFilter) (int, error)
 }

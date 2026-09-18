@@ -103,7 +103,7 @@ func (f *fakeBackend) MoveMessage(ctx context.Context, sourceQueue, messageID, t
 func (f *fakeBackend) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
 	return 0, nil
 }
-func (f *fakeBackend) SendMessage(ctx context.Context, queueName, body string) error {
+func (f *fakeBackend) SendMessage(ctx context.Context, queueName string, req queue.SendMessageRequest) error {
 	return nil
 }
 func (f *fakeBackend) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {

@@ -307,16 +307,17 @@ func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue s
 // back to browse() which returns the message bodies without IDs, so the body
 // is still readable and individual move/delete is replaced by the
 // "limited info" mode indicated in the status bar.
-func (c *Client) SendMessage(ctx context.Context, queueName, body string) error {
+func (c *Client) SendMessage(ctx context.Context, queueName string, sendReq queue.SendMessageRequest) error {
 	mbean := fmt.Sprintf(
 		"org.apache.activemq:type=Broker,brokerName=%s,destinationType=Queue,destinationName=%s",
 		c.cfg.BrokerName, queueName,
 	)
+	headers := sendMessageHeaders(sendReq)
 	reqBody := map[string]any{
 		"type":      "exec",
 		"mbean":     mbean,
 		"operation": "sendTextMessage(java.util.Map,java.lang.String,java.lang.String,java.lang.String)",
-		"arguments": []any{map[string]string{}, body, c.cfg.Username, c.cfg.Password},
+		"arguments": []any{headers, sendReq.Body, c.cfg.Username, c.cfg.Password},
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {
@@ -345,4 +346,38 @@ func (c *Client) SendMessage(ctx context.Context, queueName, body string) error 
 		return fmt.Errorf("sendTextMessage error (status %d): %s", result.Status, result.Error)
 	}
 	return nil
+}
+
+// sendMessageHeadersReserved are the JMS/ActiveMQ header names governed by
+// SendMessageRequest's own dedicated fields (JMSType, CorrelationID,
+// GroupID) — never settable via the free-form Headers map, see
+// sendMessageHeaders.
+var sendMessageHeadersReserved = map[string]bool{
+	"JMSType":          true,
+	"JMSCorrelationID": true,
+	"JMSXGroupID":      true,
+}
+
+// sendMessageHeaders builds the headers Map argument for the Jolokia
+// sendTextMessage(Map,...) operation from req. Custom Headers entries are
+// appended, never allowed to override a reserved key: an entry named
+// JMSType/JMSCorrelationID/JMSXGroupID is dropped rather than applied, so
+// the dedicated field's value is always what ends up in the map — matching
+// mq-proxy's own BrokerService.sendMessage precedence (spec-wip/fe-send-message-metadata).
+func sendMessageHeaders(req queue.SendMessageRequest) map[string]string {
+	headers := make(map[string]string, len(req.Headers)+3)
+	for k, v := range req.Headers {
+		if sendMessageHeadersReserved[k] {
+			continue
+		}
+		headers[k] = v
+	}
+	headers["JMSType"] = req.JMSType
+	if req.CorrelationID != "" {
+		headers["JMSCorrelationID"] = req.CorrelationID
+	}
+	if req.GroupID != "" {
+		headers["JMSXGroupID"] = req.GroupID
+	}
+	return headers
 }
