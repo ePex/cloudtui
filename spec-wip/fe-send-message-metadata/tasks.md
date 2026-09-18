@@ -61,24 +61,51 @@
    live verification (task 5), not unit tests, matching spec/09's existing
    note that `SendMessageOverlay` has no dedicated tview-level test file.
 
-5. [ ] **Live-verify against both backends** (`verify-live` skill) and
+5. [x] **Live-verify against both backends** (`verify-live` skill) and
    record what was checked here:
-   - [ ] Jolokia: send with JMS Type, Correlation ID, Group ID, and a
+   - [x] Jolokia: send with JMS Type, Correlation ID, Group ID, and a
      custom header set; open the message in the detail view (spec/08)
      and confirm JMS Type/Correlation ID show the entered values, and the
      raw fields show the group ID and custom header as real message
      properties — the step that confirms the ActiveMQ `sendTextMessage`
      `Map` argument behaves the way `plan.md` inferred (not previously
-     verified in this repo).
-   - [ ] mq-proxy (`task dev:proxy:start`): repeat the same send-and-verify.
-   - [ ] Both backends: send with only JMS Type + Body (everything else
+     verified in this repo). **Confirmed**: `Type: order.created`,
+     `JMSCorrelationID` matched the pre-filled UUID, `JMSXGroupID:
+     group-alpha`, and `PropertiesText: customHeader: customValue` all
+     showed correctly in the detail view against the real broker.
+   - [x] mq-proxy (`task dev:proxy:start`): repeat the same send-and-verify.
+     **Confirmed** for JMS Type and the Group ID/custom-header properties
+     (both landed under `PropertiesText`). **Found, out of scope**: the
+     detail view's "Headers" section shows `<nil>` for JMSCorrelationID
+     (and every other JMS-reserved field) on *any* mq-proxy message,
+     including ones sent before this feature existed — mq-proxy's
+     `list-messages` response has no `correlationId` field at all
+     (`proxyMessage` struct, `internal/queue/proxy/proxy.go`), and
+     `toQueueMessage` never populates `queue.Message.CorrelationID` for
+     this backend; the detail view's header-field lookup table is also
+     Jolokia-key-shaped (`jMSCorrelationID` etc.) and never matches
+     mq-proxy's raw response either way. This is a pre-existing read-side
+     gap orthogonal to this feature's write-side change — not fixed here,
+     since it wasn't in scope and isn't a regression from this work. The
+     Kotlin unit test (`BrokerServiceTest.kt`) already confirms
+     `correlationId` is applied server-side; mq-proxy just never reports
+     it back on browse.
+   - [x] Both backends: send with only JMS Type + Body (everything else
      blank) — confirm it still sends, Correlation ID shows the
      auto-generated UUID, and no Group ID/custom properties appear.
-   - [ ] Both backends: send with a custom header literally named
+     **Confirmed** on both backends (Jolokia: `JMSXGroupID: <nil>`, empty
+     `PropertiesText`; mq-proxy: empty `PropertiesText`).
+   - [x] Both backends: send with a custom header literally named
      `JMSXGroupID` set to a different value than the Group ID field —
      confirm the message's real group comes from the Group ID field, not
      the header, proving the "dedicated field always wins" contract holds
-     against a real broker, not just mocked unit tests.
-   - [ ] Attempt to submit with a blank JMS Type, and with a malformed
+     against a real broker, not just mocked unit tests. **Confirmed** on
+     both backends: `JMSXGroupID` ended up as the dedicated field's value
+     (`real-group`/`real-proxy-group`), the spoofed header value never
+     appeared anywhere, including mq-proxy's own live service (not just
+     its mocked Kotlin unit test).
+   - [x] Attempt to submit with a blank JMS Type, and with a malformed
      Headers line — confirm the overlay stays open with a status-bar
-     error each time.
+     error each time. **Confirmed**: `"JMS Type is required"` and
+     `invalid header line "this line has no colon" (expected "key:
+     value")` each appeared in the status bar with the overlay still open.
