@@ -32,6 +32,13 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
          * `receive(timeout)` waits for that dispatch instead of racing it.
          */
         private const val RECEIVE_TIMEOUT_MS = 2000L
+
+        /**
+         * Header names governed by [SendMessageRequest]'s own dedicated
+         * fields (jmsType/correlationId/groupId) — never settable via the
+         * free-form `headers` map, see [sendMessage].
+         */
+        private val RESERVED_HEADER_KEYS = setOf("JMSType", "JMSCorrelationID", "JMSXGroupID")
     }
 
     private val log = LoggerFactory.getLogger(BrokerService::class.java)
@@ -154,7 +161,12 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             message.jmsType = request.jmsType
             request.correlationId?.let { message.jmsCorrelationID = it }
             request.groupId?.let { message.setStringProperty("JMSXGroupID", it) }
-            request.headers?.forEach { (key, value) -> message.setStringProperty(key, value) }
+            // Custom headers are appended, never allowed to override a reserved
+            // key already governed by jmsType/correlationId/groupId above — a
+            // colliding entry is dropped rather than applied.
+            request.headers
+                ?.filterKeys { it !in RESERVED_HEADER_KEYS }
+                ?.forEach { (key, value) -> message.setStringProperty(key, value) }
             producer.send(message)
             producer.close()
             return message.jmsMessageID

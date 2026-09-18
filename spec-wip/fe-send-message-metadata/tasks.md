@@ -31,7 +31,7 @@
    custom header named after a reserved key is dropped rather than
    applied.
 
-3. [ ] **mq-proxy: fix `BrokerService.sendMessage`'s header precedence.**
+3. [x] **mq-proxy: fix `BrokerService.sendMessage`'s header precedence.**
    In `mq-proxy/src/main/kotlin/.../service/BrokerService.kt`, filter the
    same three reserved keys out of `request.headers` before applying them
    (currently applied last, so a colliding header wins today — the fix
