@@ -121,13 +121,27 @@ what they act on:
 ### Send message
 
 - `c` in either the queues view or the messages view opens a send overlay:
-  a bordered flex with a multi-line `tview.TextArea` body field and two
-  actions, Submit and Cancel.
+  a bordered `tview.Form` with fields for JMS Type, Correlation ID, Group
+  ID, Headers, and Body, plus Submit/Cancel buttons.
+- **JMS Type** and **Body** are mandatory; submitting with either blank
+  shows a status-bar error and keeps the overlay open (mirroring
+  `MessageFilter.apply`'s pattern) rather than sending.
+- **Correlation ID** is pre-filled with a freshly generated RFC 4122 v4
+  UUID every time the overlay opens — visible and editable, not a hidden
+  default. Clearing it and submitting anyway regenerates a fresh UUID
+  right before sending rather than sending it blank.
+- **Group ID** is optional and blank by default — unset means no
+  `JMSXGroupID` is set on the outgoing message.
+- **Headers** is an optional, free-form `key: value`-per-line text area
+  for custom message properties. Blank lines are skipped; a line with no
+  `:` separator (or an empty key) is a validation error, same treatment
+  as a blank JMS Type/Body. **A header entry named `JMSType`,
+  `JMSCorrelationID`, or `JMSXGroupID` is dropped, never applied** — those
+  three already have their own dedicated field, and a header can only add
+  to the message, never override what the dedicated fields set.
 - On submit: message is sent, overlay closes, the queues list (and the
   messages list, if open) reload, status bar confirms.
 - On cancel/Esc: overlay closes, focus returns to the caller.
-- Text messages only — no headers, properties, JMS type selection, or
-  templates/history.
 
 ## Data & config
 
@@ -137,7 +151,18 @@ PurgeQueue(ctx context.Context, queueName string) error
 DeleteMessage(ctx context.Context, queueName, messageID string) error
 MoveMessage(ctx context.Context, queueName, messageID, targetQueue string) error
 MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) // returns count moved
-SendMessage(ctx context.Context, queueName, body string) error
+SendMessage(ctx context.Context, queueName string, req SendMessageRequest) error
+
+// SendMessageRequest: JMSType and Body are required; CorrelationID,
+// GroupID, and Headers are optional — a zero value means "don't set
+// this" on the outgoing message.
+type SendMessageRequest struct {
+	JMSType       string
+	Body          string
+	CorrelationID string
+	GroupID       string
+	Headers       map[string]string
+}
 
 // Also on queue.Backend (pre-existing — see spec/08 for MessageFilter's
 // shape — but this is their first UI entry point, via the optional JMS
@@ -165,14 +190,25 @@ every other queue operation (spec/07).
   java.lang.String)` with selector `"TRUE"` (matches everything).
 - **Send**: implemented via the Jolokia `exec` operation
   `sendTextMessage(java.util.Map,java.lang.String,java.lang.String,java.lang.String)`
-  on the destination's Broker MBean, args `[{} (empty headers map), body,
-  username, password]` — **not** the single-arg
-  `sendTextMessage(java.lang.String)` overload, which fails with `User
-  name [null]` because it never receives credentials. The
-  `Map`+3-string-arg overload is what actually creates a real JMS
-  `TextMessage`, fully browsable afterward, with the broker's own
+  on the destination's Broker MBean, args `[headers, body, username,
+  password]` — **not** the single-arg `sendTextMessage(java.lang.String)`
+  overload, which fails with `User name [null]` because it never receives
+  credentials. The `Map`+3-string-arg overload is what actually creates a
+  real JMS `TextMessage`, fully browsable afterward, with the broker's own
   credentials enforced. No STOMP, no separate transport/port — this reuses
   the same Jolokia HTTP connection as every other queue operation.
+- **The headers `Map` argument is where JMS Type/Correlation ID/Group
+  ID/custom headers all get set** (confirmed live against a real broker,
+  not just inferred from ActiveMQ's public API): `headers["JMSType"]` is
+  always set from `SendMessageRequest.JMSType`; `"JMSCorrelationID"`/
+  `"JMSXGroupID"` are set only when `CorrelationID`/`GroupID` are
+  non-empty; `SendMessageRequest.Headers`' custom entries are copied in
+  last, **except** the three reserved key names above, which are dropped
+  rather than applied — the dedicated field always wins, a header can
+  only add to the message, never override what a dedicated field set
+  (`sendMessageHeaders`, `internal/queue/jolokia/mutate.go`). mq-proxy's
+  `BrokerService.sendMessage` (spec/11) enforces the same rule, so the two
+  backends behave identically on a colliding header name.
 - **Side effect**: sending via `sendTextMessage` embeds a stale
   VM-transport connection reference into the sent message. The next
   `browseMessages()` call against *that queue* then throws
@@ -289,8 +325,14 @@ every other queue operation (spec/07).
 - Progress indicators for large purges/moves; no undo.
 - Bulk-purge of multiple queues at once.
 - Creating a new destination queue on the fly from the picker.
-- Message headers, properties, JMS type selection, templates/history on
-  send — body text only.
+- Message templates or send history.
+- A JMS Type autocomplete/picker on send, mirroring purge/move-all's
+  `JMSTypePrompt` above — a plain text field only.
+- Validating header keys/values against JMS naming restrictions beyond
+  the three reserved keys handled above — anything else is sent through
+  as typed.
+- Editing headers/properties on an *existing* message — this is
+  compose-only; the message detail view (spec/08) remains read-only.
 - Filtering purge/move-all by anything other than JMS Type (From/To
   date, Max Count) — mirrors `MessageFilter`'s own JMS-Type-only
   autocomplete (spec/08), not a general bulk-filter builder.
