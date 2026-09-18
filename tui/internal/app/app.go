@@ -328,7 +328,7 @@ func New(cfg config.Config) *App {
 
 	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
-	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 70, 14)
+	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 90, 26)
 
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 

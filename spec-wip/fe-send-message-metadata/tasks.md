@@ -42,7 +42,7 @@
    named `JMSXGroupID` (or `JMSType`/`JMSCorrelationID`) never reaches
    `setStringProperty` with that key — only the dedicated-field call does.
 
-4. [ ] **Rebuild the send overlay UI.** In `internal/dialog/sendmessage.go`,
+4. [x] **Rebuild the send overlay UI.** In `internal/dialog/sendmessage.go`,
    replace the `TextArea`+`tview.List` with a `tview.Form` (JMS Type,
    Correlation ID pre-filled via a new `newCorrelationID()` UUID
    generator, Group ID, a `key: value`-per-line Headers `TextArea`, the
