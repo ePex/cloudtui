@@ -35,7 +35,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
      kept, discard-changes prompt, Enter in Name/JMS Type saves.
    - Wired into `app.go`. Added to the dialog theme-switch regression
      test.
-6. [ ] **`SnippetsView`.**
+6. [x] **`SnippetsView`.**
    - Two-pane layout, preview, keys `n`/`N`/`e`/Enter/`R`/`d`/`r`, the
      delete confirmations (snippet, folder with counts, empty folder,
      symlinked folder), and focus restore.

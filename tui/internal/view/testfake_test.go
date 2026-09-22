@@ -326,6 +326,16 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 		{"CodePipelineListView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			return NewCodePipelineListView(host, func(string) {}), nil
 		}},
+		{"SnippetsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "ping.txt"), []byte("---\njmsType: T\n---\nbody"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			store := snippet.NewStore(root)
+			confirm := dialog.NewConfirmDialog(host)
+			v := NewSnippetsView(host, store, confirm, dialog.NewSnippetEditor(host, store, confirm), dialog.NewTextPrompt(host))
+			return v, nil
+		}},
 		{"MessageDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			confirm := dialog.NewConfirmDialog(host)
 			v := NewMessageDetailView(host, dialog.NewMovePicker(host), confirm,

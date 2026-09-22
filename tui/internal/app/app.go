@@ -63,6 +63,7 @@ type App struct {
 	queuesV        *view.QueuesView
 	messagesV      *view.MessagesView
 	messageDetailV *view.MessageDetailView
+	snippetsV      *view.SnippetsView
 	confirm        *dialog.ConfirmDialog
 	movePicker     *dialog.MovePicker
 	sendMessage    *dialog.SendMessageOverlay
@@ -134,6 +135,7 @@ func New(cfg config.Config) *App {
 			Title: "ActiveMQ",
 			Entries: []views.ViewInfo{
 				{Name: "queues", Description: "List ActiveMQ queues"},
+				{Name: "snippets", Description: "Manage message snippets"},
 			},
 		},
 		{
@@ -263,6 +265,7 @@ func New(cfg config.Config) *App {
 	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
 
 	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
+	a.snippetsV = view.NewSnippetsView(a, snippets, a.confirm, a.snippetEditor, a.textPrompt)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
 	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm, a.snippetSave,
 		func() {
@@ -321,7 +324,7 @@ func New(cfg config.Config) *App {
 		a.UpdateContextPanel(a.secretsV)
 	})
 
-	a.views = []ui.View{homeView, a.settingsV, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
+	a.views = []ui.View{homeView, a.settingsV, a.logV, a.queuesV, a.snippetsV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -466,6 +469,7 @@ func New(cfg config.Config) *App {
 		a.queuesV,
 		a.messagesV,
 		a.messageDetailV,
+		a.snippetsV,
 		a.ssmParamsV,
 		a.paramDetailV,
 		a.secretsV,

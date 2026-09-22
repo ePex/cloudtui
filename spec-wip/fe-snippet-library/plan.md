@@ -220,6 +220,16 @@ the existing ones do. New names go through `ValidateName`.
   - the preview's background and base text color are reset (spec/04)
   - the preview is redrawn
 
+- **Settled during task 6:**
+  - The shortcut hint also lists `Backspace` ("up a folder"), since the
+    view has no Esc.
+  - The empty-library hint's extra line reads "Or press n to create one
+    here."
+  - View tests drive the real dialogs with key events (typing, Ctrl-U,
+    Enter, Down/Enter on the confirmation), not internal calls. So each
+    flow is tested end to end from the view: new, new folder,
+    rename/move, and the delete questions with their answers.
+
 ## `internal/app/app.go`: wiring
 
 - **Build:** `SnippetEditor` and `TextPrompt` with the other dialogs.

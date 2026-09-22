@@ -18,7 +18,7 @@ func TestPromptSuggestionsEmptyPrefixReturnsFullList(t *testing.T) {
 		"quit", "home", "settings", "log",
 		"aq", "connections", "ap", "awsprofiles",
 		"theme ",
-		"queues", "ssm-parameters", "secrets-manager",
+		"queues", "snippets", "ssm-parameters", "secrets-manager",
 		"cloudwatch-logs", "datadog-logs", "codepipeline",
 	}
 	if !reflect.DeepEqual(got, want) {
