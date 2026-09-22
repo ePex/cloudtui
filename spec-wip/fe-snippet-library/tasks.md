@@ -30,7 +30,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
      it open. Enter is handled in the input capture.
    - Wired into `app.go` (page, overlay list, theming). Added to the
      dialog theme-switch regression test.
-5. [ ] **`SnippetEditor` dialog.**
+5. [x] **`SnippetEditor` dialog.**
    - New and edit modes: overwrite prompt, rename via `Move`, `Extra`
      kept, discard-changes prompt, Enter in Name/JMS Type saves.
    - Wired into `app.go`. Added to the dialog theme-switch regression

@@ -218,6 +218,12 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 			tp := NewTextPrompt(host)
 			return tp, func() { tp.Show("New folder", "Name:", "orders", func(string) error { return nil }, func() {}) }
 		}},
+		{"SnippetEditor", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			se := NewSnippetEditor(host, snippet.NewStore(t.TempDir()), NewConfirmDialog(host))
+			return se, func() {
+				se.ShowEdit("orders/created.json", snippet.Snippet{JMSType: "OrderCreated", Body: "{\n  \"id\": 1\n}"}, func(string) {}, func() {})
+			}
+		}},
 		{"AWSProfilesPicker", false, func(t *testing.T, host *testHost) (overlay, func()) {
 			ap := NewAWSProfilesPicker(host)
 			return ap, func() {

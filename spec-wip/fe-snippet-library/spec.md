@@ -78,7 +78,7 @@ go up a folder, and `h` goes Home.
     or uses subfolders. It follows the same rules as the save dialog:
     absolute paths, `..`, a trailing `/` and hidden segments are
     rejected.
-  - **JMS Type**: optional.
+  - **JMS Type**: optional. Surrounding spaces are trimmed on save.
   - **Body**: multi-line.
 
   Buttons are **Save** and **Cancel**.

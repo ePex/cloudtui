@@ -151,6 +151,17 @@ the existing ones do. New names go through `ValidateName`.
   `TextArea` does.
 - **Size:** `ui.Centered(…, 90, 26)`, like the send dialog, which has
   the same body area.
+- **Settled during task 5:**
+  - **`onClose`:** both `Show` methods also take an `onClose`, like
+    every other dialog, so the view can restore focus after a cancel
+    too. `onSaved` runs after the editor has closed.
+  - **The Name is validated on its own before it's joined** with the
+    folder. Joining first would let `orders` + `../x` clean up to `x`
+    and pass, and an empty Name would validate as the folder itself.
+  - **Surrounding spaces are trimmed from JMS Type** on save.
+  - **A rename that succeeds but whose write then fails** leaves the
+    snippet at its new path; the editor stays open and a retry saves
+    there.
 
 ### `TextPrompt` (new, `textprompt.go`, page `text-prompt`)
 

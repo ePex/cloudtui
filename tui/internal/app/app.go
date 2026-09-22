@@ -69,6 +69,7 @@ type App struct {
 	snippetPicker  *dialog.SnippetPicker
 	snippetSave    *dialog.SnippetSaveDialog
 	textPrompt     *dialog.TextPrompt
+	snippetEditor  *dialog.SnippetEditor
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
@@ -249,6 +250,7 @@ func New(cfg config.Config) *App {
 	a.snippetPicker = dialog.NewSnippetPicker(a, snippets)
 	a.snippetSave = dialog.NewSnippetSaveDialog(a, snippets, a.confirm)
 	a.textPrompt = dialog.NewTextPrompt(a)
+	a.snippetEditor = dialog.NewSnippetEditor(a, snippets, a.confirm)
 	a.sendMessage = dialog.NewSendMessageOverlay(a, a.snippetPicker, a.confirm)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
@@ -350,6 +352,9 @@ func New(cfg config.Config) *App {
 	snippetSaveOverlay := ui.Centered(a.snippetSave.Primitive(), 64, 8)
 	// Same shape as the save-as-snippet dialog: one field plus buttons.
 	textPromptOverlay := ui.Centered(a.textPrompt.Primitive(), 64, 8)
+	// Same size as the send-message dialog, which has the same kind of
+	// multi-line body.
+	snippetEditorOverlay := ui.Centered(a.snippetEditor.Primitive(), 90, 26)
 
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
@@ -410,6 +415,7 @@ func New(cfg config.Config) *App {
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("snippet-picker", snippetPickerOverlay, true, false).
 		AddPage("snippet-save", snippetSaveOverlay, true, false).
+		AddPage("snippet-editor", snippetEditorOverlay, true, false).
 		AddPage("text-prompt", textPromptOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
@@ -444,6 +450,7 @@ func New(cfg config.Config) *App {
 		a.snippetPicker,
 		a.snippetSave,
 		a.textPrompt,
+		a.snippetEditor,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
@@ -476,6 +483,7 @@ func New(cfg config.Config) *App {
 		a.snippetPicker,
 		a.snippetSave,
 		a.textPrompt,
+		a.snippetEditor,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
