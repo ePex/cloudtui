@@ -80,17 +80,41 @@ func StyleFilterInput(i *tview.InputField, p config.Palette) *tview.InputField {
 	return i.SetPlaceholderStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Value)).Background(bg))
 }
 
-// StyleDropDown applies palette colors to the dropdown's popup list so
-// unselected items are readable against the theme background.
-func StyleDropDown(dd *tview.DropDown, p config.Palette) {
-	dd.SetListStyles(
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.Text)).
-			Background(tcell.GetColor(p.Background)),
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.SelectionText)).
-			Background(tcell.GetColor(p.SelectionBg)),
-	)
+// StyleFormDropDown applies p to the parts of dd a tview.Form doesn't
+// restyle itself — for a dropdown inside a form (whose label, field, and
+// background Form.Draw hands down via SetFormAttributes). That's the popup
+// list (unselected rows in Text on Background, the selected row in the
+// palette's selection colors — without this, unselected popup items are
+// unreadable) plus the focused, prefix, and disabled styles, which tview
+// copies at construction and would otherwise keep the previous theme's
+// colors after a live switch. Those three get the same colors
+// ApplyTviewStyles gives a freshly built dropdown.
+func StyleFormDropDown(dd *tview.DropDown, p config.Palette) *tview.DropDown {
+	bg := tcell.GetColor(p.Background)
+	text := tcell.GetColor(p.Text)
+	inverted := tcell.StyleDefault.Foreground(bg).Background(text)
+	return dd.
+		SetListStyles(
+			tcell.StyleDefault.Foreground(text).Background(bg),
+			tcell.StyleDefault.
+				Foreground(tcell.GetColor(p.SelectionText)).
+				Background(tcell.GetColor(p.SelectionBg)),
+		).
+		SetFocusedStyle(inverted).
+		SetPrefixStyle(inverted).
+		SetDisabledStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Value)).Background(bg))
+}
+
+// StyleDropDown applies p to a stand-alone dropdown (not inside a form):
+// everything StyleFormDropDown does, plus what a form would otherwise hand
+// down — its own Box background (which the label is drawn on), the label
+// in Label, and the field in SelectionText on SelectionBg, matching the
+// stand-alone filter inputs (see StyleFilterInput). Label width 0 means
+// "fit the label"; no stand-alone dropdown calls SetLabelWidth.
+func StyleDropDown(dd *tview.DropDown, p config.Palette) *tview.DropDown {
+	bg := tcell.GetColor(p.Background)
+	dd.SetFormAttributes(0, tcell.GetColor(p.Label), bg, tcell.GetColor(p.SelectionText), tcell.GetColor(p.SelectionBg))
+	return StyleFormDropDown(dd, p)
 }
 
 // AutocompletePanelBlend is how far StyleInputFieldAutocomplete tints the

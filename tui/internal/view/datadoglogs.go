@@ -103,19 +103,10 @@ func NewDatadogLogsView(a ui.DatadogLogsHost, timeRangeModal *dialog.TimeRangeMo
 
 	serviceFilterDD := tview.NewDropDown()
 	serviceFilterDD.SetLabel(" Service: ")
-	serviceFilterDD.SetLabelColor(tcell.GetColor(p.Label))
-	serviceFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	serviceFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	// Without this, unselected popup-list items are unreadable — same
-	// gotcha already hit (and fixed via styleDropDown) for the theme and
-	// connection-editor Backend dropdowns.
 	ui.StyleDropDown(serviceFilterDD, p)
 
 	envFilterDD := tview.NewDropDown()
 	envFilterDD.SetLabel(" Env: ")
-	envFilterDD.SetLabelColor(tcell.GetColor(p.Label))
-	envFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	envFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 	ui.StyleDropDown(envFilterDD, p)
 
 	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).

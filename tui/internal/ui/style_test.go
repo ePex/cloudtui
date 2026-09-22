@@ -271,6 +271,151 @@ func TestStyleFilterInputControlWithoutRestyleKeepsOldLabelBackground(t *testing
 	assertCellColors(t, "label", findText(t, renderCells(t, i, 30, 1), "/ filter:"), cyber.Label, dark.Background)
 }
 
+// dropDownState puts a freshly built dropdown into the state a test
+// renders it in: unfocused, focused (closed), or open (popup list shown).
+type dropDownState int
+
+const (
+	ddUnfocused dropDownState = iota
+	ddFocused
+	ddOpen
+)
+
+// focusTree focuses p the way tview.Application does, recursing into
+// whatever p delegates focus to.
+func focusTree(p tview.Primitive) {
+	var focus func(tview.Primitive)
+	focus = func(p tview.Primitive) { p.Focus(focus) }
+	focus(p)
+}
+
+// newStandaloneDropDown builds a " Env: " dropdown (prod/dev, prod
+// selected) while tview.Styles holds theme, styled with StyleDropDown at
+// construction the way the Datadog view builds its filters, then puts it
+// into state.
+func newStandaloneDropDown(t *testing.T, theme string, state dropDownState) *tview.DropDown {
+	t.Helper()
+	p := mustPalette(t, theme)
+	withTviewStyles(t, p)
+	dd := tview.NewDropDown().SetLabel(" Env: ").SetOptions([]string{"prod", "dev"}, nil)
+	dd.SetCurrentOption(0)
+	StyleDropDown(dd, p)
+	setDropDownState(dd, state)
+	return dd
+}
+
+func setDropDownState(dd *tview.DropDown, state dropDownState) {
+	if state == ddUnfocused {
+		return
+	}
+	focusTree(dd)
+	if state == ddOpen {
+		dd.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { focusTree(p) })
+	}
+}
+
+func TestStyleDropDownRecolorsLabelAndField(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	dd := newStandaloneDropDown(t, "dark", ddUnfocused)
+
+	if got := StyleDropDown(dd, cyber); got != dd {
+		t.Fatal("StyleDropDown did not return the same dropdown for chaining")
+	}
+	rows := renderCells(t, dd, 30, 4)
+
+	assertCellColors(t, "label", findText(t, rows, "Env:"), cyber.Label, cyber.Background)
+	assertCellColors(t, "field", findText(t, rows, "prod"), cyber.SelectionText, cyber.SelectionBg)
+}
+
+// TestStyleDropDownMatchesRestart checks a live switch draws a
+// stand-alone dropdown — unfocused, focused, and open — exactly as one
+// built under cyberpunk from the start does.
+func TestStyleDropDownMatchesRestart(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	for _, tt := range []struct {
+		name  string
+		state dropDownState
+	}{
+		{"unfocused", ddUnfocused},
+		{"focused", ddFocused},
+		{"open", ddOpen},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			live := StyleDropDown(newStandaloneDropDown(t, "dark", tt.state), cyber)
+			liveRows := renderCells(t, live, 30, 4)
+			if tt.state == ddOpen {
+				findText(t, liveRows, "dev") // only drawn while the popup list is open
+			}
+			assertSameCells(t, liveRows, renderCells(t, newStandaloneDropDown(t, "cyberpunk", tt.state), 30, 4))
+		})
+	}
+}
+
+// newFormWithDropDown builds a form holding a "Backend" dropdown
+// (jolokia/proxy) while tview.Styles holds theme, styled the way the
+// connection editor builds it (StyleForm + StyleFormDropDown), then puts
+// the dropdown into state.
+func newFormWithDropDown(t *testing.T, theme string, state dropDownState) *tview.Form {
+	t.Helper()
+	p := mustPalette(t, theme)
+	withTviewStyles(t, p)
+	f := tview.NewForm().AddDropDown("Backend", []string{"jolokia", "proxy"}, 0, nil)
+	f.SetBackgroundColor(tcell.GetColor(p.Background))
+	StyleForm(f, p)
+	dd := f.GetFormItem(0).(*tview.DropDown)
+	StyleFormDropDown(dd, p)
+	if state != ddUnfocused {
+		focusTree(f)
+		if state == ddOpen {
+			f.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { focusTree(p) })
+		}
+	}
+	return f
+}
+
+// TestStyleFormDropDownMatchesRestart checks the in-form case: StyleForm
+// plus StyleFormDropDown draw the dropdown — unfocused, focused, and open
+// — exactly as a restart does.
+func TestStyleFormDropDownMatchesRestart(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	for _, tt := range []struct {
+		name  string
+		state dropDownState
+	}{
+		{"unfocused", ddUnfocused},
+		{"focused", ddFocused},
+		{"open", ddOpen},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			live := newFormWithDropDown(t, "dark", tt.state)
+			live.SetBackgroundColor(tcell.GetColor(cyber.Background))
+			StyleForm(live, cyber)
+			StyleFormDropDown(live.GetFormItem(0).(*tview.DropDown), cyber)
+			liveRows := renderCells(t, live, 40, 6)
+			if tt.state == ddOpen {
+				findText(t, liveRows, "proxy") // only drawn while the popup list is open
+			}
+			assertSameCells(t, liveRows, renderCells(t, newFormWithDropDown(t, "cyberpunk", tt.state), 40, 6))
+		})
+	}
+}
+
+// TestStyleDropDownControlWithoutRestyleKeepsOldColors is the control: the
+// setters the Datadog view used before this fix (label and field colors
+// only at construction, then just the popup list styles on a switch)
+// leave the label on the construction-time (dark) background and the
+// field in dark's colors.
+func TestStyleDropDownControlWithoutRestyleKeepsOldColors(t *testing.T) {
+	dark, cyber := mustPalette(t, "dark"), mustPalette(t, "cyberpunk")
+	dd := newStandaloneDropDown(t, "dark", ddUnfocused)
+	ApplyTviewStyles(cyber)
+	StyleFormDropDown(dd, cyber) // what StyleDropDown used to be: list styles only
+
+	rows := renderCells(t, dd, 30, 4)
+	assertCellColors(t, "label", findText(t, rows, "Env:"), dark.Label, dark.Background)
+	assertCellColors(t, "field", findText(t, rows, "prod"), dark.SelectionText, dark.SelectionBg)
+}
+
 func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {
 	p := config.Palette{
 		Background:    "#1a1b26",

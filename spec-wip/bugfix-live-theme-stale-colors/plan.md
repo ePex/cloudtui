@@ -111,18 +111,30 @@ so their label and field colors are never reapplied at all.
   `AWSProfilesPicker.ApplyPalette` never restyled their input
   (` / search:` and ` / filter:`) at all, so after a live switch those
   kept the old theme entirely. Both now call `StyleFilterInput`.
-- **`StyleDropDown(dd, p)`**: also set the label style (`Label` on
-  `Background`) and field colors (`SelectionText` on `SelectionBg`), on
-  top of the list styles it sets today. The Datadog view's `ApplyPalette`
-  already calls it, so that's fixed with no change there, and the
-  now-duplicated construction-time lines in `datadoglogs.go` go.
-  - **One exception:** in the connection editor, the Backend dropdown
-    sits inside a form, which sets its label and field colors every
-    draw. `StyleDropDown`'s new label and field lines would be
-    overridden there, which is harmless. To keep that obvious, I'll
-    split it into `StyleDropDownList` (the existing list styles, for
-    dropdowns inside a form) and `StyleDropDown` (list, label and field,
-    for stand-alone dropdowns).
+- **Dropdowns: two helpers.** A dropdown keeps more from construction
+  than the first draft of this plan listed: besides the label, field and
+  pop-up list, also its focused, prefix and disabled styles and its own
+  box background. A form passes on none of the last four. So the split
+  is by where the dropdown sits:
+  - **New `StyleFormDropDown(dd, p)`,** for dropdowns inside a form.
+    It sets everything a form *doesn't* pass on:
+    - the pop-up list's styles (what `StyleDropDown` did before)
+    - focused and prefix: `Background` on `Text`
+    - disabled: `Value` on `Background`
+
+    These match a restart. The name is clearer than the first draft's
+    `StyleDropDownList`, since it covers more than the list.
+  - **`StyleDropDown(dd, p)`,** for stand-alone dropdowns, calls
+    `StyleFormDropDown` and also sets its own box background, the label
+    (`Label`) and the field (`SelectionText` on `SelectionBg`). It uses
+    `SetFormAttributes` with label width 0, like `StyleFilterInput`.
+  - The Datadog view's `ApplyPalette` already calls `StyleDropDown`, so
+    it's fixed with no change there. The now-duplicated
+    construction-time lines in `datadoglogs.go` go.
+  - The connection editor's in-form dropdowns switch to
+    `StyleFormDropDown`. Its `ApplyPalette` now restyles **both**
+    dropdowns, Backend and Authentication Mode; only Backend was
+    restyled before.
 
 **Forms: `ApplyPalette` calls `ui.StyleForm`**
 
@@ -180,26 +192,25 @@ assuming.
 
   Then restart and confirm it looks identical.
 
-## Open question (found during task 3)
+## Startup applies every palette too (added after task 3)
 
-`ApplyPalette` runs only on a live theme switch, never at startup
-(`App.New` builds the widgets but doesn't call it). So a few widgets that
-get their palette colors *only* from `ApplyPalette` look different right
-after startup than after a live switch. The difference runs the other
-way from this bug: here the startup look is the one that's off.
+`ApplyPalette` used to run only on a live theme switch, never at startup
+(`App.New` builds the widgets but didn't call it). So a few widgets that
+get their palette colors *only* from `ApplyPalette` looked different
+right after startup than after a live switch:
 
-- **`MovePicker` and `SnippetPicker`:** their lists get `StyleList`, and
+- **`MovePicker` and `SnippetPicker`:** their lists got `StyleList`, and
   so the palette's `SelectionBg`/`SelectionText` highlight, only on a
-  live switch. At startup the selected row uses tview's default instead:
+  live switch. At startup the selected row used tview's default instead:
   `Background` text on `Text` background, i.e. inverted body colors.
   Confirmed in the #29 live check's color capture after a restart.
-- **`MovePicker`'s search box:** gets `StyleFilterInput` only on a live
-  switch. At startup it has tview's default input colors (`Value` label,
-  `Text` on `Background` field), not the `SelectionBg` field the other
-  filter inputs use.
+- **`MovePicker`'s search box:** got `StyleFilterInput` only on a live
+  switch. At startup it had tview's default input colors.
 
-Possible fix: have `App.New` call `ApplyPalette(cfg.Colors)` on every
-themable once, after construction. Then startup, live switch and restart
-all look the same, and the look is the one each `ApplyPalette` already
-defines. This changes how those widgets look at startup, so it's the
-user's call whether it belongs in this bugfix.
+**Decision (user, task 3 review):** fix it in this bugfix.
+- `App.New` calls `ApplyPalette(cfg.Colors)` on every entry of
+  `a.themables` once, right after that slice is built.
+- Startup, live switch and restart then all show the same colors: the
+  ones each `ApplyPalette` already defines.
+- This does change how those pickers look at startup, which is
+  intended.

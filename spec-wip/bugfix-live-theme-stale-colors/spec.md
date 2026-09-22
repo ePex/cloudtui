@@ -64,6 +64,12 @@ point of switching live.
   field and button colors from the palette.
 - **Input fields and dropdowns:** stand-alone ones get the same
   treatment wherever the plan finds them affected.
+- **Startup:** a few widgets (the Move-to-Queue and snippet pickers'
+  selected row, the Move-to-Queue search box) got their palette colors
+  *only* on a live switch, and showed tview defaults right after
+  startup. Startup applies every widget's palette too, so startup, live
+  switch and restart all look the same. Added after task 3, at the
+  user's request.
 - **Snippet dialogs:** the fix covers `SnippetPicker` and
   `SnippetSaveDialog` (merged in PR #29).
 - **Tests:** each fixed widget gets a test that builds it under one
