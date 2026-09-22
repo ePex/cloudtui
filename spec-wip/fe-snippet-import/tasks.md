@@ -16,7 +16,7 @@ make sure the mutated code still compiles.
    - Moves focus to the JMS Type field of an open editor.
    - Test: after `ShowEdit` + `FocusJMSType`, typed text lands in JMS
      Type, and Enter saves.
-3. [ ] **The `i` key in the Snippets view.**
+3. [x] **The `i` key in the Snippets view.**
    - The two chained prompts, the pending import, saving without
      overwrite, landing on the snippet, the status message, and the
      editor opening (focused on JMS Type) when the snippet has none.

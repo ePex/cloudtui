@@ -1,6 +1,7 @@
 package view
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,8 @@ import (
 // SnippetsView is the snippet library: a folder-by-folder list of
 // ~/.cloudtui/snippets/ on the left, a preview of the entry under the
 // cursor on the right, and keys to create, edit, rename/move, and delete
-// snippets and folders. It re-reads the folder every time it's opened.
+// snippets and folders, and to import files from elsewhere. It re-reads
+// the folder every time it's opened.
 type SnippetsView struct {
 	host    ui.Host
 	store   *snippet.Store
@@ -27,6 +29,14 @@ type SnippetsView struct {
 	browser *dialog.SnippetBrowser
 	preview *tview.TextView
 	flex    *tview.Flex
+	pending *pendingImport // a file read by import step 1, awaiting its name
+}
+
+// pendingImport is a file read (and checked) by the import's first step,
+// kept for the second step that names it in the library.
+type pendingImport struct {
+	source  string // the absolute path it was read from
+	snippet snippet.Snippet
 }
 
 var (
@@ -66,6 +76,7 @@ func (v *SnippetsView) Shortcuts() []ui.Shortcut {
 		{Key: "Enter", Description: "open folder / edit"},
 		{Key: "n", Description: "new snippet"},
 		{Key: "N", Description: "new folder"},
+		{Key: "i", Description: "import file"},
 		{Key: "e", Description: "edit"},
 		{Key: "R", Description: "rename / move"},
 		{Key: "d", Description: "delete"},
@@ -94,6 +105,8 @@ func (v *SnippetsView) handleKey(event *tcell.EventKey) *tcell.EventKey {
 		v.editor.ShowNew(v.browser.Dir(), v.landOn, v.restoreFocus)
 	case 'N':
 		v.newFolder()
+	case 'i':
+		v.importFile()
 	case 'r':
 		v.browser.Reload()
 	case 'e':
@@ -150,6 +163,78 @@ func (v *SnippetsView) newFolder() {
 		v.landOn(path)
 		return nil
 	}, v.restoreFocus)
+}
+
+// importFile is the import's first step: it asks for the absolute path
+// of a file anywhere on disk, and reads and checks it (regular file, text,
+// at most 1 MiB, valid front matter). A problem keeps the prompt open;
+// once the file is good, the second step asks for its name.
+func (v *SnippetsView) importFile() {
+	v.pending = nil
+	v.prompt.Show("Import file", "Path:", "", func(text string) error {
+		path, err := snippet.CleanImportPath(text)
+		if err != nil {
+			return err
+		}
+		sn, err := snippet.ReadImportFile(path)
+		if err != nil {
+			return err
+		}
+		v.pending = &pendingImport{source: path, snippet: sn}
+		return nil
+	}, func() {
+		// Runs after the prompt has hidden itself, so the same prompt can
+		// be shown again for the second step.
+		if v.pending == nil {
+			v.restoreFocus() // cancelled
+			return
+		}
+		v.importAs(*v.pending)
+	})
+}
+
+// importAs is the import's second step: it asks for the snippet's name
+// in the current folder (prefilled with the file's name) and saves it
+// through the store — never overwriting — so the library's naming and
+// body formatting apply. A snippet without a JMS Type then opens in the
+// editor on that field, since the send dialog needs one.
+func (v *SnippetsView) importAs(imp pendingImport) {
+	dir := v.browser.Dir()
+	var saved string
+	v.prompt.Show("Import as", "Name:", filepath.Base(imp.source), func(text string) error {
+		// Validated as typed before joining, so ".." can't clean away.
+		name, err := snippet.ValidateName(text)
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(dir, name)
+		if err := v.store.Save(path, imp.snippet, false); err != nil {
+			if errors.Is(err, snippet.ErrExists) {
+				return fmt.Errorf("%q: %w", filepath.ToSlash(path), err)
+			}
+			return err
+		}
+		saved = path
+		v.host.SetStatus(fmt.Sprintf("Imported %s as %s", tview.Escape(imp.source), tview.Escape(filepath.ToSlash(path))))
+		v.landOn(path)
+		return nil
+	}, func() {
+		v.pending = nil
+		if saved == "" || imp.snippet.JMSType != "" {
+			v.restoreFocus()
+			return
+		}
+		// Reloaded rather than reused, so the editor shows the body as
+		// the library saved it (JSON/XML formatted).
+		sn, err := v.store.Load(saved)
+		if err != nil {
+			v.showError(err)
+			v.restoreFocus()
+			return
+		}
+		v.editor.ShowEdit(saved, sn, v.landOn, v.restoreFocus)
+		v.editor.FocusJMSType()
+	})
 }
 
 // rename asks for a new path (relative to the snippets root, prefilled
