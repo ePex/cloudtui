@@ -2,7 +2,9 @@
 
 Each task is implemented and approved on its own, then pushed.
 
-1. [ ] **Test scaffolding and `StyleList`.**
+1. [x] **Test scaffolding and `StyleList`.**
+   - Move the palette → `tview.Styles` mapping into
+     `ui.ApplyTviewStyles` (called by `app.applyTheme`).
    - Add a `tview.Styles` save/restore helper and a render-colors helper
      to `internal/ui` tests.
    - Extend `StyleList` to set the main, secondary and shortcut styles.

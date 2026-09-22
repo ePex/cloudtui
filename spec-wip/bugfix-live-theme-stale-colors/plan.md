@@ -57,6 +57,16 @@ so their label and field colors are never reapplied at all.
 
 ## Changes
 
+**`internal/ui/theme.go`**
+
+- The palette → `tview.Styles` mapping moves out of `app.applyTheme`
+  into an exported `ui.ApplyTviewStyles(p)`; `app.applyTheme` now just
+  calls it. This wasn't in the first draft of this plan. Tests in `ui`,
+  `dialog` and `view` must all put `tview.Styles` into palette A the way
+  startup does, and one shared, exported mapping keeps them (and the
+  `Style*` helpers' notion of "what a restart gives") from drifting away
+  from the real one.
+
 **`internal/ui/style.go`**
 
 - **`StyleList(l, p)`**: in addition to the selected colors it sets

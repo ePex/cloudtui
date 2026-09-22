@@ -7,15 +7,19 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
-// StyleList applies p's selection colors to l. tview.List's own computed
-// default selection style inverts body text (background/text swapped), which
-// doesn't produce the palette's highlight look — so selection is wired
-// explicitly here rather than riding on applyTheme.
-//
-// Note: tview.List exposes no getter for its selected-item style, so the
-// result cannot be unit-tested directly. Verified manually instead.
+// StyleList applies p to every item style of l. The main, secondary, and
+// shortcut styles use the same colors ApplyTviewStyles gives a freshly
+// built list — reapplied here because tview.List copies them at
+// construction, so without this a live theme switch would leave every
+// unselected row in the previous theme's colors. Selection is always
+// wired explicitly: tview's computed default inverts body text, which
+// doesn't produce the palette's highlight look.
 func StyleList(l *tview.List, p config.Palette) *tview.List {
+	bg := tcell.GetColor(p.Background)
 	return l.
+		SetMainTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(bg)).
+		SetSecondaryTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)).Background(bg)).
+		SetShortcutStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Value)).Background(bg)).
 		SetSelectedBackgroundColor(tcell.GetColor(p.SelectionBg)).
 		SetSelectedTextColor(tcell.GetColor(p.SelectionText))
 }
