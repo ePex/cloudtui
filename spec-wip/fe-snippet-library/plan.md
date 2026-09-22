@@ -24,25 +24,35 @@ matter.
 
 ### Keeping unknown front-matter keys (spec: edit)
 
-- `Snippet` gains an exported field `Extra string`: the front matter's
-  **other** keys as YAML text, i.e. everything except `jmsType`. It's
-  `""` when there are none, so every existing `Snippet{...}` literal and
-  `==` comparison (`snippet`, `dialog` and `view` tests) still holds for
-  files that only have `jmsType`.
-- **`Parse`** decodes the front matter into a `yaml.Node` rather than a
-  struct.
-  - The root must be a mapping, or empty; anything else is an error, as
-    today.
-  - `jmsType` is read from the mapping and its key/value pair removed.
-  - A non-string `jmsType` is still an error, as today.
-  - If any pairs remain, they're marshaled back to YAML as `Extra`.
-- **`Format`** writes `jmsType` first (when set), then `Extra` verbatim,
-  between the delimiters. Front matter is written when either is
-  non-empty, or when the body starts with `---` (the existing rule).
-- **What's preserved:** the other keys, their values, order and
-  comments. yaml.v3 may normalize whitespace and quoting, and `jmsType`
-  moves to the top. Because `Parse` always produces normalized `Extra`,
-  `Parse(Format(s)) == s` still holds (round-trip tests extended).
+- **Changed from the first draft after a yaml.v3 experiment.** yaml.v3
+  attaches comments to specific nodes: a comment above `jmsType` belongs
+  to the `jmsType` key, and a line comment to its value. So *removing*
+  `jmsType` from the saved YAML would have orphaned its comments.
+  Instead, `Extra` holds the **whole** front matter.
+- **What `Extra` holds:** the front matter, as normalized YAML, whenever
+  it contains more than a lone `jmsType` (other keys, or comments
+  anywhere). It's `""` otherwise, so every existing `Snippet{...}`
+  literal and `==` comparison still holds for plain files. "Lone
+  `jmsType`" is checked structurally (no comments, and either no keys or
+  one `jmsType` pair, however quoted), not by comparing text.
+- **`Parse`** decodes into a `yaml.Node`.
+  - The root must be a mapping, empty, or null; anything else is an
+    error ("front matter must be a mapping of keys to values").
+  - `jmsType` is read with `Node.Decode`, so a non-scalar `jmsType` is
+    still an error, as before.
+- **`Format`** uses `Extra` as a template:
+  - it sets `jmsType`'s value in place (position, comments and quote
+    style kept)
+  - it adds `jmsType` as the first key if missing
+  - it removes the pair, with its own comments, when `JMSType` is empty
+
+  Without `Extra` it writes the lone `jmsType` line, as before.
+- **Result:** after an edit, the file is byte-for-byte the same except
+  for the `jmsType` line. Other keys, values, order, comments, blank
+  lines after a document comment, and flow lists are all kept (checked
+  by printing an edited file). Because `Extra` is normalized, `Parse`
+  then `Format` is stable: saving without edits reproduces the same
+  `Snippet`.
 - The editor passes `Extra` through untouched: it only edits `JMSType`
   and `Body`.
 

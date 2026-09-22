@@ -3,9 +3,10 @@
 Each task is implemented and approved on its own, then pushed. Every new
 test is mutation-checked: remove the fix and confirm the test fails.
 
-1. [ ] **Keep unknown front-matter keys.**
-   - Add `Snippet.Extra`. `Parse` goes through `yaml.Node`; `Format`
-     writes `jmsType` and then `Extra`.
+1. [x] **Keep unknown front-matter keys.**
+   - Add `Snippet.Extra` (the whole front matter when it holds more than
+     a lone `jmsType`). `Parse` goes through `yaml.Node`; `Format` uses
+     `Extra` as a template and only sets, adds or removes `jmsType`.
    - Tests:
      - unknown keys kept, including order and a comment
      - `jmsType` added, changed, or cleared with `Extra` intact
