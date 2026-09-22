@@ -84,7 +84,10 @@ No new dependencies.
 - **Mutation checks:**
   - drop the `raw` write (CDATA escaped again)
   - treat whitespace-only CDATA as whitespace (it gets dropped)
-  - drop the fallback
+- **The fallback can't be tested.** For input the validator accepts,
+  `Decoder.InputOffset()` is always consistent, so no input can trigger
+  it. Its mutation check confirmed that: removing it fails no test. It's
+  kept as a defensive guard, with a comment in the code saying so.
 - **Live check:** save and edit a snippet with an embedded CDATA
   payload in the Snippets view, preview it, and send it through **Load
   snippet…**. The message on the queue keeps its CDATA section.

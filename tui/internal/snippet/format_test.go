@@ -53,6 +53,42 @@ func TestFormatBody(t *testing.T) {
 			body: "hello\nworld",
 			want: "hello\nworld",
 		},
+		// CDATA sections are kept exactly as written; the rest is indented.
+		{
+			name: "CDATA holding an XML document, in a nested element",
+			body: `<envelope><body><payload><![CDATA[<order id="1">x < y & "z"</order>]]></payload></body></envelope>`,
+			want: "<envelope>\n  <body>\n    <payload><![CDATA[<order id=\"1\">x < y & \"z\"</order>]]></payload>\n  </body>\n</envelope>",
+		},
+		{
+			name: "line breaks and indentation inside CDATA",
+			body: "<a><b><![CDATA[\n  line one\n\tline two\n]]></b></a>",
+			want: "<a>\n  <b><![CDATA[\n  line one\n\tline two\n]]></b>\n</a>",
+		},
+		{
+			name: "whitespace-only CDATA",
+			body: "<a><b><![CDATA[   ]]></b></a>",
+			want: "<a>\n  <b><![CDATA[   ]]></b>\n</a>",
+		},
+		{
+			name: "two CDATA sections and text in one element",
+			body: "<a><b>before <![CDATA[<x/>]]> middle <![CDATA[&]]> after</b></a>",
+			want: "<a>\n  <b>before <![CDATA[<x/>]]> middle <![CDATA[&]]> after</b>\n</a>",
+		},
+		{
+			name: "CDATA next to a child element is mixed content",
+			body: "<a><![CDATA[x]]><b>1</b></a>",
+			want: "<a><![CDATA[x]]><b>1</b></a>",
+		},
+		{
+			name: "whitespace-only CDATA next to a child element is mixed content",
+			body: "<a><![CDATA[ ]]><b>1</b></a>",
+			want: "<a><![CDATA[ ]]><b>1</b></a>",
+		},
+		{
+			name: "plain text is still escaped as before",
+			body: "<a><b>x &amp; y &lt; z</b></a>",
+			want: "<a>\n  <b>x &amp; y &lt; z</b>\n</a>",
+		},
 	}
 
 	for _, tt := range tests {
@@ -63,7 +99,9 @@ func TestFormatBody(t *testing.T) {
 		})
 	}
 
-	for _, body := range []string{`{"id":1}`, `<root><item/></root>`, `<p>Hello <b>there</b> friend</p>`} {
+	for _, body := range []string{`{"id":1}`, `<root><item/></root>`, `<p>Hello <b>there</b> friend</p>`,
+		`<envelope><payload><![CDATA[<order id="1">x < y</order>]]></payload></envelope>`,
+		"<a><b><![CDATA[\n  multi\n]]></b></a>"} {
 		if once, twice := FormatBody(body), FormatBody(FormatBody(body)); once != twice {
 			t.Errorf("FormatBody is not idempotent for %q: once %q, twice %q", body, once, twice)
 		}

@@ -4,7 +4,7 @@ Each task is implemented and approved on its own, then pushed. Every new
 test is mutation-checked: remove the fix and confirm the test fails, and
 make sure the mutated code still compiles.
 
-1. [ ] **Keep CDATA in `formatXML`.**
+1. [x] **Keep CDATA in `formatXML`.**
    - Record each token's source span; a `CharData` token whose span is
      `<![CDATA[…]]>` keeps it in `xmlNode.raw`, and `writeXMLNode`
      writes it as is.
@@ -13,8 +13,9 @@ make sure the mutated code still compiles.
    - Out-of-range or backwards offsets leave the body unformatted.
    - New table cases in `format_test.go`, as listed in `plan.md`. All
      existing cases pass unchanged.
-   - Mutation checks: no `raw` write, whitespace-only CDATA treated as
-     whitespace, no fallback.
+   - Mutation checks: no `raw` write, and whitespace-only CDATA treated
+     as whitespace. The fallback is untestable: no valid input reaches
+     it (see `plan.md`).
 2. [ ] **Live verification.**
    - Use the `verify-live` skill with a temporary `HOME`, run from the
      scratch folder (not `tui/`), against the local broker. Check each

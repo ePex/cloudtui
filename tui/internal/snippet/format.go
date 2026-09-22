@@ -31,6 +31,10 @@ func FormatBody(body string) string {
 type xmlNode struct {
 	token    xml.Token
 	children []*xmlNode
+	// raw is a CDATA section's source text ("<![CDATA[…]]>"), written back
+	// as is. encoding/xml hands CDATA over as plain CharData, so without
+	// this it would be escaped like ordinary text. Empty for other nodes.
+	raw string
 }
 
 // formatXML parses a complete XML document and re-encodes its tokens with
@@ -55,6 +59,9 @@ func formatXML(body string) (string, bool) {
 	rootElements := 0
 
 	for {
+		// The offsets before and after a token give its exact source text,
+		// which is the only way to tell a CDATA section from plain text.
+		start := decoder.InputOffset()
 		token, err := decoder.RawToken()
 		if err == io.EOF {
 			break
@@ -62,8 +69,21 @@ func formatXML(body string) (string, bool) {
 		if err != nil {
 			return "", false
 		}
+		end := decoder.InputOffset()
 		token = cloneXMLToken(token)
 		node := &xmlNode{token: token}
+		if _, isText := token.(xml.CharData); isText {
+			// Defensive: for input the validator accepted, InputOffset is
+			// always consistent, so no test can reach this. If it ever
+			// weren't, CDATA couldn't be told from text, so leave the body
+			// alone rather than risk rewriting a CDATA section.
+			if start < 0 || start > end || end > int64(len(body)) {
+				return "", false
+			}
+			if src := body[start:end]; strings.HasPrefix(src, "<![CDATA[") && strings.HasSuffix(src, "]]>") {
+				node.raw = src
+			}
+		}
 		if len(stack) > 0 {
 			parent := stack[len(stack)-1]
 			parent.children = append(parent.children, node)
@@ -98,7 +118,7 @@ func formatXML(body string) (string, bool) {
 
 	var out bytes.Buffer
 	for i, root := range roots {
-		if i > 0 && !isXMLWhitespace(root.token) && !isXMLWhitespace(roots[i-1].token) {
+		if i > 0 && !isXMLWhitespace(root) && !isXMLWhitespace(roots[i-1]) {
 			out.WriteByte('\n')
 		}
 		if err := writeXMLNode(&out, root, 0); err != nil {
@@ -128,16 +148,17 @@ func cloneXMLToken(token xml.Token) xml.Token {
 	}
 }
 
-// hasMixedContent reports whether any element contains both non-whitespace
-// character data and child elements, for which inserted indentation is data.
+// hasMixedContent reports whether any element contains both text (a CDATA
+// section, or non-whitespace character data) and child elements, for which
+// inserted indentation is data.
 func hasMixedContent(nodes []*xmlNode) bool {
 	for _, node := range nodes {
 		if _, isElement := node.token.(xml.StartElement); isElement {
 			hasText, hasElement := false, false
 			for _, child := range node.children {
-				switch token := child.token.(type) {
+				switch child.token.(type) {
 				case xml.CharData:
-					if strings.TrimSpace(string(token)) != "" {
+					if !isXMLWhitespace(child) {
 						hasText = true
 					}
 				case xml.StartElement:
@@ -171,9 +192,12 @@ func hasXMLSpacePreserve(nodes []*xmlNode) bool {
 	return false
 }
 
-func isXMLWhitespace(token xml.Token) bool {
-	text, ok := token.(xml.CharData)
-	return ok && strings.TrimSpace(string(text)) == ""
+// isXMLWhitespace reports whether node is whitespace-only character data
+// that indentation may replace. A CDATA section is content even when it
+// holds only whitespace, so it never counts.
+func isXMLWhitespace(node *xmlNode) bool {
+	text, ok := node.token.(xml.CharData)
+	return ok && node.raw == "" && strings.TrimSpace(string(text)) == ""
 }
 
 func writeXMLNode(out *bytes.Buffer, node *xmlNode, depth int) error {
@@ -198,7 +222,7 @@ func writeXMLNode(out *bytes.Buffer, node *xmlNode, depth int) error {
 			if _, isEnd := child.token.(xml.EndElement); isEnd {
 				continue
 			}
-			if text, isText := child.token.(xml.CharData); isText && prettyChildren && strings.TrimSpace(string(text)) == "" {
+			if prettyChildren && isXMLWhitespace(child) {
 				continue
 			}
 			if prettyChildren {
@@ -219,6 +243,10 @@ func writeXMLNode(out *bytes.Buffer, node *xmlNode, depth int) error {
 	case xml.EndElement:
 		return nil // End tokens are emitted by their matching StartElement.
 	case xml.CharData:
+		if node.raw != "" {
+			out.WriteString(node.raw) // a CDATA section, kept as written
+			return nil
+		}
 		var escaped bytes.Buffer
 		if err := xml.EscapeText(&escaped, token); err != nil {
 			return err
