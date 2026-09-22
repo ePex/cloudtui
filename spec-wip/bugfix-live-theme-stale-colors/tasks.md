@@ -45,7 +45,7 @@ Each task is implemented and approved on its own, then pushed.
      renders it, and fails if any cell still uses a `dark`-only color.
    - If this surfaces a widget the plan missed, fix it here and note it
      in `plan.md`.
-7. [ ] **Live verification.**
+7. [x] **Live verification.**
    - Use the `verify-live` skill with a temporary `HOME`, run from the
      scratch folder (not `tui/`).
    - Switch `dark` → `cyberpunk` in Settings, then check with per-cell
@@ -67,6 +67,41 @@ Each task is implemented and approved on its own, then pushed.
      Move-to-Queue and snippet pickers' selected row and the
      Move-to-Queue search box right after startup (task 5).
    - Record the results here.
+
+   **Results (2026-09-22).** The TUI ran in tmux with a temporary `HOME`,
+   started from the scratch folder so no legacy config was migrated,
+   against the local broker, on a throwaway `theme-verify` queue with one
+   message (removed afterwards). A script flagged every screen cell still
+   using a color that only `dark` has.
+
+   - **Four more stale spots found and fixed along the way,** each with a
+     unit test checked to fail without its fix (see `plan.md`):
+     1. the top bar's logo, info and context panels (base text color)
+     2. the detail views' and log view's base text color
+     3. autocomplete drop-downs whose list tview had already built
+        (message filter JMS Type, the `:` prompt)
+     4. the `:` prompt panel's outer background
+   - **After those fixes, every step passes after a live `dark` →
+     `cyberpunk` switch, with no `dark`-only colors on screen:**
+     1. Settings
+     2. the confirmation dialog, over the message detail view
+     3. the Move-to-Queue picker, while filtering and while listing
+     4. the send dialog, its snippet picker (root and `/orders`)
+     5. the save-as-snippet dialog
+     6. the message filter, with its JMS Type drop-down open
+     7. the queues view with `/` filter
+     8. the Datadog view's dropdowns, and the time-range dialog on both
+        tabs (reachable without Datadog credentials)
+     9. the AWS profiles picker (header, filter, hints), the connection
+        manager, and the editor with both dropdowns
+
+     Also clean: the `:` prompt with its suggestions open, and the
+     message detail view.
+   - **Restart comparison:** the same 18 screens were captured with
+     colors after a live switch and after starting directly in
+     `cyberpunk`. 17 are byte-identical. The send dialog differs only in
+     its randomly generated Correlation ID; with that masked, it's
+     identical too.
 8. [ ] **Merge-back** (needs your explicit go-ahead before it's
    committed).
    - Fold the fix into `spec/04-theming/spec.md`: live switching now
