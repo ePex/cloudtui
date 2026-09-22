@@ -40,7 +40,7 @@ Each task is implemented and approved on its own, then pushed.
      clears that field
    - a filled dialog asks for confirmation and an empty one doesn't
    - answering No leaves the fields unchanged and refocuses the form
-7. [ ] **Snippet save dialog.** Add `dialog/snippetsave.go`, wired into
+7. [x] **Snippet save dialog.** Add `dialog/snippetsave.go`, wired into
    `app.go` (the `snippet-save` page, theming, and sizing). Add tests
    for:
    - a validation error keeping the dialog open with a status error

@@ -119,6 +119,10 @@ overlay that is still visible.
      %q?")`. **Yes** calls `Save(…, true)`. **No** refocuses the name
      field.
   4. Report success or failure in the status bar.
+- Enter in the Name field saves. It's caught in the field's input
+  capture, not `SetDoneFunc`: `tview.Form` runs its own "finished"
+  handler right after the done func and moves focus to the next
+  element, which would take focus away from the overwrite confirmation.
 - File I/O is small and local, so it runs synchronously on the UI
   goroutine with no `QueueUpdateDraw` round-trip. This keeps
   "exists → confirm" a simple sequential flow.
@@ -188,7 +192,7 @@ overlay that is still visible.
 - Add both to the theme-applied (`ui.Themeable`) set, like the other
   dialogs.
 - Sizes: picker `ui.Centered(…, 60, 20)`; save dialog
-  `ui.Centered(…, 64, 9)` (border and padding 4 + one field 2 + buttons
+  `ui.Centered(…, 64, 8)` (border and padding 4 + one field 2 + buttons
   1 + a spare row, per the sizing comments already in `app.go`).
 
 ## Spec merge-back target (step 4)

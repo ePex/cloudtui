@@ -78,7 +78,8 @@ jmsType: OrderCreated
     snippet in a subfolder (e.g. `orders/created.json`). Missing
     subfolders are created. Absolute paths and `..` segments are
     rejected, so the file can't end up outside the snippets root.
-  - **Save** / **Cancel** buttons. Esc cancels.
+  - **Save** / **Cancel** buttons. Enter in the Name field saves; Esc
+    cancels.
 - Only two things are stored:
   - the **body**, as shown in the detail view but unformatted (not the
     pretty-printed JSON rendering), and
