@@ -2,8 +2,13 @@ package view
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"strings"
+	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/awscodepipeline"
@@ -13,7 +18,9 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/awsssm"
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/datadoglogs"
+	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -205,4 +212,129 @@ func (f *fakeViewHost) AWSSSOLogin(ctx context.Context, profile string, onCode f
 		return f.awsSSOLoginFn(ctx, profile, onCode)
 	}
 	return nil
+}
+
+// ── Live theme switch regression ─────────────────────────────────────────
+
+// paletteColors returns every color value in p (all its string fields),
+// as tcell colors. Duplicated from internal/dialog's dialogtest_test.go,
+// like renderedScreenText.
+func paletteColors(p config.Palette) map[tcell.Color]string {
+	colors := map[tcell.Color]string{}
+	v := reflect.ValueOf(p)
+	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).Kind() == reflect.String && v.Field(i).String() != "" {
+			colors[tcell.GetColor(v.Field(i).String())] = v.Type().Field(i).Name
+		}
+	}
+	return colors
+}
+
+// staleColors draws prim and describes every cell still carrying a color
+// from old that new doesn't also use.
+func staleColors(t *testing.T, prim tview.Primitive, width, height int, old, new config.Palette) []string {
+	t.Helper()
+	oldOnly := paletteColors(old)
+	for c := range paletteColors(new) {
+		delete(oldOnly, c)
+	}
+
+	prim.SetRect(0, 0, width, height)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, height)
+	prim.Draw(screen)
+	screen.Show()
+
+	var stale []string
+	cells, w, _ := screen.GetContents()
+	for i, c := range cells {
+		fg, bg, _ := c.Style.Decompose()
+		r := ' '
+		if len(c.Runes) > 0 {
+			r = c.Runes[0]
+		}
+		for _, col := range []tcell.Color{fg, bg} {
+			if name, ok := oldOnly[col]; ok {
+				stale = append(stale, fmt.Sprintf("(%d,%d) %q uses old %s", i%w, i/w, r, name))
+			}
+		}
+	}
+	return stale
+}
+
+// TestViewsFullyRecolorOnLiveThemeSwitch builds every view that holds a
+// list, filter input, dropdown, or table header while tview.Styles and
+// the host's palette hold "dark" (as at startup), switches the host to
+// "cyberpunk" and calls ApplyPalette — what a live theme switch does — and
+// fails if any drawn cell still carries a dark-only color. Views keep
+// their widgets across a switch (unlike overlays, which are reopened), so
+// there's no reopen step. Detail views are left out: their content is
+// rebuilt from the current palette every time they're opened.
+func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
+	dark, _ := config.PaletteForTheme("dark")
+	cyber, _ := config.PaletteForTheme("cyberpunk")
+
+	type themedView interface {
+		ui.Themeable
+		Primitive() tview.Primitive
+	}
+	tests := []struct {
+		name  string
+		build func(host *fakeViewHost) themedView
+	}{
+		{"SettingsView", func(host *fakeViewHost) themedView {
+			return NewSettingsView(host, dialog.NewThemePicker(host), dialog.NewConnManager(host, dialog.NewConfirmDialog(host)),
+				dialog.NewAWSProfilesPicker(host), dialog.NewDatadogEditor(host))
+		}},
+		{"QueuesView", func(host *fakeViewHost) themedView {
+			v := NewQueuesView(host, host.backend, dialog.NewConfirmDialog(host), dialog.NewMovePicker(host),
+				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
+				dialog.NewJMSTypePrompt(host), func(string) {})
+			v.filterInput.SetText("ord")
+			return v
+		}},
+		{"MessagesView", func(host *fakeViewHost) themedView {
+			v := NewMessagesView(host, dialog.NewMessageFilter(host),
+				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
+				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), func(string, queue.Message) {})
+			v.searchInput.SetText("ord")
+			return v
+		}},
+		{"SSMParamsView", func(host *fakeViewHost) themedView { return NewSSMParamsView(host, func(awsssm.Parameter) {}) }},
+		{"SecretsView", func(host *fakeViewHost) themedView { return NewSecretsView(host, func(awssecrets.Secret) {}) }},
+		{"LogsView", func(host *fakeViewHost) themedView { return NewLogsView(host, func(string) {}) }},
+		{"LogSearchView", func(host *fakeViewHost) themedView {
+			return NewLogSearchView(host, dialog.NewTimeRangeModal(host), func(awslogs.LogEvent) {}, func() {})
+		}},
+		{"DatadogLogsView", func(host *fakeViewHost) themedView {
+			return NewDatadogLogsView(host, dialog.NewTimeRangeModal(host), func(datadoglogs.LogEvent) {})
+		}},
+		{"CodePipelineListView", func(host *fakeViewHost) themedView {
+			return NewCodePipelineListView(host, func(string) {})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			saved := tview.Styles
+			t.Cleanup(func() { tview.Styles = saved })
+			ui.ApplyTviewStyles(dark)
+			host := newFakeViewHost()
+			host.cfg.Colors = dark
+
+			v := tt.build(host)
+			v.ApplyPalette(dark) // as App.New does at startup
+
+			ui.ApplyTviewStyles(cyber) // the live switch: reapplyTheme
+			host.cfg.Colors = cyber
+			v.ApplyPalette(cyber)
+
+			if stale := staleColors(t, v.Primitive(), 100, 20, dark, cyber); len(stale) > 0 {
+				t.Errorf("%d cells keep dark-only colors after the switch, e.g. %s", len(stale), strings.Join(stale[:min(len(stale), 5)], "; "))
+			}
+		})
+	}
 }

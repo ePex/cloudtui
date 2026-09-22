@@ -47,6 +47,10 @@ func (pv *SSMParamsView) ApplyPalette(p config.Palette) {
 	pv.table.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 	pv.table.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 	ui.StyleFilterInput(pv.filterInput, p)
+	pv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	pv.setHeader()
 }
 
 func (pv *SSMParamsView) Name() string               { return "ssm-parameters" }

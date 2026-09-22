@@ -146,16 +146,49 @@ so their label and field colors are never reapplied at all.
 - `timerangemodal.go` (the absolute-range form)
 - `snippetsave.go`
 
+**Found by the per-package regression tests (task 6)**
+
+The first draft assumed tables and text views needed no change. The
+regression tests showed that some parts of them are also colored only
+when created:
+
+- **Table headers.** Every table view colors its header row (and the
+  cell above the favorites star column) in `setHeader`. `QueuesView`
+  redraws it on each repaint and `LogSearchView` on each search; the
+  rest only at construction. So after a switch the header kept the old
+  theme's `Label` background until a restart. Every table view's
+  `ApplyPalette` now calls `setHeader()`:
+  - `QueuesView`, `MessagesView`, `SSMParamsView`, `SecretsView`
+  - `LogsView`, `LogSearchView`, `DatadogLogsView`,
+    `CodePipelineListView`
+
+  `setHeader` only rewrites row 0's cells with fixed per-column widths,
+  so calling it again is safe.
+- **Table column separators** use the table's borders color, which is
+  copied at construction. Each of those views, and the AWS profiles
+  picker, now resets it (`SetBordersColor(Border)`). They're blank
+  cells, so this was invisible, but it keeps the test strict.
+- **`AWSProfilesPicker`:**
+  - its header row (`setHeader`) and its key-hint footer (`Accent`
+    color tags) were built only at construction
+  - both are now rebuilt in `ApplyPalette`; the hints moved into a
+    `setHints` method
+- **`TimeRangeModal`'s tab row:** `renderTabs` color-tags the two tab
+  labels, but the spaces around them use the text view's own base text
+  color, copied at construction. `ApplyPalette` now resets it.
+
+`ConnManager`'s hints looked stale at first, but they're rebuilt every
+time it opens. The dialog regression test reopens overlays after the
+switch, as happens in real use, since only the theme picker is open
+during a switch.
+
 **Not changed**
 
-- Tables (queue, message and resource lists, `AWSProfilesPicker`'s
-  table): their cells are rebuilt with explicit palette colors on every
-  repaint or load.
-- Text views, and the command prompt: `reapplyTheme` already handles
-  the prompt via `SetFormAttributes`.
-
-I'll re-check all of these in the live check (task list) rather than
-assuming.
+- The command prompt: `reapplyTheme` already handles it via
+  `SetFormAttributes`.
+- Detail views (text built from the current palette each time they
+  open).
+- **Table data rows:** open question below.
 
 ## Testing
 
@@ -214,3 +247,19 @@ right after startup than after a live switch:
   ones each `ApplyPalette` already defines.
 - This does change how those pickers look at startup, which is
   intended.
+
+## Open question (found during task 6)
+
+Table **data rows** are also colored when they're drawn: the queue
+names, message types, the favorites star and so on. After a live switch
+they keep the old theme's colors until the view next repaints (a
+refresh, a filter change, a reload, or the queue list's auto-refresh).
+
+Each view's `repaint` also resets the selection to the first row and
+scrolls to the top. So simply calling it on a switch would move the
+cursor. Options:
+
+- (a) leave as is: rows pick up the new theme on the view's next
+  repaint
+- (b) repaint each view on a switch while keeping its selection and
+  scroll position (an extra task, with care per view)

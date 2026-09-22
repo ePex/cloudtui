@@ -50,6 +50,10 @@ func (lv *CodePipelineListView) ApplyPalette(p config.Palette) {
 	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
 	lv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
 	ui.StyleFilterInput(lv.filterInput, p)
+	lv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	lv.setHeader()
 }
 
 func (lv *CodePipelineListView) Name() string               { return "codepipeline" }

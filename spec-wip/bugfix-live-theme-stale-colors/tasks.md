@@ -39,7 +39,7 @@ Each task is implemented and approved on its own, then pushed.
    - Test in `internal/app`: after `New`, a widget whose colors come only
      from `ApplyPalette` (e.g. the Move-to-Queue picker's selected row)
      already draws in the palette's selection colors.
-6. [ ] **Per-package regression tests.**
+6. [x] **Per-package regression tests.**
    - In `internal/dialog` and `internal/view`, a table-driven test builds
      every affected widget under `dark`, calls `ApplyPalette(cyberpunk)`,
      renders it, and fails if any cell still uses a `dark`-only color.

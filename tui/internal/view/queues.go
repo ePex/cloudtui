@@ -53,6 +53,10 @@ func (qv *QueuesView) ApplyPalette(p config.Palette) {
 	qv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	qv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	ui.StyleFilterInput(qv.filterInput, p)
+	qv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	qv.setHeader()
 }
 
 func (qv *QueuesView) Name() string               { return "queues" }

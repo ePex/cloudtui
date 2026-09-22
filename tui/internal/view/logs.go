@@ -49,6 +49,10 @@ func (lv *LogsView) ApplyPalette(p config.Palette) {
 	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 	lv.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 	ui.StyleFilterInput(lv.filterInput, p)
+	lv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	lv.setHeader()
 }
 
 func (lv *LogsView) Name() string               { return "cloudwatch-logs" }

@@ -64,6 +64,10 @@ func (mv *MessagesView) ApplyPalette(p config.Palette) {
 	mv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	mv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
 	ui.StyleFilterInput(mv.searchInput, p)
+	mv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	mv.setHeader()
 }
 
 func (mv *MessagesView) Primitive() tview.Primitive { return mv.flex }

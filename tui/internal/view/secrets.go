@@ -46,6 +46,10 @@ func (sv *SecretsView) ApplyPalette(p config.Palette) {
 	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 	sv.table.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 	ui.StyleFilterInput(sv.filterInput, p)
+	sv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	sv.setHeader()
 }
 
 func (sv *SecretsView) Name() string               { return "secrets-manager" }

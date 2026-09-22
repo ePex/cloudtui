@@ -64,6 +64,10 @@ func (dv *DatadogLogsView) ApplyPalette(p config.Palette) {
 	ui.StyleFilterInput(dv.queryInput, p)
 	ui.StyleDropDown(dv.serviceFilterDD, p)
 	ui.StyleDropDown(dv.envFilterDD, p)
+	dv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	dv.setHeader()
 }
 
 func (dv *DatadogLogsView) Name() string               { return "datadog-logs" }
