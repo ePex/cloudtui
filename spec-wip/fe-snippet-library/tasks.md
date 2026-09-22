@@ -125,7 +125,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
    at 52×8), mutation-checked, and it was checked live with `Delete folder
    "archive/2026/q3/eu/payments/refunds" and its 2 snippets, 4
    subfolders?`.
-8. [ ] **Example snippets** (requested during task 2).
+8. [x] **Example snippets** (requested during task 2).
    - **Decided:** both of the following, with generic content only (no
      real internal system, queue or company names).
      - an `examples/snippets/` folder in the repo that can be copied into

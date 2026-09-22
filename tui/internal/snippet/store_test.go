@@ -505,3 +505,67 @@ func TestNewOperationsOnUnavailableStore(t *testing.T) {
 		}
 	}
 }
+
+// TestExampleSnippets loads every file in the repo's examples/snippets/
+// folder through a Store, the way the app would after a user copies the
+// folder into ~/.cloudtui/snippets/, so a broken example fails CI. It
+// also checks a few examples' contents and that saving each one without
+// edits wouldn't change it.
+func TestExampleSnippets(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "examples", "snippets")
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("examples folder missing: %v", err)
+	}
+	s := NewStore(root)
+
+	loaded := map[string]Snippet{}
+	var walk func(dir string)
+	walk = func(dir string) {
+		entries, err := s.List(dir)
+		if err != nil {
+			t.Fatalf("List(%q): %v", dir, err)
+		}
+		for _, e := range entries {
+			rel := filepath.Join(dir, e.Name)
+			if e.IsDir {
+				walk(rel)
+				continue
+			}
+			sn, err := s.Load(rel)
+			if err != nil {
+				t.Errorf("example %s doesn't parse: %v", filepath.ToSlash(rel), err)
+				continue
+			}
+			if again, err := Parse(Format(sn)); err != nil || again != sn {
+				t.Errorf("example %s changes when saved unedited: %#v, %v", filepath.ToSlash(rel), again, err)
+			}
+			loaded[filepath.ToSlash(rel)] = sn
+		}
+	}
+	walk("")
+
+	checks := []struct {
+		path, jmsType string
+		extra         bool
+	}{
+		{"orders/order-created.json", "OrderCreated", false},
+		{"orders/order-cancelled.json", "OrderCancelled", false},
+		{"payments/payment-received.xml", "PaymentReceived", false},
+		{"inventory/stock-updated.json", "StockUpdated", true},
+		{"ping.txt", "", false},
+	}
+	for _, c := range checks {
+		sn, ok := loaded[c.path]
+		if !ok {
+			t.Errorf("example %s missing", c.path)
+			continue
+		}
+		if sn.JMSType != c.jmsType || (sn.Extra != "") != c.extra || sn.Body == "" {
+			t.Errorf("example %s = (JMSType %q, has Extra %v, body %d bytes), want (%q, %v, non-empty)",
+				c.path, sn.JMSType, sn.Extra != "", len(sn.Body), c.jmsType, c.extra)
+		}
+	}
+	if len(loaded) != len(checks) {
+		t.Errorf("examples folder holds %d snippets, the test knows %d — add new ones to the checks", len(loaded), len(checks))
+	}
+}

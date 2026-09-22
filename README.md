@@ -61,6 +61,78 @@ task run:tui
 
 Press `:q` to quit.
 
+## Message snippets
+
+Snippets are reusable ActiveMQ messages: a body plus an optional JMS
+Type, kept as plain files so you can edit them anywhere and share them
+with others.
+
+**Where they live:** `~/.cloudtui/snippets/` (on Windows,
+`%USERPROFILE%\.cloudtui\snippets\`). Subfolders are fine, and every
+file in the tree is a snippet, whatever its extension. Names starting
+with `.` are ignored, so a `.git` folder doesn't get in the way.
+
+**File format:** an optional YAML header between `---` lines, then the
+message body exactly as it will be sent:
+
+```
+---
+jmsType: OrderCreated
+---
+{
+  "orderId": "ORD-1001",
+  "customerId": "CUST-42"
+}
+```
+
+- `jmsType` is the only key cloudtui uses. Any other keys and comments
+  you add (e.g. `author:`) are kept when you edit the snippet in the app.
+- Without a header, the whole file is the body and there's no JMS Type.
+  Any text file works as is.
+- The body can be anything textual: JSON, XML, plain text, ...
+
+**Using snippets in the app:**
+
+- **Save a message as a snippet:** open a message and press `S`. Only
+  the body and the JMS Type are saved; other headers aren't.
+- **Send a snippet:** on a queue, press `c` to create a message, then
+  **Load snippet…**. It fills in JMS Type and Body, asking first if you
+  already typed something there; everything else in the dialog stays as
+  it is.
+- **Manage the library:** open **snippets** from Home (under ActiveMQ)
+  or type `:snippets`. A preview of the selected snippet is shown on the
+  right.
+
+  | Key | Action |
+  |---|---|
+  | Enter | open a folder, or edit a snippet |
+  | `n` / `N` | new snippet / new folder |
+  | `e` | edit |
+  | `R` | rename or move (edit the path) |
+  | `d` | delete (asks first) |
+  | `r` | re-read the folder from disk |
+  | Backspace | up a folder |
+
+**Examples:** [`examples/snippets/`](examples/snippets/) has a few
+generic ones (JSON, XML, plain text, one with extra header keys) to
+start from. Copy them into your library:
+
+```sh
+# macOS / Linux
+mkdir -p ~/.cloudtui/snippets && cp -R examples/snippets/. ~/.cloudtui/snippets/
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force "$HOME\.cloudtui\snippets" | Out-Null
+Copy-Item -Recurse -Force examples\snippets\* "$HOME\.cloudtui\snippets\"
+```
+
+**Sharing:** copy the folder, or keep it in a git repository. You can
+also link a shared checkout into the library (e.g.
+`ln -s ~/team-snippets ~/.cloudtui/snippets/team`). Deleting a linked
+folder in the app removes only the link, never the shared files.
+
 ## Status
 
 Early development. See `CLAUDE.md` for repository conventions.

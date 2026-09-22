@@ -1,0 +1,12 @@
+---
+# Extra keys like author and tags aren't used by cloudtui,
+# but they (and this comment) are kept when you edit the snippet in the app.
+author: example-team
+jmsType: StockUpdated
+tags: [inventory, example]
+---
+{
+  "sku": "SKU-001",
+  "warehouse": "WH-EAST",
+  "quantity": 118
+}

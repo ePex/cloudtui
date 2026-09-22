@@ -1,0 +1,8 @@
+---
+jmsType: OrderCancelled
+---
+{
+  "orderId": "ORD-1001",
+  "reason": "customer request",
+  "cancelledAt": "2026-01-15T11:05:00Z"
+}
