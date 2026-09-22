@@ -165,6 +165,31 @@ func TestReapplyThemeRecolorsShellTextPanels(t *testing.T) {
 	}
 }
 
+// TestReapplyThemeRecolorsPromptPanel checks the whole ':' prompt panel —
+// not just its input line — drops the previous theme's background. The
+// prompt fills the top-left panel, and the rows below its input line
+// (behind the autocomplete drop-down) are painted by its outer Box.
+func TestReapplyThemeRecolorsPromptPanel(t *testing.T) {
+	cfg := config.Default()
+	cfg.Colors = mustTheme(t, "dark")
+	a := New(cfg)
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+	oldBg := tcell.GetColor(cfg.Colors.Background)
+
+	p := mustTheme(t, "cyberpunk")
+	a.cfg.Colors = p
+	reapplyTheme(a, p)
+
+	_, _, bg := renderedRows(t, a.prompt, 40, 5)
+	for y := range bg {
+		for x, c := range bg[y] {
+			if c == oldBg {
+				t.Fatalf("prompt panel cell (%d,%d) still has dark's Background %v", x, y, c)
+			}
+		}
+	}
+}
+
 func TestReapplyThemeUpdatesGlobalStyles(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })

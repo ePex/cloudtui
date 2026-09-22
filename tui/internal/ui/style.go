@@ -130,9 +130,18 @@ const AutocompletePanelBlend = 0.15
 // toward the palette's accent color rather than a flat copy of the screen
 // background — otherwise the popup has no visible edge and reads as loose
 // text floating over whatever else is on screen.
+//
+// tview builds the drop-down's internal list once, with the styles set at
+// that moment, and keeps it until the field loses focus (or has no
+// suggestions) — SetAutocompleteFunc builds it right away. So after
+// restyling, an unfocused field is blurred to drop that cached list; the
+// next suggestion lookup rebuilds it with these styles. Without this, a
+// live theme switch leaves the drop-down in the previous theme until the
+// field has been focused and left once. A focused field (someone is
+// typing in it) is left alone rather than blurred under tview's feet.
 func StyleInputFieldAutocomplete(i *tview.InputField, p config.Palette) *tview.InputField {
 	panelBg := BlendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), AutocompletePanelBlend)
-	return i.SetAutocompleteStyles(
+	i.SetAutocompleteStyles(
 		panelBg,
 		tcell.StyleDefault.
 			Foreground(tcell.GetColor(p.Text)).
@@ -141,6 +150,10 @@ func StyleInputFieldAutocomplete(i *tview.InputField, p config.Palette) *tview.I
 			Foreground(tcell.GetColor(p.SelectionText)).
 			Background(tcell.GetColor(p.SelectionBg)),
 	)
+	if !i.HasFocus() {
+		i.Blur()
+	}
+	return i
 }
 
 // BlendColors linearly interpolates from a toward b by t (0 keeps a, 1

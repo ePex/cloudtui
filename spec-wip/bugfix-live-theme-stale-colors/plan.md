@@ -192,6 +192,23 @@ when created:
     `LogView`
 - **`CodePipelineDetailView`** gets the same header and
   column-separator treatment as the other table views.
+- **Autocomplete drop-downs** (message filter's JMS Type, the JMS Type
+  purge/move prompt, the `:` prompt):
+  - tview builds the drop-down's internal list once, with the styles set
+    at that moment, and drops it only when the field loses focus or has
+    no suggestions. `SetAutocompleteFunc` builds it right away.
+  - So a field wired at startup and never focused kept its startup-theme
+    drop-down after a switch.
+  - `ui.StyleInputFieldAutocomplete` now blurs an *unfocused* field after
+    restyling, which drops the cached list. The next lookup rebuilds it
+    with the new styles. A focused field is left alone.
+- **The `:` prompt panel:** the prompt fills the whole top-left panel.
+  `reapplyTheme` recolored only its inner text area (via
+  `SetFormAttributes`), not the outer box that paints the rows below the
+  input line. It now does both.
+- **Tests:** `ui.TestStyleInputFieldAutocompleteRecolorsCachedDropDown`
+  and `app.TestReapplyThemeRecolorsPromptPanel`, each checked to fail
+  without its fix.
 - **Tests:**
   - `app.TestReapplyThemeRecolorsShellTextPanels` covers the shell
     panels.

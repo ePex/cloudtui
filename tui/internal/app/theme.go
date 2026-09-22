@@ -78,6 +78,10 @@ func reapplyTheme(a *App, p config.Palette) {
 	// (transparent, unchanged from New()) to preserve existing layout and
 	// look — only the three theme-dependent colors change here.
 	a.prompt.SetFormAttributes(0, tcell.GetColor(p.Value), bg, tcell.GetColor(p.Text), tcell.ColorDefault)
+	// The outer Box does still matter where the TextArea doesn't reach:
+	// the prompt fills the whole top-left panel, and every row below the
+	// input line (behind the autocomplete drop-down) is painted from it.
+	a.prompt.SetBackgroundColor(bg)
 
 	// Command prompt's autocomplete drop-down
 	ui.StyleInputFieldAutocomplete(a.prompt, p)

@@ -436,6 +436,48 @@ func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {
 	}
 }
 
+// newAutocompleteField builds an input field with a two-entry autocomplete
+// while tview.Styles holds theme, styled and wired the way the app does
+// (styles first, then SetAutocompleteFunc, which builds the drop-down's
+// list right away).
+func newAutocompleteField(t *testing.T, theme string) *tview.InputField {
+	t.Helper()
+	p := mustPalette(t, theme)
+	withTviewStyles(t, p)
+	i := tview.NewInputField().SetLabel("Type: ")
+	StyleInputFieldAutocomplete(i, p)
+	i.SetAutocompleteFunc(func(string) []string { return []string{"alpha", "beta"} })
+	return i
+}
+
+// openDropDown focuses i and looks up suggestions, so its drop-down draws.
+func openDropDown(i *tview.InputField) *tview.InputField {
+	focusTree(i)
+	i.Autocomplete()
+	return i
+}
+
+// TestStyleInputFieldAutocompleteRecolorsCachedDropDown checks a live
+// switch recolors an autocomplete drop-down whose list tview already
+// built (SetAutocompleteFunc builds it immediately): once opened, it
+// draws exactly like one built under cyberpunk from the start.
+func TestStyleInputFieldAutocompleteRecolorsCachedDropDown(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	live := newAutocompleteField(t, "dark")
+	ApplyTviewStyles(cyber)
+	StyleInputFieldAutocomplete(live, cyber)
+	liveRows := renderCells(t, openDropDown(live), 30, 4)
+	findText(t, liveRows, "beta") // the drop-down is really open
+
+	// Only the drop-down's entries: the field itself (and the blank cells
+	// beside the drop-down) are styled by a form or StyleFilterInput, not
+	// by this helper.
+	restartedRows := renderCells(t, openDropDown(newAutocompleteField(t, "cyberpunk")), 30, 4)
+	for _, entry := range []string{"alpha", "beta"} {
+		assertSameCells(t, [][]renderedCell{findText(t, liveRows, entry)}, [][]renderedCell{findText(t, restartedRows, entry)})
+	}
+}
+
 func TestBlendColors(t *testing.T) {
 	background := tcell.NewRGBColor(0x1a, 0x1b, 0x26)
 	accent := tcell.NewRGBColor(0xff, 0x79, 0xc6)
