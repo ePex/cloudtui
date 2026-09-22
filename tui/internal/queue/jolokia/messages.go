@@ -129,7 +129,8 @@ func (c *Client) browseMessagesFull(ctx context.Context, queueName string) ([]qu
 
 		// JMS type: use the jMSType header if set, otherwise infer from body fields.
 		jmsType, _ := m["jMSType"].(string)
-		if jmsType == "" {
+		inferred := jmsType == ""
+		if inferred {
 			textVal := m["text"]
 			if textVal != nil && textVal != "" {
 				jmsType = "text"
@@ -150,12 +151,13 @@ func (c *Client) browseMessagesFull(ctx context.Context, queueName string) ([]qu
 		}
 
 		messages = append(messages, queue.Message{
-			ID:            id,
-			JMSType:       jmsType,
-			CorrelationID: correlationID,
-			Timestamp:     time.UnixMilli(ts),
-			Preview:       preview,
-			RawFields:     m,
+			ID:              id,
+			JMSType:         jmsType,
+			CorrelationID:   correlationID,
+			Timestamp:       time.UnixMilli(ts),
+			Preview:         preview,
+			RawFields:       m,
+			JMSTypeInferred: inferred,
 		})
 	}
 	return messages, nil
@@ -266,9 +268,10 @@ func parseBrowseItem(raw json.RawMessage) queue.Message {
 			preview = preview[:previewMaxLen]
 		}
 		return queue.Message{
-			JMSType:   "text",
-			Preview:   preview,
-			RawFields: map[string]any{"text": s},
+			JMSType:         "text",
+			Preview:         preview,
+			RawFields:       map[string]any{"text": s},
+			JMSTypeInferred: true,
 		}
 	}
 
@@ -283,7 +286,8 @@ func parseBrowseItem(raw json.RawMessage) queue.Message {
 	jmsType, _ := obj["JMSType"].(string)
 	correlationID, _ := obj["JMSCorrelationID"].(string)
 
-	if jmsType == "" {
+	inferred := jmsType == ""
+	if inferred {
 		if bodyText != "" {
 			jmsType = "text"
 		} else {
@@ -334,12 +338,13 @@ func parseBrowseItem(raw json.RawMessage) queue.Message {
 	}
 
 	return queue.Message{
-		ID:            id,
-		JMSType:       jmsType,
-		CorrelationID: correlationID,
-		Timestamp:     ts,
-		Preview:       preview,
-		RawFields:     rawFields,
+		ID:              id,
+		JMSType:         jmsType,
+		CorrelationID:   correlationID,
+		Timestamp:       ts,
+		Preview:         preview,
+		RawFields:       rawFields,
+		JMSTypeInferred: inferred,
 	}
 }
 

@@ -158,6 +158,9 @@ func TestBrowseMessages(t *testing.T) {
 	if m.JMSType != "order-created" {
 		t.Errorf("JMSType = %q, want %q", m.JMSType, "order-created")
 	}
+	if m.JMSTypeInferred {
+		t.Error("JMSTypeInferred = true, want false (mq-proxy reported a real jmsType)")
+	}
 	if m.Preview != "hello world" {
 		t.Errorf("Preview = %q, want %q", m.Preview, "hello world")
 	}
@@ -268,6 +271,9 @@ func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	if msgs[0].JMSType != "other" {
 		t.Errorf("JMSType = %q, want %q (inferred, since mq-proxy reported an empty jmsType)", msgs[0].JMSType, "other")
 	}
+	if !msgs[0].JMSTypeInferred {
+		t.Error("JMSTypeInferred = false, want true")
+	}
 	if msgs[0].Preview != "" {
 		t.Errorf("Preview = %q, want empty", msgs[0].Preview)
 	}
@@ -290,6 +296,9 @@ func TestBrowseMessagesEmptyJMSTypeWithBodyInfersText(t *testing.T) {
 	}
 	if msgs[0].JMSType != "text" {
 		t.Errorf("JMSType = %q, want %q (inferred from body presence)", msgs[0].JMSType, "text")
+	}
+	if !msgs[0].JMSTypeInferred {
+		t.Error("JMSTypeInferred = false, want true")
 	}
 }
 

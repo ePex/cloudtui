@@ -17,7 +17,7 @@ Each task is implemented and approved on its own, then pushed.
    - `ErrExists` and overwrite
    - `ValidateName`: accepted and rejected names
    - `Load` and `List` refusing non-local paths
-3. [ ] **Distinguish header vs. inferred JMS Type.** Add
+3. [x] **Distinguish header vs. inferred JMS Type.** Add
    `queue.Message.JMSTypeInferred`, set it at the three Jolokia
    inference sites and the proxy one, and extend the existing backend
    tests to assert it for both a header-present and an inferred message.
