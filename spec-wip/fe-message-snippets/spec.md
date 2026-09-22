@@ -35,6 +35,9 @@ repo.
   extension (`order-created.json`, `ping.txt`, `no-extension`). Hidden
   entries (names starting with `.`) are skipped, so a `.git` folder in a
   shared checkout doesn't show up.
+- Symlinks are followed: a symlinked folder or file is listed like the
+  folder or file it points to (e.g. a link to a shared team checkout).
+  Broken links are skipped.
 - The snippet's display name is its file name.
 
 ## File format

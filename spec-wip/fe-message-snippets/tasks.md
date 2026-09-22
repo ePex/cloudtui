@@ -7,7 +7,7 @@ Each task is implemented and approved on its own, then pushed.
    cover: no front matter, front matter, CRLF delimiters, a body
    containing `---`, a missing closing line, invalid YAML, unknown keys,
    an empty body, and a round-trip including values that need quoting.
-2. [ ] **Snippet store.** Add `internal/snippet/store.go`, with `Store`,
+2. [x] **Snippet store.** Add `internal/snippet/store.go`, with `Store`,
    `DefaultRoot`, `Root`, `List`, `Load`, `Save`, `ErrExists`, and
    `ValidateName`, plus tests against `t.TempDir()`. The tests cover:
    - sorting, with folders first

@@ -54,7 +54,9 @@ which is already in `go.mod`.
   - `dir` is relative to the root, `""` meaning the root itself.
   - Returns folders first, then files, each sorted case-insensitively.
   - Hidden entries (names starting with `.`) and anything that is
-    neither a regular file nor a folder are skipped.
+    neither a regular file nor a folder are skipped. Symlinks are
+    classified by their target (`os.Stat`), so a link to a shared folder
+    works; broken links are skipped.
   - A root that doesn't exist yet returns an empty list, not an error.
 - `Load(name string) (Snippet, error)`: reads the file and calls `Parse`.
 - `Save(name string, s Snippet, overwrite bool) error`
