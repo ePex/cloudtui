@@ -87,8 +87,13 @@ batch; the status bar reports how many of the batch actually succeeded.
 2. **`S`** saves the message as a snippet: its raw body plus its JMS Type,
    only when that's a real `JMSType` header, not an inferred one. It opens
    the Save as Snippet dialog; see spec/22. A message without a text body
-   shows a status-bar error instead. `m` (move) and `d` (delete) are
-   described in spec/09.
+   shows a status-bar error instead. **`c`** copies a plain-text record to
+   the system clipboard: queue name, ID, Type, Timestamp, every header and
+   property shown in the Headers section, and the full body (pretty-printed
+   when it is valid JSON, or `(binary)` without a text body). Property
+   names are sorted. It reports success in the status bar and leaves the
+   detail view open. Backend fields not shown by the detail view are not
+   included. `m` (move) and `d` (delete) are described in spec/09.
 3. **Escape**/**Backspace** returns to the Messages view via
    `pages.SwitchToPage("messages")` — not `pages.ShowPage("messages")`.
    `ShowPage` only makes the target visible without hiding others; because

@@ -10,6 +10,7 @@
 ## Files and tests
 
 - `tui/internal/view/message_detail.go`: clipboard text formatter, shortcut handling, and shortcut hint.
+- `tui/internal/ui/viewhost.go`: narrow `MessageDetailHost` capability for clipboard access.
 - `tui/internal/view/message_detail_test.go`: formatter cases for queue/summary, mapped headers, sorted properties, full body, JSON formatting, binary messages, and clipboard shortcut/status behavior.
 - `spec/08-message-browser-and-detail/spec.md` and `README.md`: document copy behavior and the `c` key.
 
