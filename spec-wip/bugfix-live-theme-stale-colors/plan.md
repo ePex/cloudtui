@@ -76,7 +76,12 @@ so their label and field colors are never reapplied at all.
   time-range presets, the Settings list, and the snippet picker.
 - **New `StyleForm(f, p)`**: sets the form's label color, field style,
   and button, activated-button and disabled-button styles from the table
-  above.
+  above. It also resets every item's and button's own box background.
+  Found by the restart-comparison test: an `InputField` wraps its field
+  in a separate inner widget, `SetFormAttributes` reaches only that inner
+  one, and the outer box keeps painting its construction-time background
+  beside the field. This is the same trap `reapplyTheme` already works
+  around for the `:` prompt.
 - **New `StyleFilterInput(i, p)`** sets the colors the stand-alone
   inputs use today, plus the label background:
   - label style: `Label` on `Background`

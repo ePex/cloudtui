@@ -24,6 +24,41 @@ func StyleList(l *tview.List, p config.Palette) *tview.List {
 		SetSelectedTextColor(tcell.GetColor(p.SelectionText))
 }
 
+// StyleForm applies p to every style f copies at construction: the label
+// color, the field style, and the three button styles — the same colors
+// ApplyTviewStyles gives a freshly built form. Form.Draw hands the label
+// color and field style down to every item via SetFormAttributes, so this
+// also recolors the form's input fields, text areas, and dropdowns.
+// The form's own background, border, and title stay with each dialog's
+// ApplyPalette.
+//
+// Each item's and button's own Box background is reset too: an item like
+// InputField wraps its field in a separate inner widget, and
+// SetFormAttributes only reaches that inner one — the outer Box keeps its
+// construction-time background and paints it wherever the field doesn't
+// cover (the same trap reapplyTheme works around for the command prompt).
+func StyleForm(f *tview.Form, p config.Palette) *tview.Form {
+	bg := tcell.GetColor(p.Background)
+	text := tcell.GetColor(p.Text)
+	value := tcell.GetColor(p.Value)
+	for i := 0; i < f.GetFormItemCount(); i++ {
+		if b, ok := f.GetFormItem(i).(interface {
+			SetBackgroundColor(tcell.Color) *tview.Box
+		}); ok {
+			b.SetBackgroundColor(bg)
+		}
+	}
+	for i := 0; i < f.GetButtonCount(); i++ {
+		f.GetButton(i).SetBackgroundColor(bg)
+	}
+	return f.
+		SetLabelColor(value).
+		SetFieldStyle(tcell.StyleDefault.Foreground(text).Background(bg)).
+		SetButtonStyle(tcell.StyleDefault.Foreground(text).Background(bg)).
+		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(bg).Background(text)).
+		SetButtonDisabledStyle(tcell.StyleDefault.Foreground(value).Background(bg))
+}
+
 // StyleDropDown applies palette colors to the dropdown's popup list so
 // unselected items are readable against the theme background.
 func StyleDropDown(dd *tview.DropDown, p config.Palette) {

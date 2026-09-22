@@ -10,7 +10,7 @@ Each task is implemented and approved on its own, then pushed.
    - Extend `StyleList` to set the main, secondary and shortcut styles.
    - Test: a list built under `dark` and styled with `cyberpunk` renders
      unselected rows in `cyberpunk`'s `Text` on `Background`.
-2. [ ] **`StyleForm`, used by every form dialog.**
+2. [x] **`StyleForm`, used by every form dialog.**
    - Add `ui.StyleForm` with a render test covering the label, input
      field and a button.
    - Call it from the `ApplyPalette` of:

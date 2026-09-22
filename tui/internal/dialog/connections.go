@@ -522,6 +522,7 @@ func (ce *ConnEditor) ApplyPalette(p config.Palette) {
 	ce.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	ce.form.SetBorderColor(tcell.GetColor(p.Border))
 	ce.form.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(ce.form, p)
 	// Looked up by label rather than a fixed index — this used to target
 	// GetFormItem(2), which had been a silent no-op since Password
 	// Source was added at index 5 shifted Broker Name off index 2 (see

@@ -107,29 +107,37 @@ func TestStyleListRecolorsEveryItemStyle(t *testing.T) {
 	assertCellColors(t, "selected main text", findText(t, rows, "first"), cyber.SelectionText, cyber.SelectionBg)
 }
 
+// assertSameCells fails at the first cell where live and restarted differ
+// in rune or color.
+func assertSameCells(t *testing.T, live, restarted [][]renderedCell) {
+	t.Helper()
+	for y := range live {
+		for x := range live[y] {
+			got, want := live[y][x], restarted[y][x]
+			if got != want {
+				t.Fatalf("cell (%d,%d): live switch drew %q %v on %v, restart draws %q %v on %v",
+					x, y, got.r, got.fg, got.bg, want.r, want.fg, want.bg)
+			}
+		}
+	}
+}
+
 // TestStyleListFreshListMatchesRestart checks that a live switch (build
-// under dark, StyleList with cyberpunk) draws the unselected row exactly
-// as a list built under cyberpunk from the start does — i.e. as after a
+// under dark, StyleList with cyberpunk) draws the whole list exactly as a
+// list built under cyberpunk from the start does — i.e. as after a
 // restart.
 func TestStyleListFreshListMatchesRestart(t *testing.T) {
 	cyber := mustPalette(t, "cyberpunk")
 	live := StyleList(newThemedTestList(t), cyber)
+	live.SetBackgroundColor(tcell.GetColor(cyber.Background)) // done by each dialog's own ApplyPalette
+	liveRows := renderCells(t, live, 30, 6)
 
 	withTviewStyles(t, cyber)
 	restarted := StyleList(tview.NewList(), cyber)
 	restarted.AddItem("first", "sub", 'a', nil)
 	restarted.AddItem("second", "", 0, nil)
 
-	for _, text := range []string{"second", "sub", "(a)", "first"} {
-		got := findText(t, renderCells(t, live, 30, 6), text)
-		want := findText(t, renderCells(t, restarted, 30, 6), text)
-		for i := range got {
-			if got[i].fg != want[i].fg || got[i].bg != want[i].bg {
-				t.Errorf("%q: live switch drew %v on %v, restart draws %v on %v", text, got[i].fg, got[i].bg, want[i].fg, want[i].bg)
-				break
-			}
-		}
-	}
+	assertSameCells(t, liveRows, renderCells(t, restarted, 30, 6))
 }
 
 // TestStyleListControlWithoutRestyleKeepsOldColors is the control for the
@@ -143,6 +151,76 @@ func TestStyleListControlWithoutRestyleKeepsOldColors(t *testing.T) {
 
 	rows := renderCells(t, l, 30, 6)
 	assertCellColors(t, "unselected main text", findText(t, rows, "second"), dark.Text, dark.Background)
+}
+
+// newThemedTestForm builds a form while tview.Styles holds the "dark"
+// theme: a "Name" field holding "abc", then Save/Cancel buttons, with the
+// Save button focused (so it draws in the activated style).
+func newThemedTestForm(t *testing.T) *tview.Form {
+	t.Helper()
+	withTviewStyles(t, mustPalette(t, "dark"))
+	f := tview.NewForm().
+		AddInputField("Name", "abc", 10, nil, nil).
+		AddButton("Save", nil).
+		AddButton("Cancel", nil)
+	f.SetFocus(1) // Save: items first, then buttons
+	var focus func(tview.Primitive)
+	focus = func(p tview.Primitive) { p.Focus(focus) }
+	f.Focus(focus)
+	return f
+}
+
+func TestStyleFormRecolorsLabelFieldAndButtons(t *testing.T) {
+	f := newThemedTestForm(t)
+	cyber := mustPalette(t, "cyberpunk")
+	f.SetBackgroundColor(tcell.GetColor(cyber.Background)) // done by each dialog's own ApplyPalette
+
+	if got := StyleForm(f, cyber); got != f {
+		t.Fatal("StyleForm did not return the same form for chaining")
+	}
+	rows := renderCells(t, f, 40, 6)
+
+	for _, c := range findText(t, rows, "Name") {
+		if c.fg != tcell.GetColor(cyber.Value) {
+			t.Errorf("label %q drawn in %v, want %s", c.r, c.fg, cyber.Value)
+			break
+		}
+	}
+	assertCellColors(t, "field text", findText(t, rows, "abc"), cyber.Text, cyber.Background)
+	assertCellColors(t, "unfocused button", findText(t, rows, "Cancel"), cyber.Text, cyber.Background)
+	assertCellColors(t, "focused (activated) button", findText(t, rows, "Save"), cyber.Background, cyber.Text)
+}
+
+// TestStyleFormMatchesRestart checks a live switch draws the form's
+// label, field, and buttons exactly as a form built under cyberpunk from
+// the start does.
+func TestStyleFormMatchesRestart(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	live := newThemedTestForm(t)
+	live.SetBackgroundColor(tcell.GetColor(cyber.Background))
+	StyleForm(live, cyber)
+	liveRows := renderCells(t, live, 40, 6)
+
+	withTviewStyles(t, cyber)
+	restarted := tview.NewForm().
+		AddInputField("Name", "abc", 10, nil, nil).
+		AddButton("Save", nil).
+		AddButton("Cancel", nil)
+	restarted.SetFocus(1)
+	var focus func(tview.Primitive)
+	focus = func(p tview.Primitive) { p.Focus(focus) }
+	restarted.Focus(focus)
+	assertSameCells(t, liveRows, renderCells(t, restarted, 40, 6))
+}
+
+// TestStyleFormControlWithoutRestyleKeepsOldColors is the control: without
+// StyleForm, the field keeps the construction-time (dark) colors.
+func TestStyleFormControlWithoutRestyleKeepsOldColors(t *testing.T) {
+	dark := mustPalette(t, "dark")
+	f := newThemedTestForm(t)
+	ApplyTviewStyles(mustPalette(t, "cyberpunk"))
+
+	assertCellColors(t, "field text", findText(t, renderCells(t, f, 40, 6), "abc"), dark.Text, dark.Background)
 }
 
 func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {

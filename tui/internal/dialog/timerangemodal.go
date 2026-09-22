@@ -152,6 +152,7 @@ func (tm *TimeRangeModal) ApplyPalette(p config.Palette) {
 	tm.absoluteForm.SetBackgroundColor(bg)
 	tm.absoluteForm.SetBorderColor(tcell.GetColor(p.Border))
 	tm.absoluteForm.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(tm.absoluteForm, p)
 }
 
 var _ ui.Themeable = (*TimeRangeModal)(nil)

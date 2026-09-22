@@ -65,6 +65,7 @@ func (de *DatadogEditor) ApplyPalette(p config.Palette) {
 	de.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	de.form.SetBorderColor(tcell.GetColor(p.Border))
 	de.form.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(de.form, p)
 }
 
 var _ ui.Themeable = (*DatadogEditor)(nil)

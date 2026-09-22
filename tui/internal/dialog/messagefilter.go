@@ -216,6 +216,7 @@ func (mf *MessageFilter) ApplyPalette(p config.Palette) {
 	mf.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	mf.form.SetBorderColor(tcell.GetColor(p.Border))
 	mf.form.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(mf.form, p)
 	ui.StyleInputFieldAutocomplete(mf.jmsTypeItem, p)
 }
 
