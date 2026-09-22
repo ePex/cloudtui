@@ -12,7 +12,7 @@ make sure the mutated code still compiles.
      JSON; a snippet file keeping `Extra`; a symlink; a folder; a
      missing file; exactly 1 MiB vs 1 MiB + 1; a NUL byte; invalid
      UTF-8; broken front matter; the source left unchanged.
-2. [ ] **`SnippetEditor.FocusJMSType()`.**
+2. [x] **`SnippetEditor.FocusJMSType()`.**
    - Moves focus to the JMS Type field of an open editor.
    - Test: after `ShowEdit` + `FocusJMSType`, typed text lands in JMS
      Type, and Enter saves.
