@@ -177,6 +177,29 @@ when created:
   labels, but the spaces around them use the text view's own base text
   color, copied at construction. `ApplyPalette` now resets it.
 
+**Found during the live check (task 7)**
+
+- **Text views' base text color.** A `TextView` copies its base text
+  color at construction. Color-tagged text is rebuilt on a switch or
+  reopen, but untagged characters are drawn in that base color: the
+  spaces between tags, the whole logo, and log lines without a level.
+  Fixed with `SetTextColor(Text)`, which is what a freshly built text
+  view gets:
+  - in `reapplyTheme`, for the top bar's info, context and logo panels
+    (the logo was visibly stale)
+  - in the `ApplyPalette` of `MessageDetailView`, `ParamDetailView`,
+    `SecretDetailView`, `LogDetailView`, `DatadogLogDetailView` and
+    `LogView`
+- **`CodePipelineDetailView`** gets the same header and
+  column-separator treatment as the other table views.
+- **Tests:**
+  - `app.TestReapplyThemeRecolorsShellTextPanels` covers the shell
+    panels.
+  - The view regression test now also covers the detail views and the
+    log view. Those are opened again after the switch, as in real use.
+    Their text is rebuilt then, but the base color isn't.
+  - The first draft of this plan left detail views out, which was wrong.
+
 `ConnManager`'s hints looked stale at first, but they're rebuilt every
 time it opens. The dialog regression test reopens overlays after the
 switch, as happens in real use, since only the theme picker is open
@@ -186,8 +209,6 @@ during a switch.
 
 - The command prompt: `reapplyTheme` already handles it via
   `SetFormAttributes`.
-- Detail views (text built from the current palette each time they
-  open).
 - **Table data rows:** open question below.
 
 ## Testing
@@ -248,18 +269,15 @@ right after startup than after a live switch:
 - This does change how those pickers look at startup, which is
   intended.
 
-## Open question (found during task 6)
+## Table data rows (decided after task 6)
 
 Table **data rows** are also colored when they're drawn: the queue
 names, message types, the favorites star and so on. After a live switch
 they keep the old theme's colors until the view next repaints (a
 refresh, a filter change, a reload, or the queue list's auto-refresh).
 
-Each view's `repaint` also resets the selection to the first row and
-scrolls to the top. So simply calling it on a switch would move the
-cursor. Options:
+Repainting on a switch would move the cursor, since each view's
+`repaint` resets the selection to the first row and scrolls to the top.
 
-- (a) leave as is: rows pick up the new theme on the view's next
-  repaint
-- (b) repaint each view on a switch while keeping its selection and
-  scroll position (an extra task, with care per view)
+**Decision (user, task 6 review):** leave as is. Rows pick up the new
+theme on the view's next repaint. Out of scope for this bugfix.

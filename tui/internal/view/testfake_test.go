@@ -3,6 +3,8 @@ package view
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -266,14 +268,16 @@ func staleColors(t *testing.T, prim tview.Primitive, width, height int, old, new
 	return stale
 }
 
-// TestViewsFullyRecolorOnLiveThemeSwitch builds every view that holds a
-// list, filter input, dropdown, or table header while tview.Styles and
-// the host's palette hold "dark" (as at startup), switches the host to
-// "cyberpunk" and calls ApplyPalette — what a live theme switch does — and
-// fails if any drawn cell still carries a dark-only color. Views keep
-// their widgets across a switch (unlike overlays, which are reopened), so
-// there's no reopen step. Detail views are left out: their content is
-// rebuilt from the current palette every time they're opened.
+// TestViewsFullyRecolorOnLiveThemeSwitch builds every view while
+// tview.Styles and the host's palette hold "dark" (as at startup), gives
+// it some content, switches the host to "cyberpunk" and calls
+// ApplyPalette — what a live theme switch does — and fails if any drawn
+// cell still carries a dark-only color. List-style views keep their
+// widgets across a switch, so they're checked as they are. Detail views
+// (and the log view) are shown again after the switch, as happens when
+// you next open them, via their reopen func. Their text is rebuilt then,
+// but untagged characters still use the text view's base color, which is
+// the part this checks.
 func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 	dark, _ := config.PaletteForTheme("dark")
 	cyber, _ := config.PaletteForTheme("cyberpunk")
@@ -284,37 +288,85 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 	}
 	tests := []struct {
 		name  string
-		build func(host *fakeViewHost) themedView
+		build func(t *testing.T, host *fakeViewHost) (themedView, func())
 	}{
-		{"SettingsView", func(host *fakeViewHost) themedView {
+		{"SettingsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			return NewSettingsView(host, dialog.NewThemePicker(host), dialog.NewConnManager(host, dialog.NewConfirmDialog(host)),
-				dialog.NewAWSProfilesPicker(host), dialog.NewDatadogEditor(host))
+				dialog.NewAWSProfilesPicker(host), dialog.NewDatadogEditor(host)), nil
 		}},
-		{"QueuesView", func(host *fakeViewHost) themedView {
+		{"QueuesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewQueuesView(host, host.backend, dialog.NewConfirmDialog(host), dialog.NewMovePicker(host),
 				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
 				dialog.NewJMSTypePrompt(host), func(string) {})
 			v.filterInput.SetText("ord")
-			return v
+			return v, nil
 		}},
-		{"MessagesView", func(host *fakeViewHost) themedView {
+		{"MessagesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewMessagesView(host, dialog.NewMessageFilter(host),
 				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
 				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), func(string, queue.Message) {})
 			v.searchInput.SetText("ord")
-			return v
+			return v, nil
 		}},
-		{"SSMParamsView", func(host *fakeViewHost) themedView { return NewSSMParamsView(host, func(awsssm.Parameter) {}) }},
-		{"SecretsView", func(host *fakeViewHost) themedView { return NewSecretsView(host, func(awssecrets.Secret) {}) }},
-		{"LogsView", func(host *fakeViewHost) themedView { return NewLogsView(host, func(string) {}) }},
-		{"LogSearchView", func(host *fakeViewHost) themedView {
-			return NewLogSearchView(host, dialog.NewTimeRangeModal(host), func(awslogs.LogEvent) {}, func() {})
+		{"SSMParamsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewSSMParamsView(host, func(awsssm.Parameter) {}), nil
 		}},
-		{"DatadogLogsView", func(host *fakeViewHost) themedView {
-			return NewDatadogLogsView(host, dialog.NewTimeRangeModal(host), func(datadoglogs.LogEvent) {})
+		{"SecretsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewSecretsView(host, func(awssecrets.Secret) {}), nil
 		}},
-		{"CodePipelineListView", func(host *fakeViewHost) themedView {
-			return NewCodePipelineListView(host, func(string) {})
+		{"LogsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewLogsView(host, func(string) {}), nil
+		}},
+		{"LogSearchView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewLogSearchView(host, dialog.NewTimeRangeModal(host), func(awslogs.LogEvent) {}, func() {}), nil
+		}},
+		{"DatadogLogsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewDatadogLogsView(host, dialog.NewTimeRangeModal(host), func(datadoglogs.LogEvent) {}), nil
+		}},
+		{"CodePipelineListView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			return NewCodePipelineListView(host, func(string) {}), nil
+		}},
+		{"MessageDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			confirm := dialog.NewConfirmDialog(host)
+			v := NewMessageDetailView(host, dialog.NewMovePicker(host), confirm,
+				dialog.NewSnippetSaveDialog(host, snippet.NewStore(""), confirm), func() {}, func() {})
+			msg := queue.Message{ID: "ID:1", JMSType: "OrderCreated", Timestamp: time.Now(),
+				RawFields: map[string]any{"text": `{"id":1}`, "jMSCorrelationID": "c-1"}}
+			return v, func() { v.Render("orders", msg) }
+		}},
+		{"ParamDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			v := NewParamDetailView(host, func() {})
+			return v, func() {
+				v.Render(awsssm.Parameter{Name: "/app/db/url", Type: "String", Value: "x", LastModified: time.Now()})
+			}
+		}},
+		{"SecretDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			v := NewSecretDetailView(host, func() {})
+			return v, func() { v.Render(awssecrets.Secret{Name: "app/db", ARN: "arn:x", LastChanged: time.Now()}) }
+		}},
+		{"LogDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			v := NewLogDetailView(host, func() {})
+			return v, func() { v.Render(awslogs.LogEvent{Timestamp: time.Now(), LogStream: "s", Message: "hello world"}) }
+		}},
+		{"DatadogLogDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			v := NewDatadogLogDetailView(host, func() {})
+			return v, func() {
+				v.Render(datadoglogs.LogEvent{Timestamp: time.Now(), Service: "api", Status: "info", Host: "h"})
+			}
+		}},
+		{"CodePipelineDetailView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			v := NewCodePipelineDetailView(host, func() {})
+			return v, func() { v.Render([]awscodepipeline.StageStatus{{Name: "Build", Status: "Succeeded"}}) }
+		}},
+		{"LogView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
+			// The second line has no level, so colorizeLog leaves it
+			// untagged: drawn in the text view's base color.
+			path := filepath.Join(t.TempDir(), "cloudtui.log")
+			if err := os.WriteFile(path, []byte("time=now level=INFO msg=hello\n  continued value, no level\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			v := NewLogViewWithPath(path)
+			return v, v.Activate
 		}},
 	}
 	for _, tt := range tests {
@@ -325,12 +377,18 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 			host := newFakeViewHost()
 			host.cfg.Colors = dark
 
-			v := tt.build(host)
+			v, reopen := tt.build(t, host)
 			v.ApplyPalette(dark) // as App.New does at startup
+			if reopen != nil {
+				reopen()
+			}
 
 			ui.ApplyTviewStyles(cyber) // the live switch: reapplyTheme
 			host.cfg.Colors = cyber
 			v.ApplyPalette(cyber)
+			if reopen != nil {
+				reopen()
+			}
 
 			if stale := staleColors(t, v.Primitive(), 100, 20, dark, cyber); len(stale) > 0 {
 				t.Errorf("%d cells keep dark-only colors after the switch, e.g. %s", len(stale), strings.Join(stale[:min(len(stale), 5)], "; "))

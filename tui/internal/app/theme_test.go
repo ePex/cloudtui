@@ -129,6 +129,42 @@ func TestReapplyThemeUpdatesInfoPanelText(t *testing.T) {
 	}
 }
 
+// TestReapplyThemeRecolorsShellTextPanels checks the top bar's text
+// panels drop the previous theme's base text color on a live switch. The
+// logo is untagged text, and the info and context panels have untagged
+// characters between their color tags; all of those are drawn in the
+// panel's base text color, which tview copies at construction.
+func TestReapplyThemeRecolorsShellTextPanels(t *testing.T) {
+	cfg := config.Default()
+	cfg.Colors = mustTheme(t, "dark")
+	a := New(cfg)
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+	oldText := tcell.GetColor(cfg.Colors.Text)
+
+	p := mustTheme(t, "cyberpunk")
+	a.cfg.Colors = p
+	reapplyTheme(a, p)
+
+	for _, panel := range []struct {
+		name string
+		prim tview.Primitive
+	}{
+		{"logo", a.logoPanel},
+		{"info", a.infoPanel},
+		{"context", a.contextPanel},
+	} {
+		text, fg, _ := renderedRows(t, panel.prim, 60, 6)
+		for y := range fg {
+			for x, c := range fg[y] {
+				if c == oldText {
+					t.Errorf("%s panel: cell (%d,%d) %q still drawn in dark's Text %v", panel.name, x, y, []rune(text[y])[x], c)
+					break
+				}
+			}
+		}
+	}
+}
+
 func TestReapplyThemeUpdatesGlobalStyles(t *testing.T) {
 	a := New(config.Default())
 	t.Cleanup(func() { applyTheme(config.Default().Colors) })

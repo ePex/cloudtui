@@ -88,3 +88,7 @@ point of switching live.
   unless the plan finds them affected too.
 - Anything drawn only once at startup that a theme switch rebuilds
   anyway.
+- Table **data rows** (queue names, message types, ...). They keep the
+  previous theme's colors until the view next repaints (refresh, filter
+  change, reload), because repainting on a switch would reset the
+  cursor. Decided after task 6.

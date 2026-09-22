@@ -26,6 +26,11 @@ func reapplyTheme(a *App, p config.Palette) {
 	applyTheme(p)
 
 	bg := tcell.GetColor(p.Background)
+	// The text panels' base text color is copied from tview.Styles at
+	// construction. Their color-tagged text is rebuilt below, but
+	// untagged characters (the logo art, spaces between tags) are drawn in
+	// that base color, so reset it to what a freshly built TextView gets.
+	text := tcell.GetColor(p.Text)
 
 	// Status bar — recolor only; don't touch its text. It's either blank
 	// (idle) or showing a transient message, and there's no longer a
@@ -35,6 +40,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Info panel — rebuildtext to show the new theme name
 	a.infoPanel.SetBackgroundColor(bg)
+	a.infoPanel.SetTextColor(text)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 
 	// Divider — rebuild color-tagged text to pick up the new border color
@@ -47,6 +53,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Context panel — background only; text is managed by SwitchTo/UpdateContextPanel
 	a.contextPanel.SetBackgroundColor(bg)
+	a.contextPanel.SetTextColor(text)
 	// Re-render shortcuts with new accent color if a Shortcuttable view is active.
 	if av := a.activeView(); av != nil {
 		a.UpdateContextPanel(av)
@@ -54,6 +61,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Logo panel
 	a.logoPanel.SetBackgroundColor(bg)
+	a.logoPanel.SetTextColor(text)
 
 	// Command prompt's own background, label color, and typed-text color.
 	// InputField.SetBackgroundColor (the embedded *Box) is NOT enough here:

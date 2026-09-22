@@ -37,6 +37,10 @@ func (dv *CodePipelineDetailView) ApplyPalette(p config.Palette) {
 	dv.table.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
 	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
+	dv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	dv.setHeader()
 }
 
 func (dv *CodePipelineDetailView) Primitive() tview.Primitive { return dv.table }
