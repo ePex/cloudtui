@@ -41,6 +41,31 @@ func TestSaveDatadogConfigPersists(t *testing.T) {
 	}
 }
 
+func TestSaveAMQManagerSettingsPersists(t *testing.T) {
+	setHomeDir(t, t.TempDir())
+	a := New(config.Default())
+	want := config.AMQManagerSettings{ShowOnlyQueuesWithPendingMessages: true}
+	a.SaveAMQManagerSettings(want)
+
+	if a.cfg.AMQManager != want {
+		t.Errorf("cfg.AMQManager = %+v, want %+v", a.cfg.AMQManager, want)
+	}
+	if main4, _ := a.settingsV.List().GetItemText(4); !strings.Contains(main4, "queues with pending messages") {
+		t.Errorf("AMQ Manager settings row = %q, want enabled summary", main4)
+	}
+	path, err := config.DefaultPath()
+	if err != nil {
+		t.Fatalf("config.DefaultPath() error = %v", err)
+	}
+	got, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.AMQManager != want {
+		t.Errorf("persisted AMQ Manager settings = %+v, want %+v", got.AMQManager, want)
+	}
+}
+
 // TestSetActiveAWSProfilePersistsAndUpdatesUI confirms App's real
 // SetActiveAWSProfile (the ui.Host method the AWS Profiles overlay
 // calls) updates the info panel and settings list, and persists to

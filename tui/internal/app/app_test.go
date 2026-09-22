@@ -298,6 +298,16 @@ func TestOnGlobalKeyPassesThroughWhenDatadogEditorVisible(t *testing.T) {
 	}
 }
 
+func TestOnGlobalKeyPassesThroughWhenAMQManagerSettingsVisible(t *testing.T) {
+	a := New(config.Default())
+	a.amqManagerEditor.Show()
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey('q') while AMQ Manager settings visible = %v, want event passed through unchanged", got)
+	}
+}
+
 func TestOnPromptDoneQuit(t *testing.T) {
 	a := New(config.Default())
 	a.prompt.SetText("quit")

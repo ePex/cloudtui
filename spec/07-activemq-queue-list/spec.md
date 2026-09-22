@@ -37,6 +37,14 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   and restores the plain title. The filter string persists across
   navigation and is reapplied after every data reload — same persistence
   model as sort.
+- **AMQ Manager setting**: Settings → AMQ Manager contains the global
+  **Show only queues with pending messages** toggle. It is off by default
+  and stored in `~/.cloudtui/config.yaml`, independent of the active broker
+  connection. When enabled, queues with a known pending count of zero are
+  omitted from the displayed list; positive and unknown (negative) counts
+  remain visible. This is applied to loaded summaries before the queue-name
+  filter and sorting, and changing the option repaints the current summary
+  list without reloading it. The backend still returns the complete list.
 - **Scroll-to-top on repaint**: every repaint (initial load, filter change,
   sort change, or re-entering the view) resets the table selection to the
   first data row. Scroll position is deliberately *not* preserved across
@@ -82,6 +90,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 - `queue.Backend` interface: `List(ctx context.Context) ([]Summary, error)`
   — implemented by both the Jolokia client and the mq-proxy client
   (spec/11); this view is backend-agnostic.
+- `config.AMQManagerSettings` groups global AMQ manager options and is
+  persisted in the settings portion of `config.yaml`; its initial option
+  `showOnlyQueuesWithPendingMessages` defaults to false.
 - Jolokia backend connection config lives under `queue:` in each entry of
   `~/.cloudtui/connections/jolokia.yaml` (`brokerName`, `url`, `username`,
   `password` — see spec/12-named-connections for the full connections

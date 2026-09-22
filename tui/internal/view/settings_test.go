@@ -15,8 +15,9 @@ func newTestSettingsView(t *testing.T) (*fakeViewHost, *SettingsView) {
 	connManager := dialog.NewConnManager(host, confirm)
 	awsProfiles := dialog.NewAWSProfilesPicker(host)
 	datadogEditor := dialog.NewDatadogEditor(host)
+	amqManagerEditor := dialog.NewAMQManagerSettingsEditor(host)
 	themePicker := dialog.NewThemePicker(host)
-	return host, NewSettingsView(host, themePicker, connManager, awsProfiles, datadogEditor)
+	return host, NewSettingsView(host, themePicker, connManager, awsProfiles, datadogEditor, amqManagerEditor)
 }
 
 func TestSettingsViewNameAndTitle(t *testing.T) {
@@ -32,11 +33,25 @@ func TestSettingsViewNameAndTitle(t *testing.T) {
 	}
 }
 
-func TestSettingsListHasFourItems(t *testing.T) {
+func TestSettingsListHasFiveItems(t *testing.T) {
 	_, sv := newTestSettingsView(t)
 
-	if got := sv.List().GetItemCount(); got != 4 {
-		t.Errorf("settings list item count = %d, want 4", got)
+	if got := sv.List().GetItemCount(); got != 5 {
+		t.Errorf("settings list item count = %d, want 5", got)
+	}
+}
+
+func TestSettingsAMQManagerRowSummarizesSetting(t *testing.T) {
+	host, sv := newTestSettingsView(t)
+	main, _ := sv.List().GetItemText(4)
+	if !strings.Contains(main, "AMQ Manager") || !strings.Contains(main, "all queues") {
+		t.Fatalf("default AMQ Manager row = %q", main)
+	}
+	host.cfg.AMQManager.ShowOnlyQueuesWithPendingMessages = true
+	sv.Refresh()
+	main, _ = sv.List().GetItemText(4)
+	if !strings.Contains(main, "queues with pending messages") {
+		t.Errorf("enabled AMQ Manager row = %q", main)
 	}
 }
 

@@ -40,12 +40,13 @@ type Config struct {
 	// Settings -> AWS Profiles picker. Independent of Connections/backends —
 	// this slice of AWS support is discovery/selection only, not yet wired
 	// to any broker connection. Empty means none selected.
-	ActiveAWSProfile string        `yaml:"activeAWSProfile"`
-	Datadog          DatadogConfig `yaml:"datadog"`
-	Theme            string        `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
-	Logo             []string      `yaml:"logo"`
-	Colors           Palette       `yaml:"colors"`
-	AWSFavorites     AWSFavorites  `yaml:"awsFavorites,omitempty"`
+	ActiveAWSProfile string             `yaml:"activeAWSProfile"`
+	Datadog          DatadogConfig      `yaml:"datadog"`
+	AMQManager       AMQManagerSettings `yaml:"amqManager"`
+	Theme            string             `yaml:"theme"` // name of an embedded theme file (e.g. "dark", "cyberpunk")
+	Logo             []string           `yaml:"logo"`
+	Colors           Palette            `yaml:"colors"`
+	AWSFavorites     AWSFavorites       `yaml:"awsFavorites,omitempty"`
 }
 
 // settingsFile is config.yaml's on-disk shape: everything except
@@ -56,12 +57,19 @@ type Config struct {
 // other. Config itself is unchanged and still holds all of it in
 // memory; only Load/Save's on-disk representation is split.
 type settingsFile struct {
-	ActiveConnection string        `yaml:"activeConnection"`
-	ActiveAWSProfile string        `yaml:"activeAWSProfile"`
-	Datadog          DatadogConfig `yaml:"datadog"`
-	Theme            string        `yaml:"theme"`
-	Logo             []string      `yaml:"logo"`
-	Colors           Palette       `yaml:"colors"`
+	ActiveConnection string             `yaml:"activeConnection"`
+	ActiveAWSProfile string             `yaml:"activeAWSProfile"`
+	Datadog          DatadogConfig      `yaml:"datadog"`
+	AMQManager       AMQManagerSettings `yaml:"amqManager"`
+	Theme            string             `yaml:"theme"`
+	Logo             []string           `yaml:"logo"`
+	Colors           Palette            `yaml:"colors"`
+}
+
+// AMQManagerSettings contains global settings for the AMQ queue manager.
+// These settings apply across named broker connections.
+type AMQManagerSettings struct {
+	ShowOnlyQueuesWithPendingMessages bool `yaml:"showOnlyQueuesWithPendingMessages,omitempty"`
 }
 
 // FavoriteKind identifies which of AWSFavorites' three namespaces a
@@ -511,6 +519,7 @@ func Load(path string) (Config, error) {
 			ActiveConnection: cfg.ActiveConnection,
 			ActiveAWSProfile: cfg.ActiveAWSProfile,
 			Datadog:          cfg.Datadog,
+			AMQManager:       cfg.AMQManager,
 			Theme:            cfg.Theme,
 			Logo:             cfg.Logo,
 			Colors:           cfg.Colors,
@@ -521,6 +530,7 @@ func Load(path string) (Config, error) {
 		cfg.ActiveConnection = sf.ActiveConnection
 		cfg.ActiveAWSProfile = sf.ActiveAWSProfile
 		cfg.Datadog = sf.Datadog
+		cfg.AMQManager = sf.AMQManager
 		cfg.Theme = sf.Theme
 		cfg.Logo = sf.Logo
 
@@ -720,6 +730,7 @@ func Save(path string, cfg Config) error {
 		ActiveConnection: cfg.ActiveConnection,
 		ActiveAWSProfile: cfg.ActiveAWSProfile,
 		Datadog:          cfg.Datadog,
+		AMQManager:       cfg.AMQManager,
 		Theme:            cfg.Theme,
 		Logo:             cfg.Logo,
 		Colors:           cfg.Colors,

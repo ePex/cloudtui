@@ -22,25 +22,26 @@ type testHost struct {
 	messagesFilter  queue.MessageFilter
 	deleteResult    bool // DeleteConnection's return value
 
-	shownPages         []string
-	hiddenPages        []string
-	focused            tview.Primitive
-	focusMainCalls     int
-	status             string
-	contextHint        string
-	switchedTheme      string
-	switchedConnection string
-	savedConnection    *savedConnectionCall
-	deletedConnection  string
-	savedDatadogConfig *config.DatadogConfig
-	activeAWSProfile   string
-	toggledFavorite    *toggledFavoriteCall
-	loadedJMSTypes     []string
-	messagesQueueName  string
-	scanJMSTypesFn     func(ctx context.Context, queueName string, maxCount int) ([]string, error)
-	reloadedQueue      string
-	appliedFilter      *queue.MessageFilter
-	focusMessagesCalls int
+	shownPages              []string
+	hiddenPages             []string
+	focused                 tview.Primitive
+	focusMainCalls          int
+	status                  string
+	contextHint             string
+	switchedTheme           string
+	switchedConnection      string
+	savedConnection         *savedConnectionCall
+	deletedConnection       string
+	savedDatadogConfig      *config.DatadogConfig
+	savedAMQManagerSettings *config.AMQManagerSettings
+	activeAWSProfile        string
+	toggledFavorite         *toggledFavoriteCall
+	loadedJMSTypes          []string
+	messagesQueueName       string
+	scanJMSTypesFn          func(ctx context.Context, queueName string, maxCount int) ([]string, error)
+	reloadedQueue           string
+	appliedFilter           *queue.MessageFilter
+	focusMessagesCalls      int
 }
 
 type savedConnectionCall struct {
@@ -82,7 +83,11 @@ func (h *testHost) DeleteConnection(name string) bool {
 	return h.deleteResult
 }
 func (h *testHost) SaveDatadogConfig(cfg config.DatadogConfig) { h.savedDatadogConfig = &cfg }
-func (h *testHost) SetActiveAWSProfile(name string)            { h.activeAWSProfile = name }
+func (h *testHost) SaveAMQManagerSettings(cfg config.AMQManagerSettings) {
+	h.savedAMQManagerSettings = &cfg
+	h.cfg.AMQManager = cfg
+}
+func (h *testHost) SetActiveAWSProfile(name string) { h.activeAWSProfile = name }
 func (h *testHost) ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error) {
 	if h.listAWSProfiles == nil {
 		return nil, nil
