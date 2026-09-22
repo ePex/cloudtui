@@ -33,7 +33,7 @@ Each task is implemented and approved on its own, then pushed.
    - the empty-root hint
    - a parse error keeping the picker open with a status error
    - Esc calling `onClose`
-6. [ ] **Load snippet in send dialog.** Add the **Load snippet…** button
+6. [x] **Load snippet in send dialog.** Add the **Load snippet…** button
    and `applySnippet`/`setFromSnippet` to `SendMessageOverlay`, and
    update its constructor and the wiring in `app.go`. Add tests that:
    - only JMS Type and Body change, and a snippet with no JMS Type

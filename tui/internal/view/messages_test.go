@@ -11,6 +11,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -18,7 +19,7 @@ func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *d
 	t.Helper()
 	host := newFakeViewHost()
 	messageFilter := dialog.NewMessageFilter(host)
-	sendMessage := dialog.NewSendMessageOverlay(host)
+	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(string, queue.Message) {})
@@ -216,7 +217,7 @@ func TestMessagesViewWrapNavigationSkipsContinuationRows(t *testing.T) {
 func TestMessagesViewWrapSelectedFuncOpensCorrectMessage(t *testing.T) {
 	host := newFakeViewHost()
 	messageFilter := dialog.NewMessageFilter(host)
-	sendMessage := dialog.NewSendMessageOverlay(host)
+	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	var selected queue.Message

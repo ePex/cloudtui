@@ -236,7 +236,6 @@ func New(cfg config.Config) *App {
 	// further down.
 	a.confirm = dialog.NewConfirmDialog(a)
 	a.movePicker = dialog.NewMovePicker(a)
-	a.sendMessage = dialog.NewSendMessageOverlay(a)
 	// An unresolvable home directory leaves the snippet store rootless:
 	// every snippet action then reports "snippets folder unavailable"
 	// instead of failing startup over an optional feature.
@@ -246,6 +245,7 @@ func New(cfg config.Config) *App {
 	}
 	snippets := snippet.NewStore(snippetRoot)
 	a.snippetPicker = dialog.NewSnippetPicker(a, snippets)
+	a.sendMessage = dialog.NewSendMessageOverlay(a, a.snippetPicker, a.confirm)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)

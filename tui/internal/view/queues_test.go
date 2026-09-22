@@ -13,6 +13,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 )
 
 type fakeQueueBackend struct {
@@ -94,7 +95,7 @@ func newTestQueuesViewWithBackend(t *testing.T, b *fakeQueueBackend) (*fakeViewH
 	host := newFakeViewHost()
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
-	sendMessage := dialog.NewSendMessageOverlay(host)
+	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
 	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
 }
@@ -634,7 +635,7 @@ func newTestQueuesViewWithDrawSignal(t *testing.T, b *fakeQueueBackend, bufSize 
 	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, bufSize)}
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
-	sendMessage := dialog.NewSendMessageOverlay(host)
+	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
 	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
 }
