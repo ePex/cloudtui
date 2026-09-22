@@ -125,6 +125,7 @@ func (s *Store) Save(name string, sn Snippet, overwrite bool) error {
 	if err != nil {
 		return err
 	}
+	sn.Body = FormatBody(sn.Body)
 	path := filepath.Join(s.root, rel)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating snippet folder: %w", err)

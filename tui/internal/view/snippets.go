@@ -122,6 +122,13 @@ func (v *SnippetsView) edit(rel string) {
 		v.showError(err)
 		return
 	}
+	if formatted := snippet.FormatBody(sn.Body); formatted != sn.Body {
+		sn.Body = formatted
+		if err := v.store.Save(rel, sn, true); err != nil {
+			v.showError(err)
+			return
+		}
+	}
 	v.editor.ShowEdit(rel, sn, v.landOn, v.restoreFocus)
 }
 
@@ -250,7 +257,8 @@ func (v *SnippetsView) updatePreview() {
 		if jmsType == "" {
 			jmsType = "(none)"
 		}
-		v.preview.SetText(fmt.Sprintf("[%s]JMS Type:[-] %s\n\n%s", p.Label, tview.Escape(jmsType), tview.Escape(sn.Body)))
+		body := snippet.FormatBody(sn.Body)
+		v.preview.SetText(fmt.Sprintf("[%s]JMS Type:[-] %s\n\n%s", p.Label, tview.Escape(jmsType), tview.Escape(body)))
 	}
 	v.preview.ScrollToBeginning()
 }

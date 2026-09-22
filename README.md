@@ -90,6 +90,10 @@ jmsType: OrderCreated
 - Without a header, the whole file is the body and there's no JMS Type.
   Any text file works as is.
 - The body can be anything textual: JSON, XML, plain text, ...
+- Valid JSON is saved with two-space indentation. Valid XML is indented
+  when formatting can preserve its text; mixed-content XML, XML using
+  `xml:space="preserve"`, malformed JSON/XML, and other text are left as
+  written.
 
 **Using snippets in the app:**
 
@@ -101,7 +105,8 @@ jmsType: OrderCreated
   it is.
 - **Manage the library:** open **snippets** from Home (under ActiveMQ)
   or type `:snippets`. A preview of the selected snippet is shown on the
-  right.
+  right. Valid JSON/XML is formatted in the preview without changing the
+  file. Opening a snippet for editing also formats and saves its body.
 
   | Key | Action |
   |---|---|

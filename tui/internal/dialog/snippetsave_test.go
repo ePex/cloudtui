@@ -74,7 +74,9 @@ func TestSnippetSaveWritesFile(t *testing.T) {
 
 	pressEnterInForm(sd, host)
 
-	if got, want := readSnippet(t, root, "orders/created.json"), string(snippet.Format(sn)); got != want {
+	formatted := sn
+	formatted.Body = snippet.FormatBody(sn.Body)
+	if got, want := readSnippet(t, root, "orders/created.json"), string(snippet.Format(formatted)); got != want {
 		t.Errorf("file = %q, want %q", got, want)
 	}
 	if *closed != 1 || sd.Visible() {
