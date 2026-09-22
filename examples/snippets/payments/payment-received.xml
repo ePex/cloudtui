@@ -1,0 +1,10 @@
+---
+jmsType: PaymentReceived
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<payment>
+  <paymentId>PAY-2001</paymentId>
+  <orderId>ORD-1001</orderId>
+  <amount currency="EUR">59.90</amount>
+  <receivedAt>2026-01-15T10:45:00Z</receivedAt>
+</payment>

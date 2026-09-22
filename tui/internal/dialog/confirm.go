@@ -25,8 +25,12 @@ func NewConfirmDialog(host ui.Host) *ConfirmDialog {
 	c := &ConfirmDialog{host: host}
 	c.text = tview.NewTextView().SetWrap(true)
 	c.list = tview.NewList().ShowSecondaryText(false)
+	// Three rows for the question: at the app's 52-column overlay that
+	// fits about 150 characters, enough for a delete question naming a
+	// deep snippet folder plus its nested counts. The list keeps the
+	// remaining rows (No/Yes need two).
 	c.flex = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(c.text, 2, 0, false).
+		AddItem(c.text, 3, 0, false).
 		AddItem(c.list, 0, 1, true)
 	c.flex.SetBorder(true).SetTitle(" Confirm ")
 	return c

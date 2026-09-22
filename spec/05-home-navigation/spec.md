@@ -17,7 +17,7 @@ Home is a keyboard-navigable launcher, sectioned by backend, rather than a flat 
 - Home does **not** list itself (listing "Home" from within Home is circular).
 - Sections are grouped **by backend**, in this order:
 
-  1. **ActiveMQ**: `queues`
+  1. **ActiveMQ**: `queues`, `snippets` (the message snippet library, spec/22)
   2. **AWS**: `ssm-parameters`, `secrets-manager`, `cloudwatch-logs`, `codepipeline` (in that order)
   3. **Datadog**: `datadog-logs`
   4. **System**: `settings`, `log`

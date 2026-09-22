@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ import (
 func TestNewRegistersViewsWithHomeDefault(t *testing.T) {
 	a := New(config.Default())
 
-	wantNames := []string{"home", "settings", "log", "queues", "ssm-parameters", "secrets-manager", "cloudwatch-logs", "datadog-logs", "codepipeline"}
+	wantNames := []string{"home", "settings", "log", "queues", "snippets", "ssm-parameters", "secrets-manager", "cloudwatch-logs", "datadog-logs", "codepipeline"}
 	if len(a.views) != len(wantNames) {
 		t.Fatalf("len(views) = %d, want %d", len(a.views), len(wantNames))
 	}
@@ -725,6 +726,33 @@ func TestPromptQueuesCommandSwitchesToQueuesView(t *testing.T) {
 
 	if name, _ := a.pages.GetFrontPage(); name != "queues" {
 		t.Errorf("front page after ':queues' = %q, want %q", name, "queues")
+	}
+}
+
+func TestSnippetsViewOnHomeAndPrompt(t *testing.T) {
+	setHomeDir(t, t.TempDir())
+	a := New(config.Default())
+
+	var activemq []string
+	for _, section := range a.homeSections {
+		if section.Title == "ActiveMQ" {
+			for _, e := range section.Entries {
+				activemq = append(activemq, e.Name)
+			}
+		}
+	}
+	if want := []string{"queues", "snippets"}; !reflect.DeepEqual(activemq, want) {
+		t.Errorf("Home's ActiveMQ entries = %q, want %q", activemq, want)
+	}
+
+	if got := a.promptSuggestions("sni"); !reflect.DeepEqual(got, []string{"snippets"}) {
+		t.Errorf("promptSuggestions(\"sni\") = %q, want [snippets]", got)
+	}
+
+	a.prompt.SetText("snippets")
+	a.onPromptDone(tcell.KeyEnter)
+	if name, _ := a.pages.GetFrontPage(); name != "snippets" {
+		t.Errorf("front page after ':snippets' = %q, want %q", name, "snippets")
 	}
 }
 

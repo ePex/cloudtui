@@ -63,11 +63,14 @@ type App struct {
 	queuesV        *view.QueuesView
 	messagesV      *view.MessagesView
 	messageDetailV *view.MessageDetailView
+	snippetsV      *view.SnippetsView
 	confirm        *dialog.ConfirmDialog
 	movePicker     *dialog.MovePicker
 	sendMessage    *dialog.SendMessageOverlay
 	snippetPicker  *dialog.SnippetPicker
 	snippetSave    *dialog.SnippetSaveDialog
+	textPrompt     *dialog.TextPrompt
+	snippetEditor  *dialog.SnippetEditor
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
@@ -132,6 +135,7 @@ func New(cfg config.Config) *App {
 			Title: "ActiveMQ",
 			Entries: []views.ViewInfo{
 				{Name: "queues", Description: "List ActiveMQ queues"},
+				{Name: "snippets", Description: "Manage message snippets"},
 			},
 		},
 		{
@@ -247,6 +251,8 @@ func New(cfg config.Config) *App {
 	snippets := snippet.NewStore(snippetRoot)
 	a.snippetPicker = dialog.NewSnippetPicker(a, snippets)
 	a.snippetSave = dialog.NewSnippetSaveDialog(a, snippets, a.confirm)
+	a.textPrompt = dialog.NewTextPrompt(a)
+	a.snippetEditor = dialog.NewSnippetEditor(a, snippets, a.confirm)
 	a.sendMessage = dialog.NewSendMessageOverlay(a, a.snippetPicker, a.confirm)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
@@ -259,6 +265,7 @@ func New(cfg config.Config) *App {
 	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
 
 	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
+	a.snippetsV = view.NewSnippetsView(a, snippets, a.confirm, a.snippetEditor, a.textPrompt)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
 	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm, a.snippetSave,
 		func() {
@@ -317,7 +324,7 @@ func New(cfg config.Config) *App {
 		a.UpdateContextPanel(a.secretsV)
 	})
 
-	a.views = []ui.View{homeView, a.settingsV, a.logV, a.queuesV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
+	a.views = []ui.View{homeView, a.settingsV, a.logV, a.queuesV, a.snippetsV, a.ssmParamsV, a.secretsV, a.logsV, a.datadogLogsV, a.codePipelineListV}
 	for _, v := range a.views {
 		prim := v.Primitive()
 		a.colorBordered(v, prim)
@@ -346,6 +353,11 @@ func New(cfg config.Config) *App {
 	// Height: border+padding (4 rows) + 1 item * 2 (2 rows) + button row
 	// (1 row) + one spare row = 8.
 	snippetSaveOverlay := ui.Centered(a.snippetSave.Primitive(), 64, 8)
+	// Same shape as the save-as-snippet dialog: one field plus buttons.
+	textPromptOverlay := ui.Centered(a.textPrompt.Primitive(), 64, 8)
+	// Same size as the send-message dialog, which has the same kind of
+	// multi-line body.
+	snippetEditorOverlay := ui.Centered(a.snippetEditor.Primitive(), 90, 26)
 
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
@@ -406,6 +418,8 @@ func New(cfg config.Config) *App {
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("snippet-picker", snippetPickerOverlay, true, false).
 		AddPage("snippet-save", snippetSaveOverlay, true, false).
+		AddPage("snippet-editor", snippetEditorOverlay, true, false).
+		AddPage("text-prompt", textPromptOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
@@ -438,6 +452,8 @@ func New(cfg config.Config) *App {
 		a.sendMessage,
 		a.snippetPicker,
 		a.snippetSave,
+		a.textPrompt,
+		a.snippetEditor,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
@@ -453,6 +469,7 @@ func New(cfg config.Config) *App {
 		a.queuesV,
 		a.messagesV,
 		a.messageDetailV,
+		a.snippetsV,
 		a.ssmParamsV,
 		a.paramDetailV,
 		a.secretsV,
@@ -469,6 +486,8 @@ func New(cfg config.Config) *App {
 		a.sendMessage,
 		a.snippetPicker,
 		a.snippetSave,
+		a.textPrompt,
+		a.snippetEditor,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,

@@ -1,15 +1,18 @@
 # Message snippets
 
-_Condensed from spec-wip/fe-message-snippets. See that PR for the
-incremental history and the reasoning behind each decision._
+_Condensed from spec-wip/fe-message-snippets and
+spec-wip/fe-snippet-library. See those PRs for the incremental history
+and the reasoning behind each decision._
 
 ## Purpose
 
 A library of reusable message snippets, stored as plain files on disk.
-You can save a message you are viewing as a snippet, and load a snippet
-into the send-message dialog (spec/09) when composing a message. Test or
-requeue messages you send often are then one keystroke away, instead of
-being retyped or pasted each time.
+You can save a message you are viewing as a snippet, load a snippet into
+the send-message dialog (spec/09) when composing a message, and manage
+the whole library (create, edit, rename, move, delete snippets and
+folders) in the **Snippets** view. Test or requeue messages you send
+often are then one keystroke away, instead of being retyped or pasted
+each time.
 
 The library is an ordinary folder tree with no index or database. Teams
 can share snippets by copying the folder or keeping it in a git repo.
@@ -50,9 +53,16 @@ jmsType: OrderCreated
   - Delimiter lines may end in `\n` or `\r\n`, so files edited on Windows
     still load.
 - **Keys:**
-  - `jmsType` is the only key written.
-  - Unknown keys are ignored on read, so later versions can add keys
-    without breaking older ones.
+  - `jmsType` is the only key the app reads and writes.
+  - **Other keys and comments are kept.** A snippet written by hand or
+    by a teammate may carry more (e.g. `author:`, `tags:`, comments).
+    Saving from the app changes only the `jmsType` line: it's set in
+    place (keeping its position and comments), added as the first key
+    if missing, or removed with its own comments when cleared.
+    Everything else stays byte-for-byte, apart from YAML normalizing
+    unusual spacing or quoting.
+  - The front matter must be a mapping of keys to values (or empty);
+    anything else, like a list, is an error.
 - **No front matter:** the whole file is the body and there is no JMS
   Type. This lets any existing file be dropped into the folder and used
   as is.
@@ -60,7 +70,8 @@ jmsType: OrderCreated
   closing `---`, or the YAML is invalid, loading the snippet shows a
   status-bar error that names the file. Nothing is filled in.
 - **On save:**
-  - Front matter is written only when the JMS Type is non-empty.
+  - Front matter is written only when there's a JMS Type or other
+    front-matter content to keep.
   - Exception: if the body's own first line is `---`, an empty
     front-matter block (`---` then `---`) is written in front of it, so
     the body isn't read back as front matter.
@@ -138,6 +149,100 @@ jmsType: OrderCreated
 - A snippet that can't be read or parsed shows a status-bar error, and
   the picker stays open.
 
+### Library view
+
+- **Opening it:** Home → ActiveMQ → **snippets** ("Manage message
+  snippets"), or `:snippets`, which is also in the `:` autocomplete. It
+  re-reads the folder from disk every time it's opened, and on `r`,
+  since files may change outside the app (e.g. a `git pull` in a shared
+  folder).
+- **Layout:** two panes.
+  - **Left:** the folder listing, browsed exactly like the snippet
+    picker: folders first, `..` and Backspace go up (keeping the cursor
+    on the folder left, never above the root), `j`/`k`, the current
+    path in the title.
+  - **Right:** a preview of the entry under the cursor:
+    - a snippet: `JMS Type: <type>` (or `(none)`) and the raw body
+    - a folder: its nested counts, e.g. `2 snippets, 1 subfolder`, or
+      `Empty folder`
+    - a symlinked folder: `Linked folder`
+    - a file that can't be parsed: the parse error
+  - An empty or missing library shows the picker's "No snippets yet"
+    hint plus "Or press n to create one here."
+- **Keys** (listed in the shortcut hint; like other top-level views
+  there's no Esc action, and `h` goes Home):
+
+  | Key | Action |
+  |---|---|
+  | Enter | open the selected folder, or edit the selected snippet |
+  | `n` | new snippet in the current folder |
+  | `N` | new folder in the current folder |
+  | `e` | edit the selected snippet |
+  | `R` | rename or move the selected snippet or folder |
+  | `d` | delete the selected snippet or folder |
+  | `r` | re-read from disk |
+  | Backspace | up a folder |
+
+  `e`, `R` and `d` do nothing on `..` and hint rows, and `e` does
+  nothing on a folder.
+- **The snippet editor** (`n`, `e`, Enter on a snippet) has three fields
+  plus **Save**/**Cancel**:
+  - **Name**, relative to the snippet's folder, with `/` for subfolders.
+    It follows the save dialog's naming rules, and is checked as typed
+    before being joined with the folder, so `..` can't slip through.
+  - **JMS Type**, optional; surrounding spaces are trimmed.
+  - **Body**, multi-line; Enter inserts a new line.
+
+  Enter in Name or JMS Type saves.
+  - **New:** an existing name asks `Overwrite snippet "<name>"?` (No by
+    default).
+  - **Edit:** only JMS Type and Body change on disk; other front-matter
+    keys and comments are kept (see File format). Changing the Name
+    renames or moves the snippet. If the new name already exists, that's
+    an error and nothing is overwritten.
+  - Cancel or Esc with unsaved changes asks `Discard changes?` (No by
+    default).
+  - A file that can't be parsed doesn't open; the status bar shows the
+    error.
+- **New folder** (`N`): a prompt for a name relative to the current
+  folder. Nested names like `eu/archive` create every level. An existing
+  folder or file of that name is an error.
+- **Rename or move** (`R`): a prompt prefilled with the item's path
+  relative to the snippets root. Editing the last part renames it;
+  changing the folder part moves it, creating missing folders. The
+  target must not exist (nothing is overwritten), and moving a folder
+  into itself or a subfolder of itself is refused.
+- **Delete** (`d`) always asks, with No as the default:
+  - `Delete snippet "<name>"?`
+  - `Delete folder "<name>" and its 3 snippets, 1 subfolder?`, with
+    counts covering everything nested inside. Yes deletes the folder with
+    its contents.
+  - `Delete empty folder "<name>"?`
+  - `Remove link "<name>"? The folder it points to is kept.` for a
+    symlinked folder. Only the link is removed, and folder counts never
+    look inside linked folders.
+- **Afterwards:** after creating, saving, or moving something, the view
+  shows the folder it landed in with the cursor on it. Every action
+  reports success or failure in the status bar. A failure leaves the
+  view usable, and if the open folder disappeared from disk, the view
+  falls back to the nearest folder that still exists.
+- Changes are immediately visible in the send dialog's snippet picker,
+  since both read the same folder.
+
+### Examples
+
+- The repo ships generic example snippets in `examples/snippets/`:
+  - JSON order events with a JMS Type
+  - an XML payment message
+  - a JSON event with extra front-matter keys and a comment
+  - a plain-text file without front matter
+- The README's "Message snippets" section explains the format, the
+  keys, sharing, and how to copy the examples into
+  `~/.cloudtui/snippets/` (macOS/Linux and PowerShell).
+- Nothing is written into the user's home automatically.
+- `TestExampleSnippets` (`internal/snippet/store_test.go`) loads every
+  example through a `Store`, so a broken or unlisted example fails CI.
+
 ## Data & config
 
 No `config.yaml` additions. The snippets root is fixed at
@@ -148,6 +253,7 @@ No `config.yaml` additions. The snippets root is fixed at
 type Snippet struct {
 	JMSType string // "" = none
 	Body    string
+	Extra   string // the whole front matter as YAML when it holds more than a lone jmsType; "" otherwise
 }
 
 func Parse(data []byte) (Snippet, error)
@@ -155,11 +261,12 @@ func Format(s Snippet) []byte
 
 type Store struct{ /* root string */ }
 type Entry struct {
-	Name  string
-	IsDir bool
+	Name   string
+	IsDir  bool // for a symlink: what it points to
+	IsLink bool
 }
 
-var ErrExists = errors.New("snippet already exists")
+var ErrExists = errors.New("already exists") // Save (without overwrite), MkDir, Move
 
 func DefaultRoot() (string, error) // ~/.cloudtui/snippets
 func NewStore(root string) *Store  // "" root: every call fails with "snippets folder unavailable"
@@ -167,6 +274,12 @@ func (s *Store) Root() string
 func (s *Store) List(dir string) ([]Entry, error)  // dir relative to root, "" = root; missing root = empty list
 func (s *Store) Load(name string) (Snippet, error)
 func (s *Store) Save(name string, sn Snippet, overwrite bool) error // ErrExists when !overwrite and it exists
+func (s *Store) MkDir(name string) error          // with parents; ErrExists if anything is there
+func (s *Store) Move(from, to string) error       // rename/move; never overwrites; refuses a folder into itself
+func (s *Store) Delete(name string) error         // a snippet; refuses folders
+func (s *Store) DeleteFolder(dir string) error    // recursive; refuses the root; a symlink loses only the link
+func (s *Store) Count(dir string) (snippets, folders int, err error) // nested, not inside linked folders
+func (s *Store) Stat(name string) (Entry, error)
 func ValidateName(name string) (string, error)     // "/"-separated user input -> OS-relative path
 
 // internal/queue: set by every backend where it infers a type
@@ -215,6 +328,29 @@ type Message struct {
   `onCancel`.
 - **List item names go through `tview.Escape`,** since a `[` in a file
   name would otherwise be read as a color tag.
+- **`Parse`/`Format` use yaml.v3's node API.** `Extra` is the whole
+  front matter (normalized) whenever it holds more than a lone
+  `jmsType`, checked structurally rather than by text. `Format` uses
+  `Extra` as a template and only sets, adds, or removes the `jmsType`
+  pair. `Parse` then `Format` is stable: saving without edits
+  reproduces the same `Snippet`.
+- **`SnippetBrowser`** (`dialog/snippetbrowser.go`) is the folder list
+  shared by `SnippetPicker` and `SnippetsView`.
+  - It owns the list's single input capture and runs the owner's key
+    handler first (`SetKeys`), then its own `j`/`k`/Backspace.
+  - It reports cursor moves (`SetChangedFunc`, the preview's hook) and
+    exposes `Selected`, `Dir`, `SetDir`, `Select` and `Reload`.
+- **Library view:**
+  - `SnippetEditor` is on page `snippet-editor` (90×26) and `TextPrompt`
+    (a reusable one-field prompt) on page `text-prompt` (64×8). Both
+    pages go before `confirm`, and both are in `overlayVisible` and
+    `themables`.
+  - `SnippetsView` (`view/snippets.go`) is in `a.views` (hence
+    `:snippets`) and `themables`. It implements `Activate` to re-read on
+    open.
+- **`ConfirmDialog` shows 3 question rows** (about 150 characters at its
+  52×8 size), so a delete question naming a deep folder plus its counts
+  isn't cut off.
 - **`MessageDetailView.restoreFocus()`** is shared by the move picker
   (`m`) and the save dialog (`S`) to give focus and the shortcut hint
   back to the detail view.
@@ -228,13 +364,22 @@ type Message struct {
   would take focus away from the overwrite confirmation, or off the Name
   field after a validation error. The capture handles Enter and swallows
   it. `snippetsave_test.go` drives Enter through the form with a
-  focus-applying `setFocus` so this is caught if it comes back.
+  focus-applying `setFocus` so this is caught if it comes back. The
+  snippet editor and `TextPrompt` handle Enter the same way, with the
+  same kind of test.
+- **yaml.v3 attaches comments to nodes** (a comment above `jmsType`
+  belongs to the `jmsType` key, a line comment to its value). So `Extra`
+  holds the *whole* front matter rather than "everything except
+  `jmsType`": removing the pair would have orphaned its comments.
 
 ## Out of scope (deliberate)
 
-- A library view for browsing, editing, renaming, moving, or deleting
-  snippets and folders in the TUI (planned: `fe-snippet-library`).
 - Importing a file from an absolute path (planned: `fe-snippet-import`).
+- Sending a snippet directly from the library view (**Load snippet…** in
+  the send dialog covers that).
+- Duplicating or copying snippets, undo, and search or filter in the
+  library view.
+- Watching the folder for outside changes automatically (`r` refreshes).
 - A configurable snippets root path.
 - Launching an external `$EDITOR`.
 - Storing any header other than JMS Type.
