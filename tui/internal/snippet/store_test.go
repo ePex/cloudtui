@@ -164,8 +164,79 @@ func TestSaveCreatesFoldersAndWritesFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != string(Format(sn)) {
-		t.Errorf("file content = %q, want %q", data, Format(sn))
+	want := Format(Snippet{JMSType: sn.JMSType, Body: FormatBody(sn.Body), Extra: sn.Extra})
+	if string(data) != string(want) {
+		t.Errorf("file content = %q, want %q", data, want)
+	}
+}
+
+func TestSaveFormatsBodiesAndKeepsFrontMatter(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	tests := []struct {
+		name      string
+		body      string
+		formatted string
+	}{
+		{
+			name:      "json",
+			body:      `{"orderId":42}`,
+			formatted: "{\n  \"orderId\": 42\n}",
+		},
+		{
+			name:      "xml",
+			body:      `<order><id>42</id></order>`,
+			formatted: "<order>\n  <id>42</id>\n</order>",
+		},
+		{
+			name:      "plain text",
+			body:      "hello world",
+			formatted: "hello world",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name := tt.name + ".txt"
+			sn := Snippet{
+				JMSType: "OrderCreated",
+				Body:    tt.body,
+				Extra:   "# Team-owned metadata.\nauthor: payments\n",
+			}
+			if err := s.Save(name, sn, false); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			data, err := os.ReadFile(filepath.Join(root, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := string(Format(Snippet{JMSType: sn.JMSType, Body: tt.formatted, Extra: sn.Extra}))
+			if string(data) != want {
+				t.Errorf("file content = %q, want %q", data, want)
+			}
+			parsed, err := Parse(data)
+			if err != nil {
+				t.Fatalf("Parse saved snippet: %v", err)
+			}
+			if parsed.Body != tt.formatted || parsed.JMSType != sn.JMSType || !strings.Contains(parsed.Extra, "author: payments") || !strings.Contains(parsed.Extra, "# Team-owned metadata.") {
+				t.Errorf("saved snippet lost formatted body or front matter: %#v", parsed)
+			}
+		})
+	}
+}
+
+func TestSaveFormatsBodyWhenOverwriting(t *testing.T) {
+	root := t.TempDir()
+	s := NewStore(root)
+	writeFile(t, root, "event.json", "old")
+	if err := s.Save("event.json", Snippet{Body: `{"id":1}`}, true); err != nil {
+		t.Fatalf("Save overwrite: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "event.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "{\n  \"id\": 1\n}"; got != want {
+		t.Errorf("overwritten body = %q, want %q", got, want)
 	}
 }
 
