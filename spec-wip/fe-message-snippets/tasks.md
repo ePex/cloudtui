@@ -52,7 +52,7 @@ Each task is implemented and approved on its own, then pushed.
    `S` entry in `Shortcuts()`. Add tests for `snippetFromMessage` with a
    header type (kept), an inferred type (dropped), and an empty or
    binary body (error).
-9. [ ] **Live verification.** Use the `verify-live` skill against both
+9. [x] **Live verification.** Use the `verify-live` skill against both
    the Jolokia and the mq-proxy backends, and record the results here.
    Check each of these in the running TUI:
    1. Move `~/.cloudtui/snippets` aside if it exists. Open the send
@@ -83,6 +83,36 @@ Each task is implemented and approved on its own, then pushed.
       stays open.
    10. Switch the theme in Settings. The picker and the save dialog pick
        up the new colors.
+
+   **Results (2026-09-22).** The TUI ran in tmux with a temporary `HOME`
+   (the real `~/.cloudtui` was not touched), against the local broker
+   through Jolokia and through a local mq-proxy, on a throwaway
+   `snippet-verify` queue (removed afterwards).
+
+   - Steps 1–9 pass on Jolokia. Notes:
+     - Step 1: the hint's folder path was cut off, but only because the
+       temporary `HOME` path was very long.
+     - Step 3: the header-less message was sent directly through Jolokia
+       with no headers, because `task seed:queue` sets `JMSType: text`.
+     - Step 6: after going up with `..`, the cursor stayed on `orders/`.
+     - Step 7: loading `plain.txt` cleared JMS Type. Submitting was then
+       refused with "JMS Type is required" and the dialog stayed open.
+   - mq-proxy:
+     - Saving a message with a real JMS Type keeps it; saving one with an
+       inferred type drops it.
+     - Loading `proxy/created.json` into an empty dialog and submitting
+       delivers the message with the snippet's JMS Type and body.
+   - Step 10 partly fails, because of an existing issue not caused by this
+     feature. After a *live* theme switch:
+     - The picker's border, background and selected row pick up the new
+       theme, but unselected rows keep the old theme's text and background
+       colors.
+     - The save dialog's Name label and input field keep the old colors.
+     - The existing Move-to-Queue picker has the same problem:
+       `ui.StyleList` only restyles the selected row, and the form dialogs'
+       `ApplyPalette` only restyles the border and background.
+     - After a restart, both render fully in the new theme.
+     - To be handled as a separate bugfix.
 10. [ ] **Merge-back** (needs your explicit go-ahead before it is
     committed). Add `spec/22-message-snippets/spec.md`, add
     cross-references in `spec/08` and `spec/09`, add `internal/snippet/`
