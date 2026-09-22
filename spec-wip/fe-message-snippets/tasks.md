@@ -47,7 +47,7 @@ Each task is implemented and approved on its own, then pushed.
    - a successful save writing the expected file
    - `ErrExists` leading to a confirmation, then Yes overwriting and No
      refocusing the name field
-8. [ ] **`S` on the message detail view.** Add `snippetFromMessage`, the
+8. [x] **`S` on the message detail view.** Add `snippetFromMessage`, the
    `S` handler, the `restoreFocus()` refactor shared with `m`, and the
    `S` entry in `Shortcuts()`. Add tests for `snippetFromMessage` with a
    header type (kept), an inferred type (dropped), and an empty or

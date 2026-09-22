@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
@@ -22,14 +24,15 @@ import (
 // It is not a registered ui.View; it is opened via App.OpenMessageDetail
 // and returns to "messages" on Esc/Backspace.
 type MessageDetailView struct {
-	textView   *tview.TextView
-	host       ui.Host
-	movePicker *dialog.MovePicker
-	confirm    *dialog.ConfirmDialog
-	onBack     func()
-	onReload   func()
-	queueName  string
-	msg        queue.Message
+	textView    *tview.TextView
+	host        ui.Host
+	movePicker  *dialog.MovePicker
+	confirm     *dialog.ConfirmDialog
+	snippetSave *dialog.SnippetSaveDialog
+	onBack      func()
+	onReload    func()
+	queueName   string
+	msg         queue.Message
 }
 
 var _ ui.Themeable = (*MessageDetailView)(nil)
@@ -47,18 +50,19 @@ func (dv *MessageDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "m", Description: "move"},
 		{Key: "d", Description: "delete"},
+		{Key: "S", Description: "save as snippet"},
 		{Key: "Esc", Description: "back"},
 	}
 }
 
-func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, onBack func(), onReload func()) *MessageDetailView {
+func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, snippetSave *dialog.SnippetSaveDialog, onBack func(), onReload func()) *MessageDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Message Details ")
 	tv.SetDynamicColors(true)
 	tv.SetScrollable(true)
 	tv.SetWrap(true)
 
-	dv := &MessageDetailView{textView: tv, host: a, movePicker: movePicker, confirm: confirm, onBack: onBack, onReload: onReload}
+	dv := &MessageDetailView{textView: tv, host: a, movePicker: movePicker, confirm: confirm, snippetSave: snippetSave, onBack: onBack, onReload: onReload}
 
 	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -69,14 +73,6 @@ func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dia
 		case event.Rune() == 'm':
 			srcQueue := dv.queueName
 			msgID := dv.msg.ID
-			restoreDetail := func() {
-				dv.host.SetFocus(dv.textView)
-				lines := make([]string, 0, len(dv.Shortcuts()))
-				for _, sc := range dv.Shortcuts() {
-					lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
-				}
-				dv.host.SetContextHint(strings.Join(lines, "\n"))
-			}
 			dv.movePicker.Show(srcQueue, func(target string) {
 				err := dv.host.Backend().MoveMessage(context.Background(), srcQueue, msgID, target)
 				dv.host.QueueUpdateDraw(func() {
@@ -88,7 +84,15 @@ func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dia
 					dv.onBack()
 					dv.onReload()
 				})
-			}, restoreDetail)
+			}, dv.restoreFocus)
+			return nil
+		case event.Rune() == 'S':
+			sn, err := snippetFromMessage(dv.msg)
+			if err != nil {
+				dv.host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))
+				return nil
+			}
+			dv.snippetSave.Show(sn, dv.restoreFocus)
 			return nil
 		case event.Rune() == 'd':
 			queueName := dv.queueName
@@ -116,6 +120,34 @@ func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dia
 	})
 
 	return dv
+}
+
+// restoreFocus gives focus and the shortcut hint back to the detail view
+// after an overlay raised from it (move picker, snippet save) closes.
+func (dv *MessageDetailView) restoreFocus() {
+	dv.host.SetFocus(dv.textView)
+	lines := make([]string, 0, len(dv.Shortcuts()))
+	for _, sc := range dv.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", dv.host.Config().Colors.Accent, sc.Key, sc.Description))
+	}
+	dv.host.SetContextHint(strings.Join(lines, "\n"))
+}
+
+// snippetFromMessage builds the snippet saved by 'S': the raw (not
+// pretty-printed) text body, plus the JMS Type only when it's the
+// message's real JMSType header — an inferred "text"/"bytes"/"other" is
+// dropped. No other header is kept. A message without a text body (e.g.
+// binary) can't be saved.
+func snippetFromMessage(msg queue.Message) (snippet.Snippet, error) {
+	body, _ := msg.RawFields["text"].(string)
+	if body == "" {
+		return snippet.Snippet{}, errors.New("message has no text body to save as a snippet")
+	}
+	sn := snippet.Snippet{Body: body}
+	if !msg.JMSTypeInferred {
+		sn.JMSType = msg.JMSType
+	}
+	return sn, nil
 }
 
 // prettyJSON returns an indented version of s if s is valid JSON, otherwise "".

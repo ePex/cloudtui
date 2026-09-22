@@ -260,7 +260,7 @@ func New(cfg config.Config) *App {
 
 	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
 	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.OpenMessageDetail)
-	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm,
+	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm, a.snippetSave,
 		func() {
 			a.pages.SwitchToPage("messages")
 			a.tv.SetFocus(a.messagesV.Table())

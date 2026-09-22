@@ -9,6 +9,7 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 )
 
 func newTestMessageDetailView(t *testing.T) (*fakeViewHost, *dialog.MovePicker, *dialog.ConfirmDialog, *MessageDetailView) {
@@ -16,7 +17,8 @@ func newTestMessageDetailView(t *testing.T) (*fakeViewHost, *dialog.MovePicker, 
 	host := newFakeViewHost()
 	movePicker := dialog.NewMovePicker(host)
 	confirm := dialog.NewConfirmDialog(host)
-	return host, movePicker, confirm, NewMessageDetailView(host, movePicker, confirm, func() {}, func() {})
+	snippetSave := dialog.NewSnippetSaveDialog(host, snippet.NewStore(t.TempDir()), confirm)
+	return host, movePicker, confirm, NewMessageDetailView(host, movePicker, confirm, snippetSave, func() {}, func() {})
 }
 
 func TestMessageDetailViewTitle(t *testing.T) {
@@ -103,5 +105,130 @@ func TestMessageDetailViewDeleteOpensConfirmWithPrompt(t *testing.T) {
 	want := `Delete message from "orders"?`
 	if got := renderedScreenText(t, confirm.Primitive(), 60, 8); !strings.Contains(got, want) {
 		t.Errorf("rendered confirm dialog = %q, want it to contain %q", got, want)
+	}
+}
+
+func TestSnippetFromMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     queue.Message
+		want    snippet.Snippet
+		wantErr bool
+	}{
+		{
+			name: "header JMS type is kept",
+			msg: queue.Message{
+				JMSType:   "OrderCreated",
+				RawFields: map[string]any{"text": `{"id":1}`, "jMSCorrelationID": "corr-1"},
+			},
+			want: snippet.Snippet{JMSType: "OrderCreated", Body: `{"id":1}`},
+		},
+		{
+			name: "inferred JMS type is dropped",
+			msg: queue.Message{
+				JMSType:         "text",
+				JMSTypeInferred: true,
+				RawFields:       map[string]any{"text": "hello"},
+			},
+			want: snippet.Snippet{Body: "hello"},
+		},
+		{
+			name: "body is raw, not pretty-printed",
+			msg: queue.Message{
+				JMSType:   "T",
+				RawFields: map[string]any{"text": `{"a":1,"b":[1,2]}`},
+			},
+			want: snippet.Snippet{JMSType: "T", Body: `{"a":1,"b":[1,2]}`},
+		},
+		{
+			name:    "empty body is an error",
+			msg:     queue.Message{JMSType: "T", RawFields: map[string]any{"text": ""}},
+			wantErr: true,
+		},
+		{
+			name:    "binary (non-string) body is an error",
+			msg:     queue.Message{JMSType: "bytes", JMSTypeInferred: true, RawFields: map[string]any{"text": nil}},
+			wantErr: true,
+		},
+		{
+			name:    "nil RawFields is an error",
+			msg:     queue.Message{JMSType: "T"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := snippetFromMessage(tt.msg)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("snippetFromMessage = %#v, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("snippetFromMessage: unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("snippetFromMessage = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageDetailViewSaveSnippetOpensDialog(t *testing.T) {
+	host, _, _, dv := newTestMessageDetailView(t)
+	dv.Render("orders", queue.Message{
+		ID:        "ID:test:1:1",
+		JMSType:   "OrderCreated",
+		Timestamp: time.Now(),
+		RawFields: map[string]any{"text": "{}"},
+	})
+
+	dv.textView.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'S', tcell.ModNone))
+
+	if !dv.snippetSave.Visible() {
+		t.Fatal("'S' should open the save-as-snippet dialog")
+	}
+	if host.focused == dv.textView {
+		t.Error("focus stayed on the detail view")
+	}
+}
+
+func TestMessageDetailViewSaveSnippetWithoutBodyShowsError(t *testing.T) {
+	host, _, _, dv := newTestMessageDetailView(t)
+	dv.Render("orders", queue.Message{ID: "ID:test:1:1", JMSType: "bytes", JMSTypeInferred: true, Timestamp: time.Now()})
+
+	dv.textView.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'S', tcell.ModNone))
+
+	if dv.snippetSave.Visible() {
+		t.Error("'S' opened the save dialog for a message without a text body")
+	}
+	if !strings.Contains(host.status, "[red]") || !strings.Contains(host.status, "no text body") {
+		t.Errorf("status = %q, want a red no-text-body error", host.status)
+	}
+}
+
+func TestMessageDetailViewShortcutSavePresent(t *testing.T) {
+	_, _, _, dv := newTestMessageDetailView(t)
+	for _, s := range dv.Shortcuts() {
+		if s.Key == "S" && s.Description == "save as snippet" {
+			return
+		}
+	}
+	t.Error(`Shortcuts() missing {S, "save as snippet"}`)
+}
+
+func TestMessageDetailViewRestoreFocus(t *testing.T) {
+	host, _, _, dv := newTestMessageDetailView(t)
+	host.focused = nil
+	dv.restoreFocus()
+
+	if host.focused != dv.textView {
+		t.Error("restoreFocus did not focus the detail view")
+	}
+	for _, key := range []string{"<m>", "<d>", "<S>", "<Esc>"} {
+		if !strings.Contains(host.contextHint, key) {
+			t.Errorf("context hint %q is missing %s", host.contextHint, key)
+		}
 	}
 }
