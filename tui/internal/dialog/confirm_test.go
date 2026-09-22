@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -141,5 +142,22 @@ func TestConfirmReuseDropsPreviousOnCancel(t *testing.T) {
 	}
 	if host.focusMainCalls != 2 {
 		t.Errorf("FocusMain calls = %d, want 2 (Yes, then Esc on the plain Show)", host.focusMainCalls)
+	}
+}
+
+// TestConfirmLongQuestionFitsOverlay renders the dialog at the size
+// app.go gives it (52×8) with a long question — a delete of a deeply
+// nested snippet folder — and checks nothing is cut off: the end of the
+// question (the counts) and both answers stay visible.
+func TestConfirmLongQuestionFitsOverlay(t *testing.T) {
+	c := NewConfirmDialog(newTestHost())
+	question := `Delete folder "archive/2026/q3/eu/payments/refunds/partial" and its 12 snippets, 3 subfolders?`
+	c.Show(question, func() {})
+
+	text := renderedScreenText(t, c.Primitive(), 52, 8)
+	for _, want := range []string{"archive/2026/q3", "subfolders?", "No", "Yes"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("rendered confirm (52x8) lacks %q:\n%s", want, text)
+		}
 	}
 }

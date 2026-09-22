@@ -244,6 +244,13 @@ the existing ones do. New names go through `ValidateName`.
   `confirm`, so confirmations draw on top. Add both to `overlayVisible`
   and `themables`, and the view to `themables`.
 
+## Found during the live check (task 7)
+
+- `ConfirmDialog`'s question area goes from 2 to 3 rows, in the same
+  52×8 overlay. Long delete questions (a deep folder path plus nested
+  counts) no longer lose their end. Every other confirmation just gains
+  a blank row.
+
 ## Spec merge-back target (step 4)
 
 - `spec/22-message-snippets/spec.md` gains a "Library view" section and

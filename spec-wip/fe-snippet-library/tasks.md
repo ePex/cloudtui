@@ -43,7 +43,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
      the ActiveMQ section; `:snippets`.
    - View tests as listed in `plan.md`. Added to the view theme-switch
      regression test. `app` tests for `:snippets` and the Home entry.
-7. [ ] **Live verification.**
+7. [x] **Live verification.**
    - Use the `verify-live` skill with a temporary `HOME`, run from the
      scratch folder (not `tui/`). No broker is needed except for step
      10. Check each step on screen and record the results here.
@@ -71,6 +71,60 @@ test is mutation-checked: remove the fix and confirm the test fails.
    11. Switch the theme live: the view, the editor and the prompt pick
        up the new colors.
    12. Edit a file outside the app, then press `r`: the preview updates.
+
+   **Results (2026-09-22).** The TUI ran in tmux with a temporary `HOME`,
+   started from the scratch folder, against the local broker for step
+   10, on a throwaway `snippet-lib-verify` queue (removed afterwards).
+   All 12 steps pass.
+
+   1. Home shows "snippets" under ActiveMQ. The view opens from Home and
+      from `:snippets`, which is also in the autocomplete. The empty
+      hint shows "Or press n to create one here." (The path was cut off
+      only because the temporary `HOME` path is very long.)
+   2. `n`: `orders/created.json` with JMS Type and a 4-line JSON body.
+      Enter in Body adds new lines. The file on disk is exactly right,
+      and the view jumps into `/orders` with the cursor on it.
+   3. The preview shows `JMS Type: OrderCreated` and the raw body. On
+      the folder it shows "Folder / 1 snippet".
+   4. An edit changing the JMS Type and adding a body line saves
+      correctly. After adding a document comment with a blank line, an
+      `author:` key with an end-of-line comment, and `tags: [orders,
+      eu]` by hand, another edit (Enter in JMS Type) changes **only** the
+      `jmsType` line; everything else is byte-for-byte the same.
+   5. Esc after a change asks "Discard changes?". No keeps the typed
+      change in the editor; Yes closes it with the file unchanged.
+   6. `N` `eu/archive` creates both levels, and the view lands on
+      `archive/`. `R` shows the current path prefilled; moving
+      `orders/created.json` to `eu/archive/created.json` follows it into
+      `/eu/archive`. `R` onto that existing name shows
+      `"eu/archive/created.json": already exists`, the prompt stays
+      open, and both files are unchanged.
+   7. `R` `eu` → `eu/archive/eu` shows `can't move "eu" into itself`.
+   8. The questions read `Delete folder "eu" and its 1 snippet, 1
+      subfolder?`, `Delete empty folder "orders"?` and `Delete snippet
+      "ping.txt"?`. No keeps each; Yes on the empty folder deletes only
+      it.
+   9. For a linked scratch folder, the preview says "Linked folder" and
+      `d` asks `Remove link "shared"? The folder it points to is kept.`.
+      After Yes the link is gone and the target folder with its file is
+      intact.
+   10. **Load snippet…** in the send dialog shows the library as it is
+       now (`eu/`, `ping.txt`), and loading fills in the JMS Type
+       `OrderShipped` and its body.
+   11. After a live switch `dark` → `cyberpunk`, the view, the editor, the
+       prompt and a delete confirmation have no `dark`-only colors (per-cell
+       scan).
+   12. After changing `ping.txt` outside the app, `r` updates the preview
+       and keeps the cursor on it.
+
+   **Found and fixed:** the confirmation dialog had only 2 text rows
+   (about 100 characters at its 52-column size). A delete question
+   naming a deep folder plus its counts could lose its end, the counts.
+   It now has 3 rows, which fits about 150 characters, within the same
+   overlay size. There's a new test (a 95-character question rendered
+   at 52×8), mutation-checked, and it was checked live with `Delete folder
+   "archive/2026/q3/eu/payments/refunds" and its 2 snippets, 4
+   subfolders?`.
 8. [ ] **Example snippets** (requested during task 2).
    - **Decided:** both of the following, with generic content only (no
      real internal system, queue or company names).
