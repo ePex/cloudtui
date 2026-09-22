@@ -109,7 +109,10 @@ jmsType: OrderCreated
     dialog unchanged
   - `j`/`k`/arrows move the selection, matching the other pickers
 - If the root folder doesn't exist or is empty, the picker shows a
-  "No snippets yet" hint that says where the folder is.
+  "No snippets yet" hint that says where the folder is. A subfolder with
+  nothing in it shows only `..`.
+- Going up with `..` or Backspace leaves the cursor on the folder you
+  just came out of. Reopening the picker always starts at the root.
 - Loading a snippet sets **Body** and **JMS Type**. If the snippet has no
   JMS Type, the field is cleared. Correlation ID, Group ID, and Headers
   are never touched.

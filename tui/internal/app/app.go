@@ -26,6 +26,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/queue/secretbackend"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 	"github.com/ePex/cloudtui/tui/internal/ui/views"
 	"github.com/ePex/cloudtui/tui/internal/view"
@@ -65,6 +66,7 @@ type App struct {
 	confirm        *dialog.ConfirmDialog
 	movePicker     *dialog.MovePicker
 	sendMessage    *dialog.SendMessageOverlay
+	snippetPicker  *dialog.SnippetPicker
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
@@ -235,6 +237,15 @@ func New(cfg config.Config) *App {
 	a.confirm = dialog.NewConfirmDialog(a)
 	a.movePicker = dialog.NewMovePicker(a)
 	a.sendMessage = dialog.NewSendMessageOverlay(a)
+	// An unresolvable home directory leaves the snippet store rootless:
+	// every snippet action then reports "snippets folder unavailable"
+	// instead of failing startup over an optional feature.
+	snippetRoot, err := snippet.DefaultRoot()
+	if err != nil {
+		slog.Error("snippets: resolving folder", "error", err)
+	}
+	snippets := snippet.NewStore(snippetRoot)
+	a.snippetPicker = dialog.NewSnippetPicker(a, snippets)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
@@ -329,6 +340,7 @@ func New(cfg config.Config) *App {
 	confirmOverlay := ui.Centered(a.confirm.Primitive(), 52, 8)
 	movePickerOverlay := ui.Centered(a.movePicker.Primitive(), 52, 22)
 	sendMessageOverlay := ui.Centered(a.sendMessage.Primitive(), 90, 26)
+	snippetPickerOverlay := ui.Centered(a.snippetPicker.Primitive(), 60, 20)
 
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
@@ -387,6 +399,7 @@ func New(cfg config.Config) *App {
 		AddPage("help", helpOverlay, true, false).
 		AddPage("move-picker", movePickerOverlay, true, false).
 		AddPage("send-message", sendMessageOverlay, true, false).
+		AddPage("snippet-picker", snippetPickerOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
@@ -417,6 +430,7 @@ func New(cfg config.Config) *App {
 		a.confirm,
 		a.movePicker,
 		a.sendMessage,
+		a.snippetPicker,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
@@ -446,6 +460,7 @@ func New(cfg config.Config) *App {
 		a.confirm,
 		a.movePicker,
 		a.sendMessage,
+		a.snippetPicker,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,

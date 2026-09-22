@@ -25,7 +25,7 @@ Each task is implemented and approved on its own, then pushed.
    `ConfirmDialog.ShowWithCancel`, with `Show` delegating to it. Add
    tests that No and Esc call `onCancel`, and that `Show` still calls
    `FocusMain`.
-5. [ ] **Snippet picker overlay.** Add `dialog/snippetpicker.go`, wired
+5. [x] **Snippet picker overlay.** Add `dialog/snippetpicker.go`, wired
    into `app.go` (the store, the `snippet-picker` page between
    `send-message` and `confirm`, theming, and sizing). Add tests for:
    - list contents and ordering

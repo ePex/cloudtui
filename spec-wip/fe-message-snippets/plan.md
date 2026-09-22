@@ -132,8 +132,11 @@ overlay that is still visible.
 - `fill()` rebuilds the list from `List`:
   - a `..` entry comes first when not at the root
   - folders are shown with a trailing `/`
-  - an empty root shows a single disabled item:
-    `No snippets yet — save one from a message (S) or add files to <root>`
+  - an empty root shows three disabled rows (`tview.List` doesn't wrap,
+    so one long row would cut off the path): `No snippets yet.`,
+    `Save one from a message (S), or add files to:`, and the root path
+  - names are passed through `tview.Escape`, so a `[` in a file name
+    isn't read as a color tag
 - Backspace also goes up a level (and does nothing at the root).
 - Enter on a snippet calls `Load`. A parse error is shown in the status
   bar and the picker stays open. On success, the picker closes and calls
