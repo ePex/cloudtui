@@ -2,7 +2,7 @@
 
 Each task is implemented and approved on its own, then pushed.
 
-1. [ ] **Snippet format.** Add `internal/snippet/snippet.go`, with
+1. [x] **Snippet format.** Add `internal/snippet/snippet.go`, with
    `Snippet`, `Parse`, and `Format`, plus table-driven tests. The tests
    cover: no front matter, front matter, CRLF delimiters, a body
    containing `---`, a missing closing line, invalid YAML, unknown keys,

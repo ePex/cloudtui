@@ -60,9 +60,11 @@ jmsType: OrderCreated
 - If a file starts with `---` but has no closing `---`, or its front
   matter isn't valid YAML, it is reported as an error in the status bar
   when loaded. Nothing is filled in.
-- On save, front matter is written only when the JMS Type is non-empty.
-  The body is written exactly as it is, with no pretty-printing and no
-  added trailing newline.
+- On save, front matter is written only when the JMS Type is non-empty,
+  with one exception: if the body's own first line is `---`, an empty
+  front-matter block (`---` then `---`) is written in front of it, so the
+  body isn't read back as front matter. The body is written exactly as
+  it is, with no pretty-printing and no added trailing newline.
 - Body content can be anything textual: plaintext, JSON, XML, etc.
 
 ## Save a snippet from the message detail view

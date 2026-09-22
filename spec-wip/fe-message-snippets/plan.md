@@ -35,7 +35,9 @@ which is already in `go.mod`.
     still parse. The body keeps its bytes untouched either way.
 - `Format(s Snippet) []byte`
   - Writes `---\njmsType: <v>\n---\n` + body when `JMSType != ""`.
-  - Otherwise writes just the body.
+  - Otherwise writes just the body, unless the body's first line is
+    `---`: then an empty front-matter block goes in front of it, so
+    `Parse` doesn't read the body as front matter.
   - The front matter is produced with `yaml.Marshal`, so values that
     need quoting (e.g. `jmsType: "yes"` or a leading `#`) round-trip
     correctly.
