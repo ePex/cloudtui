@@ -214,6 +214,10 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 			tp := NewThemePicker(host)
 			return tp, tp.Show
 		}},
+		{"TextPrompt", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			tp := NewTextPrompt(host)
+			return tp, func() { tp.Show("New folder", "Name:", "orders", func(string) error { return nil }, func() {}) }
+		}},
 		{"AWSProfilesPicker", false, func(t *testing.T, host *testHost) (overlay, func()) {
 			ap := NewAWSProfilesPicker(host)
 			return ap, func() {

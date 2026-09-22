@@ -25,7 +25,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
    - `SnippetPicker` becomes a thin overlay around it. The existing
      picker tests pass **unchanged**; new tests cover the added
      callbacks and methods.
-4. [ ] **`TextPrompt` dialog.**
+4. [x] **`TextPrompt` dialog.**
    - A one-field prompt with **OK**/**Cancel**. An `onSubmit` error keeps
      it open. Enter is handled in the input capture.
    - Wired into `app.go` (page, overlay list, theming). Added to the

@@ -68,6 +68,7 @@ type App struct {
 	sendMessage    *dialog.SendMessageOverlay
 	snippetPicker  *dialog.SnippetPicker
 	snippetSave    *dialog.SnippetSaveDialog
+	textPrompt     *dialog.TextPrompt
 	connManager    *dialog.ConnManager
 	connEditor     *dialog.ConnEditor
 	messageFilter  *dialog.MessageFilter
@@ -247,6 +248,7 @@ func New(cfg config.Config) *App {
 	snippets := snippet.NewStore(snippetRoot)
 	a.snippetPicker = dialog.NewSnippetPicker(a, snippets)
 	a.snippetSave = dialog.NewSnippetSaveDialog(a, snippets, a.confirm)
+	a.textPrompt = dialog.NewTextPrompt(a)
 	a.sendMessage = dialog.NewSendMessageOverlay(a, a.snippetPicker, a.confirm)
 	a.messageFilter = dialog.NewMessageFilter(a)
 	a.jmsTypePrompt = dialog.NewJMSTypePrompt(a)
@@ -346,6 +348,8 @@ func New(cfg config.Config) *App {
 	// Height: border+padding (4 rows) + 1 item * 2 (2 rows) + button row
 	// (1 row) + one spare row = 8.
 	snippetSaveOverlay := ui.Centered(a.snippetSave.Primitive(), 64, 8)
+	// Same shape as the save-as-snippet dialog: one field plus buttons.
+	textPromptOverlay := ui.Centered(a.textPrompt.Primitive(), 64, 8)
 
 	connManagerOverlay := ui.Centered(a.connManager.Primitive(), 64, 20)
 
@@ -406,6 +410,7 @@ func New(cfg config.Config) *App {
 		AddPage("send-message", sendMessageOverlay, true, false).
 		AddPage("snippet-picker", snippetPickerOverlay, true, false).
 		AddPage("snippet-save", snippetSaveOverlay, true, false).
+		AddPage("text-prompt", textPromptOverlay, true, false).
 		AddPage("conn-manager", connManagerOverlay, true, false).
 		AddPage("conn-editor", connEditorOverlay, true, false).
 		AddPage("message-filter", messageFilterOverlay, true, false).
@@ -438,6 +443,7 @@ func New(cfg config.Config) *App {
 		a.sendMessage,
 		a.snippetPicker,
 		a.snippetSave,
+		a.textPrompt,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
@@ -469,6 +475,7 @@ func New(cfg config.Config) *App {
 		a.sendMessage,
 		a.snippetPicker,
 		a.snippetSave,
+		a.textPrompt,
 		a.connManager,
 		a.connEditor,
 		a.messageFilter,
