@@ -16,7 +16,7 @@ make sure the mutated code still compiles.
    - Mutation checks: no `raw` write, and whitespace-only CDATA treated
      as whitespace. The fallback is untestable: no valid input reaches
      it (see `plan.md`).
-2. [ ] **Live verification.**
+2. [x] **Live verification.**
    - Use the `verify-live` skill with a temporary `HOME`, run from the
      scratch folder (not `tui/`), against the local broker. Check each
      step on screen and record the results here.
@@ -31,6 +31,22 @@ make sure the mutated code still compiles.
    4. Load it in the send dialog (**Load snippet…**) and send it to a
       throwaway queue. In the message detail view, the body shows the
       CDATA section.
+   **Results (2026-09-23).** The TUI ran in tmux with a temporary `HOME`,
+   started from the scratch folder, against the local broker, on a
+   throwaway `cdata-verify` queue (removed afterwards). All 4 steps pass.
+
+   1. `n` → `soap-call.xml`, JMS Type `SoapCall`, typed on one line:
+      `<envelope><header><id>42</id></header><body><payload><![CDATA[<order
+      id="1"><item>x < y & "z"</item></order>]]></payload></body></envelope>`.
+      The saved file has the envelope indented and the CDATA section byte
+      for byte (`<`, `&` and quotes unescaped).
+   2. The preview shows the CDATA section as written.
+   3. Opening it in the editor (which formats and saves on open) and
+      saving again both leave the file's checksum unchanged.
+   4. **Load snippet…** fills in `SoapCall` and the body. The sent
+      message's detail view shows the body with the CDATA section as
+      written.
+
 3. [ ] **Merge-back** (needs your explicit go-ahead before it's
    committed).
    - `spec/22`: the File format note changes from "CDATA sections are
