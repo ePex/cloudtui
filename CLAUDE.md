@@ -6,6 +6,8 @@ Instructions for AI assistants (and humans) working in this repository.
 
 - **Commit only source and specifications.** Never commit build artifacts,
   binaries, coverage reports, IDE state, OS files, or generated code.
+  One exception: small documentation media the README embeds (the demo
+  GIFs in `docs/demo/`), together with the scripts that regenerate them.
 - **Small, focused commits.** One logical change per commit. Conventional
   Commits format: `feat(tui): ...`, `fix: ...`, `docs: ...`, `chore: ...`.
 - **No drive-by changes.** Don't reformat, rename, or "clean up" files

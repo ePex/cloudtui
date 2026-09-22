@@ -77,6 +77,30 @@ the same broker state.
   `connections_test.go`'s job) — only needs a connection to exist, which
   `add-proxy-conn` provides directly.
 
+### `docs/demo/` — README demo recordings
+
+- `setup.sh` builds an **example instance** holding only made-up data:
+  - a throwaway ActiveMQ broker in a podman/docker container on ports
+    18161/16616, so it never clashes with a dev broker on 8161/61616
+  - generic queues and messages
+  - a separate `HOME` under `/tmp/cloudtui-demo` with one connection
+    called `example`, and the repo's example snippets
+
+  `setup.sh --down` removes it all.
+- `record.py` (Python standard library only) drives the real TUI in tmux
+  through scripted scenarios, samples the screen with colors about ten
+  times a second into an asciinema recording, and renders it to
+  `docs/demo/<scenario>.gif` with `agg`. No browser or network is
+  involved. VHS was tried first, but its headless browser doesn't run in
+  a sandboxed shell.
+- `docs/demo/README.md` explains regenerating the GIFs and what to check
+  before committing them:
+  - no data other than the example data
+  - the demo files live under `/tmp/cloudtui-demo`, so no home-folder
+    path (with a username) appears on screen
+  - `:theme <name>` rather than the picker, so the bundled theme list
+    isn't shown
+
 ### `.claude/skills/verify-live/SKILL.md`
 A project skill capturing the tmux driving pattern (build, launch,
 send-keys, capture-pane, key reference), broker-safety rules (don't assume
