@@ -90,9 +90,9 @@ func TestListFollowsSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	want := []Entry{{Name: "shared", IsDir: true}}
+	want := []Entry{{Name: "shared", IsDir: true, IsLink: true}}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("List = %#v, want %#v (symlinked folder listed, dangling link skipped)", got, want)
+		t.Errorf("List = %#v, want %#v (symlinked folder listed as a link, dangling link skipped)", got, want)
 	}
 }
 
@@ -254,6 +254,254 @@ func TestValidateName(t *testing.T) {
 	for _, in := range invalid {
 		if got, err := ValidateName(in); err == nil {
 			t.Errorf("ValidateName(%q) = %q, want error", in, got)
+		}
+	}
+}
+
+// symlinkOrSkip creates link → target, skipping the test where symlinks
+// aren't available (e.g. unprivileged Windows).
+func symlinkOrSkip(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unsupported here: %v", err)
+	}
+}
+
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
+func TestMkDir(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "orders/created.json", "x")
+	s := NewStore(root)
+
+	if err := s.MkDir("eu/archive"); err != nil {
+		t.Fatalf("MkDir nested: %v", err)
+	}
+	if info, err := os.Stat(filepath.Join(root, "eu", "archive")); err != nil || !info.IsDir() {
+		t.Errorf("eu/archive not created as a folder: %v", err)
+	}
+
+	for _, name := range []string{"orders", "orders/created.json", "eu/archive"} {
+		if err := s.MkDir(name); !errors.Is(err, ErrExists) {
+			t.Errorf("MkDir(%q) err = %v, want ErrExists", name, err)
+		}
+	}
+	for _, name := range []string{"", "../x", ".hidden", "a/"} {
+		if err := s.MkDir(name); err == nil {
+			t.Errorf("MkDir(%q): expected a validation error", name)
+		}
+	}
+}
+
+func TestMove(t *testing.T) {
+	tests := []struct {
+		name     string
+		from, to string
+		wantErr  string // "" = success; else a substring, or "exists" for ErrExists
+		gone     string // must no longer exist after success
+		present  string // must exist after success
+	}{
+		{name: "rename in place", from: "orders/created.json", to: "orders/renamed.json",
+			gone: "orders/created.json", present: "orders/renamed.json"},
+		{name: "move into a new subfolder", from: "orders/created.json", to: "eu/archive/created.json",
+			gone: "orders/created.json", present: "eu/archive/created.json"},
+		{name: "move a folder", from: "orders", to: "archive/orders",
+			gone: "orders", present: "archive/orders/created.json"},
+		{name: "target exists", from: "orders/created.json", to: "ping.txt", wantErr: "exists"},
+		{name: "folder into itself", from: "orders", to: "orders/inner", wantErr: "into itself"},
+		{name: "folder onto itself", from: "orders", to: "orders", wantErr: "into itself"},
+		{name: "missing source", from: "nope.txt", to: "x.txt", wantErr: "nope.txt"},
+		{name: "target outside the root", from: "ping.txt", to: "../escape.txt", wantErr: "inside the snippets folder"},
+		{name: "source outside the root", from: "../x", to: "y", wantErr: "outside"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFile(t, root, "orders/created.json", "x")
+			writeFile(t, root, "ping.txt", "p")
+
+			err := NewStore(root).Move(tt.from, tt.to)
+			switch {
+			case tt.wantErr == "exists":
+				if !errors.Is(err, ErrExists) {
+					t.Fatalf("err = %v, want ErrExists", err)
+				}
+			case tt.wantErr != "":
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want one containing %q", err, tt.wantErr)
+				}
+			default:
+				if err != nil {
+					t.Fatalf("Move: %v", err)
+				}
+				if exists(filepath.Join(root, filepath.FromSlash(tt.gone))) {
+					t.Errorf("%s still exists", tt.gone)
+				}
+				if !exists(filepath.Join(root, filepath.FromSlash(tt.present))) {
+					t.Errorf("%s doesn't exist", tt.present)
+				}
+				return
+			}
+			// A failed move changes nothing.
+			if !exists(filepath.Join(root, "orders", "created.json")) || !exists(filepath.Join(root, "ping.txt")) {
+				t.Error("a failed Move changed the library")
+			}
+		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "orders/created.json", "x")
+	s := NewStore(root)
+
+	if err := s.Delete("orders"); err == nil || !strings.Contains(err.Error(), "folder") {
+		t.Errorf("Delete(folder) err = %v, want a refusal", err)
+	}
+	if err := s.Delete("orders/created.json"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if exists(filepath.Join(root, "orders", "created.json")) {
+		t.Error("snippet still exists")
+	}
+	if err := s.Delete("orders/created.json"); err == nil {
+		t.Error("Delete of a missing snippet: expected an error")
+	}
+	if err := s.Delete("../x"); err == nil {
+		t.Error("Delete outside the root: expected an error")
+	}
+}
+
+func TestDeleteFolder(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "orders/eu/created.json", "x")
+	writeFile(t, root, "ping.txt", "p")
+	s := NewStore(root)
+
+	if err := s.DeleteFolder(""); err == nil {
+		t.Error("DeleteFolder(root): expected a refusal")
+	}
+	if err := s.DeleteFolder("ping.txt"); err == nil {
+		t.Error("DeleteFolder(file): expected a refusal")
+	}
+	if err := s.DeleteFolder("orders"); err != nil {
+		t.Fatalf("DeleteFolder: %v", err)
+	}
+	if exists(filepath.Join(root, "orders")) {
+		t.Error("folder still exists")
+	}
+	if !exists(filepath.Join(root, "ping.txt")) {
+		t.Error("DeleteFolder removed more than the folder")
+	}
+}
+
+// TestDeleteFolderSymlinkRemovesOnlyTheLink guards a shared checkout
+// linked into the library: deleting the link must never delete its
+// target's contents.
+func TestDeleteFolderSymlinkRemovesOnlyTheLink(t *testing.T) {
+	root := t.TempDir()
+	shared := t.TempDir()
+	writeFile(t, shared, "team/order.json", "x")
+	symlinkOrSkip(t, shared, filepath.Join(root, "shared"))
+
+	if err := NewStore(root).DeleteFolder("shared"); err != nil {
+		t.Fatalf("DeleteFolder(link): %v", err)
+	}
+	if exists(filepath.Join(root, "shared")) {
+		t.Error("link still exists")
+	}
+	if !exists(filepath.Join(shared, "team", "order.json")) {
+		t.Fatal("the linked folder's contents were deleted")
+	}
+}
+
+func TestCount(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "orders/created.json", "x")
+	writeFile(t, root, "orders/eu/a.json", "x")
+	writeFile(t, root, "orders/eu/b.json", "x")
+	writeFile(t, root, "orders/.hidden", "x")
+	writeFile(t, root, "orders/.git/config", "x")
+	if err := os.MkdirAll(filepath.Join(root, "orders", "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(root)
+
+	snippets, folders, err := s.Count("orders")
+	if err != nil {
+		t.Fatalf("Count: %v", err)
+	}
+	if snippets != 3 || folders != 2 {
+		t.Errorf("Count(orders) = %d snippets, %d folders; want 3, 2", snippets, folders)
+	}
+	if _, _, err := s.Count("nope"); err == nil {
+		t.Error("Count of a missing folder: expected an error")
+	}
+}
+
+func TestCountDoesNotFollowLinkedFolders(t *testing.T) {
+	root := t.TempDir()
+	shared := t.TempDir()
+	writeFile(t, shared, "a.json", "x")
+	writeFile(t, shared, "b.json", "x")
+	writeFile(t, root, "orders/created.json", "x")
+	symlinkOrSkip(t, shared, filepath.Join(root, "orders", "shared"))
+
+	snippets, folders, err := NewStore(root).Count("orders")
+	if err != nil {
+		t.Fatalf("Count: %v", err)
+	}
+	if snippets != 1 || folders != 1 {
+		t.Errorf("Count = %d snippets, %d folders; want 1, 1 (the link counts, its contents don't)", snippets, folders)
+	}
+}
+
+func TestStat(t *testing.T) {
+	root := t.TempDir()
+	shared := t.TempDir()
+	writeFile(t, root, "orders/created.json", "x")
+	symlinkOrSkip(t, shared, filepath.Join(root, "shared"))
+	s := NewStore(root)
+
+	tests := []struct {
+		name string
+		want Entry
+	}{
+		{"orders", Entry{Name: "orders", IsDir: true}},
+		{"orders/created.json", Entry{Name: "created.json"}},
+		{"shared", Entry{Name: "shared", IsDir: true, IsLink: true}},
+	}
+	for _, tt := range tests {
+		got, err := s.Stat(tt.name)
+		if err != nil {
+			t.Errorf("Stat(%q): %v", tt.name, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("Stat(%q) = %#v, want %#v", tt.name, got, tt.want)
+		}
+	}
+	if _, err := s.Stat("missing"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Stat(missing) err = %v, want ErrNotExist", err)
+	}
+}
+
+func TestNewOperationsOnUnavailableStore(t *testing.T) {
+	s := NewStore("")
+	checks := map[string]error{
+		"MkDir":        s.MkDir("x"),
+		"Move":         s.Move("a", "b"),
+		"Delete":       s.Delete("x"),
+		"DeleteFolder": s.DeleteFolder("x"),
+	}
+	_, _, checks["Count"] = s.Count("")
+	_, checks["Stat"] = s.Stat("x")
+	for op, err := range checks {
+		if !errors.Is(err, errUnavailable) {
+			t.Errorf("%s err = %v, want errUnavailable", op, err)
 		}
 	}
 }

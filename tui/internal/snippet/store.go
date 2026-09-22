@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// ErrExists is returned by Save when a snippet of that name already
-// exists and overwrite is false.
-var ErrExists = errors.New("snippet already exists")
+// ErrExists is returned by Save, MkDir, and Move when something of that
+// name already exists (and, for Save, overwrite is false).
+var ErrExists = errors.New("already exists")
 
 // errUnavailable is returned by every Store operation when the snippets
 // root couldn't be resolved (see DefaultRoot).
@@ -25,9 +25,11 @@ type Store struct {
 }
 
 // Entry is one item in a snippets folder: a subfolder or a snippet file.
+// IsLink is set for a symlink (IsDir then describes what it points to).
 type Entry struct {
-	Name  string
-	IsDir bool
+	Name   string
+	IsDir  bool
+	IsLink bool
 }
 
 // NewStore returns a Store rooted at root. An empty root yields a Store
@@ -72,17 +74,13 @@ func (s *Store) List(dir string) ([]Entry, error) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		info, err := os.Stat(filepath.Join(path, name))
-		if err != nil {
-			// A dangling symlink or an entry removed since ReadDir.
+		e, ok := classify(filepath.Join(path, name))
+		if !ok {
+			// A dangling symlink, something that's neither a folder nor a
+			// regular file, or an entry removed since ReadDir.
 			continue
 		}
-		switch {
-		case info.IsDir():
-			entries = append(entries, Entry{Name: name, IsDir: true})
-		case info.Mode().IsRegular():
-			entries = append(entries, Entry{Name: name})
-		}
+		entries = append(entries, e)
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
@@ -176,6 +174,193 @@ func ValidateName(name string) (string, error) {
 		}
 	}
 	return filepath.Clean(rel), nil
+}
+
+// MkDir creates the folder name (relative to the root; see ValidateName)
+// and any missing parents. Something already existing at name — folder
+// or file — is an error.
+func (s *Store) MkDir(name string) error {
+	if s.root == "" {
+		return errUnavailable
+	}
+	rel, err := ValidateName(name)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.root, rel)
+	if err := notExisting(path, name); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("creating folder %q: %w", name, err)
+	}
+	return nil
+}
+
+// Move renames or moves the snippet or folder from to to (both relative
+// to the root; to must pass ValidateName). Missing parent folders of to
+// are created. Nothing is overwritten: an existing to fails with
+// ErrExists. Moving a folder into itself or one of its own subfolders is
+// refused. Moving across filesystems (e.g. into a symlinked folder on
+// another volume) fails with the OS error.
+func (s *Store) Move(from, to string) error {
+	src, err := s.resolve(from, false)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Lstat(src); err != nil {
+		return fmt.Errorf("moving %q: %w", from, err)
+	}
+	rel, err := ValidateName(to)
+	if err != nil {
+		return err
+	}
+	fromRel := filepath.Clean(filepath.FromSlash(from))
+	if rel == fromRel || strings.HasPrefix(rel, fromRel+string(filepath.Separator)) {
+		return fmt.Errorf("can't move %q into itself", from)
+	}
+	dst := filepath.Join(s.root, rel)
+	if err := notExisting(dst, to); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("creating folder for %q: %w", to, err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("moving %q to %q: %w", from, to, err)
+	}
+	return nil
+}
+
+// Delete removes the snippet file name (relative to the root). Folders
+// are refused; see DeleteFolder.
+func (s *Store) Delete(name string) error {
+	path, err := s.resolve(name, false)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return fmt.Errorf("%q is a folder, not a snippet", name)
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("deleting snippet %q: %w", name, err)
+	}
+	return nil
+}
+
+// DeleteFolder removes the folder dir (relative to the root) and
+// everything in it. The root itself is refused. A symlinked folder has
+// only its link removed — never the folder it points to — so a linked
+// shared checkout is never deleted from here.
+func (s *Store) DeleteFolder(dir string) error {
+	path, err := s.resolve(dir, false)
+	if err != nil {
+		return err
+	}
+	e, ok := classify(path)
+	if !ok || !e.IsDir {
+		return fmt.Errorf("%q is not a folder", dir)
+	}
+	if e.IsLink {
+		err = os.Remove(path)
+	} else {
+		err = os.RemoveAll(path)
+	}
+	if err != nil {
+		return fmt.Errorf("deleting folder %q: %w", dir, err)
+	}
+	return nil
+}
+
+// Count returns how many snippets and folders are nested anywhere inside
+// dir (relative to the root; "" is the root), by List's rules: hidden
+// entries and broken links are skipped. A symlinked folder counts as one
+// folder but isn't looked inside, since deleting removes only the link.
+func (s *Store) Count(dir string) (snippets, folders int, err error) {
+	path, err := s.resolve(dir, true)
+	if err != nil {
+		return 0, 0, err
+	}
+	var walk func(string) error
+	walk = func(p string) error {
+		des, err := os.ReadDir(p)
+		if err != nil {
+			return err
+		}
+		for _, de := range des {
+			if strings.HasPrefix(de.Name(), ".") {
+				continue
+			}
+			e, ok := classify(filepath.Join(p, de.Name()))
+			switch {
+			case !ok:
+			case !e.IsDir:
+				snippets++
+			default:
+				folders++
+				if !e.IsLink {
+					if err := walk(filepath.Join(p, de.Name())); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	}
+	if err := walk(path); err != nil {
+		return 0, 0, fmt.Errorf("counting snippets in %q: %w", dir, err)
+	}
+	return snippets, folders, nil
+}
+
+// Stat describes the snippet or folder name (relative to the root).
+func (s *Store) Stat(name string) (Entry, error) {
+	path, err := s.resolve(name, false)
+	if err != nil {
+		return Entry{}, err
+	}
+	e, ok := classify(path)
+	if !ok {
+		return Entry{}, fmt.Errorf("%q is not a snippet or folder: %w", name, fs.ErrNotExist)
+	}
+	return e, nil
+}
+
+// classify describes path as an Entry, following symlinks to tell a
+// folder from a file. ok is false for anything List would skip: a broken
+// link, something that's neither a folder nor a regular file, or a path
+// that doesn't exist.
+func classify(path string) (e Entry, ok bool) {
+	linfo, err := os.Lstat(path)
+	if err != nil {
+		return Entry{}, false
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return Entry{}, false
+	}
+	e = Entry{Name: filepath.Base(path), IsLink: linfo.Mode()&fs.ModeSymlink != 0}
+	switch {
+	case info.IsDir():
+		e.IsDir = true
+	case !info.Mode().IsRegular():
+		return Entry{}, false
+	}
+	return e, true
+}
+
+// notExisting returns ErrExists (naming name) when something — even a
+// broken link — is already at path.
+func notExisting(path, name string) error {
+	_, err := os.Lstat(path)
+	switch {
+	case err == nil:
+		return fmt.Errorf("%q: %w", name, ErrExists)
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf("checking %q: %w", name, err)
+	}
 }
 
 // resolve turns a root-relative path from the picker into an absolute

@@ -13,7 +13,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
      - a round trip with `Extra`
      - a non-mapping front matter is an error
      - the existing format tests still pass unchanged
-2. [ ] **Store operations.**
+2. [x] **Store operations.**
    - `MkDir`, `Move`, `Delete`, `DeleteFolder`, `Count`, `Stat`, and
      `Entry.IsLink` (set by `List`).
    - Table-driven tests, as listed in `plan.md`, including the
@@ -71,10 +71,13 @@ test is mutation-checked: remove the fix and confirm the test fails.
    11. Switch the theme live: the view, the editor and the prompt pick
        up the new colors.
    12. Edit a file outside the app, then press `r`: the preview updates.
-8. [ ] **Merge-back** (needs your explicit go-ahead before it is
+8. [ ] **Example snippets** (requested during task 2; exact form to be
+   agreed before starting, see the PR discussion).
+9. [ ] **Merge-back** (needs your explicit go-ahead before it is
    committed).
-   - `spec/22`: add a library section, the new `Store` methods and
-     `Extra`, and take the library view off the out-of-scope list.
+   - `spec/22`: add a library section, the new `Store` methods, `Extra`
+     and the generalized `ErrExists` text, and take the library view off
+     the out-of-scope list.
    - `spec/05`: the Home entry.
    - `spec/03`: the new dialogs, the dialog-to-dialog links, the view,
      and `ShowWithCancel` users.
