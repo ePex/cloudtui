@@ -61,6 +61,9 @@ task run:tui
 
 Press `:q` to quit.
 
+On a message detail page, press `c` to copy the queue name, message
+summary, displayed headers and properties, and full body to the clipboard.
+
 ## Message snippets
 
 Snippets are reusable ActiveMQ messages: a body plus an optional JMS

@@ -85,3 +85,10 @@ type MessagesHost interface {
 	Host
 	SwitchTo(name string)
 }
+
+// MessageDetailHost is what MessageDetailView needs to copy the current
+// message through the app's terminal clipboard support.
+type MessageDetailHost interface {
+	Host
+	CopyToClipboard(data string)
+}

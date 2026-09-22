@@ -38,6 +38,112 @@ func TestMessageDetailViewShortcutEscPresent(t *testing.T) {
 	t.Error("Shortcuts() missing key \"Esc\"")
 }
 
+func TestMessageDetailViewCopyShortcutPresent(t *testing.T) {
+	_, _, _, dv := newTestMessageDetailView(t)
+	for _, s := range dv.Shortcuts() {
+		if s.Key == "c" && s.Description == "copy message" {
+			return
+		}
+	}
+	t.Error(`Shortcuts() missing {c, "copy message"}`)
+}
+
+func TestMessageClipboardTextIncludesQueueSummaryHeadersPropertiesAndFullBody(t *testing.T) {
+	timestamp := time.Date(2026, 9, 22, 12, 34, 56, 0, time.Local)
+	body := `{"orderId":42}`
+	msg := queue.Message{
+		ID:        "ID:broker:1:2",
+		JMSType:   "OrderCreated",
+		Timestamp: timestamp,
+		Preview:   `{"orderId":`,
+		RawFields: map[string]any{
+			"text":             body,
+			"jMSCorrelationID": "corr-123",
+			"jMSDeliveryMode":  2,
+			"jMSDestination":   "queue://orders",
+			"jMSExpiration":    0,
+			"jMSRedelivered":   false,
+			"jMSReplyTo":       "queue://reply",
+			"groupID":          "group-1",
+			"groupSequence":    3,
+			"userID":           "alice",
+			"jMSPriority":      4,
+			"properties": map[string]any{
+				"zeta":  "last",
+				"alpha": map[string]any{"data": []any{float64('A')}},
+			},
+		},
+	}
+	want := "Queue: orders\n" +
+		"ID: ID:broker:1:2\n" +
+		"Type: OrderCreated\n" +
+		"Timestamp: 2026-09-22 12:34:56\n\n" +
+		"Headers:\n" +
+		"JMSCorrelationID: corr-123\n" +
+		"JMSDeliveryMode: 2\n" +
+		"JMSDestination: queue://orders\n" +
+		"JMSExpiration: 0\n" +
+		"JMSRedelivered: false\n" +
+		"JMSReplyTo: queue://reply\n" +
+		"JMSXGroupID: group-1\n" +
+		"JMSXGroupSeq: 3\n" +
+		"JMSXUserID: alice\n" +
+		"Priority: 4\n" +
+		"PropertiesText:\n" +
+		"  alpha: A\n" +
+		"  zeta: last\n\n" +
+		"Body:\n{\n  \"orderId\": 42\n}"
+	if got := messageClipboardText("orders", msg); got != want {
+		t.Errorf("messageClipboardText() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestMessageClipboardTextUsesBinaryPlaceholder(t *testing.T) {
+	got := messageClipboardText("orders", queue.Message{})
+	if !strings.HasSuffix(got, "Body:\n(binary)") {
+		t.Errorf("binary message clipboard ends with %q, want Body: (binary)", got)
+	}
+	if !strings.Contains(got, "JMSCorrelationID: <nil>") {
+		t.Errorf("missing nil header placeholders: %q", got)
+	}
+	if !strings.Contains(got, "PropertiesText: <nil>") {
+		t.Errorf("missing nil PropertiesText placeholder: %q", got)
+	}
+}
+
+func TestMessageDetailViewCopyWritesCompleteMessageAndStaysOpen(t *testing.T) {
+	host, _, _, dv := newTestMessageDetailView(t)
+	msg := queue.Message{
+		ID:        "ID:test:1:1",
+		JMSType:   "OrderCreated",
+		Timestamp: time.Date(2026, 1, 2, 3, 4, 5, 0, time.Local),
+		Preview:   "short",
+		RawFields: map[string]any{
+			"text":             "the complete body",
+			"jMSCorrelationID": "corr-1",
+		},
+	}
+	dv.Render("orders", msg)
+	detailBefore := dv.textView.GetText(false)
+
+	dv.textView.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
+
+	for _, want := range []string{"Queue: orders", "JMSCorrelationID: corr-1", "the complete body"} {
+		if !strings.Contains(host.copiedData, want) {
+			t.Errorf("clipboard data %q does not contain %q", host.copiedData, want)
+		}
+	}
+	if strings.Contains(host.copiedData, "short") {
+		t.Errorf("clipboard contains preview instead of full body: %q", host.copiedData)
+	}
+	if host.status != "Copied message from orders to clipboard" {
+		t.Errorf("status = %q, want copy confirmation", host.status)
+	}
+	if got := dv.textView.GetText(false); got != detailBefore {
+		t.Errorf("copy changed the detail view text: got %q, want %q", got, detailBefore)
+	}
+}
+
 func TestMessageDetailViewRenderNilRawFields(t *testing.T) {
 	_, _, _, dv := newTestMessageDetailView(t)
 	// Must not panic when RawFields is nil.
@@ -226,7 +332,7 @@ func TestMessageDetailViewRestoreFocus(t *testing.T) {
 	if host.focused != dv.textView {
 		t.Error("restoreFocus did not focus the detail view")
 	}
-	for _, key := range []string{"<m>", "<d>", "<S>", "<Esc>"} {
+	for _, key := range []string{"<c>", "<m>", "<d>", "<S>", "<Esc>"} {
 		if !strings.Contains(host.contextHint, key) {
 			t.Errorf("context hint %q is missing %s", host.contextHint, key)
 		}

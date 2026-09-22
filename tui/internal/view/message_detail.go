@@ -25,7 +25,7 @@ import (
 // and returns to "messages" on Esc/Backspace.
 type MessageDetailView struct {
 	textView    *tview.TextView
-	host        ui.Host
+	host        ui.MessageDetailHost
 	movePicker  *dialog.MovePicker
 	confirm     *dialog.ConfirmDialog
 	snippetSave *dialog.SnippetSaveDialog
@@ -51,6 +51,7 @@ func (dv *MessageDetailView) Primitive() tview.Primitive { return dv.textView }
 
 func (dv *MessageDetailView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
+		{Key: "c", Description: "copy message"},
 		{Key: "m", Description: "move"},
 		{Key: "d", Description: "delete"},
 		{Key: "S", Description: "save as snippet"},
@@ -58,7 +59,7 @@ func (dv *MessageDetailView) Shortcuts() []ui.Shortcut {
 	}
 }
 
-func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, snippetSave *dialog.SnippetSaveDialog, onBack func(), onReload func()) *MessageDetailView {
+func NewMessageDetailView(a ui.MessageDetailHost, movePicker *dialog.MovePicker, confirm *dialog.ConfirmDialog, snippetSave *dialog.SnippetSaveDialog, onBack func(), onReload func()) *MessageDetailView {
 	tv := tview.NewTextView()
 	tv.SetBorder(true).SetTitle(" Message Details ")
 	tv.SetDynamicColors(true)
@@ -73,6 +74,10 @@ func NewMessageDetailView(a ui.Host, movePicker *dialog.MovePicker, confirm *dia
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 		case event.Rune() == 'k':
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Rune() == 'c':
+			dv.host.CopyToClipboard(messageClipboardText(dv.queueName, dv.msg))
+			dv.host.SetStatus(fmt.Sprintf("Copied message from %s to clipboard", tview.Escape(dv.queueName)))
+			return nil
 		case event.Rune() == 'm':
 			srcQueue := dv.queueName
 			msgID := dv.msg.ID
@@ -162,6 +167,76 @@ func prettyJSON(s string) string {
 	return buf.String()
 }
 
+type detailHeaderField struct {
+	label string
+	key   string
+}
+
+func messageDetailHeaderFields() []detailHeaderField {
+	return []detailHeaderField{
+		{"JMSCorrelationID", "jMSCorrelationID"},
+		{"JMSDeliveryMode", "jMSDeliveryMode"},
+		{"JMSDestination", "jMSDestination"},
+		{"JMSExpiration", "jMSExpiration"},
+		{"JMSRedelivered", "jMSRedelivered"},
+		{"JMSReplyTo", "jMSReplyTo"},
+		{"JMSXGroupID", "groupID"},
+		{"JMSXGroupSeq", "groupSequence"},
+		{"JMSXUserID", "userID"},
+		{"Priority", "jMSPriority"},
+		{"PropertiesText", "properties"},
+	}
+}
+
+// messageClipboardText builds a readable, uncolored representation of the
+// current detail page. It uses the full body rather than the queue-list
+// preview and shares the same header mapping and value decoding as Render.
+func messageClipboardText(queueName string, msg queue.Message) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Queue: %s\n", queueName)
+	fmt.Fprintf(&b, "ID: %s\n", msg.ID)
+	fmt.Fprintf(&b, "Type: %s\n", msg.JMSType)
+	fmt.Fprintf(&b, "Timestamp: %s\n", msg.Timestamp.Local().Format("2006-01-02 15:04:05"))
+
+	b.WriteString("\nHeaders:\n")
+	for _, field := range messageDetailHeaderFields() {
+		if msg.RawFields == nil {
+			fmt.Fprintf(&b, "%s: <nil>\n", field.label)
+			continue
+		}
+		if field.key == "properties" {
+			b.WriteString(field.label + ":")
+			b.WriteByte('\n')
+			if properties, ok := msg.RawFields[field.key].(map[string]any); ok {
+				keys := make([]string, 0, len(properties))
+				for key := range properties {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					fmt.Fprintf(&b, "  %s: %s\n", key, decodePropertyValue(properties[key]))
+				}
+			}
+			continue
+		}
+		var value any
+		if msg.RawFields != nil {
+			value = msg.RawFields[field.key]
+		}
+		fmt.Fprintf(&b, "%s: %v\n", field.label, value)
+	}
+
+	b.WriteString("\nBody:\n")
+	body, _ := msg.RawFields["text"].(string)
+	if body == "" {
+		body = "(binary)"
+	} else if formatted := prettyJSON(body); formatted != "" {
+		body = formatted
+	}
+	b.WriteString(body)
+	return b.String()
+}
+
 // decodePropertyValue converts a Jolokia property value to a human-readable
 // string. ActiveMQ serialises string properties as ByteSequence objects:
 // a map with a "data" key holding a []any of float64 byte values.
@@ -213,25 +288,7 @@ func (dv *MessageDetailView) Render(queueName string, msg queue.Message) {
 	// — Headers section —
 	fmt.Fprintf(&b, "\n[%s]Headers:[-]\n", accent)
 
-	type headerField struct {
-		label string
-		key   string
-	}
-	fields := []headerField{
-		{"JMSCorrelationID", "jMSCorrelationID"},
-		{"JMSDeliveryMode", "jMSDeliveryMode"},
-		{"JMSDestination", "jMSDestination"},
-		{"JMSExpiration", "jMSExpiration"},
-		{"JMSRedelivered", "jMSRedelivered"},
-		{"JMSReplyTo", "jMSReplyTo"},
-		{"JMSXGroupID", "groupID"},
-		{"JMSXGroupSeq", "groupSequence"},
-		{"JMSXUserID", "userID"},
-		{"Priority", "jMSPriority"},
-		{"PropertiesText", "properties"},
-	}
-
-	for _, f := range fields {
+	for _, f := range messageDetailHeaderFields() {
 		if msg.RawFields == nil {
 			fmt.Fprintf(&b, "[%s]%s:[-] [%s]<nil>[-]\n", accent, f.label, text)
 			continue
