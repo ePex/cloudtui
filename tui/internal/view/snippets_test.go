@@ -3,6 +3,7 @@ package view
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -123,6 +124,11 @@ func (f *snippetsFixture) selectedName() string {
 
 func TestSnippetsViewPreview(t *testing.T) {
 	f := newSnippetsFixture(t)
+	path := filepath.Join(f.root, "orders", "created.json")
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	f.cursorTo(t, "ping.txt")
 	if got := f.previewText(); !strings.Contains(got, "JMS Type: (none)") || !strings.Contains(got, "ping") {
@@ -141,6 +147,9 @@ func TestSnippetsViewPreview(t *testing.T) {
 	f.cursorTo(t, "created.json")
 	if got := f.previewText(); !strings.Contains(got, "JMS Type: OrderCreated") || !strings.Contains(got, `{"id":1}`) {
 		t.Errorf("preview of created.json = %q", got)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != string(original) {
+		t.Errorf("preview changed the file: content = %q, err = %v", got, err)
 	}
 }
 
@@ -223,6 +232,46 @@ func TestSnippetsViewEditParseErrorReported(t *testing.T) {
 	f.press('e')
 	if f.editor.Visible() || !strings.Contains(f.host.status, "no closing") {
 		t.Errorf("editor visible = %v, status = %q; want the parse error instead", f.editor.Visible(), f.host.status)
+	}
+}
+
+func TestSnippetsViewEditFormatsAndPersistsBody(t *testing.T) {
+	f := newSnippetsFixture(t)
+	f.v.browser.SetDir("orders")
+	f.cursorTo(t, "created.json")
+	f.press('e')
+	if !f.editor.Visible() {
+		t.Fatal("editor didn't open")
+	}
+	data, err := os.ReadFile(filepath.Join(f.root, "orders", "created.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "---\njmsType: OrderCreated\n---\n{\n  \"id\": 1\n}"; string(data) != want {
+		t.Errorf("edited snippet on disk = %q (%d bytes), want %q (%d bytes)", data, len(data), want, len(want))
+	}
+}
+
+func TestSnippetsViewEditFormatWriteFailureKeepsEditorClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only file permissions are not enforced for this test process")
+	}
+	f := newSnippetsFixture(t)
+	path := filepath.Join(f.root, "orders", "created.json")
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+	probe, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		_ = probe.Close()
+		t.Skip("read-only file permissions are not enforced for this test process")
+	}
+	f.v.browser.SetDir("orders")
+	f.cursorTo(t, "created.json")
+	f.press('e')
+	if f.editor.Visible() || !strings.Contains(f.host.status, "saving snippet") {
+		t.Errorf("editor visible = %v, status = %q; want write error and closed editor", f.editor.Visible(), f.host.status)
 	}
 }
 

@@ -122,6 +122,13 @@ func (v *SnippetsView) edit(rel string) {
 		v.showError(err)
 		return
 	}
+	if formatted := snippet.FormatBody(sn.Body); formatted != sn.Body {
+		sn.Body = formatted
+		if err := v.store.Save(rel, sn, true); err != nil {
+			v.showError(err)
+			return
+		}
+	}
 	v.editor.ShowEdit(rel, sn, v.landOn, v.restoreFocus)
 }
 
