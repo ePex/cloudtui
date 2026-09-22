@@ -13,14 +13,17 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // SendMessageOverlay is the "Send Message" overlay: JMS Type, Correlation
-// ID, Group ID, custom Headers, and Body fields plus Submit/Cancel actions
-// for composing a new message on a queue.
+// ID, Group ID, custom Headers, and Body fields plus Submit/Cancel/Load
+// snippet… actions for composing a new message on a queue.
 type SendMessageOverlay struct {
 	host              ui.Host
+	snippetPicker     *SnippetPicker
+	confirm           *ConfirmDialog
 	form              *tview.Form
 	jmsTypeItem       *tview.InputField
 	correlationIDItem *tview.InputField
@@ -32,8 +35,10 @@ type SendMessageOverlay struct {
 }
 
 // NewSendMessageOverlay builds the send-message overlay's widgets.
-func NewSendMessageOverlay(host ui.Host) *SendMessageOverlay {
-	sm := &SendMessageOverlay{host: host}
+// snippetPicker backs the "Load snippet…" button; confirm asks before a
+// loaded snippet replaces fields the user already filled in.
+func NewSendMessageOverlay(host ui.Host, snippetPicker *SnippetPicker, confirm *ConfirmDialog) *SendMessageOverlay {
+	sm := &SendMessageOverlay{host: host, snippetPicker: snippetPicker, confirm: confirm}
 	sm.form = tview.NewForm()
 	sm.form.SetBorder(true).SetTitle(" Send Message ")
 	sm.form.
@@ -43,7 +48,8 @@ func NewSendMessageOverlay(host ui.Host) *SendMessageOverlay {
 		AddTextArea("Headers (key: value per line)", "", 40, 3, 0, nil).
 		AddTextArea("Body", "", 40, 6, 0, nil).
 		AddButton("Submit", nil).
-		AddButton("Cancel", sm.close)
+		AddButton("Cancel", sm.close).
+		AddButton("Load snippet…", sm.openSnippetPicker)
 	sm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			sm.close()
@@ -79,10 +85,46 @@ func (sm *SendMessageOverlay) Show(queueName string, onClose func()) {
 
 	sm.form.SetFocus(0)
 	host.ShowPage("send-message")
-	host.SetFocus(sm.form)
 	sm.visible = true
-	ac := host.Config().Colors.Accent
-	host.SetContextHint(fmt.Sprintf("[%s]<Tab>[-] next field  [%s]<Esc>[-] cancel", ac, ac))
+	sm.focusForm()
+}
+
+// focusForm gives focus and the context hint back to the form — on open,
+// and whenever an overlay raised from it (snippet picker, confirmation)
+// is dismissed.
+func (sm *SendMessageOverlay) focusForm() {
+	sm.host.SetFocus(sm.form)
+	ac := sm.host.Config().Colors.Accent
+	sm.host.SetContextHint(fmt.Sprintf("[%s]<Tab>[-] next field  [%s]<Esc>[-] cancel", ac, ac))
+}
+
+// openSnippetPicker opens the snippet picker on top of the form; the
+// picked snippet goes through applySnippet.
+func (sm *SendMessageOverlay) openSnippetPicker() {
+	sm.snippetPicker.Show(sm.applySnippet, sm.focusForm)
+}
+
+// applySnippet loads s into the form. When JMS Type or Body already hold
+// something, a confirmation asks first; "No" leaves the form unchanged.
+func (sm *SendMessageOverlay) applySnippet(s snippet.Snippet) {
+	if sm.jmsTypeItem.GetText() == "" && sm.bodyItem.GetText() == "" {
+		sm.setFromSnippet(s)
+		return
+	}
+	sm.confirm.ShowWithCancel("Replace JMS Type and Body with the snippet?",
+		func() {
+			sm.setFromSnippet(s)
+			sm.focusForm()
+		},
+		sm.focusForm)
+}
+
+// setFromSnippet writes s's JMS Type (clearing the field when s has none)
+// and Body into the form. Correlation ID, Group ID, and Headers are never
+// touched — a snippet only carries those two.
+func (sm *SendMessageOverlay) setFromSnippet(s snippet.Snippet) {
+	sm.jmsTypeItem.SetText(s.JMSType)
+	sm.bodyItem.SetText(s.Body, false)
 }
 
 // doSend validates the form's fields, closes the overlay, and sends the

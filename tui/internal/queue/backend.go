@@ -23,6 +23,12 @@ type Message struct {
 	Timestamp     time.Time
 	Preview       string         // first 80 chars of body text; "(binary)" for non-text messages
 	RawFields     map[string]any // full Jolokia response map for the message
+
+	// JMSTypeInferred is true when the message carried no JMSType header
+	// and JMSType was inferred from the body instead — so callers that
+	// must not treat that placeholder as a real header value (e.g. saving
+	// a snippet) can tell the two apart.
+	JMSTypeInferred bool
 }
 
 // MessageFilter selects which messages a browse, bulk delete, or bulk

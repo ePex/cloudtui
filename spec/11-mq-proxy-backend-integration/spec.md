@@ -99,7 +99,8 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   present, `"other"` otherwise) only when the server doesn't supply one —
   mirroring the pattern the Jolokia backend uses for its own `jMSType`
   header (spec/08), so both backends filter on the same kind of
-  value.
+  value. An inferred type sets `queue.Message.JMSTypeInferred` (spec/08,
+  spec/22).
 - Sends `returnBody=true` always when browsing (the message browser needs
   the body for its preview column — spec/08).
 - `SendMessage` populates `send-message`'s `jmsType`/`headers`/`groupId`/

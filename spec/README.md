@@ -3,14 +3,14 @@
 The living documentation of cloudtui: one folder per **feature area**,
 each holding a single `spec.md` that describes the **current, end-state
 behavior** of that area — detailed enough that if all code were deleted,
-the application could be rebuilt from these 20 documents alone.
+the application could be rebuilt from these documents alone.
 
 This is not an incremental log. A doc describes what's true *today*; when
 a feature area's behavior changes, its `spec.md` is updated in place
 rather than gaining a new dated entry. Bugfixes and change requests don't
 get their own folder here — they're folded into the area they correct.
 
-Numbering is a 1–21 reading order (foundational/infra first), not a
+Numbering is a 1–22 reading order (foundational/infra first), not a
 chronological counter — see the table below.
 
 | Folder | Covers |
@@ -36,6 +36,7 @@ chronological counter — see the table below.
 | [19-log-investigation-crosslinks](19-log-investigation-crosslinks/spec.md) | Log investigation cross-links: correlation jump + shared time-range modal |
 | [20-aws-codepipeline-monitor](20-aws-codepipeline-monitor/spec.md) | AWS CodePipeline monitor with desktop notifications |
 | [21-amq-web-console](21-amq-web-console/spec.md) | Static web console for browsing/managing ActiveMQ queues via mq-proxy |
+| [22-message-snippets](22-message-snippets/spec.md) | Message snippet library: save from the detail view, load into the send dialog |
 
 ## Relationship to `spec-wip/`
 
@@ -44,8 +45,8 @@ it happens in [`spec-wip/`](../spec-wip/README.md), following the gated
 spec → plan → tasks workflow described in the root `CLAUDE.md`. Once a
 change is fully implemented, its content is merged back: the relevant
 `spec/<area>/spec.md` above is updated to reflect the new end-state
-behavior (or a new area folder is added, numbered 21 onward, for a
-genuinely new capability), and the `spec-wip/` folder is deleted. Nothing
+behavior (or a new area folder is added, with the next unused number,
+for a genuinely new capability), and the `spec-wip/` folder is deleted. Nothing
 is lost by deleting it — the PR that shipped the change is the permanent
 record of what was decided and why; this file only needs to reflect
 what's true now.

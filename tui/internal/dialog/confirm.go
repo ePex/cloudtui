@@ -33,22 +33,36 @@ func NewConfirmDialog(host ui.Host) *ConfirmDialog {
 }
 
 // Show presents a confirmation dialog with the given question. onConfirm
-// is called when the user selects "Yes".
+// is called when the user selects "Yes"; "No"/Esc returns focus to the
+// main view.
 func (c *ConfirmDialog) Show(question string, onConfirm func()) {
+	c.ShowWithCancel(question, onConfirm, nil)
+}
+
+// ShowWithCancel is Show with a cancel callback: when onCancel is non-nil,
+// "No"/Esc call it instead of returning focus to the main view — for a
+// confirmation raised on top of another overlay that stays open and must
+// get focus back.
+func (c *ConfirmDialog) ShowWithCancel(question string, onConfirm, onCancel func()) {
 	c.text.SetText(question)
 	c.list.Clear()
 
-	dismiss := func() { c.close() }
+	dismiss := func() {
+		c.close(onCancel == nil)
+		if onCancel != nil {
+			onCancel()
+		}
+	}
 
 	c.list.AddItem("No", "", 0, dismiss)
 	c.list.AddItem("Yes", "", 0, func() {
-		c.close()
+		c.close(true)
 		onConfirm()
 	})
 
 	c.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			c.close()
+			dismiss()
 			return nil
 		}
 		return event
@@ -59,10 +73,13 @@ func (c *ConfirmDialog) Show(question string, onConfirm func()) {
 	c.visible = true
 }
 
-// close hides the confirmation dialog and restores focus.
-func (c *ConfirmDialog) close() {
+// close hides the confirmation dialog, restoring focus to the main view
+// when focusMain is set (otherwise the caller's onCancel restores it).
+func (c *ConfirmDialog) close(focusMain bool) {
 	c.host.HidePage("confirm")
-	c.host.FocusMain()
+	if focusMain {
+		c.host.FocusMain()
+	}
 	c.visible = false
 }
 

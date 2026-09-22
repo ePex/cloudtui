@@ -325,6 +325,7 @@ func toQueueMessage(m proxyMessage) queue.Message {
 	ts, _ := time.Parse(time.RFC3339, m.Timestamp)
 
 	jmsType := m.JMSType
+	inferred := jmsType == ""
 	var bodyText string
 	var preview string
 	if m.Body != nil {
@@ -333,10 +334,10 @@ func toQueueMessage(m proxyMessage) queue.Message {
 		if len([]rune(preview)) > previewMaxLen {
 			preview = string([]rune(preview)[:previewMaxLen])
 		}
-		if jmsType == "" {
+		if inferred {
 			jmsType = "text"
 		}
-	} else if jmsType == "" {
+	} else if inferred {
 		jmsType = "other"
 	}
 
@@ -349,6 +350,7 @@ func toQueueMessage(m proxyMessage) queue.Message {
 			"text":       bodyText,
 			"properties": m.Headers,
 		},
+		JMSTypeInferred: inferred,
 	}
 }
 

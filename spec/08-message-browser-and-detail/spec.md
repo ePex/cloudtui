@@ -84,7 +84,12 @@ batch; the status bar reports how many of the batch actually succeeded.
    - **Headers** — all captured JMS fields as sorted `Key: value` lines.
    - **Body** — full message text, pretty-printed if valid JSON, or
      `(binary)` for non-text messages.
-2. **Escape**/**Backspace** returns to the Messages view via
+2. **`S`** saves the message as a snippet: its raw body plus its JMS Type,
+   only when that's a real `JMSType` header, not an inferred one. It opens
+   the Save as Snippet dialog; see spec/22. A message without a text body
+   shows a status-bar error instead. `m` (move) and `d` (delete) are
+   described in spec/09.
+3. **Escape**/**Backspace** returns to the Messages view via
    `pages.SwitchToPage("messages")` — not `pages.ShowPage("messages")`.
    `ShowPage` only makes the target visible without hiding others; because
    "message-detail" is added to the pages stack *after* "messages" it would
@@ -146,6 +151,10 @@ type Message struct {
     Timestamp      int64 // epoch millis
     Preview        string
     RawFields      map[string]interface{} // full Jolokia map, for the detail view
+    // JMSTypeInferred: JMSType was inferred ("text"/"bytes"/"other") because
+    // the message carried no JMSType header. Set by every backend; used so
+    // saving a snippet (spec/22) never stores an inferred type.
+    JMSTypeInferred bool
 }
 
 type MessageFilter struct {

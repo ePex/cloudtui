@@ -249,6 +249,9 @@ func TestBrowseMessagesFallbackFullObject(t *testing.T) {
 	if got, _ := msgs[0].RawFields["jMSDeliveryMode"].(any); got == nil {
 		t.Error("RawFields[jMSDeliveryMode] is nil")
 	}
+	if !msgs[0].JMSTypeInferred {
+		t.Error("JMSTypeInferred = false, want true (JMSType was null)")
+	}
 	if msgs[0].Timestamp.IsZero() {
 		t.Error("Timestamp is zero")
 	}
@@ -282,6 +285,9 @@ func TestBrowseMessagesFallback(t *testing.T) {
 	}
 	if msgs[0].ID != "" {
 		t.Errorf("msgs[0].ID = %q, want empty string (fallback has no ID)", msgs[0].ID)
+	}
+	if !msgs[0].JMSTypeInferred {
+		t.Error("msgs[0].JMSTypeInferred = false, want true (plain-string item carries no headers)")
 	}
 	if msgs[0].Preview != "hello world" {
 		t.Errorf("msgs[0].Preview = %q, want %q", msgs[0].Preview, "hello world")
@@ -338,5 +344,68 @@ func TestBrowseMessagesFallbackBothFail(t *testing.T) {
 	}
 	if got := err.Error(); got == "" {
 		t.Error("error message is empty")
+	}
+}
+
+// TestBrowseMessagesJMSTypeInferred covers the browseMessages() path: a
+// jMSType header is reported as-is, and only a missing one is inferred.
+func TestBrowseMessagesJMSTypeInferred(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": 200,
+			"value": []map[string]any{
+				{"messageId": "ID:header", "jMSType": "order.created", "text": "{}"},
+				{"messageId": "ID:text", "text": "hello"},
+				{"messageId": "ID:bytes", "bodyLength": float64(3)},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	msgs, err := newTestClient(srv.URL).BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	if err != nil {
+		t.Fatalf("BrowseMessages() error = %v", err)
+	}
+	want := []struct {
+		jmsType  string
+		inferred bool
+	}{
+		{"order.created", false},
+		{"text", true},
+		{"bytes", true},
+	}
+	if len(msgs) != len(want) {
+		t.Fatalf("len(msgs) = %d, want %d", len(msgs), len(want))
+	}
+	for i, w := range want {
+		if msgs[i].JMSType != w.jmsType || msgs[i].JMSTypeInferred != w.inferred {
+			t.Errorf("msgs[%d] = (JMSType %q, inferred %v), want (%q, %v)",
+				i, msgs[i].JMSType, msgs[i].JMSTypeInferred, w.jmsType, w.inferred)
+		}
+	}
+}
+
+// TestParseBrowseItemJMSTypeInferred covers the browse() fallback's
+// full-object path for both a present and an absent JMSType header.
+func TestParseBrowseItemJMSTypeInferred(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		wantType     string
+		wantInferred bool
+	}{
+		{"header present", `{"JMSMessageID":"ID:1","Text":"{}","JMSType":"order.created"}`, "order.created", false},
+		{"header null with body", `{"JMSMessageID":"ID:2","Text":"hi","JMSType":null}`, "text", true},
+		{"header absent without body", `{"JMSMessageID":"ID:3"}`, "other", true},
+		{"plain string item", `"hello"`, "text", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := parseBrowseItem(json.RawMessage(tt.raw))
+			if m.JMSType != tt.wantType || m.JMSTypeInferred != tt.wantInferred {
+				t.Errorf("parseBrowseItem = (JMSType %q, inferred %v), want (%q, %v)",
+					m.JMSType, m.JMSTypeInferred, tt.wantType, tt.wantInferred)
+			}
+		})
 	}
 }
