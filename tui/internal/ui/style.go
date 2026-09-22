@@ -59,6 +59,27 @@ func StyleForm(f *tview.Form, p config.Palette) *tview.Form {
 		SetButtonDisabledStyle(tcell.StyleDefault.Foreground(value).Background(bg))
 }
 
+// StyleFilterInput applies p to a stand-alone input field (a view's "/"
+// filter, a picker's search box): label in Label, the field itself in
+// SelectionText on SelectionBg, and — to match what a freshly built field
+// gets — the placeholder in Value on Background.
+//
+// The colors go through SetFormAttributes rather than SetLabelColor /
+// SetFieldBackgroundColor / SetFieldTextColor: InputField wraps a private
+// TextArea with its own embedded Box, and that inner Box's background is
+// what the label is drawn on. SetFormAttributes is the only exported
+// InputField method that reaches it (the same trap reapplyTheme works
+// around for the command prompt); without it the label keeps the
+// construction-time theme's background after a live switch. Label width 0
+// means "fit the label", which is what every filter input uses (none
+// calls SetLabelWidth). The outer Box's background is reset as well.
+func StyleFilterInput(i *tview.InputField, p config.Palette) *tview.InputField {
+	bg := tcell.GetColor(p.Background)
+	i.SetBackgroundColor(bg)
+	i.SetFormAttributes(0, tcell.GetColor(p.Label), bg, tcell.GetColor(p.SelectionText), tcell.GetColor(p.SelectionBg))
+	return i.SetPlaceholderStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Value)).Background(bg))
+}
+
 // StyleDropDown applies palette colors to the dropdown's popup list so
 // unselected items are readable against the theme background.
 func StyleDropDown(dd *tview.DropDown, p config.Palette) {

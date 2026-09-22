@@ -52,9 +52,7 @@ func (qv *QueuesView) ApplyPalette(p config.Palette) {
 	qv.table.SetBackgroundColor(bg)
 	qv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	qv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
-	qv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	qv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	qv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(qv.filterInput, p)
 }
 
 func (qv *QueuesView) Name() string               { return "queues" }
@@ -90,9 +88,7 @@ func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, mo
 	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
-	filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(filterInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

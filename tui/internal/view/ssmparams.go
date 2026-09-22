@@ -46,9 +46,7 @@ func (pv *SSMParamsView) ApplyPalette(p config.Palette) {
 	pv.table.SetBackgroundColor(bg)
 	pv.table.SetBorderColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
 	pv.table.SetTitleColor(tcell.GetColor(p.ViewColor("ssm-parameters")))
-	pv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	pv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	pv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(pv.filterInput, p)
 }
 
 func (pv *SSMParamsView) Name() string               { return "ssm-parameters" }
@@ -77,9 +75,7 @@ func NewSSMParamsView(a ui.SSMParamsHost, onSelect func(param awsssm.Parameter))
 	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
-	filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(filterInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

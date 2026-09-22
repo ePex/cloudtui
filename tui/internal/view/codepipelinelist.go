@@ -49,9 +49,7 @@ func (lv *CodePipelineListView) ApplyPalette(p config.Palette) {
 	lv.table.SetBackgroundColor(bg)
 	lv.table.SetBorderColor(tcell.GetColor(p.ViewColor("codepipeline")))
 	lv.table.SetTitleColor(tcell.GetColor(p.ViewColor("codepipeline")))
-	lv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	lv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	lv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(lv.filterInput, p)
 }
 
 func (lv *CodePipelineListView) Name() string               { return "codepipeline" }
@@ -85,9 +83,7 @@ func NewCodePipelineListView(a ui.CodePipelineHost, onSelect func(pipelineName s
 	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
-	filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(filterInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

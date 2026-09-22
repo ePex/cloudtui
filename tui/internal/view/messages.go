@@ -63,6 +63,7 @@ func (mv *MessagesView) ApplyPalette(p config.Palette) {
 	mv.table.SetBackgroundColor(bg)
 	mv.table.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	mv.table.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+	ui.StyleFilterInput(mv.searchInput, p)
 }
 
 func (mv *MessagesView) Primitive() tview.Primitive { return mv.flex }
@@ -140,9 +141,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 	p := a.Config().Colors
 	searchInput := tview.NewInputField()
 	searchInput.SetLabel(" / search: ")
-	searchInput.SetLabelColor(tcell.GetColor(p.Label))
-	searchInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	searchInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(searchInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

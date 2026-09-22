@@ -223,6 +223,54 @@ func TestStyleFormControlWithoutRestyleKeepsOldColors(t *testing.T) {
 	assertCellColors(t, "field text", findText(t, renderCells(t, f, 40, 6), "abc"), dark.Text, dark.Background)
 }
 
+// newFilterInput builds a " / filter: " input holding "abc" while
+// tview.Styles holds theme, styled with StyleFilterInput at construction
+// the way every view and picker builds its filter input.
+func newFilterInput(t *testing.T, theme string) *tview.InputField {
+	t.Helper()
+	p := mustPalette(t, theme)
+	withTviewStyles(t, p)
+	i := tview.NewInputField().SetLabel(" / filter: ").SetText("abc")
+	return StyleFilterInput(i, p)
+}
+
+func TestStyleFilterInputRecolorsLabelBackgroundAndField(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	i := newFilterInput(t, "dark")
+
+	if got := StyleFilterInput(i, cyber); got != i {
+		t.Fatal("StyleFilterInput did not return the same field for chaining")
+	}
+	rows := renderCells(t, i, 30, 1)
+
+	assertCellColors(t, "label", findText(t, rows, "/ filter:"), cyber.Label, cyber.Background)
+	assertCellColors(t, "field text", findText(t, rows, "abc"), cyber.SelectionText, cyber.SelectionBg)
+}
+
+// TestStyleFilterInputMatchesRestart checks a live switch draws the whole
+// input exactly as one built under cyberpunk from the start does.
+func TestStyleFilterInputMatchesRestart(t *testing.T) {
+	cyber := mustPalette(t, "cyberpunk")
+	live := StyleFilterInput(newFilterInput(t, "dark"), cyber)
+	liveRows := renderCells(t, live, 30, 1)
+
+	assertSameCells(t, liveRows, renderCells(t, newFilterInput(t, "cyberpunk"), 30, 1))
+}
+
+// TestStyleFilterInputControlWithoutRestyleKeepsOldLabelBackground is the
+// control: the three setters the views used before this fix leave the
+// label on the construction-time (dark) background.
+func TestStyleFilterInputControlWithoutRestyleKeepsOldLabelBackground(t *testing.T) {
+	dark, cyber := mustPalette(t, "dark"), mustPalette(t, "cyberpunk")
+	i := newFilterInput(t, "dark")
+	ApplyTviewStyles(cyber)
+	i.SetLabelColor(tcell.GetColor(cyber.Label))
+	i.SetFieldBackgroundColor(tcell.GetColor(cyber.SelectionBg))
+	i.SetFieldTextColor(tcell.GetColor(cyber.SelectionText))
+
+	assertCellColors(t, "label", findText(t, renderCells(t, i, 30, 1), "/ filter:"), cyber.Label, dark.Background)
+}
+
 func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {
 	p := config.Palette{
 		Background:    "#1a1b26",

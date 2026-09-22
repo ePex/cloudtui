@@ -247,9 +247,7 @@ func (jp *JMSTypePrompt) ApplyPalette(p config.Palette) {
 	jp.field.SetBackgroundColor(bg)
 	jp.field.SetBorderColor(tcell.GetColor(p.Border))
 	jp.field.SetTitleColor(tcell.GetColor(p.Border))
-	jp.field.SetLabelColor(tcell.GetColor(p.Label))
-	jp.field.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	jp.field.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(jp.field, p)
 	ui.StyleInputFieldAutocomplete(jp.field, p)
 }
 

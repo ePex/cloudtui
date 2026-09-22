@@ -45,9 +45,7 @@ func (sv *SecretsView) ApplyPalette(p config.Palette) {
 	sv.table.SetBackgroundColor(bg)
 	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("secrets-manager")))
 	sv.table.SetTitleColor(tcell.GetColor(p.ViewColor("secrets-manager")))
-	sv.filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	sv.filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	sv.filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(sv.filterInput, p)
 }
 
 func (sv *SecretsView) Name() string               { return "secrets-manager" }
@@ -76,9 +74,7 @@ func NewSecretsView(a ui.SecretsHost, onSelect func(secret awssecrets.Secret)) *
 	p := a.Config().Colors
 	filterInput := tview.NewInputField()
 	filterInput.SetLabel(" / filter: ")
-	filterInput.SetLabelColor(tcell.GetColor(p.Label))
-	filterInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	filterInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(filterInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

@@ -18,7 +18,7 @@ Each task is implemented and approved on its own, then pushed.
      - `MessageFilter`, `DatadogEditor`, `ConnEditor`
      - `TimeRangeModal`'s absolute form
      - `SnippetSaveDialog`
-3. [ ] **`StyleFilterInput`, used by every stand-alone input.**
+3. [x] **`StyleFilterInput`, used by every stand-alone input.**
    - Add `ui.StyleFilterInput` with a render test covering the label
      background and the field colors.
    - Replace the three-line blocks, at construction and in

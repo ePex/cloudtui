@@ -46,9 +46,7 @@ func (sv *LogSearchView) ApplyPalette(p config.Palette) {
 	sv.table.SetBackgroundColor(bg)
 	sv.table.SetBorderColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
 	sv.table.SetTitleColor(tcell.GetColor(p.ViewColor("cloudwatch-logs")))
-	sv.patternInput.SetLabelColor(tcell.GetColor(p.Label))
-	sv.patternInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	sv.patternInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(sv.patternInput, p)
 }
 
 func (sv *LogSearchView) Primitive() tview.Primitive { return sv.flex }
@@ -92,9 +90,7 @@ func NewLogSearchView(a ui.CloudWatchLogsHost, timeRangeModal *dialog.TimeRangeM
 	p := a.Config().Colors
 	patternInput := tview.NewInputField()
 	patternInput.SetLabel(" / pattern: ")
-	patternInput.SetLabelColor(tcell.GetColor(p.Label))
-	patternInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	patternInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(patternInput, p)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(table, 0, 1, true).

@@ -39,9 +39,7 @@ func NewAWSProfilesPicker(host ui.Host) *AWSProfilesPicker {
 	ap.table.SetFixed(1, 0)
 	ap.filterInput = tview.NewInputField()
 	ap.filterInput.SetLabel(" / filter: ")
-	ap.filterInput.SetLabelColor(tcell.GetColor(colors.Label))
-	ap.filterInput.SetFieldBackgroundColor(tcell.GetColor(colors.SelectionBg))
-	ap.filterInput.SetFieldTextColor(tcell.GetColor(colors.SelectionText))
+	ui.StyleFilterInput(ap.filterInput, colors)
 	ap.hints = tview.NewTextView().SetDynamicColors(true)
 	ac := colors.Accent
 	ap.hints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
@@ -145,6 +143,7 @@ func (ap *AWSProfilesPicker) ApplyPalette(p config.Palette) {
 	ap.table.SetTitleColor(tcell.GetColor(p.Border))
 	ap.hints.SetBackgroundColor(bg)
 	ap.hints.SetTextColor(tcell.GetColor(p.Text))
+	ui.StyleFilterInput(ap.filterInput, p)
 }
 
 var _ ui.Themeable = (*AWSProfilesPicker)(nil)

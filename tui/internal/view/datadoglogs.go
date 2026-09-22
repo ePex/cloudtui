@@ -61,9 +61,7 @@ func (dv *DatadogLogsView) ApplyPalette(p config.Palette) {
 	dv.table.SetBackgroundColor(bg)
 	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
 	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("datadog-logs")))
-	dv.queryInput.SetLabelColor(tcell.GetColor(p.Label))
-	dv.queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	dv.queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(dv.queryInput, p)
 	ui.StyleDropDown(dv.serviceFilterDD, p)
 	ui.StyleDropDown(dv.envFilterDD, p)
 }
@@ -101,9 +99,7 @@ func NewDatadogLogsView(a ui.DatadogLogsHost, timeRangeModal *dialog.TimeRangeMo
 	p := a.Config().Colors
 	queryInput := tview.NewInputField()
 	queryInput.SetLabel(" / query: ")
-	queryInput.SetLabelColor(tcell.GetColor(p.Label))
-	queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(queryInput, p)
 
 	serviceFilterDD := tview.NewDropDown()
 	serviceFilterDD.SetLabel(" Service: ")

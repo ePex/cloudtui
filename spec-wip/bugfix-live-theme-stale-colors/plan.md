@@ -84,9 +84,19 @@ so their label and field colors are never reapplied at all.
   around for the `:` prompt.
 - **New `StyleFilterInput(i, p)`** sets the colors the stand-alone
   inputs use today, plus the label background:
-  - label style: `Label` on `Background`
+  - label: `Label`, on `Background`
   - field: `SelectionText` on `SelectionBg`
-  - placeholder: `Value` on `SelectionBg`
+  - placeholder: `Value` on `Background`, which is what a freshly built
+    field gets. The first draft said `SelectionBg`; no input uses a
+    placeholder today.
+
+  **How it's applied (found by the restart-comparison test):** the label
+  is drawn on the background of the input's *inner* text area, not on
+  its outer box. `SetLabelColor` and `SetFieldBackgroundColor` can't
+  reach that inner background, so the helper uses `SetFormAttributes`,
+  the same workaround `reapplyTheme` uses for the `:` prompt. It passes
+  label width 0 ("fit the label"), since no filter input sets a label
+  width. It also resets the outer box's background.
 
   It replaces the identical three-line blocks, both at construction and
   in `ApplyPalette`, in:
@@ -96,6 +106,11 @@ so their label and field colors are never reapplied at all.
 
   Replacing those blocks is part of the fix, not a drive-by: each one
   would otherwise need the same extra line added.
+
+  **Two gaps fixed along the way:** `MessagesView.ApplyPalette` and
+  `AWSProfilesPicker.ApplyPalette` never restyled their input
+  (` / search:` and ` / filter:`) at all, so after a live switch those
+  kept the old theme entirely. Both now call `StyleFilterInput`.
 - **`StyleDropDown(dd, p)`**: also set the label style (`Label` on
   `Background`) and field colors (`SelectionText` on `SelectionBg`), on
   top of the list styles it sets today. The Datadog view's `ApplyPalette`
@@ -164,3 +179,27 @@ assuming.
   - Settings
 
   Then restart and confirm it looks identical.
+
+## Open question (found during task 3)
+
+`ApplyPalette` runs only on a live theme switch, never at startup
+(`App.New` builds the widgets but doesn't call it). So a few widgets that
+get their palette colors *only* from `ApplyPalette` look different right
+after startup than after a live switch. The difference runs the other
+way from this bug: here the startup look is the one that's off.
+
+- **`MovePicker` and `SnippetPicker`:** their lists get `StyleList`, and
+  so the palette's `SelectionBg`/`SelectionText` highlight, only on a
+  live switch. At startup the selected row uses tview's default instead:
+  `Background` text on `Text` background, i.e. inverted body colors.
+  Confirmed in the #29 live check's color capture after a restart.
+- **`MovePicker`'s search box:** gets `StyleFilterInput` only on a live
+  switch. At startup it has tview's default input colors (`Value` label,
+  `Text` on `Background` field), not the `SelectionBg` field the other
+  filter inputs use.
+
+Possible fix: have `App.New` call `ApplyPalette(cfg.Colors)` on every
+themable once, after construction. Then startup, live switch and restart
+all look the same, and the look is the one each `ApplyPalette` already
+defines. This changes how those widgets look at startup, so it's the
+user's call whether it belongs in this bugfix.
