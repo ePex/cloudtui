@@ -478,6 +478,14 @@ func New(cfg config.Config) *App {
 		a.themePicker,
 		a.awsProfiles,
 	}
+	// Apply every view/overlay's palette once now, not only on a live
+	// theme switch: some widgets (e.g. the pickers' selection highlight,
+	// the move picker's search box) get their palette colors only from
+	// ApplyPalette, so without this they'd show tview's defaults until the
+	// first switch — and startup would look different from a live switch.
+	for _, t := range a.themables {
+		t.ApplyPalette(a.cfg.Colors)
+	}
 
 	a.tv.SetRoot(a.rootPages, true).SetFocus(a.pages)
 	a.tv.SetInputCapture(a.onGlobalKey)

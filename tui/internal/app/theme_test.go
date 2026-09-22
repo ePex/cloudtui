@@ -2,12 +2,15 @@ package app
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/snippet"
 )
 
 func mustTheme(t *testing.T, name string) config.Palette {
@@ -186,4 +189,93 @@ func TestSwitchThemePersistsConfig(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("config.yaml not written after switchTheme: %v", err)
 	}
+}
+
+// renderedRows draws prim into a width×height simulation screen and
+// returns each row's text plus each cell's colors.
+func renderedRows(t *testing.T, prim tview.Primitive, width, height int) (text []string, fg, bg [][]tcell.Color) {
+	t.Helper()
+	prim.SetRect(0, 0, width, height)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, height)
+	prim.Draw(screen)
+	screen.Show()
+
+	cells, w, h := screen.GetContents()
+	text = make([]string, h)
+	fg = make([][]tcell.Color, h)
+	bg = make([][]tcell.Color, h)
+	for y := 0; y < h; y++ {
+		var b strings.Builder
+		fg[y] = make([]tcell.Color, w)
+		bg[y] = make([]tcell.Color, w)
+		for x := 0; x < w; x++ {
+			c := cells[y*w+x]
+			r := ' '
+			if len(c.Runes) > 0 {
+				r = c.Runes[0]
+			}
+			b.WriteRune(r)
+			fg[y][x], bg[y][x], _ = c.Style.Decompose()
+		}
+		text[y] = b.String()
+	}
+	return text, fg, bg
+}
+
+// TestNewAppliesPalettesAtStartup checks that widgets which get their
+// palette colors only from ApplyPalette already have them right after New
+// — not just after a live theme switch. Before this was fixed, the
+// pickers' selected row used tview's default (Background text on Text,
+// i.e. inverted body colors) and the move picker's search field had no
+// SelectionBg until the first switch.
+func TestNewAppliesPalettesAtStartup(t *testing.T) {
+	home := t.TempDir()
+	setHomeDir(t, home)
+	snippets := filepath.Join(home, ".cloudtui", "snippets")
+	if err := os.MkdirAll(snippets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snippets, "ping.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Default()
+	cfg.Colors = mustTheme(t, "cyberpunk")
+	a := New(cfg)
+	t.Cleanup(func() { applyTheme(config.Default().Colors) })
+	selText, selBg := tcell.GetColor(cfg.Colors.SelectionText), tcell.GetColor(cfg.Colors.SelectionBg)
+
+	t.Run("snippet picker selected row", func(t *testing.T) {
+		a.snippetPicker.Show(func(snippet.Snippet) {}, func() {})
+		text, fg, bg := renderedRows(t, a.snippetPicker.Primitive(), 40, 5)
+		for y, row := range text {
+			if x := strings.Index(row, "ping.txt"); x >= 0 {
+				x = len([]rune(row[:x]))
+				if fg[y][x] != selText || bg[y][x] != selBg {
+					t.Errorf("selected row drawn %v on %v, want %s on %s", fg[y][x], bg[y][x], cfg.Colors.SelectionText, cfg.Colors.SelectionBg)
+				}
+				return
+			}
+		}
+		t.Fatalf("ping.txt not drawn in the snippet picker: %q", text)
+	})
+
+	t.Run("move picker search field", func(t *testing.T) {
+		text, _, bg := renderedRows(t, a.movePicker.Primitive(), 40, 10)
+		for y, row := range text {
+			if x := strings.Index(row, "/ filter: "); x >= 0 {
+				x = len([]rune(row[:x+len("/ filter: ")])) // first cell of the (empty) field
+				if bg[y][x] != selBg {
+					t.Errorf("search field background = %v, want %s", bg[y][x], cfg.Colors.SelectionBg)
+				}
+				return
+			}
+		}
+		t.Fatalf("search box not drawn in the move picker: %q", text)
+	})
 }

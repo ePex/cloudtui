@@ -32,7 +32,7 @@ Each task is implemented and approved on its own, then pushed.
    - Drop the duplicated construction-time lines in `datadoglogs.go`.
    - Restart-comparison tests for both helpers, each with the dropdown
      unfocused, focused and open.
-5. [ ] **Apply every palette at startup too.**
+5. [x] **Apply every palette at startup too.**
    - `App.New` calls `ApplyPalette(cfg.Colors)` on every themable once,
      after all widgets are built. Startup then shows the same colors as a
      live switch and a restart.
