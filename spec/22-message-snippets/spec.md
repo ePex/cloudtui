@@ -1,8 +1,9 @@
 # Message snippets
 
 _Condensed from spec-wip/fe-message-snippets,
-spec-wip/fe-snippet-library, and spec-wip/fe-snippet-import. See those
-PRs for the incremental history and the reasoning behind each decision._
+spec-wip/fe-snippet-library, spec-wip/fe-snippet-import, and
+spec-wip/bugfix-snippet-xml-cdata. See those PRs for the incremental
+history and the reasoning behind each decision._
 
 ## Purpose
 
@@ -86,9 +87,17 @@ jmsType: OrderCreated
     - use `\n` for the new line breaks, so a CRLF body ends up with mixed
       line endings (its trailing `\r\n` is kept)
     - re-serialize formatted XML, not just indent it: empty elements
-      become `<b></b>`, attribute values get double quotes, and CDATA
-      sections are written as escaped text (`<![CDATA[x < y]]>` →
-      `x &lt; y`). All of these mean the same to an XML parser.
+      become `<b></b>` and attribute values get double quotes, which
+      mean the same to an XML parser.
+
+    **CDATA sections are kept exactly as written:** the markers and
+    their content, byte for byte, including whitespace and line breaks.
+    An element holding only a CDATA section stays on one line. CDATA
+    counts as text, so an element mixing a CDATA section with child
+    elements is mixed content and the document is left unchanged. (Go's
+    `encoding/xml` reports CDATA as plain text, so the formatter tells
+    them apart by each token's source span via `Decoder.InputOffset`; if
+    a span ever looked wrong, the body would be left unformatted.)
 - Body content can be anything textual: plaintext, JSON, XML, etc.
 
 ### Save a snippet from the message detail view
