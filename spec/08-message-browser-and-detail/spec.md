@@ -206,6 +206,28 @@ Backend-specific filter behavior:
 - `tui/internal/view/message_detail.go` — `MessageDetailView`, registered
   as page `"message-detail"` (not in `a.views`). Same package-split move
   as above.
+- **Jolokia message IDs.** `browseMessages()` returns each message's
+  `messageId` as a JMX `CompositeData` object, not a string.
+  `extractMessageID` (`internal/queue/jolokia/messages.go`) rebuilds the
+  canonical JMS ID:
+  `producerId.connectionId.value + ":" + producerId.sessionId + ":" +
+  producerId.value + ":" + producerSequenceId`.
+  - `connectionId.value` already contains the `ID:` prefix.
+  - `connectionId` may come as a plain string or as a nested
+    `{"value": "..."}` map; both are handled.
+  - `brokerSequenceId` is an internal broker field and **not** part of
+    the JMS ID.
+  - `removeMessage`/`moveMessageTo` need exactly this format to find a
+    message.
+- **The `browse()` fallback** (spec/09) returns one of two shapes:
+  - ActiveMQ 5.18+: full message objects with capitalized fields
+    (`JMSMessageID`, `Text`, `JMSType`, `JMSTimestamp` as an ISO-8601
+    string, typed property maps such as `StringProperties`)
+  - older brokers: plain body strings
+
+  The value is decoded as `[]json.RawMessage`, and `parseBrowseItem`
+  maps either shape onto `queue.Message`, renaming fields to the
+  `RawFields` keys the detail view expects.
 - `internal/queue/jolokia/` — `BrowseMessages` implementation and
   `filter.go`'s `filterMessages` helper. `previewMaxLen` (2000) is the
   jolokia-package-local constant capping `Preview`'s length — the full
