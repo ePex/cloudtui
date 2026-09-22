@@ -210,6 +210,10 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 			de := NewDatadogEditor(host)
 			return de, de.Show
 		}},
+		{"AMQManagerSettingsEditor", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			e := NewAMQManagerSettingsEditor(host)
+			return e, e.Show
+		}},
 		{"ThemePicker", true, func(t *testing.T, host *testHost) (overlay, func()) {
 			tp := NewThemePicker(host)
 			return tp, tp.Show

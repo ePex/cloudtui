@@ -77,6 +77,14 @@ activeConnection: default
 #   site: datadoghq.eu
 #   accessToken: ""   # set here or via DD_ACCESS_TOKEN
 
+# amqManager: global options for the ActiveMQ queue list, editable via
+# Settings -> AMQ Manager. Independent of the active connection.
+#   showOnlyQueuesWithPendingMessages — hide queues whose pending count is
+#                 known to be zero (queues with an unknown count stay
+#                 visible). Default: false.
+# amqManager:
+#   showOnlyQueuesWithPendingMessages: true
+
 # ─── Switching themes ─────────────────────────────────────────────────────────
 # Change the theme: field above to any available theme name.
 # Only the theme name is saved — the full palette is never written to this file.

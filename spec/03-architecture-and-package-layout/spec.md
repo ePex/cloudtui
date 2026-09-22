@@ -10,7 +10,7 @@ The end state is a k9s-inspired split into four layers, each a real Go package b
 
 - **`internal/ui`** — shared contracts and generic, domain-free chrome. No knowledge of queues, AWS, or Datadog.
 - **`internal/dialog`** — modal overlays (confirm, pickers, editors). Depend on `ui.Host`, never on a concrete `*App`.
-- **`internal/view`** — resource screens (queues, messages, SSM params, logs, ...). Depend on `ui.Host` or one of `ui`'s narrower per-resource host interfaces (`SSMParamsHost`, `SecretsHost`, `CloudWatchLogsHost`, `DatadogLogsHost`, `CodePipelineHost`, `MessagesHost` — each embeds `ui.Host`), never on a concrete `*App`.
+- **`internal/view`** — resource screens (queues, messages, SSM params, logs, ...). Depend on `ui.Host` or one of `ui`'s narrower per-resource host interfaces (`SSMParamsHost`, `SecretsHost`, `CloudWatchLogsHost`, `DatadogLogsHost`, `CodePipelineHost`, `MessagesHost`, `MessageDetailHost` — each embeds `ui.Host`), never on a concrete `*App`.
 - **`internal/app`** — the composition root. Imports and wires up `ui`, `dialog`, and `view`; implements `Host` and every per-resource host interface on `*App`; owns global hotkeys, page routing, and the handful of things that don't belong to any one dialog/view (cross-view navigation trampolines, the theme switch, the CodePipeline background watcher's App-facing methods).
 
 The reason for interface-mediated access rather than a shared `*App` pointer: `internal/dialog` and `internal/view` must not import `internal/app` (that would be circular, since `internal/app` imports both of them to construct and wire them up). Each overlay/view instead takes a `host ui.Host` (or one of the narrower per-resource host interfaces) at construction time — `*App` satisfies the interface, but the dependency is declared as the interface, so the dialog/view packages compile independently of `internal/app` entirely.
@@ -32,7 +32,7 @@ Current file contents (production `.go` files; each also has a colocated `_test.
 
 **`internal/ui/views`** — the home dashboard's own rendering (`home.go`, `SectionInfo`/`ViewInfo` types, `NewHome`); a separate sub-package from `internal/view`, not to be confused with it.
 
-**`internal/dialog`** — the ~15 modal overlay types, one file each: `confirm.go` (`ConfirmDialog`), `movepicker.go` (`MovePicker`), `sendmessage.go` (`SendMessageOverlay`), `snippetpicker.go` (`SnippetPicker`), `snippetbrowser.go` (`SnippetBrowser`: the snippet folder list, shared by the picker and the Snippets view), `snippetsave.go` (`SnippetSaveDialog`), `snippeteditor.go` (`SnippetEditor`), `textprompt.go` (`TextPrompt`: a reusable one-field prompt), `connections.go` (`ConnManager` + `ConnEditor` — two types in one file, since they're each other's sibling), `messagefilter.go` (`MessageFilter`), `timerangemodal.go` (`TimeRangeModal`), `datadogsettings.go` (`DatadogEditor`), `themepicker.go` (`ThemePicker`), `awsprofiles.go` (`AWSProfilesPicker`). Plus `hosttest_test.go`/`dialogtest_test.go` — a shared `ui.Host` test double used across the dialog package's tests.
+**`internal/dialog`** — the ~16 modal overlay types, one file each: `confirm.go` (`ConfirmDialog`), `movepicker.go` (`MovePicker`), `sendmessage.go` (`SendMessageOverlay`), `snippetpicker.go` (`SnippetPicker`), `snippetbrowser.go` (`SnippetBrowser`: the snippet folder list, shared by the picker and the Snippets view), `snippetsave.go` (`SnippetSaveDialog`), `snippeteditor.go` (`SnippetEditor`), `textprompt.go` (`TextPrompt`: a reusable one-field prompt), `connections.go` (`ConnManager` + `ConnEditor` — two types in one file, since they're each other's sibling), `messagefilter.go` (`MessageFilter`), `timerangemodal.go` (`TimeRangeModal`), `datadogsettings.go` (`DatadogEditor`), `amqmanagersettings.go` (`AMQManagerSettingsEditor`: Settings → AMQ Manager, spec/07), `themepicker.go` (`ThemePicker`), `awsprofiles.go` (`AWSProfilesPicker`). Plus `hosttest_test.go`/`dialogtest_test.go` — a shared `ui.Host` test double used across the dialog package's tests.
 
 **`internal/view`** — the resource views and their detail-view companions, one file each: `queues.go`, `messages.go`, `message_detail.go`, `ssmparams.go`, `paramdetail.go`, `secrets.go`, `secretdetail.go`, `logs.go` (CloudWatch log-group list), `logsearch.go` (CloudWatch log search), `logdetail.go`, `datadoglogs.go`, `datadoglogdetail.go`, `codepipelinelist.go`, `codepipelinedetail.go`, `settings.go`, `snippets.go` (`SnippetsView`, the snippet library, which takes the confirm dialog, `SnippetEditor` and `TextPrompt`), `log.go` (the app's own debug-log viewer — distinct from `logs.go`), `pipelinewatcher.go` (`PipelineWatcher` — the CodePipeline background poller, headless, no `ui.View`), `wraptext.go` (`dynamicWrapWidth` — shared free-text-column wrapping for tables, sized from the table's actual rendered width).
 
@@ -42,7 +42,7 @@ Current file contents (production `.go` files; each also has a colocated `_test.
 
 ## The Host interface (`internal/ui/host.go`)
 
-The contract the 10 dialogs depend on:
+The contract every dialog depends on:
 
 ```go
 type Host interface {
@@ -64,6 +64,7 @@ type Host interface {
     SaveConnection(conn config.Connection, origName string, isNew bool)
     DeleteConnection(name string) (wasActive bool)
     SaveDatadogConfig(cfg config.DatadogConfig)
+    SaveAMQManagerSettings(cfg config.AMQManagerSettings)
     SetActiveAWSProfile(name string)
     ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error)
 
@@ -145,6 +146,11 @@ type MessagesHost interface {
     Host
     SwitchTo(name string)
 }
+
+type MessageDetailHost interface {
+    Host
+    CopyToClipboard(data string) // `c` copies the message (spec/08)
+}
 ```
 
 Which view(s) take which interface:
@@ -155,7 +161,8 @@ Which view(s) take which interface:
 - `DatadogLogsHost` — `datadoglogs.go`, `datadoglogdetail.go` (no `AWSAuthHost` — Datadog's own API-key auth is unrelated to AWS SSO re-auth)
 - `CodePipelineHost` — `codepipelinelist.go`, `codepipelinedetail.go`, and `view.PipelineWatcher` (which technically only calls a subset — `Config`/`QueueUpdateDraw` via `Host`, `GetPipelineState`, `AWSAuthTypeFor`, `AWSSSOLogin`, not the 3 watch-toggle methods it owns and implements itself — but reuses the same interface as its sibling views rather than needing a near-duplicate one for a single caller)
 - `MessagesHost` — `messages.go`
-- Plain `ui.Host` — `queues.go`, `message_detail.go`, `settings.go` call no resource-specific method at all (`log.go` takes no host at all)
+- `MessageDetailHost` — `message_detail.go`
+- Plain `ui.Host` — `queues.go`, `settings.go`, `snippets.go` call no resource-specific method at all (`log.go` takes no host at all)
 
 `internal/view/awsload.go`'s shared `runAWSLoad[T any]` helper (the
 load/reauth/staleness-guard shape behind `SSMParamsHost`/
@@ -201,9 +208,9 @@ type-asserted or dispatched through them via `ViewHost`, so removing
 them from `ui`'s interfaces was a pure type-level cleanup with zero
 other code to touch.
 
-`*App` proves it satisfies every one of the 7 interfaces via 6
+`*App` proves it satisfies every one of the 8 interfaces via 7
 compile-time assertions in `internal/app/viewhost.go`
-(`SSMParamsHost` through `MessagesHost` — `Host` has its own assertion
+(`SSMParamsHost` through `MessageDetailHost` — `Host` has its own assertion
 elsewhere), each "load-bearing proof that the interfaces are
 complete," same reasoning the single wide assertion this replaced
 already relied on.
@@ -237,7 +244,7 @@ Construction order matters and follows a strict dependency chain:
 2. **Shell chrome** — `tview.Application`, `Pages`, the home dashboard (`views.NewHome`), the `:` command prompt, the top bar (`ui.NewTopBar`), the status bar.
 3. **Injectable data-fetcher fields** on `App` (`listAWSProfiles`, `listParameters`, `searchDatadogLogs`, ...) are set to the real package-level functions (`awsprofile.List`, `awsssm.List`, `datadoglogs.Search`, ...) — these exist so tests can substitute fakes without a network/AWS SDK dependency, and so the per-resource host interfaces' data-fetcher methods (above) have something concrete to forward to.
 4. **`secretResolver` and the initial `backend`** are built (`secretbackend.New(...)`).
-5. **The dialogs that views construct directly are built first** (`confirm`, `movePicker`, then the snippet store with `snippetPicker`, `snippetSave`, `textPrompt` and `snippetEditor`, then `sendMessage`, which needs `snippetPicker`, then `messageFilter`, `jmsTypePrompt`, `timeRangeModal`, `connManager`, `datadogEditor`, `themePicker`, `awsProfiles`) — they must exist before the views that take them as constructor parameters. `connEditor` is the one exception: it's constructed *after* the dialog-coupled views below, right where it's wired into the overlay stack, because it needs `connManager` (already built) but nothing constructed after it depends on `connEditor` existing early.
+5. **The dialogs that views construct directly are built first** (`confirm`, `movePicker`, then the snippet store with `snippetPicker`, `snippetSave`, `textPrompt` and `snippetEditor`, then `sendMessage`, which needs `snippetPicker`, then `messageFilter`, `jmsTypePrompt`, `timeRangeModal`, `connManager`, `datadogEditor`, `amqManagerEditor`, `themePicker`, `awsProfiles`) — they must exist before the views that take them as constructor parameters. `connEditor` is the one exception: it's constructed *after* the dialog-coupled views below, right where it's wired into the overlay stack, because it needs `connManager` (already built) but nothing constructed after it depends on `connEditor` existing early.
 6. **Views are constructed**, each passed `a` (satisfying `ui.Host` and whichever per-resource host interface it needs), its needed dialogs, and its `OpenX` navigation callback (or an inline closure, for the handful of `back`/`onSaved`-style callbacks that aren't `*App` methods at all, e.g. message-detail's "return to messages list" closure).
 7. **`a.views` (the `[]ui.View` slice)** is populated with only the views that have a Home entry / are reachable via `SwitchTo` by name — `home`, `settings`, `log`, `queues`, `ssm-parameters`, `secrets-manager`, `cloudwatch-logs`, `datadog-logs`, `codepipeline`. Each is added to `a.pages` (the main content `Pages`). Detail views and other "opened, not switched-to" screens (`messages`, `message-detail`, `secret-detail`, `log-search`, `log-event-detail`, `datadog-log-detail`, `codepipeline-detail`, `ssm-param-detail`) are added to `a.pages` directly but not into `a.views`, since they're reached only via an `OpenX` trampoline, never `:command` or Home.
 8. **The root layout** (`tb.Root` + `a.pages` + `a.statusBar` in a `FlexRow`) is wrapped in `a.rootPages`, a second, outer `Pages` that layers every modal overlay (centered via `ui.Centered(prim, width, height)`) on top of `"main"`. Overlay z-order is AddPage order — `"confirm"` is added last so it always draws above any other still-visible overlay underneath it (e.g. a delete-confirmation shown from within `conn-manager`).
@@ -247,7 +254,7 @@ Construction order matters and follows a strict dependency chain:
 ## Notable design decisions worth preserving
 
 - **Interface, not shared struct pointer, breaks the import cycle.** `internal/dialog`/`internal/view` importing `internal/app` for a concrete `*App` would cycle back against `internal/app` importing them to construct/wire everything. `Host` and the per-resource host interfaces are declared in the neutral `internal/ui` package, which neither `dialog` nor `view` needs to avoid importing (they already do, for the interfaces themselves) and which `app` already imports for chrome.
-- **Task-shaped Host methods over raw field mutation.** `Host.SaveConnection`/`DeleteConnection`/`SetActiveAWSProfile`/`SaveDatadogConfig` exist so dialogs describe *what* they want done (in domain terms) rather than reaching into `a.cfg.Connections` themselves — this is what actually makes a dialog's `save()` method portable off `*App`, not just the interface boundary by itself.
+- **Task-shaped Host methods over raw field mutation.** `Host.SaveConnection`/`DeleteConnection`/`SetActiveAWSProfile`/`SaveDatadogConfig`/`SaveAMQManagerSettings` exist so dialogs describe *what* they want done (in domain terms) rather than reaching into `a.cfg.Connections` themselves — this is what actually makes a dialog's `save()` method portable off `*App`, not just the interface boundary by itself.
 - **None of the per-resource host interfaces expose dialog access.** Rather than widen an interface for the 5 views that need one, those views take the specific `*dialog.X` pointer(s) directly as constructor parameters — `internal/view` can safely import `internal/dialog` (no cycle risk, since dialogs never import views), so there's no reason to route that access through an interface at all.
 - **Cross-view navigation is centralized, not peer-to-peer.** No view calls another view's methods directly; `viewwiring.go`'s `OpenX` trampolines are the only thing that reaches into a target view's state, because App (not either view) owns page routing and focus.
 - **Some dialogs keep a direct sibling reference instead of going through `Host`.** The inter-dialog dependencies in the whole package are:

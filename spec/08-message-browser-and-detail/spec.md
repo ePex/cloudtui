@@ -79,7 +79,7 @@ batch; the status bar reports how many of the batch actually succeeded.
 
 1. **Enter** on a message row opens a scrollable `tview.TextView` with three
    sections:
-   - **Summary** — Queue, ID, Type, Priority, Timestamp (label in accent
+   - **Summary** — Queue, ID, Type, Timestamp (label in accent
      color, value in text color).
    - **Headers** — all captured JMS fields as sorted `Key: value` lines.
    - **Body** — full message text, pretty-printed if valid JSON, or
