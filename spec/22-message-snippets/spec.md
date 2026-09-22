@@ -81,7 +81,14 @@ jmsType: OrderCreated
     child elements; mixed-content XML and XML using `xml:space="preserve"`
     are left unchanged to avoid changing text whitespace. JSON/XML that
     can't be parsed and all other text are stored unchanged.
-  - Formatting does not add or remove a trailing newline.
+  - Formatting does not add or remove a trailing newline. It does:
+    - remove whitespace *before* a JSON body (a `json.Indent` behavior)
+    - use `\n` for the new line breaks, so a CRLF body ends up with mixed
+      line endings (its trailing `\r\n` is kept)
+    - re-serialize formatted XML, not just indent it: empty elements
+      become `<b></b>`, attribute values get double quotes, and CDATA
+      sections are written as escaped text (`<![CDATA[x < y]]>` →
+      `x &lt; y`). All of these mean the same to an XML parser.
 - Body content can be anything textual: plaintext, JSON, XML, etc.
 
 ### Save a snippet from the message detail view
@@ -333,6 +340,7 @@ func (s *Store) DeleteFolder(dir string) error    // recursive; refuses the root
 func (s *Store) Count(dir string) (snippets, folders int, err error) // nested, not inside linked folders
 func (s *Store) Stat(name string) (Entry, error)
 func ValidateName(name string) (string, error)     // "/"-separated user input -> OS-relative path
+func FormatBody(body string) string                // JSON/XML pretty-printing applied by Save (see File format)
 
 const MaxImportSize = 1 << 20                     // 1 MiB
 func CleanImportPath(input string) (string, error) // pasted path -> clean absolute path (quotes, "\ ", ~)

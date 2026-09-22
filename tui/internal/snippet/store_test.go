@@ -580,8 +580,10 @@ func TestNewOperationsOnUnavailableStore(t *testing.T) {
 // TestExampleSnippets loads every file in the repo's examples/snippets/
 // folder through a Store, the way the app would after a user copies the
 // folder into ~/.cloudtui/snippets/, so a broken example fails CI. It
-// also checks a few examples' contents and that saving each one without
-// edits wouldn't change it.
+// also checks a few examples' contents, and that each is already in the
+// form the library saves (front matter stable, body as FormatBody leaves
+// it) — otherwise opening a copied example in the editor would rewrite
+// the user's file.
 func TestExampleSnippets(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "examples", "snippets")
 	if _, err := os.Stat(root); err != nil {
@@ -609,6 +611,9 @@ func TestExampleSnippets(t *testing.T) {
 			}
 			if again, err := Parse(Format(sn)); err != nil || again != sn {
 				t.Errorf("example %s changes when saved unedited: %#v, %v", filepath.ToSlash(rel), again, err)
+			}
+			if formatted := FormatBody(sn.Body); formatted != sn.Body {
+				t.Errorf("example %s isn't formatted the way the library saves it; its body should be:\n%s", filepath.ToSlash(rel), formatted)
 			}
 			loaded[filepath.ToSlash(rel)] = sn
 		}
