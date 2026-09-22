@@ -24,8 +24,9 @@ this module.
   (`task test:queue:add`/`remove`, `task dev:proxy:start`/`stop`).
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
 - `internal/dialog/` — modal overlay types (confirm, connection
-  manager/editor, message filter, time range, Datadog/theme/AWS
-  profile pickers) implementing internal/ui's Host contract.
+  manager/editor, message filter, time range, send message, snippet
+  picker/save, Datadog/theme/AWS profile pickers) implementing
+  internal/ui's Host contract.
 - `internal/ui/` — the `View`/`Host`/`ViewHost` interfaces shared across
   resource views.
 - `internal/ui/views/` — the home dashboard's table rendering (`home.go`);
@@ -41,6 +42,10 @@ this module.
   use, caching and transparently re-resolving on a stale/rotated
   secret (see `spec/56-fe-amq-connection-aws-secret-password`).
 - `internal/seed/` — sample JSON message generation, used by `cmd/seedqueue`.
+- `internal/snippet/` — the message snippet library: the file format
+  (optional `jmsType` front matter plus the raw body) and the
+  `~/.cloudtui/snippets/` folder store (see `spec/22-message-snippets`).
+  No UI dependency.
 - `internal/devtool/` — JMX queue admin and mq-proxy process management,
   used by `cmd/devtool`.
 - `internal/awsprofile/` — read-only discovery of AWS CLI profiles from

@@ -122,7 +122,10 @@ what they act on:
 
 - `c` in either the queues view or the messages view opens a send overlay:
   a bordered `tview.Form` with fields for JMS Type, Correlation ID, Group
-  ID, Headers, and Body, plus Submit/Cancel buttons.
+  ID, Headers, and Body, plus Submit/Cancel/**Load snippet…** buttons.
+- **Load snippet…** opens the snippet picker. Picking a snippet fills in
+  JMS Type and Body only, asking first if either already holds text; see
+  spec/22.
 - **JMS Type** and **Body** are mandatory; submitting with either blank
   shows a status-bar error and keeps the overlay open (mirroring
   `MessageFilter.apply`'s pattern) rather than sending.
