@@ -22,7 +22,7 @@ make sure the mutated code still compiles.
      editor opening (focused on JMS Type) when the snippet has none.
      `i` is in the shortcut hint.
    - View tests with real key events, as listed in `plan.md`.
-4. [ ] **README.**
+4. [x] **README.**
    - Add `i` to the Snippets keys table and a short "Importing a file"
      note to the Message snippets section.
 5. [ ] **Live verification.**
