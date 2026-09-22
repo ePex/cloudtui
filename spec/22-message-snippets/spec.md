@@ -1,8 +1,8 @@
 # Message snippets
 
-_Condensed from spec-wip/fe-message-snippets and
-spec-wip/fe-snippet-library. See those PRs for the incremental history
-and the reasoning behind each decision._
+_Condensed from spec-wip/fe-message-snippets,
+spec-wip/fe-snippet-library, and spec-wip/fe-snippet-import. See those
+PRs for the incremental history and the reasoning behind each decision._
 
 ## Purpose
 
@@ -10,7 +10,8 @@ A library of reusable message snippets, stored as plain files on disk.
 You can save a message you are viewing as a snippet, load a snippet into
 the send-message dialog (spec/09) when composing a message, and manage
 the whole library (create, edit, rename, move, delete snippets and
-folders) in the **Snippets** view. Test or requeue messages you send
+folders, and import files from anywhere on disk) in the **Snippets**
+view. Test or requeue messages you send
 often are then one keystroke away, instead of being retyped or pasted
 each time.
 
@@ -183,6 +184,7 @@ jmsType: OrderCreated
   | Enter | open the selected folder, or edit the selected snippet |
   | `n` | new snippet in the current folder |
   | `N` | new folder in the current folder |
+  | `i` | import a file from anywhere on disk (see Import below) |
   | `e` | edit the selected snippet |
   | `R` | rename or move the selected snippet or folder |
   | `d` | delete the selected snippet or folder |
@@ -239,6 +241,46 @@ jmsType: OrderCreated
 - Changes are immediately visible in the send dialog's snippet picker,
   since both read the same folder.
 
+### Import
+
+`i` in the Snippets view copies a message file from anywhere on disk
+into the current folder. It works on any row, including an empty
+library and `..`. The most common case is a plain JSON file.
+
+1. **Import file** asks for the file's **Path**.
+   - It must be absolute: a leading `/`, or on Windows a drive path
+     (`C:\…`) or UNC path (`\\server\share`). `~` and `~/…` (also `~\…` on
+     Windows) expand to the home folder; `~otheruser` doesn't.
+   - Pasted paths are cleaned: surrounding spaces and one pair of
+     surrounding quotes are removed. On macOS/Linux `\ ` becomes a
+     space, as terminals paste a dragged-in file; on Windows backslashes
+     stay separators.
+   - The file must be a regular file (a symlink to one is followed), at
+     most 1 MiB, text (valid UTF-8, no NUL bytes), and have valid front
+     matter if it starts with `---`.
+   - A problem shows an error naming the file (e.g. `is not an absolute
+     path: enter an absolute path`, `is not a file`, `is not a text
+     file`, `is larger than 1 MiB`, or the parse error), and the prompt
+     stays open.
+2. **Import as** asks for the **Name**, prefilled with the file's name
+   and relative to the current folder, with the usual naming rules
+   (checked as typed, before joining).
+   - Import **never overwrites**: an existing name shows
+     `"<name>": already exists` and the prompt stays open.
+   - Esc at either step cancels, and nothing is written.
+3. **The file is saved through the store like any snippet:**
+   - front matter is recognized, so a snippet file keeps its JMS Type,
+     other keys and comments
+   - a JSON/XML body is formatted by the usual rule
+   - the source file is only read
+
+   The view lands on the new snippet, and the status bar says
+   `Imported <file> as <name>`.
+4. **No JMS Type yet (e.g. plain JSON):** the send dialog needs one, so
+   the snippet editor opens on the imported snippet right away, with the
+   cursor in JMS Type. Type it and press Enter; Esc keeps the snippet as
+   imported. A file that already has a JMS Type just lands in the list.
+
 ### Examples
 
 - The repo ships generic example snippets in `examples/snippets/`:
@@ -291,6 +333,10 @@ func (s *Store) DeleteFolder(dir string) error    // recursive; refuses the root
 func (s *Store) Count(dir string) (snippets, folders int, err error) // nested, not inside linked folders
 func (s *Store) Stat(name string) (Entry, error)
 func ValidateName(name string) (string, error)     // "/"-separated user input -> OS-relative path
+
+const MaxImportSize = 1 << 20                     // 1 MiB
+func CleanImportPath(input string) (string, error) // pasted path -> clean absolute path (quotes, "\ ", ~)
+func ReadImportFile(path string) (Snippet, error)  // regular file, <= 1 MiB, UTF-8 without NUL, parses; read-only
 
 // internal/queue: set by every backend where it infers a type
 type Message struct {
@@ -358,6 +404,21 @@ type Message struct {
   - `SnippetsView` (`view/snippets.go`) is in `a.views` (hence
     `:snippets`) and `themables`. It implements `Activate` to re-read on
     open.
+- **Import:**
+  - Reading the outside file lives in `snippet/import.go`, with no UI
+    dependency. `CleanImportPath` delegates to a variant that takes the
+    OS name and a home lookup, so both the Unix and the Windows path
+    rules are tested on any OS; the public function then applies the
+    running OS's `filepath.Clean`.
+  - The 1 MiB limit is checked from `Stat` and again on the bytes read,
+    in case the file grew in between.
+  - The view chains its two steps on the one `TextPrompt`. Step 1's
+    `onSubmit` keeps the checked file as the pending import, and its
+    `onClose` (which runs after the prompt has hidden itself) opens step
+    2.
+  - After a save, step 2's `onClose` reloads the snippet (so the editor
+    shows the formatted body) and calls `SnippetEditor.ShowEdit` +
+    `FocusJMSType` when it has no JMS Type.
 - **`ConfirmDialog` shows 3 question rows** (about 150 characters at its
   52×8 size), so a delete question naming a deep folder plus its counts
   isn't cut off.
@@ -384,7 +445,9 @@ type Message struct {
 
 ## Out of scope (deliberate)
 
-- Importing a file from an absolute path (planned: `fe-snippet-import`).
+- Importing several files or a whole folder at once, importing from a
+  URL, tab-completion of paths in the import prompt, overwriting on
+  import, and a one-off "send from file" that bypasses the library.
 - Sending a snippet directly from the library view (**Load snippet…** in
   the send dialog covers that).
 - Duplicating or copying snippets, undo, and search or filter in the

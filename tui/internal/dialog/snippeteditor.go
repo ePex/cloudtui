@@ -108,6 +108,14 @@ func (se *SnippetEditor) open(dir, origPath string, sn snippet.Snippet, name str
 	se.refocus()
 }
 
+// FocusJMSType puts the cursor in the open editor's JMS Type field —
+// e.g. right after importing a snippet that has no JMS Type yet, since
+// the send dialog needs one.
+func (se *SnippetEditor) FocusJMSType() {
+	se.form.SetFocus(1)
+	se.refocus()
+}
+
 // values returns the fields' current Name, JMS Type, and Body.
 func (se *SnippetEditor) values() [3]string {
 	return [3]string{se.nameItem.GetText(), se.jmsTypeItem.GetText(), se.bodyItem.GetText()}

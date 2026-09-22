@@ -285,3 +285,40 @@ func TestSnippetEditorDiscardChanges(t *testing.T) {
 		}
 	})
 }
+
+// TestSnippetEditorFocusJMSType covers opening the editor on a freshly
+// imported snippet with the cursor in JMS Type: what's typed lands there
+// (not in Name), and Enter saves it.
+func TestSnippetEditorFocusJMSType(t *testing.T) {
+	f := newEditorFixture(t)
+	writeSnippetFile(t, f.root, "order.json", `{"orderId":42}`)
+	f.showEdit(t, "order.json")
+
+	f.se.FocusJMSType()
+	if item, button := f.se.form.GetFocusedItemIndex(); item != 1 || button != -1 || f.host.focused != f.se.form {
+		t.Fatalf("focus = item %d, button %d, host %T; want the form on JMS Type (item 1)", item, button, f.host.focused)
+	}
+
+	// Type through the form's input handler, as tview.Application would.
+	var setFocus func(tview.Primitive)
+	setFocus = func(p tview.Primitive) {
+		f.host.focused = p
+		p.Focus(setFocus)
+	}
+	f.se.form.Focus(setFocus)
+	for _, r := range "OrderCreated" {
+		f.se.form.InputHandler()(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone), setFocus)
+	}
+	f.se.form.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
+
+	sn, err := f.store.Load("order.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sn.JMSType != "OrderCreated" {
+		t.Errorf("saved JMS Type = %q, want OrderCreated", sn.JMSType)
+	}
+	if f.exists("order.jsonOrderCreated") || len(f.saved) != 1 || f.saved[0] != "order.json" {
+		t.Errorf("saved = %q; the typed text must go into JMS Type, not Name", f.saved)
+	}
+}

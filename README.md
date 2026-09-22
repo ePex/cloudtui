@@ -115,11 +115,22 @@ jmsType: OrderCreated
   |---|---|
   | Enter | open a folder, or edit a snippet |
   | `n` / `N` | new snippet / new folder |
+  | `i` | import a file from anywhere on disk |
   | `e` | edit |
   | `R` | rename or move (edit the path) |
   | `d` | delete (asks first) |
   | `r` | re-read the folder from disk |
   | Backspace | up a folder |
+
+**Importing a file:** in the Snippets view, press `i` and enter the
+file's absolute path. You can paste it, or drag the file into the
+terminal; quotes, `\ ` escapes and `~` are handled. Then confirm or
+change the name it gets in the current folder. The file must be text
+and at most 1 MiB. It's saved like any snippet, so JSON/XML is
+formatted, and the original file is left untouched. Import never
+overwrites an existing snippet. A plain file (e.g. a JSON message) has
+no JMS Type yet, so the editor opens on that field right away. Type it
+and press Enter.
 
 **Examples:** [`examples/snippets/`](examples/snippets/) has a few
 generic ones (JSON, XML, plain text, one with extra header keys) to

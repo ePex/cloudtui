@@ -458,3 +458,247 @@ func TestSnippetsViewRefreshAndActivateReread(t *testing.T) {
 		t.Error("Activate didn't re-read the folder")
 	}
 }
+
+// ── Import ────────────────────────────────────────────────────────────────
+
+// importSource writes content to a file named name outside the library
+// and returns its absolute path.
+func importSource(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// pressIn focuses the overlay prim and sends k to it.
+func pressIn(prim tview.Primitive, k tcell.Key) {
+	focusTree(prim)
+	send(prim, key(k))
+}
+
+func (f *snippetsFixture) promptText(t *testing.T) string {
+	t.Helper()
+	return renderedScreenText(t, f.prompt.Primitive(), 64, 8)
+}
+
+func (f *snippetsFixture) load(t *testing.T, rel string) snippet.Snippet {
+	t.Helper()
+	sn, err := snippet.NewStore(f.root).Load(filepath.FromSlash(rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sn
+}
+
+// TestSnippetsViewImportPlainJSON is the common case: a plain JSON file
+// is imported (formatted, like any library snippet), the view lands on
+// it, and the editor opens on JMS Type so one can be added right away.
+func TestSnippetsViewImportPlainJSON(t *testing.T) {
+	f := newSnippetsFixture(t)
+	const raw = `{"orderId":42,"items":["a","b"]}`
+	src := importSource(t, "order.json", raw)
+	f.v.browser.SetDir("orders")
+
+	f.press('i')
+	if !f.prompt.Visible() || !strings.Contains(f.promptText(t), "Import file") {
+		t.Fatal("i didn't open the Import file prompt")
+	}
+	typeInto(f.prompt.Primitive(), src)
+
+	if !f.prompt.Visible() || !strings.Contains(f.promptText(t), "Import as") || !strings.Contains(f.promptText(t), "order.json") {
+		t.Fatalf("step 2 not shown with the file's name prefilled: %q", f.promptText(t))
+	}
+	pressIn(f.prompt.Primitive(), tcell.KeyEnter) // accept the prefilled name
+
+	sn := f.load(t, "orders/order.json")
+	if sn.JMSType != "" || sn.Body != snippet.FormatBody(raw) || sn.Body == raw {
+		t.Errorf("imported snippet = %#v, want no JMS Type and the formatted body", sn)
+	}
+	if got, _ := os.ReadFile(src); string(got) != raw {
+		t.Errorf("source file changed to %q", got)
+	}
+	if !strings.Contains(f.host.status, "Imported") || !strings.Contains(f.host.status, "orders/order.json") {
+		t.Errorf("status = %q", f.host.status)
+	}
+	if f.v.browser.Dir() != "orders" || f.selectedName() != "order.json" {
+		t.Errorf("view at %q on %q, want orders on order.json", f.v.browser.Dir(), f.selectedName())
+	}
+
+	if !f.editor.Visible() {
+		t.Fatal("editor didn't open for a snippet without a JMS Type")
+	}
+	typeInto(f.editor.Primitive(), "OrderCreated") // lands in JMS Type, Enter saves
+	if sn := f.load(t, "orders/order.json"); sn.JMSType != "OrderCreated" {
+		t.Errorf("JMS Type after the editor = %q, want OrderCreated", sn.JMSType)
+	}
+	if f.editor.Visible() || f.host.focused != f.v.browser.List() {
+		t.Errorf("editor visible %v, focus %T; want closed, the list", f.editor.Visible(), f.host.focused)
+	}
+}
+
+// TestSnippetsViewImportSnippetFile covers importing a teammate's snippet
+// file: its JMS Type and extra key are kept, and no editor opens.
+func TestSnippetsViewImportSnippetFile(t *testing.T) {
+	f := newSnippetsFixture(t)
+	src := importSource(t, "shared.json", "---\n# from the team\nauthor: someone\njmsType: OrderCreated\n---\n{}")
+
+	f.press('i')
+	typeInto(f.prompt.Primitive(), src)
+	pressIn(f.prompt.Primitive(), tcell.KeyEnter)
+
+	sn := f.load(t, "shared.json")
+	if sn.JMSType != "OrderCreated" || !strings.Contains(sn.Extra, "author: someone") || !strings.Contains(sn.Extra, "# from the team") {
+		t.Errorf("imported snippet = %#v, want the JMS Type, key and comment kept", sn)
+	}
+	if f.editor.Visible() {
+		t.Error("editor opened although the snippet has a JMS Type")
+	}
+	if f.host.focused != f.v.browser.List() {
+		t.Errorf("focus = %T, want the list", f.host.focused)
+	}
+}
+
+func TestSnippetsViewImportIntoSubfolderName(t *testing.T) {
+	f := newSnippetsFixture(t)
+	src := importSource(t, "order.json", "---\njmsType: T\n---\n{}")
+
+	f.press('i')
+	typeInto(f.prompt.Primitive(), src)
+	typeInto(f.prompt.Primitive(), "eu/renamed.json")
+
+	if f.load(t, "eu/renamed.json").JMSType != "T" {
+		t.Error("eu/renamed.json not imported")
+	}
+	if f.v.browser.Dir() != "eu" || f.selectedName() != "renamed.json" {
+		t.Errorf("view at %q on %q, want eu on renamed.json", f.v.browser.Dir(), f.selectedName())
+	}
+}
+
+// TestSnippetsViewImportNeverOverwrites checks an existing name keeps
+// step 2 open with an error, and the existing snippet is untouched.
+func TestSnippetsViewImportNeverOverwrites(t *testing.T) {
+	f := newSnippetsFixture(t)
+	src := importSource(t, "ping.txt", "the imported one")
+
+	f.press('i')
+	typeInto(f.prompt.Primitive(), src)
+	pressIn(f.prompt.Primitive(), tcell.KeyEnter) // prefilled "ping.txt" exists
+
+	if !f.prompt.Visible() || !strings.Contains(f.promptText(t), "Import as") {
+		t.Errorf("step 2 closed on an existing name")
+	}
+	if !strings.Contains(f.host.status, `"ping.txt": already exists`) {
+		t.Errorf("status = %q", f.host.status)
+	}
+	if got := f.load(t, "ping.txt").Body; got != "ping" {
+		t.Errorf("existing snippet changed to %q", got)
+	}
+	if f.confirm.Visible() {
+		t.Error("an overwrite confirmation was offered; import never overwrites")
+	}
+}
+
+func TestSnippetsViewImportStep1Refusals(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		path    func(t *testing.T) string
+		wantErr string
+	}{
+		{"relative path", func(*testing.T) string { return "order.json" }, "absolute path"},
+		{"a folder", func(t *testing.T) string { return t.TempDir() }, "not a file"},
+		{"a binary file", func(t *testing.T) string { return importSource(t, "data.bin", "ab\x00cd") }, "not a text file"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newSnippetsFixture(t)
+			f.press('i')
+			typeInto(f.prompt.Primitive(), tt.path(t))
+
+			if !f.prompt.Visible() || !strings.Contains(f.promptText(t), "Import file") {
+				t.Errorf("the Import file prompt didn't stay open")
+			}
+			if !strings.Contains(f.host.status, tt.wantErr) {
+				t.Errorf("status = %q, want %q", f.host.status, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSnippetsViewImportEscWritesNothing(t *testing.T) {
+	t.Run("at step 1", func(t *testing.T) {
+		f := newSnippetsFixture(t)
+		f.press('i')
+		pressIn(f.prompt.Primitive(), tcell.KeyEscape)
+		if f.prompt.Visible() || f.host.focused != f.v.browser.List() {
+			t.Errorf("prompt visible %v, focus %T; want closed, the list", f.prompt.Visible(), f.host.focused)
+		}
+	})
+	t.Run("at step 2", func(t *testing.T) {
+		f := newSnippetsFixture(t)
+		src := importSource(t, "order.json", `{"a":1}`)
+		f.press('i')
+		typeInto(f.prompt.Primitive(), src)
+		pressIn(f.prompt.Primitive(), tcell.KeyEscape)
+
+		if f.exists("order.json") {
+			t.Error("Esc at step 2 still imported the file")
+		}
+		if f.prompt.Visible() || f.editor.Visible() || f.host.focused != f.v.browser.List() {
+			t.Errorf("prompt %v, editor %v, focus %T; want both closed, the list", f.prompt.Visible(), f.editor.Visible(), f.host.focused)
+		}
+
+		// A new import afterwards starts clean at step 1.
+		f.press('i')
+		if !strings.Contains(f.promptText(t), "Import file") {
+			t.Errorf("next import didn't start at step 1: %q", f.promptText(t))
+		}
+	})
+}
+
+func TestSnippetsViewImportWorksInEmptyLibraryAndOnUpRow(t *testing.T) {
+	t.Run("empty library", func(t *testing.T) {
+		host := newFakeViewHost()
+		store := snippet.NewStore(filepath.Join(t.TempDir(), "snippets"))
+		confirm := dialog.NewConfirmDialog(host)
+		prompt := dialog.NewTextPrompt(host)
+		v := NewSnippetsView(host, store, confirm, dialog.NewSnippetEditor(host, store, confirm), prompt)
+		focusTree(v.browser.List())
+		send(v.browser.List(), runeKey('i'))
+		if !prompt.Visible() {
+			t.Error("i didn't open the prompt in an empty library")
+		}
+	})
+	t.Run(`".." row`, func(t *testing.T) {
+		f := newSnippetsFixture(t)
+		f.v.browser.SetDir("orders")
+		f.v.browser.List().SetCurrentItem(0)
+		f.press('i')
+		if !f.prompt.Visible() {
+			t.Error(`i didn't open the prompt on ".."`)
+		}
+	})
+}
+
+func TestSnippetsViewShortcutImport(t *testing.T) {
+	f := newSnippetsFixture(t)
+	for _, s := range f.v.Shortcuts() {
+		if s.Key == "i" && s.Description == "import file" {
+			return
+		}
+	}
+	t.Error(`Shortcuts() lacks {i, "import file"}`)
+}
+
+func TestSnippetsViewImportNameRejectsDotDot(t *testing.T) {
+	f := newSnippetsFixture(t)
+	src := importSource(t, "order.json", "---\njmsType: T\n---\n{}")
+	f.v.browser.SetDir("orders")
+	f.press('i')
+	typeInto(f.prompt.Primitive(), src)
+	typeInto(f.prompt.Primitive(), "../escaped.json")
+
+	if f.exists("escaped.json") || !f.prompt.Visible() {
+		t.Errorf("imported %v, prompt visible %v; want \"..\" refused as typed", f.exists("escaped.json"), f.prompt.Visible())
+	}
+}
