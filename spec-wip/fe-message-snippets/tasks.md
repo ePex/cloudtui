@@ -21,7 +21,7 @@ Each task is implemented and approved on its own, then pushed.
    `queue.Message.JMSTypeInferred`, set it at the three Jolokia
    inference sites and the proxy one, and extend the existing backend
    tests to assert it for both a header-present and an inferred message.
-4. [ ] **Confirm dialog cancel callback.** Add
+4. [x] **Confirm dialog cancel callback.** Add
    `ConfirmDialog.ShowWithCancel`, with `Show` delegating to it. Add
    tests that No and Esc call `onCancel`, and that `Show` still calls
    `FocusMain`.
@@ -86,5 +86,8 @@ Each task is implemented and approved on its own, then pushed.
 10. [ ] **Merge-back** (needs your explicit go-ahead before it is
     committed). Add `spec/22-message-snippets/spec.md`, add
     cross-references in `spec/08` and `spec/09`, add `internal/snippet/`
-    to `tui/CLAUDE.md`'s package layout, delete
+    to `tui/CLAUDE.md`'s package layout, update `spec/03`'s dialog list
+    and its "only inter-dialog dependencies" note (the send dialog now
+    takes the picker and confirm dialog, the save dialog takes the
+    confirm dialog, and `ConfirmDialog` has `ShowWithCancel`), delete
     `spec-wip/fe-message-snippets/`, and mark the PR ready for review.
