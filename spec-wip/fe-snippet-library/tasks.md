@@ -18,7 +18,7 @@ test is mutation-checked: remove the fix and confirm the test fails.
      `Entry.IsLink` (set by `List`).
    - Table-driven tests, as listed in `plan.md`, including the
      symlinked-folder cases.
-3. [ ] **Extract `SnippetBrowser`.**
+3. [x] **Extract `SnippetBrowser`.**
    - Move the picker's folder browsing into `dialog/snippetbrowser.go`,
      with a "cursor moved" callback, `Selected`, `Dir`, `SetDir`,
      `Select`, `Reload`, and an optional extra hint line.
@@ -71,8 +71,19 @@ test is mutation-checked: remove the fix and confirm the test fails.
    11. Switch the theme live: the view, the editor and the prompt pick
        up the new colors.
    12. Edit a file outside the app, then press `r`: the preview updates.
-8. [ ] **Example snippets** (requested during task 2; exact form to be
-   agreed before starting, see the PR discussion).
+8. [ ] **Example snippets** (requested during task 2).
+   - **Decided:** both of the following, with generic content only (no
+     real internal system, queue or company names).
+     - an `examples/snippets/` folder in the repo that can be copied into
+       `~/.cloudtui/snippets/`: JSON, XML and plain-text messages, some
+       with a JMS Type, some in subfolders, and one with an extra
+       front-matter key and a comment
+     - a "Message snippets" section in the README: where the library
+       lives, the file format with an example, how to use the examples
+       folder, and the Snippets view's keys
+   - Nothing is written into the user's home automatically.
+   - A test loads every file in `examples/snippets/` through
+     `snippet.Parse`, so a broken example fails CI.
 9. [ ] **Merge-back** (needs your explicit go-ahead before it is
    committed).
    - `spec/22`: add a library section, the new `Store` methods, `Extra`

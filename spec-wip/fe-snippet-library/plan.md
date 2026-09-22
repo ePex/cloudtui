@@ -107,6 +107,16 @@ the existing ones do. New names go through `ValidateName`.
   the extraction changed nothing.
 - The empty-root hint gains an optional extra line, which the view uses
   for "Press n to create one".
+- **Added during task 3:**
+  - **`SetKeys`:** tview allows one input capture per widget, so the
+    browser owns it. It runs the owner's handler first (the picker's
+    Esc, the view's `n`/`N`/`e`/`R`/`d`/`r`), which can consume an
+    event, and then its own `j`/`k`/Backspace.
+  - **`Reload` falls back:** if the current folder has disappeared from
+    disk (deleted outside the app), `Reload` goes to the nearest parent
+    that still exists instead of showing an error row.
+  - **`SetChangedFunc`:** its callback runs on every cursor move and
+    after every rebuild. This is the preview's hook.
 
 ### `SnippetEditor` (new, `snippeteditor.go`, page `snippet-editor`)
 
