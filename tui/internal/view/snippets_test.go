@@ -145,11 +145,28 @@ func TestSnippetsViewPreview(t *testing.T) {
 
 	f.v.browser.SetDir("orders")
 	f.cursorTo(t, "created.json")
-	if got := f.previewText(); !strings.Contains(got, "JMS Type: OrderCreated") || !strings.Contains(got, `{"id":1}`) {
+	if got := f.previewText(); !strings.Contains(got, "JMS Type: OrderCreated") || !strings.Contains(got, "{\n  \"id\": 1\n}") {
 		t.Errorf("preview of created.json = %q", got)
 	}
 	if got, err := os.ReadFile(path); err != nil || string(got) != string(original) {
 		t.Errorf("preview changed the file: content = %q, err = %v", got, err)
+	}
+}
+
+func TestSnippetsViewPreviewFormatsXMLWithoutWriting(t *testing.T) {
+	f := newSnippetsFixture(t)
+	path := filepath.Join(f.root, "payment.xml")
+	const body = `<payment><id>42</id></payment>`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.v.Activate()
+	f.cursorTo(t, "payment.xml")
+	if got := f.previewText(); !strings.Contains(got, "<payment>\n  <id>42</id>\n</payment>") {
+		t.Errorf("XML preview = %q, want formatted XML", got)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != body {
+		t.Errorf("preview changed the XML file: content = %q, err = %v", got, err)
 	}
 }
 

@@ -34,6 +34,16 @@ func TestFormatBody(t *testing.T) {
 			want: `<p>Hello <b>there</b> friend</p>`,
 		},
 		{
+			name: "XML trailing newline is preserved",
+			body: `<root><item/></root>` + "\n",
+			want: "<root>\n  <item></item>\n</root>\n",
+		},
+		{
+			name: "xml space preserve stays unchanged",
+			body: `<root xml:space="preserve"><item/>  </root>`,
+			want: `<root xml:space="preserve"><item/>  </root>`,
+		},
+		{
 			name: "invalid JSON and XML",
 			body: `{"unfinished": [1, 2]`,
 			want: `{"unfinished": [1, 2]`,
@@ -51,5 +61,11 @@ func TestFormatBody(t *testing.T) {
 				t.Errorf("FormatBody() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+
+	for _, body := range []string{`{"id":1}`, `<root><item/></root>`, `<p>Hello <b>there</b> friend</p>`} {
+		if once, twice := FormatBody(body), FormatBody(FormatBody(body)); once != twice {
+			t.Errorf("FormatBody is not idempotent for %q: once %q, twice %q", body, once, twice)
+		}
 	}
 }

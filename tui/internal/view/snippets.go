@@ -257,7 +257,8 @@ func (v *SnippetsView) updatePreview() {
 		if jmsType == "" {
 			jmsType = "(none)"
 		}
-		v.preview.SetText(fmt.Sprintf("[%s]JMS Type:[-] %s\n\n%s", p.Label, tview.Escape(jmsType), tview.Escape(sn.Body)))
+		body := snippet.FormatBody(sn.Body)
+		v.preview.SetText(fmt.Sprintf("[%s]JMS Type:[-] %s\n\n%s", p.Label, tview.Escape(jmsType), tview.Escape(body)))
 	}
 	v.preview.ScrollToBeginning()
 }

@@ -75,8 +75,12 @@ jmsType: OrderCreated
   - Exception: if the body's own first line is `---`, an empty
     front-matter block (`---` then `---`) is written in front of it, so
     the body isn't read back as front matter.
-  - The body is written exactly as it is, with no pretty-printing and no
-    added trailing newline.
+  - Valid JSON bodies are pretty-printed with two-space indentation.
+    Valid XML is indented with two spaces when it has no mixed text and
+    child elements; mixed-content XML and XML using `xml:space="preserve"`
+    are left unchanged to avoid changing text whitespace. JSON/XML that
+    can't be parsed and all other text are stored unchanged.
+  - Formatting does not add or remove a trailing newline.
 - Body content can be anything textual: plaintext, JSON, XML, etc.
 
 ### Save a snippet from the message detail view
@@ -93,8 +97,8 @@ jmsType: OrderCreated
 - **Keys:** **Save** or Enter in the Name field saves. **Cancel** or Esc
   closes the dialog without saving.
 - **Only two things are stored:**
-  - the **body**, exactly as received (the detail view's pretty-printed
-    JSON is only for display)
+  - the **body**, formatted if it is valid JSON/XML (the detail view's
+    pretty-printed JSON is only for display)
   - the **JMS Type**, but only when it is the message's real `JMSType`
     header. A type the backend *inferred* (`text`/`bytes`/`other`, see
     spec/08 and spec/11) is not saved.
@@ -162,7 +166,9 @@ jmsType: OrderCreated
     on the folder left, never above the root), `j`/`k`, the current
     path in the title.
   - **Right:** a preview of the entry under the cursor:
-    - a snippet: `JMS Type: <type>` (or `(none)`) and the raw body
+    - a snippet: `JMS Type: <type>` (or `(none)`) and the body; valid
+      JSON/XML is formatted for display even when the file is compact.
+      Preview formatting never writes to the file.
     - a folder: its nested counts, e.g. `2 snippets, 1 subfolder`, or
       `Empty folder`
     - a symlinked folder: `Linked folder`
@@ -204,6 +210,10 @@ jmsType: OrderCreated
     default).
   - A file that can't be parsed doesn't open; the status bar shows the
     error.
+  - When an existing snippet is opened, a valid JSON/XML body is formatted
+    in the editor and the normalized body is written to the same file
+    before the editor opens. Plain text, invalid JSON/XML, and XML mixed
+    content are left unchanged.
 - **New folder** (`N`): a prompt for a name relative to the current
   folder. Nested names like `eu/archive` create every level. An existing
   folder or file of that name is an error.

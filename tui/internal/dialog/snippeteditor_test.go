@@ -205,7 +205,7 @@ func TestSnippetEditorEditKeepsExtra(t *testing.T) {
 	f.se.bodyItem.SetText(`{"v":2}`, false)
 	f.pressEnter()
 
-	want := "---\n# Shared by the payments team.\nauthor: someone # ask them\njmsType: OrderUpdated\n---\n{\"v\":2}"
+	want := "---\n# Shared by the payments team.\nauthor: someone # ask them\njmsType: OrderUpdated\n---\n{\n  \"v\": 2\n}"
 	if got := f.file(t, "orders/created.json"); got != want {
 		t.Errorf("file =\n%s\nwant\n%s", got, want)
 	}

@@ -92,13 +92,13 @@ func formatXML(body string) (string, bool) {
 		return "", false
 	}
 
-	if hasMixedContent(roots) {
+	if hasMixedContent(roots) || hasXMLSpacePreserve(roots) {
 		return "", false
 	}
 
 	var out bytes.Buffer
 	for i, root := range roots {
-		if i > 0 {
+		if i > 0 && !isXMLWhitespace(root.token) && !isXMLWhitespace(roots[i-1].token) {
 			out.WriteByte('\n')
 		}
 		if err := writeXMLNode(&out, root, 0); err != nil {
@@ -155,6 +155,27 @@ func hasMixedContent(nodes []*xmlNode) bool {
 	return false
 }
 
+func hasXMLSpacePreserve(nodes []*xmlNode) bool {
+	for _, node := range nodes {
+		if start, ok := node.token.(xml.StartElement); ok {
+			for _, attr := range start.Attr {
+				if attr.Name.Space == "xml" && attr.Name.Local == "space" && attr.Value == "preserve" {
+					return true
+				}
+			}
+		}
+		if hasXMLSpacePreserve(node.children) {
+			return true
+		}
+	}
+	return false
+}
+
+func isXMLWhitespace(token xml.Token) bool {
+	text, ok := token.(xml.CharData)
+	return ok && strings.TrimSpace(string(text)) == ""
+}
+
 func writeXMLNode(out *bytes.Buffer, node *xmlNode, depth int) error {
 	switch token := node.token.(type) {
 	case xml.StartElement:
@@ -198,7 +219,11 @@ func writeXMLNode(out *bytes.Buffer, node *xmlNode, depth int) error {
 	case xml.EndElement:
 		return nil // End tokens are emitted by their matching StartElement.
 	case xml.CharData:
-		return xml.EscapeText(out, token)
+		var escaped bytes.Buffer
+		if err := xml.EscapeText(&escaped, token); err != nil {
+			return err
+		}
+		out.WriteString(strings.ReplaceAll(escaped.String(), "&#xA;", "\n"))
 	case xml.Comment:
 		out.WriteString("<!--")
 		out.Write(token)
