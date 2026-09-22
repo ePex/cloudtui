@@ -646,6 +646,28 @@ func TestDefaultQueueConfigPopulated(t *testing.T) {
 	}
 }
 
+func TestDefaultAMQManagerSettingsDisabled(t *testing.T) {
+	if config := Default().AMQManager; config.ShowOnlyQueuesWithPendingMessages {
+		t.Error("ShowOnlyQueuesWithPendingMessages defaults to true, want false")
+	}
+}
+
+func TestSaveLoadRoundTripWithAMQManagerSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg := Default()
+	cfg.AMQManager.ShowOnlyQueuesWithPendingMessages = true
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !got.AMQManager.ShowOnlyQueuesWithPendingMessages {
+		t.Error("ShowOnlyQueuesWithPendingMessages = false after round trip, want true")
+	}
+}
+
 func TestLoadPasswordEnvInjectsWhenEmpty(t *testing.T) {
 	t.Setenv("MQPROXY_CLIENT_PASSWORD", "secret")
 	path := filepath.Join(t.TempDir(), "config.yaml")

@@ -98,7 +98,10 @@ func (f *fakeViewHost) SaveConnection(conn config.Connection, origName string, i
 }
 func (f *fakeViewHost) DeleteConnection(name string) (wasActive bool) { return false }
 func (f *fakeViewHost) SaveDatadogConfig(cfg config.DatadogConfig)    {}
-func (f *fakeViewHost) SetActiveAWSProfile(name string)               { f.cfg.ActiveAWSProfile = name }
+func (f *fakeViewHost) SaveAMQManagerSettings(cfg config.AMQManagerSettings) {
+	f.cfg.AMQManager = cfg
+}
+func (f *fakeViewHost) SetActiveAWSProfile(name string) { f.cfg.ActiveAWSProfile = name }
 func (f *fakeViewHost) ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error) {
 	return nil, nil
 }
@@ -292,7 +295,7 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 	}{
 		{"SettingsView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			return NewSettingsView(host, dialog.NewThemePicker(host), dialog.NewConnManager(host, dialog.NewConfirmDialog(host)),
-				dialog.NewAWSProfilesPicker(host), dialog.NewDatadogEditor(host)), nil
+				dialog.NewAWSProfilesPicker(host), dialog.NewDatadogEditor(host), dialog.NewAMQManagerSettingsEditor(host)), nil
 		}},
 		{"QueuesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewQueuesView(host, host.backend, dialog.NewConfirmDialog(host), dialog.NewMovePicker(host),

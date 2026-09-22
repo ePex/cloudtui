@@ -16,12 +16,13 @@ import (
 // overlay. Lives in internal/app (not internal/ui/views) because it needs
 // live config read/write and runtime overlay control.
 type SettingsView struct {
-	list          *tview.List
-	host          ui.Host
-	themePicker   *dialog.ThemePicker
-	connManager   *dialog.ConnManager
-	awsProfiles   *dialog.AWSProfilesPicker
-	datadogEditor *dialog.DatadogEditor
+	list             *tview.List
+	host             ui.Host
+	themePicker      *dialog.ThemePicker
+	connManager      *dialog.ConnManager
+	awsProfiles      *dialog.AWSProfilesPicker
+	datadogEditor    *dialog.DatadogEditor
+	amqManagerEditor *dialog.AMQManagerSettingsEditor
 }
 
 var _ ui.View = (*SettingsView)(nil)
@@ -33,14 +34,13 @@ func (s *SettingsView) Primitive() tview.Primitive { return s.list }
 func (s *SettingsView) List() *tview.List          { return s.list }
 
 // NewSettingsView builds the Settings view as a tview.List. Each item opens
-// a picker overlay when Enter is pressed: item 0 → theme picker, item 1 →
-// connection manager, item 2 → AWS profiles (read-only), item 3 → Datadog
-// editor.
-func NewSettingsView(a ui.Host, themePicker *dialog.ThemePicker, connManager *dialog.ConnManager, awsProfiles *dialog.AWSProfilesPicker, datadogEditor *dialog.DatadogEditor) *SettingsView {
+// its overlay when Enter is pressed: Theme, AMQ Connection, AWS Profile,
+// Datadog, and AMQ Manager, in that order.
+func NewSettingsView(a ui.Host, themePicker *dialog.ThemePicker, connManager *dialog.ConnManager, awsProfiles *dialog.AWSProfilesPicker, datadogEditor *dialog.DatadogEditor, amqManagerEditor *dialog.AMQManagerSettingsEditor) *SettingsView {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetBorder(true).SetTitle(" Settings ")
 
-	s := &SettingsView{list: l, host: a, themePicker: themePicker, connManager: connManager, awsProfiles: awsProfiles, datadogEditor: datadogEditor}
+	s := &SettingsView{list: l, host: a, themePicker: themePicker, connManager: connManager, awsProfiles: awsProfiles, datadogEditor: datadogEditor, amqManagerEditor: amqManagerEditor}
 
 	// Items are populated by Refresh; add placeholders here so indices
 	// are stable.
@@ -48,6 +48,7 @@ func NewSettingsView(a ui.Host, themePicker *dialog.ThemePicker, connManager *di
 	l.AddItem("", "", 0, func() { s.connManager.Show() })
 	l.AddItem("", "", 0, func() { s.awsProfiles.Show() })
 	l.AddItem("", "", 0, func() { s.datadogEditor.Show() })
+	l.AddItem("", "", 0, func() { s.amqManagerEditor.Show() })
 
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
@@ -83,6 +84,11 @@ func (s *SettingsView) Refresh() {
 	s.list.AddItem(fmt.Sprintf("AMQ Connection: %s", conn.Name), "", 0, func() { s.connManager.Show() })
 	s.list.AddItem(fmt.Sprintf("AWS Profile: %s", awsProfile), "", 0, func() { s.awsProfiles.Show() })
 	s.list.AddItem(fmt.Sprintf("Datadog: %s", datadogSettingsLabel(cfg.Datadog)), "", 0, func() { s.datadogEditor.Show() })
+	amqManagerLabel := "all queues"
+	if cfg.AMQManager.ShowOnlyQueuesWithPendingMessages {
+		amqManagerLabel = "queues with pending messages"
+	}
+	s.list.AddItem(fmt.Sprintf("AMQ Manager: %s", amqManagerLabel), "", 0, func() { s.amqManagerEditor.Show() })
 	if cur >= 0 && cur < s.list.GetItemCount() {
 		s.list.SetCurrentItem(cur)
 	}

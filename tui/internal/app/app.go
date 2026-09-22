@@ -50,33 +50,34 @@ type App struct {
 	overlayVisible []visibler
 	// themables is every view/overlay that recolors itself on a live theme
 	// switch — reapplyTheme loops over this instead of naming each type.
-	themables      []ui.Themeable
-	views          []ui.View
-	cfg            config.Config
-	infoPanel      *tview.TextView
-	divider        *tview.TextView
-	contextPanel   *tview.TextView
-	logoPanel      *tview.TextView
-	statusBar      *tview.TextView
-	settingsV      *view.SettingsView
-	logV           *view.LogView
-	queuesV        *view.QueuesView
-	messagesV      *view.MessagesView
-	messageDetailV *view.MessageDetailView
-	snippetsV      *view.SnippetsView
-	confirm        *dialog.ConfirmDialog
-	movePicker     *dialog.MovePicker
-	sendMessage    *dialog.SendMessageOverlay
-	snippetPicker  *dialog.SnippetPicker
-	snippetSave    *dialog.SnippetSaveDialog
-	textPrompt     *dialog.TextPrompt
-	snippetEditor  *dialog.SnippetEditor
-	connManager    *dialog.ConnManager
-	connEditor     *dialog.ConnEditor
-	messageFilter  *dialog.MessageFilter
-	jmsTypePrompt  *dialog.JMSTypePrompt
-	timeRangeModal *dialog.TimeRangeModal
-	datadogEditor  *dialog.DatadogEditor
+	themables        []ui.Themeable
+	views            []ui.View
+	cfg              config.Config
+	infoPanel        *tview.TextView
+	divider          *tview.TextView
+	contextPanel     *tview.TextView
+	logoPanel        *tview.TextView
+	statusBar        *tview.TextView
+	settingsV        *view.SettingsView
+	logV             *view.LogView
+	queuesV          *view.QueuesView
+	messagesV        *view.MessagesView
+	messageDetailV   *view.MessageDetailView
+	snippetsV        *view.SnippetsView
+	confirm          *dialog.ConfirmDialog
+	movePicker       *dialog.MovePicker
+	sendMessage      *dialog.SendMessageOverlay
+	snippetPicker    *dialog.SnippetPicker
+	snippetSave      *dialog.SnippetSaveDialog
+	textPrompt       *dialog.TextPrompt
+	snippetEditor    *dialog.SnippetEditor
+	connManager      *dialog.ConnManager
+	connEditor       *dialog.ConnEditor
+	messageFilter    *dialog.MessageFilter
+	jmsTypePrompt    *dialog.JMSTypePrompt
+	timeRangeModal   *dialog.TimeRangeModal
+	datadogEditor    *dialog.DatadogEditor
+	amqManagerEditor *dialog.AMQManagerSettingsEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by OpenLogSearch and
 	// dropped by SwitchTo if abandoned — see spec/41.
@@ -259,10 +260,11 @@ func New(cfg config.Config) *App {
 	a.timeRangeModal = dialog.NewTimeRangeModal(a)
 	a.connManager = dialog.NewConnManager(a, a.confirm)
 	a.datadogEditor = dialog.NewDatadogEditor(a)
+	a.amqManagerEditor = dialog.NewAMQManagerSettingsEditor(a)
 	a.themePicker = dialog.NewThemePicker(a)
 	a.awsProfiles = dialog.NewAWSProfilesPicker(a)
 
-	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor)
+	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor, a.amqManagerEditor)
 
 	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
 	a.snippetsV = view.NewSnippetsView(a, snippets, a.confirm, a.snippetEditor, a.textPrompt)
@@ -402,6 +404,7 @@ func New(cfg config.Config) *App {
 	// Height: border+padding (4 rows) + 2 items * 2 rows (10) + button
 	// row (1) + one spare row = 10.
 	datadogEditorOverlay := ui.Centered(a.datadogEditor.Primitive(), 56, 10)
+	amqManagerSettingsOverlay := ui.Centered(a.amqManagerEditor.Primitive(), 64, 8)
 
 	themePickerOverlay := ui.Centered(a.themePicker.Primitive(), 40, 14)
 
@@ -426,6 +429,7 @@ func New(cfg config.Config) *App {
 		AddPage("jmstype-prompt", jmsTypePromptOverlay, true, false).
 		AddPage("time-range", timeRangeOverlay, true, false).
 		AddPage("datadog-editor", datadogEditorOverlay, true, false).
+		AddPage("amq-manager-settings", amqManagerSettingsOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false)
@@ -460,6 +464,7 @@ func New(cfg config.Config) *App {
 		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
+		a.amqManagerEditor,
 		a.themePicker,
 		a.awsProfiles,
 	}
@@ -494,6 +499,7 @@ func New(cfg config.Config) *App {
 		a.jmsTypePrompt,
 		a.timeRangeModal,
 		a.datadogEditor,
+		a.amqManagerEditor,
 		a.themePicker,
 		a.awsProfiles,
 	}

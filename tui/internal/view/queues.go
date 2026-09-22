@@ -71,6 +71,10 @@ func (qv *QueuesView) FilterInputs() []tview.Primitive {
 // App.switchConnection when the active connection changes.
 func (qv *QueuesView) SetBackend(b queue.Backend) { qv.backend = b }
 
+// RefreshSettings reapplies display settings to the last loaded queue list
+// without making another backend request.
+func (qv *QueuesView) RefreshSettings() { qv.repaint(qv.allSummaries) }
+
 func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 	return []ui.Shortcut{
 		{Key: "r", Description: "refresh"},
@@ -347,16 +351,27 @@ func (qv *QueuesView) updateTitle() {
 func (qv *QueuesView) repaint(summaries []queue.Summary) {
 	qv.allSummaries = summaries
 
-	// Apply filter.
+	// Apply the AMQ Manager visibility setting before the name filter.
 	filtered := summaries
-	if qv.filter != "" {
-		lower := strings.ToLower(qv.filter)
+	if qv.host.Config().AMQManager.ShowOnlyQueuesWithPendingMessages {
 		filtered = make([]queue.Summary, 0, len(summaries))
 		for _, s := range summaries {
-			if strings.Contains(strings.ToLower(s.Name), lower) {
+			if s.PendingCount != 0 {
 				filtered = append(filtered, s)
 			}
 		}
+	}
+
+	// Apply queue-name filter.
+	if qv.filter != "" {
+		lower := strings.ToLower(qv.filter)
+		byName := make([]queue.Summary, 0, len(filtered))
+		for _, s := range filtered {
+			if strings.Contains(strings.ToLower(s.Name), lower) {
+				byName = append(byName, s)
+			}
+		}
+		filtered = byName
 	}
 
 	// Sort by active column and direction, with name as tiebreaker.

@@ -31,6 +31,7 @@ type Host interface {
 	SaveConnection(conn config.Connection, origName string, isNew bool)
 	DeleteConnection(name string) (wasActive bool)
 	SaveDatadogConfig(cfg config.DatadogConfig)
+	SaveAMQManagerSettings(cfg config.AMQManagerSettings)
 	SetActiveAWSProfile(name string)
 	ListAWSProfiles(ctx context.Context) ([]awsprofile.Profile, error)
 	ToggleFavorite(kind config.FavoriteKind, profile, name string)

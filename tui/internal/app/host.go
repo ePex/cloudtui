@@ -175,6 +175,17 @@ func (a *App) SaveDatadogConfig(cfg config.DatadogConfig) {
 	a.settingsV.Refresh()
 }
 
+// SaveAMQManagerSettings persists the global AMQ Manager settings and
+// immediately reapplies them to the loaded queue summaries.
+func (a *App) SaveAMQManagerSettings(cfg config.AMQManagerSettings) {
+	a.cfg.AMQManager = cfg
+	if err := config.SaveDefault(a.cfg); err != nil {
+		slog.Error("SaveAMQManagerSettings: save failed", "error", err)
+	}
+	a.settingsV.Refresh()
+	a.queuesV.RefreshSettings()
+}
+
 // SetActiveAWSProfile sets name as the active AWS profile, updates the
 // info panel, refreshes the settings list, and persists. Does not touch
 // a.backend: a secret-backed connection resolves its password via its

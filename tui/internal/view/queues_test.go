@@ -382,6 +382,66 @@ func TestQueuesViewRepaintSortsAlphabetically(t *testing.T) {
 	}
 }
 
+func TestQueuesViewPendingOnlySettingKeepsPositiveAndUnknownCounts(t *testing.T) {
+	host, qv := newTestQueuesView(t)
+	host.cfg.AMQManager.ShowOnlyQueuesWithPendingMessages = true
+	qv.repaint([]queue.Summary{
+		{Name: "empty", PendingCount: 0},
+		{Name: "pending", PendingCount: 4},
+		{Name: "unknown", PendingCount: -1},
+	})
+
+	if got := qv.table.GetRowCount(); got != 3 { // header plus two visible queues
+		t.Fatalf("row count = %d, want 3", got)
+	}
+	if got := qv.table.GetCell(1, 0).Text; got != "pending" {
+		t.Errorf("first queue = %q, want pending", got)
+	}
+	if got := qv.table.GetCell(2, 0).Text; got != "unknown" {
+		t.Errorf("second queue = %q, want unknown", got)
+	}
+}
+
+func TestQueuesViewPendingOnlySettingCombinesWithNameFilterAndSort(t *testing.T) {
+	host, qv := newTestQueuesView(t)
+	host.cfg.AMQManager.ShowOnlyQueuesWithPendingMessages = true
+	qv.sortCol = 1
+	qv.sortAsc = false
+	qv.filter = "orders"
+	qv.repaint([]queue.Summary{
+		{Name: "orders-low", PendingCount: 2},
+		{Name: "orders-high", PendingCount: 9},
+		{Name: "orders-empty", PendingCount: 0},
+		{Name: "payments", PendingCount: 11},
+	})
+
+	if got := qv.table.GetRowCount(); got != 3 {
+		t.Fatalf("row count = %d, want header plus two filtered queues", got)
+	}
+	if got := qv.table.GetCell(1, 0).Text; got != "orders-high" {
+		t.Errorf("first queue = %q, want orders-high", got)
+	}
+	if got := qv.table.GetCell(2, 0).Text; got != "orders-low" {
+		t.Errorf("second queue = %q, want orders-low", got)
+	}
+}
+
+func TestQueuesViewRefreshSettingsRepaintsWithoutReload(t *testing.T) {
+	host, qv := newTestQueuesView(t)
+	qv.repaint([]queue.Summary{{Name: "empty", PendingCount: 0}, {Name: "pending", PendingCount: 1}})
+	if got := qv.table.GetRowCount(); got != 3 {
+		t.Fatalf("initial row count = %d, want 3", got)
+	}
+	host.cfg.AMQManager.ShowOnlyQueuesWithPendingMessages = true
+	qv.RefreshSettings()
+	if got := qv.table.GetRowCount(); got != 2 {
+		t.Fatalf("row count after settings refresh = %d, want header plus one queue", got)
+	}
+	if got := qv.table.GetCell(1, 0).Text; got != "pending" {
+		t.Errorf("visible queue after settings refresh = %q, want pending", got)
+	}
+}
+
 func TestQueuesViewPendingAccentWhenNonZero(t *testing.T) {
 	host, qv := newTestQueuesView(t)
 
