@@ -240,7 +240,7 @@ func NewConnEditor(host ui.Host, manager *ConnManager) *ConnEditor {
 		AddButton("Save", func() { ce.save() }).
 		AddButton("Cancel", func() { ce.close() })
 	if dd, ok := ce.form.GetFormItemByLabel("Backend").(*tview.DropDown); ok {
-		ui.StyleDropDown(dd, host.Config().Colors)
+		ui.StyleFormDropDown(dd, host.Config().Colors)
 		// Wired via SetSelectedFunc rather than passed to AddDropDown
 		// itself: AddDropDown's initial SetCurrentOption(0) call would
 		// otherwise fire the rebuild before the rest of the chain exists.
@@ -499,7 +499,7 @@ func (ce *ConnEditor) rebuildTail(backend string) {
 	}
 
 	if dd, ok := f.GetFormItemByLabel(labelAuthenticationMode).(*tview.DropDown); ok {
-		ui.StyleDropDown(dd, ce.host.Config().Colors)
+		ui.StyleFormDropDown(dd, ce.host.Config().Colors)
 		dd.SetSelectedFunc(func(_ string, idx int) {
 			ce.setPasswordField(idx)
 		})
@@ -522,14 +522,17 @@ func (ce *ConnEditor) ApplyPalette(p config.Palette) {
 	ce.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	ce.form.SetBorderColor(tcell.GetColor(p.Border))
 	ce.form.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(ce.form, p)
 	// Looked up by label rather than a fixed index — this used to target
 	// GetFormItem(2), which had been a silent no-op since Password
 	// Source was added at index 5 shifted Broker Name off index 2 (see
 	// git history); fixed as part of moving every other fixed-index
 	// lookup in this file to GetFormItemByLabel for the section-header
 	// restructuring, since Backend's index moves around even more now.
-	if dd, ok := ce.form.GetFormItemByLabel("Backend").(*tview.DropDown); ok {
-		ui.StyleDropDown(dd, p)
+	for _, label := range []string{"Backend", labelAuthenticationMode} {
+		if dd, ok := ce.form.GetFormItemByLabel(label).(*tview.DropDown); ok {
+			ui.StyleFormDropDown(dd, p)
+		}
 	}
 }
 

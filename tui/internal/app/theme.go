@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -17,18 +16,7 @@ import (
 // construction time, not on every draw — so this must run before any
 // primitive is constructed (see App.New(), which calls this first).
 func applyTheme(p config.Palette) {
-	bg := tcell.GetColor(p.Background)
-	tview.Styles.PrimitiveBackgroundColor = bg
-	tview.Styles.ContrastBackgroundColor = bg
-	tview.Styles.MoreContrastBackgroundColor = bg
-	tview.Styles.BorderColor = tcell.GetColor(p.Border)
-	tview.Styles.TitleColor = tcell.GetColor(p.Border)
-	tview.Styles.GraphicsColor = tcell.GetColor(p.Border)
-	tview.Styles.PrimaryTextColor = tcell.GetColor(p.Text)
-	tview.Styles.SecondaryTextColor = tcell.GetColor(p.Value)
-	tview.Styles.TertiaryTextColor = tcell.GetColor(p.Label)
-	tview.Styles.InverseTextColor = tcell.GetColor(p.SelectionText)
-	tview.Styles.ContrastSecondaryTextColor = tcell.GetColor(p.Value)
+	ui.ApplyTviewStyles(p)
 }
 
 // reapplyTheme updates tview.Styles and all already-constructed shell
@@ -38,6 +26,11 @@ func reapplyTheme(a *App, p config.Palette) {
 	applyTheme(p)
 
 	bg := tcell.GetColor(p.Background)
+	// The text panels' base text color is copied from tview.Styles at
+	// construction. Their color-tagged text is rebuilt below, but
+	// untagged characters (the logo art, spaces between tags) are drawn in
+	// that base color, so reset it to what a freshly built TextView gets.
+	text := tcell.GetColor(p.Text)
 
 	// Status bar — recolor only; don't touch its text. It's either blank
 	// (idle) or showing a transient message, and there's no longer a
@@ -47,6 +40,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Info panel — rebuildtext to show the new theme name
 	a.infoPanel.SetBackgroundColor(bg)
+	a.infoPanel.SetTextColor(text)
 	a.infoPanel.SetText(ui.InfoPanelText(a.cfg))
 
 	// Divider — rebuild color-tagged text to pick up the new border color
@@ -59,6 +53,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Context panel — background only; text is managed by SwitchTo/UpdateContextPanel
 	a.contextPanel.SetBackgroundColor(bg)
+	a.contextPanel.SetTextColor(text)
 	// Re-render shortcuts with new accent color if a Shortcuttable view is active.
 	if av := a.activeView(); av != nil {
 		a.UpdateContextPanel(av)
@@ -66,6 +61,7 @@ func reapplyTheme(a *App, p config.Palette) {
 
 	// Logo panel
 	a.logoPanel.SetBackgroundColor(bg)
+	a.logoPanel.SetTextColor(text)
 
 	// Command prompt's own background, label color, and typed-text color.
 	// InputField.SetBackgroundColor (the embedded *Box) is NOT enough here:
@@ -82,6 +78,10 @@ func reapplyTheme(a *App, p config.Palette) {
 	// (transparent, unchanged from New()) to preserve existing layout and
 	// look — only the three theme-dependent colors change here.
 	a.prompt.SetFormAttributes(0, tcell.GetColor(p.Value), bg, tcell.GetColor(p.Text), tcell.ColorDefault)
+	// The outer Box does still matter where the TextArea doesn't reach:
+	// the prompt fills the whole top-left panel, and every row below the
+	// input line (behind the autocomplete drop-down) is painted from it.
+	a.prompt.SetBackgroundColor(bg)
 
 	// Command prompt's autocomplete drop-down
 	ui.StyleInputFieldAutocomplete(a.prompt, p)

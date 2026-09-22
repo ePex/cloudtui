@@ -238,9 +238,7 @@ func (mp *MovePicker) ApplyPalette(p config.Palette) {
 	ui.StyleList(mp.list, p)
 	mp.list.SetBackgroundColor(bg)
 	mp.search.SetBackgroundColor(bg)
-	mp.search.SetLabelColor(tcell.GetColor(p.Label))
-	mp.search.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	mp.search.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(mp.search, p)
 }
 
 var _ ui.Themeable = (*MovePicker)(nil)

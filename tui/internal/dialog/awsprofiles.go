@@ -39,13 +39,9 @@ func NewAWSProfilesPicker(host ui.Host) *AWSProfilesPicker {
 	ap.table.SetFixed(1, 0)
 	ap.filterInput = tview.NewInputField()
 	ap.filterInput.SetLabel(" / filter: ")
-	ap.filterInput.SetLabelColor(tcell.GetColor(colors.Label))
-	ap.filterInput.SetFieldBackgroundColor(tcell.GetColor(colors.SelectionBg))
-	ap.filterInput.SetFieldTextColor(tcell.GetColor(colors.SelectionText))
+	ui.StyleFilterInput(ap.filterInput, colors)
 	ap.hints = tview.NewTextView().SetDynamicColors(true)
-	ac := colors.Accent
-	ap.hints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
-		ac, ac, ac, ac))
+	ap.setHints(colors)
 	ap.flex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(ap.table, 0, 1, true).
 		AddItem(ap.filterInput, 1, 0, false).
@@ -97,6 +93,14 @@ func NewAWSProfilesPicker(host ui.Host) *AWSProfilesPicker {
 	return ap
 }
 
+// setHints writes the key-hint footer, its keys color-tagged in p's
+// accent — rebuilt on a theme switch, since the tags bake the color in.
+func (ap *AWSProfilesPicker) setHints(p config.Palette) {
+	ac := p.Accent
+	ap.hints.SetText(fmt.Sprintf("[%s]<Enter>[-] activate  [%s]<r>[-] refresh  [%s]</>[-] filter  [%s]<Esc>[-] close",
+		ac, ac, ac, ac))
+}
+
 // setHeader draws the overlay's column header row.
 func (ap *AWSProfilesPicker) setHeader() {
 	p := ap.host.Config().Colors
@@ -143,8 +147,14 @@ func (ap *AWSProfilesPicker) ApplyPalette(p config.Palette) {
 	ap.table.SetBackgroundColor(bg)
 	ap.table.SetBorderColor(tcell.GetColor(p.Border))
 	ap.table.SetTitleColor(tcell.GetColor(p.Border))
+	ap.table.SetBordersColor(tcell.GetColor(p.Border))
 	ap.hints.SetBackgroundColor(bg)
 	ap.hints.SetTextColor(tcell.GetColor(p.Text))
+	ui.StyleFilterInput(ap.filterInput, p)
+	ap.setHints(p)
+	// The header row's cells are colored when they're created, not on
+	// every repopulate, so redraw them with the new palette.
+	ap.setHeader()
 }
 
 var _ ui.Themeable = (*AWSProfilesPicker)(nil)

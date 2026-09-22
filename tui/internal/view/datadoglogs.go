@@ -61,11 +61,13 @@ func (dv *DatadogLogsView) ApplyPalette(p config.Palette) {
 	dv.table.SetBackgroundColor(bg)
 	dv.table.SetBorderColor(tcell.GetColor(p.ViewColor("datadog-logs")))
 	dv.table.SetTitleColor(tcell.GetColor(p.ViewColor("datadog-logs")))
-	dv.queryInput.SetLabelColor(tcell.GetColor(p.Label))
-	dv.queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	dv.queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(dv.queryInput, p)
 	ui.StyleDropDown(dv.serviceFilterDD, p)
 	ui.StyleDropDown(dv.envFilterDD, p)
+	dv.table.SetBordersColor(tcell.GetColor(p.Border)) // the column separators
+	// The header row's cells are colored when they're created, not on
+	// every palette change, so redraw them with the new palette.
+	dv.setHeader()
 }
 
 func (dv *DatadogLogsView) Name() string               { return "datadog-logs" }
@@ -101,25 +103,14 @@ func NewDatadogLogsView(a ui.DatadogLogsHost, timeRangeModal *dialog.TimeRangeMo
 	p := a.Config().Colors
 	queryInput := tview.NewInputField()
 	queryInput.SetLabel(" / query: ")
-	queryInput.SetLabelColor(tcell.GetColor(p.Label))
-	queryInput.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	queryInput.SetFieldTextColor(tcell.GetColor(p.SelectionText))
+	ui.StyleFilterInput(queryInput, p)
 
 	serviceFilterDD := tview.NewDropDown()
 	serviceFilterDD.SetLabel(" Service: ")
-	serviceFilterDD.SetLabelColor(tcell.GetColor(p.Label))
-	serviceFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	serviceFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	// Without this, unselected popup-list items are unreadable — same
-	// gotcha already hit (and fixed via styleDropDown) for the theme and
-	// connection-editor Backend dropdowns.
 	ui.StyleDropDown(serviceFilterDD, p)
 
 	envFilterDD := tview.NewDropDown()
 	envFilterDD.SetLabel(" Env: ")
-	envFilterDD.SetLabelColor(tcell.GetColor(p.Label))
-	envFilterDD.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
-	envFilterDD.SetFieldTextColor(tcell.GetColor(p.SelectionText))
 	ui.StyleDropDown(envFilterDD, p)
 
 	filterRow := tview.NewFlex().SetDirection(tview.FlexColumn).

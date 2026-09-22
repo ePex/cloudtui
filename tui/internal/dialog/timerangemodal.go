@@ -145,6 +145,9 @@ func (tm *TimeRangeModal) ApplyPalette(p config.Palette) {
 	tm.flex.SetBorderColor(tcell.GetColor(p.Border))
 	tm.flex.SetTitleColor(tcell.GetColor(p.Border))
 	tm.tabs.SetBackgroundColor(bg)
+	// renderTabs color-tags the two tab labels, but the spaces around them
+	// use the text view's own base color, copied at construction.
+	tm.tabs.SetTextColor(tcell.GetColor(p.Text))
 	tm.renderTabs()
 	tm.pages.SetBackgroundColor(bg)
 	ui.StyleList(tm.relativeList, p)
@@ -152,6 +155,7 @@ func (tm *TimeRangeModal) ApplyPalette(p config.Palette) {
 	tm.absoluteForm.SetBackgroundColor(bg)
 	tm.absoluteForm.SetBorderColor(tcell.GetColor(p.Border))
 	tm.absoluteForm.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(tm.absoluteForm, p)
 }
 
 var _ ui.Themeable = (*TimeRangeModal)(nil)

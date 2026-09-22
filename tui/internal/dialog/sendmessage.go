@@ -245,11 +245,7 @@ func (sm *SendMessageOverlay) ApplyPalette(p config.Palette) {
 	sm.form.SetBackgroundColor(bg)
 	sm.form.SetBorderColor(tcell.GetColor(p.Border))
 	sm.form.SetTitleColor(tcell.GetColor(p.Border))
-	for _, area := range []*tview.TextArea{sm.headersItem, sm.bodyItem} {
-		area.SetBackgroundColor(bg)
-		area.SetTextStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Text)).Background(bg))
-		area.SetLabelStyle(tcell.StyleDefault.Foreground(tcell.GetColor(p.Label)))
-	}
+	ui.StyleForm(sm.form, p)
 }
 
 var _ ui.Themeable = (*SendMessageOverlay)(nil)

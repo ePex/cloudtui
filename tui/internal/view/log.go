@@ -108,6 +108,9 @@ func (lv *LogView) ApplyPalette(p config.Palette) {
 	lv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	lv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("log")))
 	lv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("log")))
+	// Untagged text (the spaces between color tags, or plain log lines)
+	// is drawn in the text view's base color, copied at construction.
+	lv.textView.SetTextColor(tcell.GetColor(p.Text))
 }
 
 func logLevelColor(line string) string {

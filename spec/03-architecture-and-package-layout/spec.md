@@ -24,10 +24,10 @@ Current file contents (production `.go` files; each also has a colocated `_test.
 - `viewhost.go` — the per-resource host interfaces (see below)
 - `view.go` — the `View` interface (`Name()`, `Title()`, `Primitive()`)
 - `shortcuttable.go` — the optional `Shortcuttable` interface (`Shortcuts() []Shortcut`) views/dialogs implement to populate the top bar's context panel
-- `theme.go` — the `Themeable` interface (recolor-on-theme-switch contract) and palette application
+- `theme.go` — the `Themeable` interface (recolor-on-theme-switch contract) and `ApplyTviewStyles` (the single palette → `tview.Styles` mapping)
 - `topbar.go`, `statusbar.go`, `help.go`, `notify.go` — generic chrome widgets (top bar layout, status bar, help modal, OS desktop notifications)
 - `filter.go` — shared inline-filter-input widget behavior
-- `style.go` — shared tview styling helpers (`StyleList`, `StyleDropDown`, ...) usable by both dialogs and views
+- `style.go` — shared tview styling helpers usable by both dialogs and views: `StyleList`, `StyleForm`, `StyleFilterInput`, `StyleDropDown`/`StyleFormDropDown`, `StyleInputFieldAutocomplete`. Each re-applies what a widget copies at construction, so a live theme switch matches a restart (see spec/04).
 - `timerange.go` — the `TimeRange`/`TimeRangeMode`/time-range-preset types shared by the CloudWatch and Datadog log views and the time-range modal dialog
 
 **`internal/ui/views`** — the home dashboard's own rendering (`home.go`, `SectionInfo`/`ViewInfo` types, `NewHome`); a separate sub-package from `internal/view`, not to be confused with it.
@@ -241,7 +241,7 @@ Construction order matters and follows a strict dependency chain:
 6. **Views are constructed**, each passed `a` (satisfying `ui.Host` and whichever per-resource host interface it needs), its needed dialogs, and its `OpenX` navigation callback (or an inline closure, for the handful of `back`/`onSaved`-style callbacks that aren't `*App` methods at all, e.g. message-detail's "return to messages list" closure).
 7. **`a.views` (the `[]ui.View` slice)** is populated with only the views that have a Home entry / are reachable via `SwitchTo` by name — `home`, `settings`, `log`, `queues`, `ssm-parameters`, `secrets-manager`, `cloudwatch-logs`, `datadog-logs`, `codepipeline`. Each is added to `a.pages` (the main content `Pages`). Detail views and other "opened, not switched-to" screens (`messages`, `message-detail`, `secret-detail`, `log-search`, `log-event-detail`, `datadog-log-detail`, `codepipeline-detail`, `ssm-param-detail`) are added to `a.pages` directly but not into `a.views`, since they're reached only via an `OpenX` trampoline, never `:command` or Home.
 8. **The root layout** (`tb.Root` + `a.pages` + `a.statusBar` in a `FlexRow`) is wrapped in `a.rootPages`, a second, outer `Pages` that layers every modal overlay (centered via `ui.Centered(prim, width, height)`) on top of `"main"`. Overlay z-order is AddPage order — `"confirm"` is added last so it always draws above any other still-visible overlay underneath it (e.g. a delete-confirmation shown from within `conn-manager`).
-9. **Bookkeeping slices** built once, after everything exists, so the rest of the code loops over them instead of hand-maintaining OR-chains: `focusExemptInputs` (inputs that swallow global hotkeys while focused), `overlayVisible` (every dialog via its `Visible()` accessor, checked by `anyOverlayVisible()`), `themables` (every view/dialog implementing `ui.Themeable`, looped by `reapplyTheme`).
+9. **Bookkeeping slices** built once, after everything exists, so the rest of the code loops over them instead of hand-maintaining OR-chains: `focusExemptInputs` (inputs that swallow global hotkeys while focused), `overlayVisible` (every dialog via its `Visible()` accessor, checked by `anyOverlayVisible()`), `themables` (every view/dialog implementing `ui.Themeable`, looped by `reapplyTheme`). Right after `themables` is built, `New()` calls every entry's `ApplyPalette(cfg.Colors)` once, so startup shows the same colors as a live switch (spec/04).
 10. `a.tv.SetRoot(a.rootPages, true)`, initial `SwitchTo(a.views[0].Name())` (home), global key capture installed.
 
 ## Notable design decisions worth preserving

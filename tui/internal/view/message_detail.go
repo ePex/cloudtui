@@ -42,6 +42,9 @@ func (dv *MessageDetailView) ApplyPalette(p config.Palette) {
 	dv.textView.SetBackgroundColor(tcell.GetColor(p.Background))
 	dv.textView.SetBorderColor(tcell.GetColor(p.ViewColor("queues")))
 	dv.textView.SetTitleColor(tcell.GetColor(p.ViewColor("queues")))
+	// Untagged text (the spaces between color tags, or plain log lines)
+	// is drawn in the text view's base color, copied at construction.
+	dv.textView.SetTextColor(tcell.GetColor(p.Text))
 }
 
 func (dv *MessageDetailView) Primitive() tview.Primitive { return dv.textView }

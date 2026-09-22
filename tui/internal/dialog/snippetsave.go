@@ -131,6 +131,7 @@ func (sd *SnippetSaveDialog) ApplyPalette(p config.Palette) {
 	sd.form.SetBackgroundColor(tcell.GetColor(p.Background))
 	sd.form.SetBorderColor(tcell.GetColor(p.Border))
 	sd.form.SetTitleColor(tcell.GetColor(p.Border))
+	ui.StyleForm(sd.form, p)
 }
 
 var _ ui.Themeable = (*SnippetSaveDialog)(nil)
