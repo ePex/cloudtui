@@ -219,8 +219,16 @@ every other queue operation (spec/07).
   queue, not just the sent message — this is exactly why `BrowseMessages`
   (spec/08) falls back to the simpler `browse()` JMX operation
   whenever `browseMessages()` errors, rather than surfacing the error.
-  Fallback-path messages have empty IDs; a yellow status note is shown
-  when this path is taken.
+  On ActiveMQ 5.18+ `browse()` returns full message objects with a real
+  `JMSMessageID`, so delete and move keep working on the fallback path.
+  Only older brokers' plain-string `browse()` results carry no ID. For
+  those, the messages list shows a yellow "limited message info" note,
+  and individual move/delete/mark are unavailable (spec/08).
+- **Remove and move report "not found" in the result, not the status**:
+  `removeMessage` and `moveMessageTo` return a JSON boolean in Jolokia's
+  `value`, with HTTP/Jolokia status still 200 when the message wasn't
+  found. The backend treats `value == false` as an error ("message not
+  found in queue"), rather than as success.
 - The queue picker (shared by single-move and move-all) is a `tview.List`
   overlay using the same centered pattern as the confirm dialog; queue
   names are loaded via `backend.List()` in a goroutine, showing

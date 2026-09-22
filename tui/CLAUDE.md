@@ -73,6 +73,68 @@ this module.
   but it doesn't replace verifying a *new* feature's specific behavior by
   hand (see the `verify-live` skill for why).
 
+## tview gotchas (v0.42)
+
+Traps hit in this codebase that aren't obvious from tview's API. Read
+this before adding or restyling a widget.
+
+- **`tview.Modal` focuses its *last* button.** Enter then triggers the
+  last button (usually Cancel), not the confirm action. Confirmation
+  dialogs use a `tview.List` instead, so the cursor starts on item 0
+  (see `dialog.ConfirmDialog`).
+- **`NewTableCell(...).SetTextColor(c)` stores the color in the cell's
+  `Style`**, not the legacy `Color` field. Read it back with
+  `fg, _, _ := cell.Style.Decompose()`.
+- **`[...]` in table cells and list items is parsed as a color tag**,
+  with no per-cell opt-out. Pass untrusted or user text through
+  `tview.Escape`, and use glyphs (`✓`, `⭐`) rather than `[x]` for
+  markers.
+- **Autocomplete: style first, then wire.** Call
+  `ui.StyleInputFieldAutocomplete` *before*
+  `InputField.SetAutocompleteFunc`. `SetAutocompleteFunc` builds the
+  drop-down's internal list immediately, with whatever styles are set at
+  that moment. tview keeps that list until the field loses focus or has
+  no suggestions, so styles set later don't reach it. That's why
+  `StyleInputFieldAutocomplete` blurs an unfocused field after
+  restyling.
+- **Widgets copy `tview.Styles` at construction.** Setting
+  `tview.Styles` later (a live theme switch) doesn't reach widgets that
+  already exist. What keeps its construction-time colors unless
+  re-applied:
+  - `List`: unselected rows
+  - `Form`: label color, field style, button styles
+  - `DropDown`: focused, prefix and disabled styles
+  - `TextView`: base text color, used by untagged characters
+  - table cells: colored when set
+
+  Every `ApplyPalette` re-applies them through the `ui.Style*` helpers
+  (`StyleList`, `StyleForm`, `StyleFilterInput`,
+  `StyleDropDown`/`StyleFormDropDown`, `StyleInputFieldAutocomplete`).
+  It also redraws table headers and resets borders colors. See
+  `spec/04-theming`.
+- **An `InputField` has two backgrounds.** It wraps a private `TextArea`
+  whose own box background is what the label is drawn on. Only
+  `SetFormAttributes` reaches it; `SetLabelColor`,
+  `SetFieldBackgroundColor` and `SetBackgroundColor` don't. The outer
+  box background paints wherever the field doesn't reach (beside it,
+  below it), so reset both.
+- **`tview.Form` moves focus after an item's done func.** Its own
+  "finished" handler runs right after `SetDoneFunc`'s callback and
+  focuses the next element through the application's `setFocus`. That
+  steals focus from any overlay the callback just opened, e.g. a
+  confirmation. Handle Enter in the item's input capture and swallow it
+  instead (see `dialog.SnippetSaveDialog`).
+- **`tview.Form` remembers its focused item across `Show` calls.** Reset
+  it with `form.SetFocus(0)` when reopening a form.
+- **Testing rendering:** draw the primitive on a
+  `tcell.NewSimulationScreen` and read `GetContents()` for runes and
+  styles; `internal/ui/style_test.go` has helpers. For a theme fix,
+  compare a live switch against a restart cell by cell. Always
+  mutation-check a new test: remove the fix and confirm the test fails.
+  Several first attempts here passed while testing nothing (a build
+  error counted as "no failures", test data that never hit the code
+  path).
+
 ## Dependencies
 
 - Currently: `tview`/`tcell` (UI), `aws-sdk-go-v2/config` (AWS shared
