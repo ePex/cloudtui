@@ -4,7 +4,7 @@ Each task is implemented and approved on its own, then pushed. Every new
 test is mutation-checked: remove the fix and confirm the test fails, and
 make sure the mutated code still compiles.
 
-1. [ ] **Reading an outside file (`snippet/import.go`).**
+1. [x] **Reading an outside file (`snippet/import.go`).**
    - `MaxImportSize`, `CleanImportPath` (with an injectable home folder
      and OS), and `ReadImportFile`.
    - Table-driven tests as listed in `plan.md`: Unix and Windows path
