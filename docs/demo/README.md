@@ -25,6 +25,13 @@ docs/demo/setup.sh --down   # remove the broker container and /tmp/cloudtui-demo
   so a fresh `setup.sh` followed by all of them gives the intended result.
 - The scenarios are plain lists of key presses in `record.py`. Adjust
   one and re-run.
+- `vhs/<name>.tape` records the same scenarios with
+  [VHS](https://github.com/charmbracelet/vhs) instead, into
+  `docs/demo/vhs-<name>.gif`: run `vhs docs/demo/vhs/<name>.tape` from
+  the repo root after `setup.sh`. VHS 0.12.0 exits without writing the
+  GIF ([vhs#787](https://github.com/charmbracelet/vhs/issues/787)); use
+  0.11.0 (`go install github.com/charmbracelet/vhs@v0.11.0`). VHS runs a
+  headless browser, so it doesn't work in sandboxed shells.
 - The demo `HOME` and files live under `/tmp/cloudtui-demo` on purpose:
   the app shows full paths in some places (e.g. after an import), and a
   path under your own home folder would put your username in the GIF.

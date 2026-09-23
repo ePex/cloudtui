@@ -61,23 +61,33 @@ Browse queues, a queue's messages, and a message's details:
 
 ![Browsing queues and messages](docs/demo/queues.gif)
 
+![Browsing queues and messages (VHS)](docs/demo/vhs-queues.gif)
+
 Requeue a dead-letter queue: mark all, move, and the matching queue is
 offered first:
 
 ![Requeuing a DLQ](docs/demo/dlq-requeue.gif)
 
+![Requeuing a DLQ (VHS)](docs/demo/vhs-dlq-requeue.gif)
+
 Send a message from a snippet:
 
 ![Sending a message from a snippet](docs/demo/send-snippet.gif)
+
+![Sending a message from a snippet (VHS)](docs/demo/vhs-send-snippet.gif)
 
 The snippet library: preview, then import a plain JSON file and give it
 a JMS Type:
 
 ![The snippet library and importing a file](docs/demo/snippets.gif)
 
+![The snippet library and importing a file (VHS)](docs/demo/vhs-snippets.gif)
+
 Switch themes live:
 
 ![Switching themes](docs/demo/themes.gif)
+
+![Switching themes (VHS)](docs/demo/vhs-themes.gif)
 
 ## Installing a release
 

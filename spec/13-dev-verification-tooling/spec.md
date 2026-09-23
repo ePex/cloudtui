@@ -91,8 +91,10 @@ the same broker state.
   through scripted scenarios, samples the screen with colors about ten
   times a second into an asciinema recording, and renders it to
   `docs/demo/<scenario>.gif` with `agg`. No browser or network is
-  involved. VHS was tried first, but its headless browser doesn't run in
-  a sandboxed shell.
+  involved.
+- `vhs/<scenario>.tape` records the same scenarios with VHS (0.11.0;
+  0.12.0 writes no GIF) into `docs/demo/vhs-<scenario>.gif`. VHS drives
+  a headless browser, so it doesn't run in a sandboxed shell.
 - `docs/demo/README.md` explains regenerating the GIFs and what to check
   before committing them:
   - no data other than the example data
