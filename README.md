@@ -2,6 +2,83 @@
 
 A terminal UI for managing cloud resources.
 
+## Features
+
+**ActiveMQ**
+
+- **Queues:** pending, consumer and enqueue/dequeue counts, with a live
+  filter and sorting by any column. A setting hides queues with no
+  pending messages.
+- **Messages:** browse a queue's messages, search them, filter by JMS
+  Type and time range, and open a message to see its headers,
+  properties and (pretty-printed) body. `c` copies it to the clipboard.
+- **Actions:**
+  - purge a queue, optionally only one JMS Type
+  - delete or move messages one at a time, marked, or all at once
+  - send new messages with JMS Type, correlation and group IDs, and
+    custom headers
+
+  When moving out of a `dlq.*` queue, the matching queue is offered
+  first, so requeuing a dead-letter queue takes a couple of keys.
+- **Message snippets:** a library of reusable messages, stored as plain
+  files you can share. Save a received message as a snippet, load one
+  into the send dialog, manage folders and snippets in the app, or import
+  a JSON/XML file from anywhere (see [Message snippets](#message-snippets)).
+- **Connections:** switch between named broker connections, using Jolokia
+  or, for Amazon MQ (which has no Jolokia), the bundled `mq-proxy`
+  service. A connection's password can come from AWS Secrets Manager.
+- **A web console** (`mq-console.html` on each release) offers the same
+  queue operations in a browser, for colleagues who don't use a terminal.
+
+**AWS** (using your AWS CLI profiles, with SSO re-login when a session
+expires)
+
+- **Parameter Store** and **Secrets Manager:** browse, reveal values, and
+  star favorites.
+- **CloudWatch Logs:** search a log group over a relative or absolute
+  time range.
+- **CodePipeline:** watch pipelines and get desktop notifications as
+  their stages change.
+
+**Datadog**
+
+- **Logs:** search with service/env filters. Jump from a Datadog log line
+  to the matching CloudWatch log by its correlation ID.
+
+**Everywhere**
+
+- Keyboard-driven, with a `:` command prompt (with autocomplete) to
+  switch views.
+- Themes you can switch live, plus your own color overrides.
+
+### A quick look
+
+These recordings run against an example broker holding only made-up
+data; [`docs/demo/`](docs/demo/) has the scripts that build it and
+record them.
+
+Browse queues, a queue's messages, and a message's details:
+
+![Browsing queues and messages](docs/demo/queues.gif)
+
+Requeue a dead-letter queue: mark all, move, and the matching queue is
+offered first:
+
+![Requeuing a DLQ](docs/demo/dlq-requeue.gif)
+
+Send a message from a snippet:
+
+![Sending a message from a snippet](docs/demo/send-snippet.gif)
+
+The snippet library: preview, then import a plain JSON file and give it
+a JMS Type:
+
+![The snippet library and importing a file](docs/demo/snippets.gif)
+
+Switch themes live:
+
+![Switching themes](docs/demo/themes.gif)
+
 ## Installing a release
 
 **macOS/Linux:**
