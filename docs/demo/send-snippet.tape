@@ -1,7 +1,7 @@
 # Compose a message from a library snippet and send it from inside the queue.
-# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/vhs/send-snippet.tape
-# Writes docs/demo/vhs-send-snippet.gif, next to the committed record.py GIF.
-Output "docs/demo/vhs-send-snippet.gif"
+# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/send-snippet.tape
+# Writes docs/demo/send-snippet.gif.
+Output "docs/demo/send-snippet.gif"
 
 Set Shell "bash"
 Set FontSize 13

@@ -1,7 +1,7 @@
 # Home -> queue list -> filter -> messages -> message detail.
-# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/vhs/queues.tape
-# Writes docs/demo/vhs-queues.gif, next to the committed record.py GIF.
-Output "docs/demo/vhs-queues.gif"
+# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/queues.tape
+# Writes docs/demo/queues.gif.
+Output "docs/demo/queues.gif"
 
 Set Shell "bash"
 Set FontSize 13

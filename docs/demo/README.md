@@ -9,32 +9,30 @@ broker, config or AWS/Datadog accounts is involved.
 
 ## Regenerating them
 
-Needs podman or docker, Go, python3, tmux, and
-[agg](https://github.com/asciinema/agg) (`brew install agg`).
+Needs podman or docker, Go, python3, and
+[VHS](https://github.com/charmbracelet/vhs) **0.11.0**. VHS 0.12.0 exits
+without writing the GIF
+([vhs#787](https://github.com/charmbracelet/vhs/issues/787)), and
+Homebrew ships 0.12.0, so install it with Go:
+`go install github.com/charmbracelet/vhs@v0.11.0` (it also needs `ttyd`
+and `ffmpeg`, e.g. `brew install ttyd ffmpeg`).
 
 ```sh
 docs/demo/setup.sh          # build the example instance (/tmp/cloudtui-demo)
-docs/demo/record.py         # record all GIFs into docs/demo/
+for t in queues send-snippet snippets dlq-requeue themes; do vhs docs/demo/$t.tape; done
 docs/demo/setup.sh --down   # remove the broker container and /tmp/cloudtui-demo
 ```
 
-- `record.py` drives the real TUI in a tmux session, samples the screen
-  about ten times a second, and renders the frames with agg. It needs no
-  browser or network. `record.py <name>` records a single scenario, but
-  the scenarios change the broker's data as they go (sending, requeuing),
-  so a fresh `setup.sh` followed by all of them gives the intended result.
-- The scenarios are plain lists of key presses in `record.py`. Adjust
-  one and re-run.
-- `vhs/<name>.tape` records the same scenarios with
-  [VHS](https://github.com/charmbracelet/vhs) instead, into
-  `docs/demo/vhs-<name>.gif`: run `vhs docs/demo/vhs/<name>.tape` from
-  the repo root after `setup.sh`. VHS 0.12.0 exits without writing the
-  GIF ([vhs#787](https://github.com/charmbracelet/vhs/issues/787)); use
-  0.11.0 (`go install github.com/charmbracelet/vhs@v0.11.0`). VHS runs a
-  headless browser, so it doesn't work in sandboxed shells.
+- Each `<name>.tape` starts the app with the demo `HOME` (hidden), plays
+  one scenario as key presses, and writes `docs/demo/<name>.gif`. Adjust
+  a tape and re-run it. The scenarios change the broker's data as they
+  go (sending, importing, requeuing), so a fresh `setup.sh` followed by
+  all of them, in the order above, gives the intended result.
+- VHS drives a headless browser, so it doesn't run in sandboxed shells.
 - The demo `HOME` and files live under `/tmp/cloudtui-demo` on purpose:
   the app shows full paths in some places (e.g. after an import), and a
   path under your own home folder would put your username in the GIF.
 - Before committing new GIFs, check them for anything that isn't example
-  data. For instance, the theme scenario uses `:theme <name>` rather than
-  the theme picker, so the full list of bundled themes isn't shown.
+  data. For instance, the theme scenario types `:theme <name>` while hidden
+  rather than using the theme picker, so the full list of bundled themes
+  isn't shown.

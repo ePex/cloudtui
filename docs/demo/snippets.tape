@@ -1,7 +1,7 @@
 # The snippet library: browse with preview, then import a plain JSON file.
-# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/vhs/snippets.tape
-# Writes docs/demo/vhs-snippets.gif, next to the committed record.py GIF.
-Output "docs/demo/vhs-snippets.gif"
+# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/snippets.tape
+# Writes docs/demo/snippets.gif.
+Output "docs/demo/snippets.gif"
 
 Set Shell "bash"
 Set FontSize 13

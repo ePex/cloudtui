@@ -1,9 +1,9 @@
 # Live theme switching with :theme (dark -> cyberpunk -> dark).
 # The theme name is typed while hidden, so the autocomplete never shows
 # every bundled theme on screen.
-# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/vhs/themes.tape
-# Writes docs/demo/vhs-themes.gif, next to the committed record.py GIF.
-Output "docs/demo/vhs-themes.gif"
+# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/themes.tape
+# Writes docs/demo/themes.gif.
+Output "docs/demo/themes.gif"
 
 Set Shell "bash"
 Set FontSize 13

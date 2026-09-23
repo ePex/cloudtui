@@ -1,7 +1,7 @@
 # Requeue a whole DLQ: mark all, move, the matching queue is offered first.
-# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/vhs/dlq-requeue.tape
-# Writes docs/demo/vhs-dlq-requeue.gif, next to the committed record.py GIF.
-Output "docs/demo/vhs-dlq-requeue.gif"
+# Run from the repo root after docs/demo/setup.sh:  vhs docs/demo/dlq-requeue.tape
+# Writes docs/demo/dlq-requeue.gif.
+Output "docs/demo/dlq-requeue.gif"
 
 Set Shell "bash"
 Set FontSize 13
