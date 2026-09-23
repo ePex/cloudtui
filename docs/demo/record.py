@@ -75,19 +75,20 @@ SCENARIOS = {
         key("Enter", 3.5),
         key("Escape", 1.0), key("Escape", 1.5),
     ],
-    # Compose a message on a queue from a library snippet and send it.
+    # Compose a message from a library snippet and send it, from inside the
+    # queue's message list: after sending, the new message shows up on top.
     "send-snippet": [
         *prompt("queues"),
         key("/", 0.4), type_("orders.created", 0.6), key("Enter", 1.0),
         key("Down", 0.8),                       # past dlq.orders.created
+        key("Enter", 2.0),                      # orders.created's messages
         key("c", 1.2),
         *keys("Tab", "Tab", "Tab", "Tab", "Tab", "Tab", "Tab", pause=0.15),
         key("Enter", 1.2),                      # Load snippet…
         key("Down", 0.6), key("Enter", 0.8),    # orders/
         key("Down", 0.4), key("Down", 0.6),     # order-created.json
         key("Enter", 1.8),
-        key("BTab", 0.2), key("BTab", 0.5), key("Enter", 2.0),  # Submit
-        key("Enter", 2.5),                      # the queue's messages
+        key("BTab", 0.2), key("BTab", 0.5), key("Enter", 3.0),  # Submit
     ],
     # The snippet library: browse with preview, then import a plain JSON
     # file — the editor opens on JMS Type for it.
