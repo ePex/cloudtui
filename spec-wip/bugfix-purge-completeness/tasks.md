@@ -153,6 +153,24 @@ otherwise.
    the JMS Type prompt and lets its automatic scan run; `main` has the
    same 10 races, so it predates this branch.
 
-9. [ ] **Regression run.** `task test` (all modules), `task
+9. [x] **Regression run.** `task test` (all modules), `task
    smoke:test`, and a final pass of the live checks from tasks 5–8 in
    one session. Remove the scratch queue afterwards.
+   *Done 2026-10-10.* `task test`: exit 0 (Go, mq-proxy, mq-proxy-web
+   43/43). Smoke test: PASS, run with a scratch `HOME` holding only a
+   local-broker connection, because the developer's real active
+   connection pointed at a shared remote environment. Note for running
+   it that way: tmux must be a separate server (`tmux -L <name>`) —
+   an already-running tmux server starts the TUI with its own
+   environment, so a `HOME` override doesn't reach it. A first attempt
+   hit exactly that; it only listed queues on the real connection
+   (read-only) before timing out. Final pass in one session on 800 ×
+   TypeA then 800 × TypeB: purge prompt offered only `TypeA` with the
+   scan note; purging `TypeB` from the queue list → `Purged 112 TypeB
+   message(s) … — 1488 message(s) remain; …` (112, not 0 as in task 6:
+   after the earlier browsing the broker had more of the queue paged
+   in, which is why the warning says "may"); inside the queue the
+   title read `(showing 400 of 1488)`, and `p` with a blank type →
+   JMS Type prompt → `Purged 1488 message(s) …`, queue empty. Both
+   scratch queues and their two `ActiveMQ.Statistics.Destination.*`
+   request queues removed from the local broker.
