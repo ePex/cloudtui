@@ -9,7 +9,7 @@ the local broker, a disposable queue (here `cloudtui.test.purge`), seeded
 with **800 × TypeA followed by 800 × TypeB** unless a task says
 otherwise.
 
-1. [ ] **mq-proxy: honest `hasMore` on `list-messages`** (plan §1).
+1. [x] **mq-proxy: honest `hasMore` on `list-messages`** (plan §1).
    `doBrowse` sets `hasMore` when the enumeration ended early but the
    queue depth (statistics plugin) is larger than what the browser saw;
    filtered browses use a count-only unfiltered pass for that. No stats →
@@ -19,6 +19,14 @@ otherwise.
    messages and `hasMore: true`; the same with `filter.jmsType=TypeB`
    returns 0 messages and `hasMore: true`; a queue with 10 messages
    returns 10 and `hasMore: false`.
+   *Done 2026-10-10.* Unit tests mutation-checked (disabling the depth
+   check fails both `hasMore: true` tests). Live, 800 × TypeA then
+   800 × TypeB: unfiltered → 400, `hasMore: true`; `TypeA` → 400,
+   `hasMore: true`; `TypeB` → **48** (not 0: with a selector the broker
+   scanned slightly past 400 this time; stable across repeats),
+   `hasMore: true`; `maxCount=100` → 100, `hasMore: true`. 10-message
+   queue: unfiltered and `TypeA` → 10, `hasMore: false`; `TypeB` → 0,
+   `hasMore: false`; `maxCount=5` → 5, `hasMore: true`.
 
 2. [ ] **TUI: `BrowseMessages` returns `hasMore`** (plan §2, §3 first
    bullet, §4 last bullet). Signature becomes `([]Message, bool, error)`

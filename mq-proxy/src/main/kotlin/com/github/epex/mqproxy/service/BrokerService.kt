@@ -82,9 +82,16 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     /**
      * Pages through [browseMessages] starting just after [QueueMessageFilter.afterMessageId]
      * (spec/11's pagination). [hasMore] is true when at least one more matching
-     * message exists beyond this page.
+     * message exists beyond this page, or may exist beyond the part of the queue
+     * the broker let the browser see (see [isBrowseWindowTruncated]).
      */
     data class BrowseResult(val data: List<MessageSummary>, val hasMore: Boolean)
+
+    /**
+     * One [doBrowse] pass: its [result], whether the cursor was found, and how
+     * many messages the browser enumerated in total (skipped ones included).
+     */
+    private data class BrowsePass(val result: BrowseResult, val foundCursor: Boolean, val enumerated: Int)
 
     fun browseMessages(queueName: String, filter: QueueMessageFilter, returnBody: Boolean = true): BrowseResult {
         log.info("broker: browseMessages queue={} filter={} returnBody={}", queueName, filter, returnBody)
@@ -92,11 +99,16 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
         connection.start()
         return try {
             val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
-            val (result, foundCursor) = doBrowse(session, queueName, filter, returnBody, filter.afterMessageId)
+            val first = doBrowse(session, queueName, filter, returnBody, filter.afterMessageId)
             // The cursor message is gone (a page raced a concurrent purge/consume) -
             // silently restart from the beginning rather than surfacing an error to
             // a non-technical user (spec-wip/fe-list-messages-pagination).
-            if (foundCursor) result else doBrowse(session, queueName, filter, returnBody, null).first
+            val pass = if (first.foundCursor) first else doBrowse(session, queueName, filter, returnBody, null)
+            if (pass.result.hasMore || !isBrowseWindowTruncated(session, queueName, filter, pass.enumerated)) {
+                pass.result
+            } else {
+                pass.result.copy(hasMore = true)
+            }
         } finally {
             connection.close()
         }
@@ -104,9 +116,9 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
 
     /**
      * One JMS QueueBrowser pass: skips messages up to and including [afterMessageId]
-     * (if set), then collects up to [QueueMessageFilter.maxCount] after it. The
-     * second return value is whether [afterMessageId] was actually found in this
-     * pass - false means it's stale/gone, and the caller should retry unfiltered.
+     * (if set), then collects up to [QueueMessageFilter.maxCount] after it.
+     * [BrowsePass.foundCursor] false means [afterMessageId] is stale/gone, and the
+     * caller should retry unfiltered.
      */
     private fun doBrowse(
         session: Session,
@@ -114,7 +126,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
         filter: QueueMessageFilter,
         returnBody: Boolean,
         afterMessageId: String?,
-    ): Pair<BrowseResult, Boolean> {
+    ): BrowsePass {
         val browser = session.createBrowser(session.createQueue(queueName), filter.toSelector())
         try {
             val enum = browser.enumeration
@@ -122,8 +134,10 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             var foundCursor = afterMessageId == null
             val messages = mutableListOf<MessageSummary>()
             var hasMore = false
+            var enumerated = 0
             while (enum.hasMoreElements()) {
                 val msg = enum.nextElement() as? jakarta.jms.Message ?: continue
+                enumerated++
                 if (skipping) {
                     if (msg.jmsMessageID == afterMessageId) {
                         skipping = false
@@ -137,7 +151,50 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
                 }
                 messages += msg.toSummary(queueName, returnBody)
             }
-            return BrowseResult(messages, hasMore) to foundCursor
+            return BrowsePass(BrowseResult(messages, hasMore), foundCursor, enumerated)
+        } finally {
+            browser.close()
+        }
+    }
+
+    /**
+     * Whether the broker stopped the browser before the end of the queue. A JMS
+     * QueueBrowser on ActiveMQ never sees more than the broker's
+     * `maxBrowsePageSize` (default 400) messages, and its enumeration just ends
+     * there, indistinguishable from reaching the end of the queue - so compare
+     * the browse window with the queue depth from the statistics plugin. An
+     * unfiltered pass's [enumerated] count *is* the window; a filtered pass's
+     * isn't (the broker applies the selector itself), so count the window with a
+     * separate unfiltered pass. Without the statistics plugin this can't be
+     * told, and stays false.
+     */
+    private fun isBrowseWindowTruncated(
+        session: Session,
+        queueName: String,
+        filter: QueueMessageFilter,
+        enumerated: Int,
+    ): Boolean {
+        val depth = fetchStats(session, queueName)?.get("size")?.takeIf { it >= 0 }
+        if (depth == null) {
+            log.warn("broker: can't tell whether browsing '{}' was cut short - queue depth unavailable", queueName)
+            return false
+        }
+        if (depth <= enumerated) return false
+        val window = if (filter.toSelector() == null) enumerated else countBrowseWindow(session, queueName)
+        return depth > window
+    }
+
+    /** Counts the messages an unfiltered QueueBrowser on [queueName] gets to see. */
+    private fun countBrowseWindow(session: Session, queueName: String): Int {
+        val browser = session.createBrowser(session.createQueue(queueName))
+        try {
+            val enum = browser.enumeration
+            var count = 0
+            while (enum.hasMoreElements()) {
+                enum.nextElement()
+                count++
+            }
+            return count
         } finally {
             browser.close()
         }

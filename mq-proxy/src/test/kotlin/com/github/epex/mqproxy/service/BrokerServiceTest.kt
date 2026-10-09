@@ -8,6 +8,7 @@ import io.mockk.mockk
 import io.mockk.Runs
 import io.mockk.verify
 import jakarta.jms.Connection
+import jakarta.jms.MapMessage
 import jakarta.jms.Message
 import jakarta.jms.MessageConsumer
 import jakarta.jms.MessageProducer
@@ -76,14 +77,55 @@ class BrokerServiceTest {
     // a fresh Enumeration over `messages` - matching real JMS QueueBrowser.getEnumeration()
     // behavior, and required for browseMessages' stale-cursor fallback, which re-reads
     // the enumeration on a second pass after the first is fully consumed.
-    private fun stubBrowser(session: Session, queueName: String, selector: String?, messages: List<Message>): QueueBrowser {
+    //
+    // `depth` is the queue depth the statistics plugin reports; it defaults to
+    // exactly the browsed messages, i.e. a queue the browser saw all of.
+    private fun stubBrowser(
+        session: Session,
+        queueName: String,
+        selector: String?,
+        messages: List<Message>,
+        depth: Long? = messages.size.toLong(),
+    ): QueueBrowser {
         val queue = mockk<Queue>()
         val browser = mockk<QueueBrowser>()
         every { session.createQueue(queueName) } returns queue
         every { session.createBrowser(queue, selector) } returns browser
         every { browser.enumeration } answers { Collections.enumeration(messages) }
         every { browser.close() } just Runs
+        stubStats(session, queueName, depth)
         return browser
+    }
+
+    // The unfiltered, count-only browser a filtered browse uses to measure the
+    // broker's browse window (the selector-less createBrowser overload).
+    private fun stubWindowBrowser(session: Session, windowSize: Int): QueueBrowser {
+        val browser = mockk<QueueBrowser>()
+        every { session.createBrowser(any()) } returns browser
+        every { browser.enumeration } answers { Collections.enumeration(List(windowSize) { mockk<Message>() }) }
+        every { browser.close() } just Runs
+        return browser
+    }
+
+    // The statistics plugin round trip; a null depth means the plugin doesn't answer.
+    private fun stubStats(session: Session, queueName: String, depth: Long?) {
+        val tempQueue = mockk<TemporaryQueue>()
+        val statsConsumer = mockk<MessageConsumer>()
+        val statsProducer = mockk<MessageProducer>()
+        val statsQueue = mockk<Queue>()
+        val statsRequest = mockk<Message>(relaxed = true)
+        every { session.createTemporaryQueue() } returns tempQueue
+        every { session.createConsumer(tempQueue) } returns statsConsumer
+        every { session.createQueue("ActiveMQ.Statistics.Destination.$queueName") } returns statsQueue
+        every { session.createProducer(statsQueue) } returns statsProducer
+        every { session.createMessage() } returns statsRequest
+        every { statsProducer.send(statsRequest) } just Runs
+        every { statsConsumer.receive(3_000) } returns depth?.let { size ->
+            mockk<MapMessage>(relaxed = true).also { every { it.getLong("size") } returns size }
+        }
+        every { statsProducer.close() } just Runs
+        every { statsConsumer.close() } just Runs
+        every { tempQueue.delete() } just Runs
     }
 
     // -------------------------------------------------------------------------
@@ -301,6 +343,87 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter())
 
         assertThat(result.data[0].body).isEqualTo("hello")
+    }
+
+    @Test
+    fun `browseMessages hasMore is true when the broker stopped browsing before the end of the queue`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2), depth = 1_600)
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
+
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:1", "ID:2")
+        assertThat(result.hasMore).isTrue()
+    }
+
+    @Test
+    fun `browseMessages hasMore is false when the browser saw the whole queue`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2), depth = 2)
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
+
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `browseMessages filtered hasMore is true when the browse window is smaller than the queue`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        // No TypeB within the window the broker lets the browser see.
+        stubBrowser(session, "orders", "JMSType = 'TypeB'", emptyList(), depth = 1_600)
+        stubWindowBrowser(session, windowSize = 400)
+
+        val result = service.browseMessages("orders", QueueMessageFilter(jmsType = "TypeB", maxCount = 5_000))
+
+        assertThat(result.data).isEmpty()
+        assertThat(result.hasMore).isTrue()
+    }
+
+    @Test
+    fun `browseMessages filtered hasMore is false when the browse window covers the queue`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val match = stubTextMessage(session, id = "ID:2", jmsType = "TypeB")
+        stubBrowser(session, "orders", "JMSType = 'TypeB'", listOf(match), depth = 3)
+        stubWindowBrowser(session, windowSize = 3)
+
+        val result = service.browseMessages("orders", QueueMessageFilter(jmsType = "TypeB", maxCount = 5_000))
+
+        assertThat(result.data.map { it.messageId }).containsExactly("ID:2")
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `browseMessages hasMore stays false when the queue depth is unavailable`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        stubBrowser(session, "orders", null, listOf(msg1), depth = null)
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
+
+        assertThat(result.hasMore).isFalse()
+    }
+
+    @Test
+    fun `browseMessages skips the depth check when maxCount was reached`() {
+        val conn = mockConnection()
+        val session = stubSession(conn)
+        val msg1 = stubTextMessage(session, id = "ID:1")
+        val msg2 = stubTextMessage(session, id = "ID:2")
+        stubBrowser(session, "orders", null, listOf(msg1, msg2))
+
+        val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 1))
+
+        assertThat(result.hasMore).isTrue()
+        verify(exactly = 0) { session.createTemporaryQueue() }
     }
 
     // -------------------------------------------------------------------------
