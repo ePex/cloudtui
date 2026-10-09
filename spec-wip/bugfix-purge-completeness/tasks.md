@@ -112,7 +112,7 @@ otherwise.
    move-all `TypeB` to another queue → `Moved 0 message(s) from … to … —
    1600 message(s) remain; …`.
 
-7. [ ] **TUI: message browser says when it's incomplete** (plan §5
+7. [x] **TUI: message browser says when it's incomplete** (plan §5
    "Message browser title"). Unfiltered loads fetch the pending count
    concurrently and show `showing <n> of <pending>` when `n < pending`;
    filtered loads with `hasMore` show `first <n> browsed, more on
@@ -121,6 +121,16 @@ otherwise.
    *Live check:* opening the queue shows `showing 400 of 1600`; filtering
    by `TypeB` shows an empty list titled `first 0 browsed, more on
    queue`; a 10-message queue shows no suffix.
+   *Done 2026-10-10.* Load's result handling is split into `applyLoad`
+   for tests; `go test -race` clean on the concurrent pending-count
+   fetch. Pending-comparison mutation fails 5 tests. Live: the
+   1,600-message queue showed `(filter: max=500) (showing 400 of
+   1600)`; the 10-message queue no note. Filtered: checked with
+   `TypeA` instead of `TypeB` → `(filter: type=TypeA max=500) (first
+   400 browsed, more on queue)`. `TypeB` couldn't be applied from the
+   keyboard: with it not among the suggestions, Enter in the filter's
+   JMS Type field picks the drop-down's scan entry and clears the field
+   (pre-existing; recorded with the follow-up bugfix from task 5).
 
 8. [ ] **TUI: JMS Type scans report the limit** (plan §5 "JMS Type
    scans"). `ScanJMSTypes` returns `hasMore`; `JMSTypePrompt` and

@@ -77,17 +77,26 @@ func filteredRemainderWarning(ctx context.Context, b queue.Backend, queueName, j
 	if jmsType == "" {
 		return ""
 	}
-	summaries, err := b.List(ctx)
-	if err != nil {
-		slog.Warn("can't read the remaining count after a filtered operation", "queue", queueName, "error", err)
-		return ""
-	}
-	for _, s := range summaries {
-		if s.Name == queueName && s.PendingCount > filteredWindowWarnAt {
-			return fmt.Sprintf(" — %d message(s) remain; matching messages further back may not have been reached", s.PendingCount)
-		}
+	if n, ok := pendingCount(ctx, b, queueName); ok && n > filteredWindowWarnAt {
+		return fmt.Sprintf(" — %d message(s) remain; matching messages further back may not have been reached", n)
 	}
 	return ""
+}
+
+// pendingCount reads queueName's pending count via List. ok is false when
+// List fails (logged) or doesn't include the queue.
+func pendingCount(ctx context.Context, b queue.Backend, queueName string) (int64, bool) {
+	summaries, err := b.List(ctx)
+	if err != nil {
+		slog.Warn("can't read the queue's pending count", "queue", queueName, "error", err)
+		return 0, false
+	}
+	for _, s := range summaries {
+		if s.Name == queueName {
+			return s.PendingCount, true
+		}
+	}
+	return 0, false
 }
 
 // purge dispatches to the backend call matching jmsType: PurgeQueue (the
