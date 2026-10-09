@@ -4,6 +4,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -251,7 +252,7 @@ func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, target
 func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
 	n, err := c.MoveMessages(ctx, sourceQueue, targetQueue, queue.MessageFilter{})
 	if err != nil {
-		return 0, fmt.Errorf("move all from %q to %q: %w", sourceQueue, targetQueue, err)
+		return n, fmt.Errorf("move all from %q to %q: %w", sourceQueue, targetQueue, err)
 	}
 	return n, nil
 }
@@ -276,8 +277,54 @@ func (c *Client) SendMessage(ctx context.Context, queueName string, sendReq queu
 	return nil
 }
 
-// DeleteMessages implements queue.Backend.
+// maxBulkRounds caps how many requests one bulk delete/move makes (see
+// inRounds). At the ~400 messages per request a browse-capped server
+// manages, that's 400,000 messages.
+const maxBulkRounds = 1000
+
+// errBulkIncomplete is returned (wrapped) when a bulk delete/move hits
+// maxBulkRounds while the server still reports progress.
+var errBulkIncomplete = errors.New("incomplete")
+
+// inRounds repeats round until it acts on 0 messages and returns the total.
+// Nothing in the wire contract (spec/11) promises that one delete-messages/
+// move-messages call acts on every matching message - a server that
+// browses before consuming stops at the broker's browse limit - so a bulk
+// operation keeps asking until the server reports nothing left. Bounded by
+// maxBulkRounds so a server that misreports progress can't loop forever;
+// the context is checked between rounds. On error, the total so far comes
+// back alongside it.
+func inRounds(ctx context.Context, round func() (int, error)) (int, error) {
+	total := 0
+	for range maxBulkRounds {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		n, err := round()
+		total += n
+		if err != nil {
+			return total, err
+		}
+		if n == 0 {
+			return total, nil
+		}
+	}
+	return total, fmt.Errorf("%w after %d requests (%d messages so far); the server kept reporting progress",
+		errBulkIncomplete, maxBulkRounds, total)
+}
+
+// DeleteMessages implements queue.Backend. Without a MaxCount ("all
+// matching") it repeats until nothing is left (inRounds); with one, it's a
+// single request.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+	if filter.MaxCount > 0 {
+		return c.deleteOnce(ctx, queueName, filter)
+	}
+	return inRounds(ctx, func() (int, error) { return c.deleteOnce(ctx, queueName, filter) })
+}
+
+// deleteOnce makes a single delete-messages request.
+func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	reqs := []deleteMessagesRequest{{SourceQueue: queueName, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[deletedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/delete-messages", reqs, &env); err != nil {
@@ -289,8 +336,17 @@ func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter qu
 	return len(env.Data), nil
 }
 
-// MoveMessages implements queue.Backend.
+// MoveMessages implements queue.Backend, repeating like DeleteMessages
+// when filter has no MaxCount.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+	if filter.MaxCount > 0 {
+		return c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+	}
+	return inRounds(ctx, func() (int, error) { return c.moveOnce(ctx, sourceQueue, targetQueue, filter) })
+}
+
+// moveOnce makes a single move-messages request.
+func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	reqs := []moveMessagesRequest{{SourceQueue: sourceQueue, TargetQueue: targetQueue, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[movedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/move-messages", reqs, &env); err != nil {

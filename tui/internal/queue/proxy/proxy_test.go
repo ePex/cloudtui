@@ -3,6 +3,8 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -354,7 +356,9 @@ func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 // ── PurgeQueue ────────────────────────────────────────────────────────────────
 
 func TestPurgeQueue(t *testing.T) {
+	calls := 0
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		checkBasicAuth(t, r)
 		if r.Method != http.MethodPost || r.URL.Path != "/api/management/command/delete-messages" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -366,10 +370,11 @@ func TestPurgeQueue(t *testing.T) {
 		if len(reqs) != 1 || reqs[0].SourceQueue != "orders" || reqs[0].Filter.MaxCount != nil {
 			t.Errorf("unexpected request %+v, want a single empty-filter entry for orders", reqs)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data":   []map[string]string{{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"}},
-			"errors": []any{},
-		})
+		data := []map[string]string{{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"}}
+		if calls > 1 {
+			data = nil // the queue is empty now
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
 	}))
 	defer stop()
 
@@ -379,6 +384,9 @@ func TestPurgeQueue(t *testing.T) {
 	}
 	if n != 3 {
 		t.Errorf("PurgeQueue() = %d, want 3 (the deleted messages the server reported)", n)
+	}
+	if calls != 2 {
+		t.Errorf("requests = %d, want 2 (one deleting, one confirming nothing is left)", calls)
 	}
 }
 
@@ -475,7 +483,9 @@ func TestMoveMessageNotFound(t *testing.T) {
 // ── MoveAllMessages ───────────────────────────────────────────────────────────
 
 func TestMoveAllMessages(t *testing.T) {
+	calls := 0
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		checkBasicAuth(t, r)
 		var reqs []moveMessagesRequest
 		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
@@ -484,13 +494,14 @@ func TestMoveAllMessages(t *testing.T) {
 		if len(reqs) != 1 || reqs[0].Filter.MaxCount != nil {
 			t.Errorf("unexpected request %+v, want a single empty-filter entry", reqs)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"data": []map[string]string{
-				{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"},
-				{"messageId": "ID:4"}, {"messageId": "ID:5"}, {"messageId": "ID:6"}, {"messageId": "ID:7"},
-			},
-			"errors": []any{},
-		})
+		data := []map[string]string{
+			{"messageId": "ID:1"}, {"messageId": "ID:2"}, {"messageId": "ID:3"},
+			{"messageId": "ID:4"}, {"messageId": "ID:5"}, {"messageId": "ID:6"}, {"messageId": "ID:7"},
+		}
+		if calls > 1 {
+			data = nil // the source queue is empty now
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
 	}))
 	defer stop()
 
@@ -568,6 +579,209 @@ func TestMoveMessagesSendsFilter(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("MoveMessages() = %d, want 1", n)
+	}
+}
+
+// ── Bulk rounds ───────────────────────────────────────────────────────────────
+
+// cappedServer fakes delete-messages/move-messages on a queue holding
+// remaining messages, acting on at most perRound of them per request (the
+// way a server that browses before consuming stops at the broker's browse
+// limit). It records each request's filter; failOn makes that request
+// (1-based) fail with HTTP 502, and stuck makes every request report
+// perRound messages without ever running out.
+type cappedServer struct {
+	remaining int
+	perRound  int
+	failOn    int
+	stuck     bool
+	filters   []queueMessageFilter
+}
+
+func (s *cappedServer) handler(t *testing.T) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqs []struct {
+			Filter queueMessageFilter `json:"filter"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil || len(reqs) != 1 {
+			t.Errorf("decode request: %v (%d entries)", err, len(reqs))
+		}
+		s.filters = append(s.filters, reqs[0].Filter)
+		if len(s.filters) == s.failOn {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "broker error"})
+			return
+		}
+		n := min(s.remaining, s.perRound)
+		if s.stuck {
+			n = s.perRound
+		}
+		s.remaining -= n
+		data := make([]map[string]string, n)
+		for i := range data {
+			data[i] = map[string]string{"messageId": fmt.Sprintf("ID:%d", i)}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
+	})
+}
+
+func TestPurgeQueueRepeatsUntilNothingIsLeft(t *testing.T) {
+	s := &cappedServer{remaining: 1000, perRound: 400}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 1000 {
+		t.Errorf("PurgeQueue() = %d, want 1000", n)
+	}
+	if len(s.filters) != 4 {
+		t.Errorf("requests = %d, want 4 (400 + 400 + 200 + an empty one)", len(s.filters))
+	}
+}
+
+func TestPurgeQueueOnEmptyQueueMakesOneRequest(t *testing.T) {
+	s := &cappedServer{remaining: 0, perRound: 400}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+	if err != nil || n != 0 {
+		t.Fatalf("PurgeQueue() = %d, %v; want 0, nil", n, err)
+	}
+	if len(s.filters) != 1 {
+		t.Errorf("requests = %d, want 1", len(s.filters))
+	}
+}
+
+func TestMoveAllMessagesRepeatsUntilNothingIsLeft(t *testing.T) {
+	s := &cappedServer{remaining: 900, perRound: 400}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.MoveAllMessages(context.Background(), "orders", "archive")
+	if err != nil {
+		t.Fatalf("MoveAllMessages() error = %v", err)
+	}
+	if n != 900 {
+		t.Errorf("MoveAllMessages() = %d, want 900", n)
+	}
+}
+
+func TestDeleteMessagesWithoutMaxCountRepeatsWithTheSameFilter(t *testing.T) {
+	s := &cappedServer{remaining: 500, perRound: 200}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.DeleteMessages(context.Background(), "orders", queue.MessageFilter{JMSType: "TypeB"})
+	if err != nil {
+		t.Fatalf("DeleteMessages() error = %v", err)
+	}
+	if n != 500 {
+		t.Errorf("DeleteMessages() = %d, want 500", n)
+	}
+	for i, f := range s.filters {
+		if f.JMSType != "TypeB" || f.MaxCount != nil {
+			t.Errorf("request %d filter = %+v, want jmsType=TypeB and no maxCount", i+1, f)
+		}
+	}
+}
+
+func TestMoveMessagesWithoutMaxCountRepeats(t *testing.T) {
+	s := &cappedServer{remaining: 500, perRound: 200}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.MoveMessages(context.Background(), "orders", "archive", queue.MessageFilter{JMSType: "TypeB"})
+	if err != nil {
+		t.Fatalf("MoveMessages() error = %v", err)
+	}
+	if n != 500 {
+		t.Errorf("MoveMessages() = %d, want 500", n)
+	}
+}
+
+func TestBulkCallsWithMaxCountMakeOneRequest(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		call func(*Client) error
+	}{
+		{"RemoveMessage", func(c *Client) error { return c.RemoveMessage(context.Background(), "orders", "ID:0") }},
+		{"MoveMessage", func(c *Client) error { return c.MoveMessage(context.Background(), "orders", "ID:0", "archive") }},
+		{"DeleteMessages", func(c *Client) error {
+			_, err := c.DeleteMessages(context.Background(), "orders", queue.MessageFilter{MaxCount: 10})
+			return err
+		}},
+		{"MoveMessages", func(c *Client) error {
+			_, err := c.MoveMessages(context.Background(), "orders", "archive", queue.MessageFilter{MaxCount: 10})
+			return err
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &cappedServer{remaining: 1000, perRound: 1}
+			c, stop := newTestClient(t, s.handler(t))
+			defer stop()
+
+			if err := tt.call(c); err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if len(s.filters) != 1 {
+				t.Errorf("requests = %d, want 1", len(s.filters))
+			}
+		})
+	}
+}
+
+func TestPurgeQueueStopsAtTheRoundLimit(t *testing.T) {
+	s := &cappedServer{perRound: 400, stuck: true}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+	if !errors.Is(err, errBulkIncomplete) {
+		t.Fatalf("PurgeQueue() error = %v, want errBulkIncomplete", err)
+	}
+	if len(s.filters) != maxBulkRounds {
+		t.Errorf("requests = %d, want %d", len(s.filters), maxBulkRounds)
+	}
+	if want := maxBulkRounds * 400; n != want {
+		t.Errorf("PurgeQueue() = %d, want %d (the total so far)", n, want)
+	}
+}
+
+func TestPurgeQueueErrorMidwayReportsTheTotalSoFar(t *testing.T) {
+	s := &cappedServer{remaining: 1000, perRound: 400, failOn: 2}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+	if err == nil {
+		t.Fatal("PurgeQueue() error = nil, want the failed second request")
+	}
+	if n != 400 {
+		t.Errorf("PurgeQueue() = %d, want 400 (deleted before the failure)", n)
+	}
+	if len(s.filters) != 2 {
+		t.Errorf("requests = %d, want 2 (POSTs don't retry)", len(s.filters))
+	}
+}
+
+func TestInRoundsStopsWhenTheContextIsCancelledBetweenRounds(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rounds := 0
+
+	n, err := inRounds(ctx, func() (int, error) {
+		rounds++
+		cancel() // cancelled after this round completes
+		return 400, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("inRounds() error = %v, want context.Canceled", err)
+	}
+	if n != 400 || rounds != 1 {
+		t.Errorf("inRounds() = %d after %d rounds, want 400 after 1", n, rounds)
 	}
 }
 

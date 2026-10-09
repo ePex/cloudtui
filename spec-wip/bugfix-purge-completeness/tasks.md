@@ -49,7 +49,7 @@ otherwise.
    `QueueSize` read returns `{"status":200,"value":10}` on a 10-message
    queue, the shape the code decodes.
 
-4. [ ] **TUI: proxy client repeats bulk delete/move until zero** (plan
+4. [x] **TUI: proxy client repeats bulk delete/move until zero** (plan
    §3). Private round helper used by `PurgeQueue`, `MoveAllMessages` and
    `DeleteMessages`/`MoveMessages` when `MaxCount == 0`; sums the
    counts; stops on a 0 round; `maxBulkRounds` (1,000) guard with an
@@ -61,6 +61,14 @@ otherwise.
    the `mq-proxy` log). *Manual check by the user*, if a server that
    caps deletes per call is available: purge a 1,000+ message queue
    from the TUI and confirm it ends empty.
+   *Done 2026-10-10.* The context check is unit-tested on the round
+   helper directly, since cancelling from an `httptest` handler races
+   the client reading that response. Mutation-checked (single request
+   again fails 7 tests). Live: purging a 10-message queue from the queue
+   list made two `delete-messages` requests in the `mq-proxy` log and
+   left it empty. Each takes ~2 s (`mq-proxy`'s receive timeout), so the
+   confirming request adds ~2 s to a purge against `mq-proxy`. The
+   manual check against a per-call-capped server is still open (user).
 
 5. [ ] **TUI: one purge flow for both entry points, with a result
    line** (plan §5 "Shared purge flow" and "Result line" first
