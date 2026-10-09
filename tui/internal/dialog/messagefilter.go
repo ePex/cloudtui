@@ -34,6 +34,18 @@ const jmsTypeScanCount = 5000
 // showing this literal text before onJMSTypeChanged clears it back.
 var jmsTypeScanSentinel = fmt.Sprintf("↻ Scan up to %d messages for JMS types", jmsTypeScanCount)
 
+// scanStatus is the status line after a successful JMS Type scan, shared
+// by MessageFilter and JMSTypePrompt: empty when the scan saw the whole
+// queue, otherwise a note that types further back aren't listed — the
+// broker stops browsing at its browse limit (400 by default), so a scan
+// can end well short of what it asked for.
+func scanStatus(scan ui.JMSTypeScan) string {
+	if !scan.HasMore {
+		return ""
+	}
+	return fmt.Sprintf("Scanned the first %d messages — the queue holds more; types further back aren't listed", scan.Scanned)
+}
+
 // MessageFilter is the server-side message filter overlay (FE 46) — the
 // counterpart to messagesView's quick search: JMS type + date range + max
 // count, applied by the backend rather than client-side.
@@ -139,9 +151,9 @@ func (mf *MessageFilter) startScan() {
 	mf.scanning = true
 	mf.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", jmsTypeScanCount))
 	go func() {
-		types, err := mf.host.ScanJMSTypes(context.Background(), mf.host.MessagesQueueName(), jmsTypeScanCount)
+		scan, err := mf.host.ScanJMSTypes(context.Background(), mf.host.MessagesQueueName(), jmsTypeScanCount)
 		mf.host.QueueUpdateDraw(func() {
-			mf.handleScanResult(types, err)
+			mf.handleScanResult(scan, err)
 		})
 	}()
 }
@@ -154,15 +166,15 @@ func (mf *MessageFilter) startScan() {
 // comment). Also where the sentinel text left in the field by
 // onJMSTypeChanged finally gets cleared — safe here, unlike there (see
 // onJMSTypeChanged's doc comment).
-func (mf *MessageFilter) handleScanResult(types []string, err error) {
+func (mf *MessageFilter) handleScanResult(scan ui.JMSTypeScan, err error) {
 	mf.scanning = false
 	mf.jmsTypeItem.SetText("")
 	if err != nil {
 		mf.host.SetStatus(fmt.Sprintf("[red]JMS type scan failed: %s[-]", err))
 		return
 	}
-	mf.scanned = types
-	mf.host.SetStatus("")
+	mf.scanned = scan.Types
+	mf.host.SetStatus(scanStatus(scan))
 	mf.jmsTypeItem.Autocomplete()
 }
 

@@ -68,7 +68,7 @@ type fakeViewHost struct {
 	awsSSOLoginFn            func(ctx context.Context, profile string, onCode func(code, url string)) error
 	loadedJMSTypes           []string
 	messagesQueueName        string
-	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) ([]string, error)
+	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error)
 }
 
 // newFakeViewHost defaults backend to a no-op fakeQueueBackend (never nil)
@@ -114,9 +114,9 @@ func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}
 func (f *fakeViewHost) FocusMessages()                             {}
 func (f *fakeViewHost) LoadedJMSTypes() []string                   { return f.loadedJMSTypes }
 func (f *fakeViewHost) MessagesQueueName() string                  { return f.messagesQueueName }
-func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
+func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error) {
 	if f.scanJMSTypesFn == nil {
-		return nil, nil
+		return ui.JMSTypeScan{}, nil
 	}
 	return f.scanJMSTypesFn(ctx, queueName, maxCount)
 }

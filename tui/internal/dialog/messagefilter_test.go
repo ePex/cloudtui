@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 func newTestMessageFilter(t *testing.T) (*MessageFilter, *testHost) {
@@ -126,7 +128,7 @@ func TestJMSTypeSuggestionsDedupesLoadedAndScanned(t *testing.T) {
 // here).
 func TestOnJMSTypeChangedTriggersScan(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
-	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
+	host.scanJMSTypesFn = func(context.Context, string, int) (ui.JMSTypeScan, error) {
 		select {} // never returns; this test only checks the synchronous part
 	}
 
@@ -151,7 +153,7 @@ func TestStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	calls := 0
 	entered := make(chan struct{})
-	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
+	host.scanJMSTypesFn = func(context.Context, string, int) (ui.JMSTypeScan, error) {
 		calls++
 		close(entered) // happens-after calls++, so the test's read below is race-free
 		select {}      // never returns
@@ -176,7 +178,7 @@ func TestHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	mf.jmsTypeItem.SetText(jmsTypeScanSentinel) // left there by onJMSTypeChanged in the real flow
 	host.loadedJMSTypes = []string{"OrderCreated"}
 
-	mf.handleScanResult([]string{"ScannedType"}, nil)
+	mf.handleScanResult(ui.JMSTypeScan{Types: []string{"ScannedType"}}, nil)
 
 	if mf.scanning {
 		t.Error("scanning after handleScanResult = true, want false")
@@ -196,12 +198,36 @@ func TestHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	}
 }
 
+func TestHandleScanResultReportsTheLimit(t *testing.T) {
+	tests := []struct {
+		name string
+		scan ui.JMSTypeScan
+		want string
+	}{
+		{"queue holds more", ui.JMSTypeScan{Types: []string{"TypeA"}, Scanned: 400, HasMore: true},
+			"Scanned the first 400 messages — the queue holds more; types further back aren't listed"},
+		{"whole queue scanned", ui.JMSTypeScan{Types: []string{"TypeA"}, Scanned: 10}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mf, host := newTestMessageFilter(t)
+			host.status = "Scanning up to 5000 messages for JMS types..."
+
+			mf.handleScanResult(tt.scan, nil)
+
+			if host.status != tt.want {
+				t.Errorf("status = %q, want %q", host.status, tt.want)
+			}
+		})
+	}
+}
+
 func TestHandleScanResultErrorSetsStatusAndClearsFlag(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	mf.scanning = true
 	mf.jmsTypeItem.SetText(jmsTypeScanSentinel)
 
-	mf.handleScanResult(nil, context.DeadlineExceeded)
+	mf.handleScanResult(ui.JMSTypeScan{}, context.DeadlineExceeded)
 
 	if mf.scanning {
 		t.Error("scanning after handleScanResult error = true, want false")

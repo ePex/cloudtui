@@ -132,7 +132,7 @@ otherwise.
    JMS Type field picks the drop-down's scan entry and clears the field
    (pre-existing; recorded with the follow-up bugfix from task 5).
 
-8. [ ] **TUI: JMS Type scans report the limit** (plan §5 "JMS Type
+8. [x] **TUI: JMS Type scans report the limit** (plan §5 "JMS Type
    scans"). `ScanJMSTypes` returns `hasMore`; `JMSTypePrompt` and
    `MessageFilter` show `Scanned the first <n> messages — the queue
    holds more; types further back aren't listed` when it's true. Tests
@@ -140,6 +140,18 @@ otherwise.
    *Live check:* `p` on the queue offers only `TypeA` and the status
    line shows the scan message; the same in the message filter's JMS
    Type field (`f` inside the queue).
+   *Done 2026-10-10.* Deviation from plan §5: `ScanJMSTypes` returns a
+   `ui.JMSTypeScan{Types, Scanned, HasMore}` instead of `(types,
+   hasMore, err)`, since the message needs the scanned count too.
+   Mutation-checked (an always-empty status fails both new tests).
+   Live: the purge prompt offered only `TypeA` with the status line
+   `Scanned the first 400 messages — the queue holds more; types
+   further back aren't listed`; the message filter's opt-in 5,000
+   scan (`maxCount=5000` in the `mq-proxy` log) showed the same.
+   Found while doing so, not part of this bugfix: `go test -race
+   ./internal/dialog/` reports data races in a theming test that opens
+   the JMS Type prompt and lets its automatic scan run; `main` has the
+   same 10 races, so it predates this branch.
 
 9. [ ] **Regression run.** `task test` (all modules), `task
    smoke:test`, and a final pass of the live checks from tasks 5–8 in

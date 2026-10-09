@@ -239,7 +239,7 @@ func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
 		browseMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 			gotQueue = queueName
 			gotFilter = filter
-			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, false, nil
+			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, true, nil
 		},
 	}
 
@@ -255,8 +255,11 @@ func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
 		t.Errorf("filter passed to BrowseMessages = %+v, want %+v", gotFilter, want)
 	}
 	want := []string{"a", "b"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("ScanJMSTypes() = %v, want %v", got, want)
+	if len(got.Types) != len(want) || got.Types[0] != want[0] || got.Types[1] != want[1] {
+		t.Errorf("ScanJMSTypes().Types = %v, want %v", got.Types, want)
+	}
+	if got.Scanned != 3 || !got.HasMore {
+		t.Errorf("ScanJMSTypes() Scanned, HasMore = %d, %v; want 3, true (passed through from the browse)", got.Scanned, got.HasMore)
 	}
 }
 
