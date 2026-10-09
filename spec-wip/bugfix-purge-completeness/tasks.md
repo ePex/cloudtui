@@ -70,7 +70,7 @@ otherwise.
    confirming request adds ~2 s to a purge against `mq-proxy`. The
    manual check against a per-call-capped server is still open (user).
 
-5. [ ] **TUI: one purge flow for both entry points, with a result
+5. [x] **TUI: one purge flow for both entry points, with a result
    line** (plan §5 "Shared purge flow" and "Result line" first
    paragraph). New `internal/view/purge.go` holds the JMS Type prompt →
    confirm → backend call → status flow, used by `QueuesView` and
@@ -83,6 +83,16 @@ otherwise.
    show the JMS Type prompt and the same confirm wording; each purges
    1,600 → 0 and shows `Purged 1600 message(s) from
    "cloudtui.test.purge"`.
+   *Done 2026-10-10.* The goroutine's result handling is split into
+   `purgeFlow.finish` so it's tested directly. The regression test
+   fails against the old in-queue behavior. Live: both paths showed the
+   JMS Type prompt, the same confirm wording and `Purged 1600
+   message(s) from "cloudtui.test.purge"`, leaving the queue empty; a
+   `TypeA` purge inside the queue showed `Purged 800 TypeA message(s)
+   …` and left the 800 TypeB. Found while doing so, not part of this
+   bugfix: text typed into the JMS Type prompt before its automatic
+   scan finishes is wiped when the scan completes
+   (`JMSTypePrompt.handleScanResult` clears the field).
 
 6. [ ] **TUI: warning after filtered purge/move-all** (plan §5 "Result
    line" second paragraph). After a filtered purge or move-all, read the

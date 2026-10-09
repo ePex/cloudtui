@@ -44,6 +44,7 @@ type MessagesView struct {
 	sendMessage   *dialog.SendMessageOverlay
 	confirm       *dialog.ConfirmDialog
 	movePicker    *dialog.MovePicker
+	purge         purgeFlow
 	queueName     string
 	allMsgs       []queue.Message     // full set from the last load, pre-quick-search
 	quickSearch   string              // active quick-search text (client-side)
@@ -113,6 +114,18 @@ func (mv *MessagesView) Open(queueName string) {
 	mv.Load()
 }
 
+// restoreShortcuts returns focus to the message table and rewrites the
+// context panel's shortcut hints after an overlay opened from here closes
+// (the purge flow's JMS Type prompt) — QueuesView.restoreShortcuts' twin.
+func (mv *MessagesView) restoreShortcuts() {
+	mv.host.SetFocus(mv.table)
+	lines := make([]string, 0, len(mv.Shortcuts()))
+	for _, sc := range mv.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", mv.host.Config().Colors.Accent, sc.Key, sc.Description))
+	}
+	mv.host.SetContextHint(strings.Join(lines, "\n"))
+}
+
 func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 	wrap := "off"
 	if mv.wrap {
@@ -136,7 +149,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 
 // NewMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *MessagesView {
+func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string, msg queue.Message)) *MessagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
@@ -152,6 +165,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 		AddItem(searchInput, 1, 0, false)
 
 	mv := &MessagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
+	mv.purge = purgeFlow{host: a, backend: a.Backend, prompt: jmsTypePrompt, confirm: confirm}
 	mv.setHeader()
 
 	searchInput.SetChangedFunc(func(text string) {
@@ -219,20 +233,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 			})
 			return nil
 		case event.Rune() == 'p':
-			name := mv.queueName
-			mv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
-				go func() {
-					_, err := a.Backend().PurgeQueue(context.Background(), name)
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							slog.Error("messages: purge failed", "queue", name, "error", err)
-							mv.showError(err)
-							return
-						}
-						mv.Load()
-					})
-				}()
-			})
+			mv.purge.start(mv.queueName, mv.restoreShortcuts, mv.Load, mv.showError)
 			return nil
 		case event.Rune() == 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)

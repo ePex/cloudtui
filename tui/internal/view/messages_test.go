@@ -22,7 +22,7 @@ func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *d
 	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
-	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(string, queue.Message) {})
+	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(string, queue.Message) {})
 }
 
 // newTestMessagesViewWithMsgs builds a MessagesView already populated via
@@ -221,7 +221,7 @@ func TestMessagesViewWrapSelectedFuncOpensCorrectMessage(t *testing.T) {
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	var selected queue.Message
-	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(_ string, m queue.Message) {
+	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(_ string, m queue.Message) {
 		selected = m
 	})
 	mv.repaint([]queue.Message{
@@ -525,6 +525,41 @@ func TestMessagesViewRepaintClearsMarks(t *testing.T) {
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	if len(mv.marked) != 0 {
 		t.Errorf("marked after repaint() = %v, want empty (marks reset on reload)", mv.marked)
+	}
+}
+
+// TestMessagesViewPurgeKeyShowsJMSTypePrompt is the regression test for
+// purge inside a queue skipping the JMS Type prompt (spec-wip
+// bugfix-purge-completeness, defect 3): 'p' must open the prompt first,
+// exactly like the queue list's 'p'.
+func TestMessagesViewPurgeKeyShowsJMSTypePrompt(t *testing.T) {
+	_, confirm, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+
+	mv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+
+	if !mv.purge.prompt.Visible() {
+		t.Error("JMS Type prompt is not visible after pressing 'p'")
+	}
+	if confirm.Visible() {
+		t.Error("confirm dialog is visible before the JMS Type prompt was continued past")
+	}
+}
+
+// TestMessagesViewPurgePromptContinuesToConfirm follows the purge past the
+// prompt: Enter on a blank JMS Type continues to the confirm dialog.
+func TestMessagesViewPurgePromptContinuesToConfirm(t *testing.T) {
+	_, confirm, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	mv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+
+	mv.purge.prompt.Primitive().InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if mv.purge.prompt.Visible() {
+		t.Error("JMS Type prompt still visible after Enter on a blank field")
+	}
+	if !confirm.Visible() {
+		t.Error("confirm dialog not visible after continuing past the JMS Type prompt")
 	}
 }
 
