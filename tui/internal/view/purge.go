@@ -29,9 +29,15 @@ func (pf purgeFlow) start(queueName string, onClose, onDone func(), onError func
 	pf.prompt.Show("Purge", queueName, func(jmsType string) {
 		pf.confirm.Show(purgeQuestion(queueName, jmsType), func() {
 			go func() {
-				n, err := purge(context.Background(), pf.backend(), queueName, jmsType)
+				ctx := context.Background()
+				b := pf.backend()
+				n, err := purge(ctx, b, queueName, jmsType)
+				var warning string
+				if err == nil {
+					warning = filteredRemainderWarning(ctx, b, queueName, jmsType)
+				}
 				pf.host.QueueUpdateDraw(func() {
-					pf.finish(queueName, jmsType, n, err, onDone, onError)
+					pf.finish(queueName, jmsType, n, warning, err, onDone, onError)
 				})
 			}()
 		})
@@ -40,15 +46,48 @@ func (pf purgeFlow) start(queueName string, onClose, onDone func(), onError func
 
 // finish applies a completed purge's outcome — split out from start's
 // goroutine so tests can call it directly, like the dialogs'
-// handleScanResult.
-func (pf purgeFlow) finish(queueName, jmsType string, n int, err error, onDone func(), onError func(error)) {
+// handleScanResult. warning (from filteredRemainderWarning) is appended to
+// the status line.
+func (pf purgeFlow) finish(queueName, jmsType string, n int, warning string, err error, onDone func(), onError func(error)) {
 	if err != nil {
 		slog.Error("purge failed", "queue", queueName, "jmsType", jmsType, "deleted", n, "error", err)
 		onError(err)
 		return
 	}
-	pf.host.SetStatus(purgedStatus(queueName, jmsType, n))
+	pf.host.SetStatus(purgedStatus(queueName, jmsType, n) + warning)
 	onDone()
+}
+
+// filteredWindowWarnAt is ActiveMQ's default maxPageSize: a consumer with a
+// JMS selector only sees matches among the first this-many messages the
+// broker pages in, so a filtered purge/move-all can miss matches behind
+// more non-matching messages than that (spec-wip bugfix-purge-completeness,
+// "What JMS can and can't reach"). A heuristic: a broker configured with a
+// larger window makes the warning show more often than needed.
+const filteredWindowWarnAt = 200
+
+// filteredRemainderWarning is the status-line suffix after a filtered
+// (jmsType != "") purge or move-all: when more than filteredWindowWarnAt
+// messages remain on queueName, matching ones further back may not have
+// been reached. "May": the TUI can't tell whether the remaining messages
+// include matches. Empty for an unfiltered operation, at or below the
+// threshold, or when the pending count can't be read (logged, not an
+// error — the operation itself succeeded).
+func filteredRemainderWarning(ctx context.Context, b queue.Backend, queueName, jmsType string) string {
+	if jmsType == "" {
+		return ""
+	}
+	summaries, err := b.List(ctx)
+	if err != nil {
+		slog.Warn("can't read the remaining count after a filtered operation", "queue", queueName, "error", err)
+		return ""
+	}
+	for _, s := range summaries {
+		if s.Name == queueName && s.PendingCount > filteredWindowWarnAt {
+			return fmt.Sprintf(" — %d message(s) remain; matching messages further back may not have been reached", s.PendingCount)
+		}
+	}
+	return ""
 }
 
 // purge dispatches to the backend call matching jmsType: PurgeQueue (the

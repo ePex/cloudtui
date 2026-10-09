@@ -205,14 +205,19 @@ func (qv *QueuesView) restoreShortcuts() {
 // selection performs the move via doMoveAll.
 func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 	qv.movePicker.Show(srcQueue, func(target string) {
-		count, err := qv.doMoveAll(context.Background(), srcQueue, target, jmsType)
+		ctx := context.Background()
+		count, err := qv.doMoveAll(ctx, srcQueue, target, jmsType)
+		var warning string
+		if err == nil {
+			warning = filteredRemainderWarning(ctx, qv.backend, srcQueue, jmsType)
+		}
 		qv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
 				qv.showError(err)
 				return
 			}
-			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
+			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
 			qv.Load()
 		})
 	}, qv.restoreShortcuts)

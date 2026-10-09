@@ -116,7 +116,7 @@ func TestPurgeFlowFinishSuccessSetsStatusThenCallsOnDone(t *testing.T) {
 			n = 800
 		}
 		var statusAtDone string
-		newTestPurgeFlow(host).finish("orders", tt.jmsType, n, nil,
+		newTestPurgeFlow(host).finish("orders", tt.jmsType, n, "", nil,
 			func() { statusAtDone = host.status },
 			func(err error) { t.Errorf("onError(%v) called on success", err) })
 
@@ -126,12 +126,60 @@ func TestPurgeFlowFinishSuccessSetsStatusThenCallsOnDone(t *testing.T) {
 	}
 }
 
+func TestPurgeFlowFinishAppendsTheWarning(t *testing.T) {
+	host := newFakeViewHost()
+	warning := " — 1600 message(s) remain; matching messages further back may not have been reached"
+
+	newTestPurgeFlow(host).finish("orders", "TypeB", 0, warning, nil, func() {}, func(error) {})
+
+	if want := `Purged 0 TypeB message(s) from "orders"` + warning; host.status != want {
+		t.Errorf("status = %q, want %q", host.status, want)
+	}
+}
+
+func TestFilteredRemainderWarning(t *testing.T) {
+	const warn1600 = " — 1600 message(s) remain; matching messages further back may not have been reached"
+	tests := []struct {
+		name    string
+		jmsType string
+		pending int64
+		listErr error
+		want    string
+	}{
+		{"filtered, above the window", "TypeB", 1600, nil, warn1600},
+		{"filtered, just above the window", "TypeB", 201, nil, " — 201 message(s) remain; matching messages further back may not have been reached"},
+		{"filtered, at the window", "TypeB", 200, nil, ""},
+		{"filtered, below the window", "TypeB", 10, nil, ""},
+		{"unfiltered never warns", "", 1600, nil, ""},
+		{"List fails", "TypeB", 1600, errors.New("boom"), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			listCalled := false
+			b := &fakeQueueBackend{listFn: func(context.Context) ([]queue.Summary, error) {
+				listCalled = true
+				if tt.listErr != nil {
+					return nil, tt.listErr
+				}
+				return []queue.Summary{{Name: "other", PendingCount: 9999}, {Name: "orders", PendingCount: tt.pending}}, nil
+			}}
+
+			if got := filteredRemainderWarning(context.Background(), b, "orders", tt.jmsType); got != tt.want {
+				t.Errorf("filteredRemainderWarning() = %q, want %q", got, tt.want)
+			}
+			if tt.jmsType == "" && listCalled {
+				t.Error("List was called for an unfiltered operation")
+			}
+		})
+	}
+}
+
 func TestPurgeFlowFinishErrorCallsOnErrorOnly(t *testing.T) {
 	host := newFakeViewHost()
 	wantErr := errors.New("boom")
 	var gotErr error
 
-	newTestPurgeFlow(host).finish("orders", "", 400, wantErr,
+	newTestPurgeFlow(host).finish("orders", "", 400, "", wantErr,
 		func() { t.Error("onDone called on error") },
 		func(err error) { gotErr = err })
 

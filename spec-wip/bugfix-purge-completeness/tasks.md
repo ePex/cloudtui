@@ -94,7 +94,7 @@ otherwise.
    scan finishes is wiped when the scan completes
    (`JMSTypePrompt.handleScanResult` clears the field).
 
-6. [ ] **TUI: warning after filtered purge/move-all** (plan §5 "Result
+6. [x] **TUI: warning after filtered purge/move-all** (plan §5 "Result
    line" second paragraph). After a filtered purge or move-all, read the
    pending count via `List`; above 200 remaining, append `— <m>
    message(s) remain; matching messages further back may not have been
@@ -104,6 +104,13 @@ otherwise.
    message(s) remain; …`; purge `TypeA` → `Purged 800 TypeA message(s)
    …` with the warning (800 remain); then purge `TypeB` → `Purged 800
    …` and no warning.
+   *Done 2026-10-10.* Threshold boundary mutation-checked (`>=` fails
+   the "at the window" case). Live, all three exactly as above, e.g.
+   `Purged 0 TypeB message(s) from "cloudtui.test.purge" — 1600
+   message(s) remain; matching messages further back may not have been
+   reached`. Also live, since move-all's wiring has no unit test:
+   move-all `TypeB` to another queue → `Moved 0 message(s) from … to … —
+   1600 message(s) remain; …`.
 
 7. [ ] **TUI: message browser says when it's incomplete** (plan §5
    "Message browser title"). Unfiltered loads fetch the pending count
