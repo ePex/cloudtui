@@ -222,7 +222,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 			name := mv.queueName
 			mv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
 				go func() {
-					err := a.Backend().PurgeQueue(context.Background(), name)
+					_, err := a.Backend().PurgeQueue(context.Background(), name)
 					a.QueueUpdateDraw(func() {
 						if err != nil {
 							slog.Error("messages: purge failed", "queue", name, "error", err)

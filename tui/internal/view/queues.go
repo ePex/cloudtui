@@ -232,7 +232,8 @@ func (qv *QueuesView) confirmPurge(name, jmsType string) {
 // rather than DeleteMessages with an always-empty-filter fallback.
 func (qv *QueuesView) doPurge(ctx context.Context, name, jmsType string) error {
 	if jmsType == "" {
-		return qv.backend.PurgeQueue(ctx, name)
+		_, err := qv.backend.PurgeQueue(ctx, name)
+		return err
 	}
 	_, err := qv.backend.DeleteMessages(ctx, name, queue.MessageFilter{JMSType: jmsType})
 	return err

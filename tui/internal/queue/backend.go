@@ -59,10 +59,13 @@ type SendMessageRequest struct {
 // BrowseMessages' bool is hasMore: true when more matching messages exist
 // beyond the returned ones, or may exist beyond the part of the queue the
 // broker let the backend browse. A backend that can't tell returns false.
+//
+// PurgeQueue returns how many messages it deleted — on error, how many it
+// had deleted before failing.
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
 	BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, bool, error)
-	PurgeQueue(ctx context.Context, queueName string) error
+	PurgeQueue(ctx context.Context, queueName string) (int, error)
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 	MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error)

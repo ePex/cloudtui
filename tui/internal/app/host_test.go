@@ -201,7 +201,7 @@ func (f *fakeBrowseBackend) List(context.Context) ([]queue.Summary, error) { pan
 func (f *fakeBrowseBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	return f.browseMessagesFn(ctx, queueName, filter)
 }
-func (f *fakeBrowseBackend) PurgeQueue(context.Context, string) error { panic("not used") }
+func (f *fakeBrowseBackend) PurgeQueue(context.Context, string) (int, error) { panic("not used") }
 func (f *fakeBrowseBackend) RemoveMessage(context.Context, string, string) error {
 	panic("not used")
 }

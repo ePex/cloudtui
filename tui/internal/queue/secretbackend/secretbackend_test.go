@@ -78,6 +78,7 @@ type fakeBackend struct {
 	removeCalls   int
 	removeFails   bool
 	browseHasMore bool // BrowseMessages' hasMore
+	purged        int  // PurgeQueue's count
 }
 
 func (f *fakeBackend) List(ctx context.Context) ([]queue.Summary, error) {
@@ -90,7 +91,9 @@ func (f *fakeBackend) List(ctx context.Context) ([]queue.Summary, error) {
 func (f *fakeBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	return nil, f.browseHasMore, nil
 }
-func (f *fakeBackend) PurgeQueue(ctx context.Context, queueName string) error { return nil }
+func (f *fakeBackend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
+	return f.purged, nil
+}
 func (f *fakeBackend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
 	f.removeCalls++
 	if f.removeFails {
@@ -177,6 +180,21 @@ func TestBackendBrowseMessagesPassesHasMoreThrough(t *testing.T) {
 		if got != want {
 			t.Errorf("BrowseMessages() hasMore = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestBackendPurgeQueuePassesCountThrough(t *testing.T) {
+	r := newTestResolver(func(context.Context, string, string) (string, bool, error) {
+		return "pw", false, nil
+	})
+	b := newTestBackend(r, "prof", &fakeBackend{purged: 42})
+
+	n, err := b.PurgeQueue(context.Background(), "q1")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 42 {
+		t.Errorf("PurgeQueue() = %d, want 42", n)
 	}
 }
 

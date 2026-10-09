@@ -23,7 +23,7 @@ type fakeQueueBackend struct {
 	// (see TestQueuesViewPurge*/TestQueuesViewMoveAll* below) — nil means
 	// the plain no-op default every other test in this file already
 	// relies on.
-	purgeQueueFn      func(ctx context.Context, queueName string) error
+	purgeQueueFn      func(ctx context.Context, queueName string) (int, error)
 	deleteMessagesFn  func(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error)
 	moveAllMessagesFn func(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 	moveMessagesFn    func(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error)
@@ -45,9 +45,9 @@ func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.M
 	return nil, false, nil
 }
 
-func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) error {
+func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
 	if f.purgeQueueFn == nil {
-		return nil
+		return 0, nil
 	}
 	return f.purgeQueueFn(ctx, queueName)
 }
@@ -499,10 +499,10 @@ func TestQueuesViewDoPurgeUnfilteredCallsPurgeQueue(t *testing.T) {
 	purgeCalled := false
 	deleteCalled := false
 	b := &fakeQueueBackend{
-		purgeQueueFn: func(_ context.Context, queueName string) error {
+		purgeQueueFn: func(_ context.Context, queueName string) (int, error) {
 			purgeCalled = true
 			gotQueue = queueName
-			return nil
+			return 0, nil
 		},
 		deleteMessagesFn: func(context.Context, string, queue.MessageFilter) (int, error) {
 			deleteCalled = true
@@ -535,9 +535,9 @@ func TestQueuesViewDoPurgeFilteredCallsDeleteMessages(t *testing.T) {
 	var gotFilter queue.MessageFilter
 	purgeCalled := false
 	b := &fakeQueueBackend{
-		purgeQueueFn: func(context.Context, string) error {
+		purgeQueueFn: func(context.Context, string) (int, error) {
 			purgeCalled = true
-			return nil
+			return 0, nil
 		},
 		deleteMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 			gotQueue, gotFilter = queueName, filter

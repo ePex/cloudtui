@@ -215,11 +215,12 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter qu
 }
 
 // PurgeQueue implements queue.Backend.
-func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
-	if _, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{}); err != nil {
-		return fmt.Errorf("purge queue %q: %w", queueName, err)
+func (c *Client) PurgeQueue(ctx context.Context, queueName string) (int, error) {
+	n, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{})
+	if err != nil {
+		return n, fmt.Errorf("purge queue %q: %w", queueName, err)
 	}
-	return nil
+	return n, nil
 }
 
 // RemoveMessage implements queue.Backend.

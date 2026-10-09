@@ -288,16 +288,16 @@ func (b *Backend) BrowseMessages(ctx context.Context, queueName string, filter q
 	return cur.BrowseMessages(ctx, queueName, filter)
 }
 
-func (b *Backend) PurgeQueue(ctx context.Context, queueName string) error {
+func (b *Backend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if err := cur.PurgeQueue(ctx, queueName); err != nil {
+	n, err := cur.PurgeQueue(ctx, queueName)
+	if err != nil {
 		b.refresh()
-		return err
 	}
-	return nil
+	return n, err
 }
 
 func (b *Backend) RemoveMessage(ctx context.Context, queueName, messageID string) error {

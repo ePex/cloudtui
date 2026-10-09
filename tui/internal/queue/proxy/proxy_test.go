@@ -373,8 +373,12 @@ func TestPurgeQueue(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.PurgeQueue(context.Background(), "orders"); err != nil {
+	n, err := c.PurgeQueue(context.Background(), "orders")
+	if err != nil {
 		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 3 {
+		t.Errorf("PurgeQueue() = %d, want 3 (the deleted messages the server reported)", n)
 	}
 }
 
@@ -384,7 +388,7 @@ func TestPurgeQueueError(t *testing.T) {
 	}))
 	defer stop()
 
-	if err := c.PurgeQueue(context.Background(), "orders"); err == nil {
+	if _, err := c.PurgeQueue(context.Background(), "orders"); err == nil {
 		t.Fatal("PurgeQueue() error = nil, want non-nil")
 	}
 }

@@ -37,12 +37,17 @@ otherwise.
    Tests: proxy client passes `hasMore` through; `secretbackend`
    forwards it.
 
-3. [ ] **TUI: `PurgeQueue` returns the deleted count** (plan §2, §4).
+3. [x] **TUI: `PurgeQueue` returns the deleted count** (plan §2, §4).
    Signature becomes `(int, error)`. Proxy: the count from the response.
    Jolokia: `QueueSize` read before tier 1, the returned count for tier
    2, counted removals for tier 3. `secretbackend` passes it through.
    Views ignore the count until task 5. Tests per Jolokia tier, proxy
    and `secretbackend`.
+   *Done 2026-10-10.* Tier 1 is skipped when `QueueSize` can't be read,
+   so the count is never made up; on error, the count deleted so far is
+   returned alongside it. Tests mutation-checked. Live: the Jolokia
+   `QueueSize` read returns `{"status":200,"value":10}` on a 10-message
+   queue, the shape the code decodes.
 
 4. [ ] **TUI: proxy client repeats bulk delete/move until zero** (plan
    §3). Private round helper used by `PurgeQueue`, `MoveAllMessages` and
