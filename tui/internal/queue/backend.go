@@ -55,9 +55,13 @@ type SendMessageRequest struct {
 }
 
 // Backend is the interface all queue data sources must implement.
+//
+// BrowseMessages' bool is hasMore: true when more matching messages exist
+// beyond the returned ones, or may exist beyond the part of the queue the
+// broker let the backend browse. A backend that can't tell returns false.
 type Backend interface {
 	List(ctx context.Context) ([]Summary, error)
-	BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, error)
+	BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, bool, error)
 	PurgeQueue(ctx context.Context, queueName string) error
 	RemoveMessage(ctx context.Context, queueName, messageID string) error
 	MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error

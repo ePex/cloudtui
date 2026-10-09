@@ -346,7 +346,7 @@ func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	go func() {
-		msgs, err := mv.host.Backend().BrowseMessages(context.Background(), queueName, filter)
+		msgs, _, err := mv.host.Backend().BrowseMessages(context.Background(), queueName, filter)
 		mv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("messages: failed to browse messages", "queue", queueName, "error", err)

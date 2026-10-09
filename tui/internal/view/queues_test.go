@@ -41,8 +41,8 @@ func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
 	return f.summaries, nil
 }
 
-func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, error) {
-	return nil, nil
+func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, bool, error) {
+	return nil, false, nil
 }
 
 func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) error {

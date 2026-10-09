@@ -32,7 +32,7 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
 	}
 
 	// Tier 3: browse-and-remove.
-	msgs, err := c.BrowseMessages(ctx, queueName, queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(ctx, queueName, queue.MessageFilter{})
 	if err != nil {
 		return fmt.Errorf("purge queue %s: browse: %w", queueName, err)
 	}

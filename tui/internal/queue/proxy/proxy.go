@@ -39,11 +39,12 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-// listEnvelope is the {data, errors} shape every list-returning
-// mq-proxy endpoint responds with.
+// listEnvelope is the {data, errors, hasMore} shape every list-returning
+// mq-proxy endpoint responds with. Only list-messages sets hasMore.
 type listEnvelope[T any] struct {
-	Data   []T        `json:"data"`
-	Errors []apiError `json:"errors"`
+	Data    []T        `json:"data"`
+	Errors  []apiError `json:"errors"`
+	HasMore bool       `json:"hasMore"`
 }
 
 // itemEnvelope is the {data, error} shape single-result mq-proxy
@@ -195,21 +196,22 @@ func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
 	return out, nil
 }
 
-// BrowseMessages implements queue.Backend.
-func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+// BrowseMessages implements queue.Backend, passing list-messages' hasMore
+// through as is.
+func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	path := "/api/management/command/list-messages?" + browseQuery(queueName, filter)
 	var env listEnvelope[proxyMessage]
 	if err := c.getJSON(ctx, path, &env); err != nil {
-		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
+		return nil, false, fmt.Errorf("browse messages %q: %w", queueName, err)
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
+		return nil, false, fmt.Errorf("browse messages %q: %w", queueName, err)
 	}
 	out := make([]queue.Message, len(env.Data))
 	for i, m := range env.Data {
 		out[i] = toQueueMessage(m)
 	}
-	return out, nil
+	return out, env.HasMore, nil
 }
 
 // PurgeQueue implements queue.Backend.

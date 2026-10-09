@@ -33,18 +33,22 @@ const previewMaxLen = 2000
 // full/fallback browse completes — JMX has no selector-based browse, unlike
 // the proxy backend, which pushes the filter down to mq-proxy's list-messages
 // endpoint.
-func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+//
+// hasMore is always false: JMX's browse operations stop at the broker's
+// browse limit without saying so, and this backend doesn't try to detect
+// it (spec/08).
+func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	msgs, err := c.browseMessagesFull(ctx, queueName)
 	if err != nil {
 		slog.Debug("browseMessages failed, trying browse() fallback", "queue", queueName, "err", err)
 		fallback, fallbackErr := c.browseMessagesFallback(ctx, queueName)
 		if fallbackErr != nil {
 			slog.Debug("browse() fallback also failed", "queue", queueName, "err", fallbackErr)
-			return nil, err
+			return nil, false, err
 		}
-		return filterMessages(fallback, filter), nil
+		return filterMessages(fallback, filter), false, nil
 	}
-	return filterMessages(msgs, filter), nil
+	return filterMessages(msgs, filter), false, nil
 }
 
 // browseMessagesFull calls the browseMessages() Jolokia exec operation and

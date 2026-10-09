@@ -88,7 +88,7 @@ func (a *App) MessagesQueueName() string {
 // touch the messages view's displayed list, regardless of which queue
 // queueName names.
 func (a *App) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
-	msgs, err := a.backend.BrowseMessages(ctx, queueName, queue.MessageFilter{MaxCount: maxCount})
+	msgs, _, err := a.backend.BrowseMessages(ctx, queueName, queue.MessageFilter{MaxCount: maxCount})
 	if err != nil {
 		return nil, err
 	}

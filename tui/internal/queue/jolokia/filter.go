@@ -37,7 +37,7 @@ func filterMessages(msgs []queue.Message, filter queue.MessageFilter) []queue.Me
 // DeleteMessages implements queue.Backend: browses queueName filtered by
 // filter, and removes each match via RemoveMessage.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
-	matches, err := c.BrowseMessages(ctx, queueName, filter)
+	matches, _, err := c.BrowseMessages(ctx, queueName, filter)
 	if err != nil {
 		return 0, fmt.Errorf("delete messages from %q: %w", queueName, err)
 	}
@@ -52,7 +52,7 @@ func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter qu
 // MoveMessages implements queue.Backend: browses sourceQueue filtered by
 // filter, and moves each match via MoveMessage.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
-	matches, err := c.BrowseMessages(ctx, sourceQueue, filter)
+	matches, _, err := c.BrowseMessages(ctx, sourceQueue, filter)
 	if err != nil {
 		return 0, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
 	}

@@ -28,7 +28,7 @@ otherwise.
    queue: unfiltered and `TypeA` → 10, `hasMore: false`; `TypeB` → 0,
    `hasMore: false`; `maxCount=5` → 5, `hasMore: true`.
 
-2. [ ] **TUI: `BrowseMessages` returns `hasMore`** (plan §2, §3 first
+2. [x] **TUI: `BrowseMessages` returns `hasMore`** (plan §2, §3 first
    bullet, §4 last bullet). Signature becomes `([]Message, bool, error)`
    on `queue.Backend`, the proxy client decodes `hasMore` from the
    envelope, Jolokia returns `false`, and `secretbackend` passes it

@@ -144,7 +144,7 @@ func TestBrowseMessages(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -206,7 +206,7 @@ func TestBrowseMessagesFilterQuery(t *testing.T) {
 	}))
 	defer stop()
 
-	_, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{
+	_, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{
 		JMSType: "order-created", MessageID: "ID:m1", FromDate: from, ToDate: to, MaxCount: 10,
 	})
 	if err != nil {
@@ -234,7 +234,7 @@ func TestBrowseMessagesNonStringHeaderValue(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -253,6 +253,34 @@ func TestBrowseMessagesNonStringHeaderValue(t *testing.T) {
 	}
 }
 
+func TestBrowseMessagesHasMore(t *testing.T) {
+	tests := []struct {
+		name     string
+		envelope map[string]any
+		want     bool
+	}{
+		{"true", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": true}, true},
+		{"false", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": false}, false},
+		{"absent", map[string]any{"data": []any{}, "errors": []any{}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(w, http.StatusOK, tt.envelope)
+			}))
+			defer stop()
+
+			_, got, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+			if err != nil {
+				t.Fatalf("BrowseMessages() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("BrowseMessages() hasMore = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -264,7 +292,7 @@ func TestBrowseMessagesEmptyJMSTypeNilBody(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -290,7 +318,7 @@ func TestBrowseMessagesEmptyJMSTypeWithBodyInfersText(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -314,7 +342,7 @@ func TestBrowseMessagesPreviewTruncated(t *testing.T) {
 	}))
 	defer stop()
 
-	msgs, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "orders", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}

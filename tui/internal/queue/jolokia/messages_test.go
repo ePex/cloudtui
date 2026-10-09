@@ -31,7 +31,7 @@ func TestBrowseMessagesHappyPath(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestBrowseMessagesFiltersFullPath(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MessageID: "ID:msg-2"})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MessageID: "ID:msg-2"})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestBrowseMessagesCompositeDataMessageID(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestBrowseMessagesHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	_, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error for HTTP 500, got nil")
 	}
@@ -138,7 +138,7 @@ func TestBrowseMessagesJolokiaError(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	_, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error for Jolokia status 500, got nil")
 	}
@@ -169,7 +169,7 @@ func TestBrowseMessagesBackfillsBytesMessageBody(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -230,7 +230,7 @@ func TestBrowseMessagesFallbackFullObject(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -276,7 +276,7 @@ func TestBrowseMessagesFallback(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -319,7 +319,7 @@ func TestBrowseMessagesFiltersFallbackPath(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	msgs, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MaxCount: 1})
+	msgs, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{MaxCount: 1})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
@@ -338,7 +338,7 @@ func TestBrowseMessagesFallbackBothFail(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv.URL)
-	_, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	_, _, err := c.BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err == nil {
 		t.Fatal("BrowseMessages() expected error when both operations fail, got nil")
 	}
@@ -362,7 +362,7 @@ func TestBrowseMessagesJMSTypeInferred(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	msgs, err := newTestClient(srv.URL).BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
+	msgs, _, err := newTestClient(srv.URL).BrowseMessages(context.Background(), "myQueue", queue.MessageFilter{})
 	if err != nil {
 		t.Fatalf("BrowseMessages() error = %v", err)
 	}
