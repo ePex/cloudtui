@@ -152,11 +152,20 @@ what they act on:
     below has finished**.
   - `Tab` keeps the typed text in the field.
   - Neither ever starts a scan or picks a suggestion on its own: a
-    suggestion is only accepted after the user moves the highlight onto
-    it with the arrow keys (or clicks it). Then `Enter`/`Tab` put that
-    type in the field (a second `Enter` continues), or, on the "↻ Scan
-    up to …" entry, start the wider scan. See "JMS Type autocomplete"
-    in Implementation notes.
+    suggestion is only accepted after the user chooses it with the
+    arrow keys (or clicks it). Then `Enter`/`Tab` put that type in the
+    field (a second `Enter` continues), or, on the "↻ Scan up to …"
+    entry, start the wider scan. See "JMS Type autocomplete" in
+    Implementation notes.
+  - **The highlight means "Enter takes this".** No suggestion is drawn
+    in the selection colors until the user chooses one: the first
+    `↑`/`↓` (or `PgUp`/`PgDn`) highlights the entry `Enter` would take
+    (the first suggestion starting with the typed text, else the first
+    one) without moving, and opens the drop-down if it was closed;
+    further arrow keys move the highlight. Any other key (typing,
+    `Backspace`, `←`/`→`, `Esc`) removes it again, so the typed text is
+    what counts. This includes a one-entry list (often just the scan
+    entry).
   - `Esc` cancels the whole purge/move-all operation.
 - Text typed while a scan runs stays; the scan's types become
   suggestions for it.
@@ -415,23 +424,50 @@ every other queue operation (spec/07).
     keys.
 
   So Enter or Tab on an empty field, an unlisted type, or even a
-  matching prefix started a 5,000-message scan and lost the text. The
-  shared `jmsTypeAutocomplete` fixes it:
-  - It tracks `chosen`: the arrow keys moved the highlight since the
-    last text change (tview's `AutocompletedNavigate`). Its
-    `SetAutocompletedFunc` callback leaves the text alone on navigation,
-    so tview doesn't rebuild the drop-down and it stays open (tview
-    only rebuilds when a key changed the text).
+  matching prefix started a 5,000-message scan and lost the text. Even
+  after that was fixed, the drop-down still drew one entry in the
+  selection colors that Enter would ignore, so it wasn't clear whether
+  a purge would be filtered. The shared `jmsTypeAutocomplete` handles
+  both:
+  - It tracks `chosen`: an entry chosen with the arrow keys since the
+    last other keystroke. Its `SetAutocompletedFunc` callback records
+    navigation (tview's `AutocompletedNavigate`) and leaves the text
+    alone, so tview doesn't rebuild the drop-down and it stays open
+    (tview only rebuilds when a key changed the text).
   - Its input capture, on Enter/Tab without `chosen`, closes the
     drop-down — tview has no public "close", but `Autocomplete()` with
     no entries removes it — and lets the key through to its normal job.
   - With `chosen`, the callback puts a real type in the field (tview
     leaves setting the text to the callback) or calls the dialog's
-    `onScan` for the scan entry.
-  - Up/Down with a **single** suggestion count as choosing it: tview
-    can't move the highlight in a one-entry list, so it reports no
-    navigation — and that's typically the scan entry alone, when there
-    are no types to suggest yet (found live).
+    `onScan` for the scan entry. Accepting uses up the choice: the scan
+    entry leaves the text alone, so the changed func wouldn't reset it.
+  - **The look follows `chosen`.** tview always has a current entry and
+    draws it in the autocomplete's `selected` style, with no public way
+    to say "none". So while nothing is chosen, `selected` is the plain
+    row style (`ui.AutocompleteStyles`' row style) and no entry looks
+    selected; when chosen, it's the theme's selection colors. tview
+    copies the styles only into a newly built drop-down, so switching
+    means setting the styles and then dropping and rebuilding the
+    drop-down (`setChosen`).
+  - The first `↑`/`↓`/`PgUp`/`PgDn` without `chosen` switches to the
+    chosen look and swallows the key, so the highlight appears on the
+    entry tview already had current (a new drop-down starts on the
+    first entry starting with the typed text, else the first,
+    `firstMatch`) instead of silently moving it. That also covers a
+    one-entry list, where tview can't move the current entry and
+    reports no navigation (typically the scan entry alone, when there
+    are no types to suggest yet; found live). Since the capture can't
+    tell whether a drop-down is open, `↑` on a closed one opens it too,
+    as `↓` always did.
+  - Any other key with `chosen` (except Enter/Tab) switches back to the
+    plain look before tview handles it. The changed func does the same
+    for any text change (including `SetText`), but only sets the styles:
+    it runs inside tview's key handling, which holds the drop-down's
+    lock, so it can't call `Autocomplete()` (deadlock).
+  - `reset()` (when a dialog opens) and `applyPalette` (a live theme
+    switch, blurring an unfocused field like
+    `ui.StyleInputFieldAutocomplete`) keep the look in step. The dialogs
+    style the field only through it.
   - The scan entry's text never goes into the field. That retired three
     workarounds: an Enter-on-empty input capture, clearing the field
     after every scan (which wiped text typed during the automatic scan),

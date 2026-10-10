@@ -58,7 +58,7 @@ Three built-in themes ship: `dark`, `cyberpunk` (palettes described in spec/01-r
   - `StyleForm`: label, field, the three button states, and each item's and button's own box background
   - `StyleFilterInput`: stand-alone `/` inputs — `Label` label, `SelectionText` on `SelectionBg` field, via `SetFormAttributes`, plus the outer box background
   - `StyleDropDown` (stand-alone) and `StyleFormDropDown` (inside a form: pop-up list, focused, prefix, disabled)
-  - `StyleInputFieldAutocomplete`
+  - `StyleInputFieldAutocomplete`, with the colors from `AutocompleteStyles` (panel background, rows, selected row). The JMS Type autocomplete (spec/09) styles its fields from `AutocompleteStyles` itself, through `applyPalette`, because its selected-row style depends on whether a suggestion is chosen
 - `tui/internal/app/theme.go` — `reapplyTheme`: sets `tview.Styles`, recolors the shell chrome (status bar, top-bar panels including their base text color, the `:` prompt's inner text area *and* outer box), then calls every themable's `ApplyPalette`.
 - Table views redraw their header row (`setHeader()`) and reset their borders color in `ApplyPalette`, since both are colored only when created.
 
@@ -77,7 +77,7 @@ Three built-in themes ship: `dark`, `cyberpunk` (palettes described in spec/01-r
 
   Every widget kind added to a view or dialog needs its colors re-applied in `ApplyPalette`, through the matching helper where one exists.
 - **`InputField` has two backgrounds.** It wraps a private `TextArea` whose own box background is what the label is drawn on; only `SetFormAttributes` reaches it. The outer box background paints wherever the field doesn't (beside it, below it). Both need resetting, which `StyleFilterInput`/`StyleForm` and `reapplyTheme` (for the `:` prompt) do.
-- **Autocomplete drop-downs are cached.** tview builds the drop-down's internal list once, with the styles set at that moment, and drops it only when the field loses focus or has no suggestions. `SetAutocompleteFunc` builds it immediately. So `StyleInputFieldAutocomplete` blurs an unfocused field after restyling, to force a rebuild with the new styles.
+- **Autocomplete drop-downs are cached.** tview builds the drop-down's internal list once, with the styles set at that moment, and drops it only when the field loses focus or has no suggestions. `SetAutocompleteFunc` builds it immediately. So `StyleInputFieldAutocomplete` (and the JMS Type autocomplete's `applyPalette`) blurs an unfocused field after restyling, to force a rebuild with the new styles.
 - **Testing a theme fix:**
   - compare a live switch against a restart cell by cell, on a simulation screen
   - and/or scan for colors only the old palette has; the regression tests in `internal/dialog` and `internal/view` build every overlay and view under `dark` and switch to `cyberpunk`

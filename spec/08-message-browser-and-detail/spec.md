@@ -156,9 +156,9 @@ reloads and are reflected in the table title):
   filter. This is the one that bounds how much is fetched for large
   backlogs.
 
-  The **JMS Type** field has two-tier autocomplete (styled via
-  `ui.StyleInputFieldAutocomplete`, same accent-tinted panel as the `:`
-  command prompt): typing prefix-filters distinct `JMSType` values seen
+  The **JMS Type** field has two-tier autocomplete (colored by
+  `ui.AutocompleteStyles`, same accent-tinted panel as the `:` command
+  prompt): typing prefix-filters distinct `JMSType` values seen
   among the messages already loaded (`Host.LoadedJMSTypes()`, free — no
   network call), and a permanent, always-present entry ("↻ Scan up to
   5,000 messages for JMS types", regardless of what's typed — it's an
@@ -185,10 +185,11 @@ reloads and are reflected in the table title):
   purge/move-all prompt (spec/09, "JMS Type autocomplete"): `Enter` and
   `Tab` keep exactly what's typed and move on to the next form field, so
   a type that isn't among the suggestions can be applied; a suggestion
-  is only accepted after the user moves the highlight onto it with the
-  arrow keys (or clicks it), and only the scan entry chosen that way
-  starts the scan. The scan entry's text never goes into the field, so
-  Apply works while a scan is still running.
+  is only accepted after the user chooses it with the arrow keys (or
+  clicks it), and only the scan entry chosen that way starts the scan.
+  Only a chosen suggestion is drawn highlighted, so the highlight always
+  shows what `Enter` takes. The scan entry's text never goes into the
+  field, so Apply works while a scan is still running.
 
   The form **always opens with focus on the JMS Type field**: `Show()`
   calls `form.SetFocus(0)`, because `tview.Form` remembers its focused

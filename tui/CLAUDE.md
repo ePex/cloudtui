@@ -100,7 +100,8 @@ this before adding or restyling a widget.
   that moment. tview keeps that list until the field loses focus or has
   no suggestions, so styles set later don't reach it. That's why
   `StyleInputFieldAutocomplete` blurs an unfocused field after
-  restyling.
+  restyling. (`dialog.jmsTypeAutocomplete` styles its field itself,
+  before wiring it; don't style that field with the helper.)
 - **In an open autocomplete drop-down, Tab acts like Enter**: both
   accept the highlighted entry, before the field's own Enter/Tab
   handling runs. And **the highlight is sticky**: a rebuilt drop-down
@@ -112,6 +113,14 @@ this before adding or restyling a widget.
   drop-down in the input capture (`Autocomplete()` with no entries) and
   let the key through. A one-entry list can't move its highlight, so
   arrow keys there report no navigation.
+- **An autocomplete drop-down always has a current entry**, drawn in
+  the `selected` style, and there's no public "no current entry". To
+  show none, set `selected` to the row style; to change the look of an
+  open drop-down, set the styles, then drop and rebuild it
+  (`Autocomplete()` with no entries, then again). Never call
+  `Autocomplete()` from the changed func: tview holds the drop-down's
+  lock while it runs (deadlock); do it in the input capture.
+  `dialog.jmsTypeAutocomplete` shows both.
 - **Widgets copy `tview.Styles` at construction.** Setting
   `tview.Styles` later (a live theme switch) doesn't reach widgets that
   already exist. What keeps its construction-time colors unless
