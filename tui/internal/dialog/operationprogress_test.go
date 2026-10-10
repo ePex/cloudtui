@@ -39,11 +39,11 @@ func TestOperationProgressDeterminateRendering(t *testing.T) {
 	op.Show("Moving messages", 4)
 	op.SetProgress(2, 4)
 
-	text := renderedScreenText(t, op.Primitive(), 52, 9)
+	text := renderedScreenText(t, op.Primitive(), 52, 10)
 	if !strings.Contains(text, "Moving messages") {
 		t.Errorf("overlay is missing operation label: %q", text)
 	}
-	if !strings.Contains(text, "50%") || !strings.Contains(text, "2/4") {
+	if !strings.Contains(text, "50%") || !strings.Contains(text, "Message 2 of 4") {
 		t.Errorf("overlay is missing determinate progress: %q", text)
 	}
 	if !strings.Contains(text, "=^.^=") {
@@ -75,7 +75,10 @@ func TestOperationProgressClampsCompletedCount(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Deleting", 3)
 	op.SetProgress(8, 3)
-	if got := op.bar.GetText(true); !strings.Contains(got, "100%") || !strings.Contains(got, "3/3") {
-		t.Errorf("clamped progress = %q, want 100%% (3/3)", got)
+	if got := op.bar.GetText(true); !strings.Contains(got, "100%") {
+		t.Errorf("clamped bar = %q, want 100%%", got)
+	}
+	if got := op.counter.GetText(true); got != "Message 3 of 3" {
+		t.Errorf("clamped counter = %q, want Message 3 of 3", got)
 	}
 }

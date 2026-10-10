@@ -102,10 +102,12 @@ closes before success or error feedback and the existing queue reload.
 Deleting or moving multiple selected messages from the Messages view opens
 the same blocking progress modal, labeled with the action, message count, and
 source queue. Since the view invokes the backend once per selected message,
-the modal shows a determinate Nyan-style bar and advances after each attempt;
-failed attempts count as completed work. The overlay closes before existing
-partial-failure or success feedback and the messages list reload/focus flow.
-Single-message detail actions are unchanged.
+the modal shows a determinate Nyan-style bar and advances after each attempt.
+A separate line below the bar shows the current message attempt and total
+(for example, `Message 3 of 10`); failed attempts count as completed work.
+The overlay closes before existing partial-failure or success feedback and
+the messages list reload/focus flow. Single-message detail actions are
+unchanged.
 
 ### Broker limits on filtered purge/move-all
 

@@ -23,6 +23,7 @@ type OperationProgress struct {
 	label     *tview.TextView
 	cat       *tview.TextView
 	bar       *tview.TextView
+	counter   *tview.TextView
 	visible   bool
 	completed int
 	total     int
@@ -35,11 +36,13 @@ func NewOperationProgress(host ui.Host) *OperationProgress {
 	op.label = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.cat = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.bar = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
+	op.counter = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(nil, 1, 0, false).
 		AddItem(op.label, 1, 0, false).
 		AddItem(op.cat, 1, 0, false).
 		AddItem(op.bar, 1, 0, false).
+		AddItem(op.counter, 1, 0, false).
 		AddItem(nil, 1, 0, false)
 	op.root.SetBorder(true).SetTitle(" Working ")
 	op.render()
@@ -96,7 +99,7 @@ func (op *OperationProgress) Hide() {
 func (op *OperationProgress) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
 	op.root.SetBackgroundColor(bg).SetBorderColor(tcell.GetColor(p.Border)).SetTitleColor(tcell.GetColor(p.Border))
-	for _, text := range []*tview.TextView{op.label, op.cat, op.bar} {
+	for _, text := range []*tview.TextView{op.label, op.cat, op.bar, op.counter} {
 		text.SetBackgroundColor(bg)
 		text.SetTextColor(tcell.GetColor(p.Text))
 	}
@@ -118,6 +121,7 @@ func (op *OperationProgress) render() {
 	op.cat.SetText(trail.String() + "[white]=^.^=[-]")
 
 	if op.total <= 0 {
+		op.counter.SetText("")
 		width := 19
 		position := op.frame * (width - 5) / (len(nyanColors) - 1)
 		line := strings.Repeat("─", position) + "=^.^=" + strings.Repeat("─", width-position-5)
@@ -131,7 +135,8 @@ func (op *OperationProgress) render() {
 	filled := op.completed * width / op.total
 	percent := op.completed * 100 / op.total
 	bar := "[green]" + strings.Repeat("█", filled) + "[-]" + "[gray]" + strings.Repeat("░", width-filled) + "[-]"
-	op.bar.SetText(fmt.Sprintf("%s  %d%%  (%d/%d)", bar, percent, op.completed, op.total))
+	op.bar.SetText(fmt.Sprintf("%s  %d%%", bar, percent))
+	op.counter.SetText(fmt.Sprintf("Message %d of %d", op.completed, op.total))
 }
 
 var _ ui.Themeable = (*OperationProgress)(nil)
