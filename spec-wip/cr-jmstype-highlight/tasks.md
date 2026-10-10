@@ -99,7 +99,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    and 410–432, including the one-entry special case, now gone) for the
    highlight rule and the PgUp/PgDn and ↑ details.
 
-4. [ ] **Live check and regression run.** `task test`,
+4. [x] **Live check and regression run.** `task test`,
    `task test:tui:race`, smoke test (isolated).
    *Live (tmux, isolated HOME, local broker):* a scratch queue with
    messages of two JMS types. Purge prompt: no highlighted row on
@@ -109,3 +109,31 @@ done. Live checks run with an isolated HOME and a separate tmux server
    highlight behavior. Repeat the highlight checks in the dark theme
    and one other theme, including a live theme switch with the
    drop-down open. Remove the scratch queue.
+   *Done (2026-10-10):* `task test` (Go, mq-proxy, 78/78 web tests),
+   `task test:tui:race` and the smoke test pass. The smoke test ran
+   with the scratch HOME and its own tmux server, through a `tmux -L`
+   wrapper on `PATH`; the scratch HOME was unchanged afterwards. Live:
+   a fresh build in its own tmux server (truecolor), scratch HOME, local
+   broker, scratch queue `jmshl-scratch` with 3 `OrderCreated` and 2
+   `OrderCancelled` messages. Highlighted rows were read from
+   `capture-pane -e` by the selection background.
+   - **Purge prompt (dark):** no highlighted suggestion on open (only
+     the input field itself, which uses the same color); ↓ highlighted
+     `OrderCancelled`, ↓ moved it to `OrderCreated`; typing `O` removed
+     it. Backspace, ↓ ↓, Enter put `OrderCreated` in the field; Enter
+     again showed "All OrderCreated messages will be deleted"; Yes
+     purged 3, and the broker still held the 2 `OrderCancelled`
+     messages. Reopening after a pick: no highlight. ↑ ↑ highlighted
+     the scan entry (the list wraps); Enter scanned, and the refreshed
+     drop-down had no highlight.
+   - **Message filter (dark):** no highlight on open; ↓ highlighted,
+     ↓ moved it, ← removed it; ↓ then Enter put `OrderCancelled` in
+     the field.
+   - **Cyberpunk** (`:theme cyberpunk`): purge prompt with no highlight
+     on open, ↓ highlighted in cyberpunk's selection color, typing
+     removed it, no dark selection color anywhere on screen.
+   - **Not done live:** a theme switch with the drop-down open. While
+     the field is focused every key goes to it, so the switch can only
+     happen with the prompt closed; the cached drop-down case is
+     covered by `…ThemeSwitchKeepsTheChoiceHighlighted`.
+   Scratch queue removed; no mq-proxy left running.
