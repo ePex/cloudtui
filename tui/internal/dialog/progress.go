@@ -38,7 +38,10 @@ var (
 		tcell.NewRGBColor(0x00, 0x99, 0xff), // blue
 		tcell.NewRGBColor(0x66, 0x33, 0xff), // purple
 	}
-	trackColor = tcell.NewRGBColor(0x0b, 0x1f, 0x4b) // night sky behind the trail
+	// Night sky behind the trail: exactly xterm color 17, so a
+	// 256-color terminal shows the same navy (a nearby RGB value maps to
+	// a gray there).
+	trackColor = tcell.NewRGBColor(0x00, 0x00, 0x5f)
 	starColor  = tcell.NewRGBColor(0xff, 0xff, 0xff)
 	catColors  = map[byte]tcell.Color{
 		't': tcell.NewRGBColor(0xf5, 0xc3, 0x8c), // tart crust
@@ -73,6 +76,11 @@ var catFrames = [2][2 * barRows]string{
 
 // catWidth is the cat's width in cells (one pixel column per cell).
 var catWidth = len(catFrames[0][0])
+
+// catTrailEnd is the cat column where the rainbow ends behind it (the
+// middle of the tart): transparent pixels from there on show the night
+// sky, so the trail doesn't peek out between the ears or legs.
+const catTrailEnd = 5
 
 // spinnerFrames is the spinner's animation, one rune per frame.
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -131,6 +139,8 @@ func rainbowCells(width, done, total, frame int) [][]progressCell {
 			for i := 0; i < len(row); i++ {
 				if c, ok := catColors[row[i]]; ok {
 					pixels[y][left+i] = c
+				} else if i >= catTrailEnd {
+					pixels[y][left+i] = trackColor
 				}
 			}
 		}
@@ -149,10 +159,12 @@ func rainbowCells(width, done, total, frame int) [][]progressCell {
 		if left >= 0 && x >= left && x < left+catWidth {
 			continue
 		}
+		// 0 and 3 are six columns apart (7·6 ≡ 3 mod 13), so the two
+		// kinds of star don't bunch up.
 		switch (x*7 + frame) % 13 {
 		case 0:
 			rows[1][x] = progressCell{r: '✦', fg: starColor, bg: trackColor}
-		case 6:
+		case 3:
 			rows[1][x] = progressCell{r: '·', fg: starColor, bg: trackColor}
 		}
 	}
@@ -181,8 +193,8 @@ func progressCount(done, total, failed int) string {
 // fe-progress-modal): the operation's title, then a rainbow bar with a
 // cat for a counted operation on a screen with enough colors, otherwise
 // a spinner; a count line, an optional detail text and a footer. It only
-// draws: showing it, animating it (Tick) and handling keys belong to the
-// app. All methods must run on the UI goroutine.
+// draws: showing it, animating it (SetFrame) and handling keys belong to
+// the app. All methods must run on the UI goroutine.
 type ProgressModal struct {
 	*tview.Box
 
@@ -231,8 +243,9 @@ func (m *ProgressModal) SetFooter(text string) { m.footer = text }
 // screen without enough colors — for previewing the fallback.
 func (m *ProgressModal) SetForceSpinner(on bool) { m.forceSpinner = on }
 
-// Tick advances the animation by one frame.
-func (m *ProgressModal) Tick() { m.frame++ }
+// SetFrame sets the animation frame: the cat's pose, the stars and the
+// spinner.
+func (m *ProgressModal) SetFrame(frame int) { m.frame = frame }
 
 // rainbow reports whether the modal draws the rainbow bar on screen.
 func (m *ProgressModal) rainbow(screen tcell.Screen) bool {
@@ -241,8 +254,8 @@ func (m *ProgressModal) rainbow(screen tcell.Screen) bool {
 
 // Draw paints the modal. Its layout, inside the border:
 //
-//	row 0     title
-//	rows 2–4  rainbow bar, or the spinner (and count) on row 3
+//	row 0     title, above the rainbow bar
+//	rows 2–4  rainbow bar, or on row 3 the spinner, title and count
 //	row 5     count, under the rainbow bar
 //	rows 6–7  detail, wrapped
 //	row 8     footer
@@ -258,9 +271,8 @@ func (m *ProgressModal) Draw(screen tcell.Screen) {
 		}
 	}
 
-	line(m.title, 0, tview.AlignCenter, m.textColor)
-
 	if m.rainbow(screen) {
+		line(m.title, 0, tview.AlignCenter, m.textColor)
 		bar := rainbowCells(width-2, m.done, m.total, m.frame)
 		for r, cells := range bar {
 			if 2+r >= height {
@@ -273,11 +285,19 @@ func (m *ProgressModal) Draw(screen tcell.Screen) {
 		}
 		line(progressCount(m.done, m.total, m.failed), 5, tview.AlignCenter, m.textColor)
 	} else {
-		spin := string(spinnerRune(m.frame))
+		// "⠹ Loading queues…  3 of 10": the spinner in the accent color,
+		// the rest in the text color.
+		text := m.title + "…"
 		if count := progressCount(m.done, m.total, m.failed); count != "" {
-			spin += "  " + count
+			text += "  " + count
 		}
-		line(spin, 3, tview.AlignCenter, m.accentColor)
+		spin := string(spinnerRune(m.frame))
+		if hex := m.accentColor.Hex(); hex >= 0 {
+			spin = fmt.Sprintf("[#%06x]%s[-]", hex, spin)
+		}
+		if height > 3 {
+			tview.Print(screen, spin+" "+tview.Escape(text), x+1, y+3, width-2, tview.AlignCenter, m.textColor)
+		}
 	}
 
 	for i, row := range wrapLines(m.detail, width-2, 2) {

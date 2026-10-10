@@ -23,6 +23,10 @@ type Host interface {
 	// Status / context feedback
 	SetStatus(text string)
 	SetContextHint(text string)
+	// StartOperation begins a blocking operation shown in the progress
+	// modal: title, total items (0 when there's no count) and what Esc
+	// does. Only one runs at a time; starting another replaces it.
+	StartOperation(title string, total int, kind OpKind) Operation
 
 	// Config / theme
 	Config() config.Config

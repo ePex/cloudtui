@@ -67,8 +67,10 @@ StartOperation(title string, total int, kind OpKind) Operation
 - **Timing:** a 250 ms timer shows the page; `Finish` hides it, but no
   sooner than 400 ms after it was shown (a second timer). Timers come
   from an injected `afterFunc` (default `time.AfterFunc`) so tests drive
-  them without sleeping. Everything that touches tview runs through
-  `QueueUpdateDraw`.
+  them without sleeping. The runner's state sits behind a mutex, so
+  operations can report from any goroutine; it asks for redraws with
+  `go QueueUpdateDraw(…)`, because `QueueUpdateDraw` blocks until the
+  UI goroutine runs it and would deadlock when called from there.
 - **Animation:** a 100 ms ticker runs only while the modal is visible,
   advancing `frame` and redrawing.
 - **Blocking keys:** `onGlobalKey` checks for an active operation
@@ -77,8 +79,11 @@ StartOperation(title string, total int, kind OpKind) Operation
   change footer, wait for the caller's `Finish`), Ctrl+C is passed through so tview still quits, every
   other key is swallowed. The modal never takes focus, so the view
   underneath keeps its cursor and focus for when it closes.
-- New page `"progress"` in `a.rootPages`, added right after `"confirm"`
-  so it draws above every overlay.
+- The modal is **not** a page: `tview.Pages.ShowPage` moves focus to the
+  newly visible page, and hiding it wouldn't put focus back where it
+  was. Instead the app's existing after-draw hook (`SetAfterDrawFunc`,
+  shared with the clipboard's screen capture) draws it centered on top
+  of everything once the normal draw is done.
 
 ## 3. TUI: wiring the operations
 
@@ -178,8 +183,8 @@ works with no connection.
 
 - **Rendering:** `SimulationScreen` tests — 256 colors draws `▀` cells
   in band colors and the cat at the head for 0 %, 50 %, 100 %; 16
-  colors or `total == 0` draws the spinner and `3 of 10`; the footer and
-  detail lines appear.
+  colors or `total == 0` draws the spinner (`⠹ <title>…`) and `3 of 10`;
+  the footer and detail lines appear.
 - **Operation runner:** fake `afterFunc` — hidden before 250 ms, shown
   after; `Finish` at 300 ms keeps it until 650 ms; a superseded
   operation's `Finish` doesn't close the newer one; keys swallowed

@@ -11,7 +11,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    screen and for `total == 0`; footer and detail lines.
    Not wired into the app yet.
 
-2. [ ] **Operation runner and `:progress-demo`** (plan §2, §5).
+2. [x] **Operation runner and `:progress-demo`** (plan §2, §5).
    `ui.Operation` / `ui.Host.StartOperation`, `app/operation.go`
    (one operation at a time, 250/400 ms timing with injected timers,
    ticker only while visible, key blocking with Esc and Ctrl+C), the
@@ -23,8 +23,20 @@ done. Live checks run with an isolated HOME and a separate tmux server
    bar filling 1…20 with the cat at its head, then the spinner; other
    keys do nothing; Esc ends it early. `:progress-demo spinner` shows
    the spinner with `3 of 20`-style counts. Check it in two themes and
-   at a narrow terminal width (60 columns). Also run it with
-   `TERM=xterm` (16 colors) to see the automatic fallback.
+   at a narrow terminal width (60 columns). Also run it with an
+   8/16-color terminal to see the automatic fallback.
+   *Done (2026-10-10):* checked in tmux (separate server, scratch HOME)
+   with the colored captures rendered in a browser: rainbow + cat +
+   stars, `12 of 20 (1 failed)`, spinner row `⠹ Progress demo: no
+   count…`; `s`/`l`/`h`/`:`/`q` ignored during the demo; Esc → closed,
+   `Progress demo cancelled`; Ctrl+C quits; dark and cyberpunk themes;
+   60 columns; `TERM=ansi` (8 colors) falls back to the spinner, and
+   `xterm-256color` without truecolor still draws the rainbow. Note:
+   `COLORTERM=truecolor` makes tcell report 16M colors whatever `TERM`
+   says, so unset it for the fallback check. Fixed along the way: the
+   two star kinds sat side by side; the rainbow showed between the
+   cat's ears; the night sky turned gray on 256-color terminals (now
+   exactly xterm color 17); the spinner now sits next to the title.
 
 3. [ ] **Mutations never cut off mid-request** (plan §4). Proxy: round
    requests use `context.WithoutCancel`, `inRounds` returns the total

@@ -154,6 +154,20 @@ func TestRainbowCellsHalfway(t *testing.T) {
 	}
 }
 
+func TestRainbowCellsEndsTheTrailBehindTheCat(t *testing.T) {
+	rows := rainbowCells(40, 5, 10, 0)
+	left := catLeft(trailWidth(40, 5, 10))
+	// Frame 0's top row is "..tttttg.g": the gap between the ears
+	// (column 8) shows the night sky, the gap before the tail (column 0)
+	// the rainbow.
+	if got := rows[0][left+8].fg; got != trackColor {
+		t.Errorf("between the ears: fg = %v, want the night sky", got)
+	}
+	if got := rows[0][left].fg; got != rainbowBands[0] {
+		t.Errorf("behind the tail: fg = %v, want the rainbow", got)
+	}
+}
+
 func TestRainbowCellsEmptyAndFull(t *testing.T) {
 	const width = 40
 	empty := rainbowCells(width, 0, 10, 0)
@@ -198,7 +212,7 @@ func TestProgressModalUsesThePaletteForItsText(t *testing.T) {
 	p := config.Palette{Background: "#101010", Border: "#202020", Text: "#30a030", Label: "#a03030", Accent: "#3030a0"}
 	m := NewProgressModal()
 	m.ApplyPalette(p)
-	m.Reset("Loading queues", 0)
+	m.Reset("Loading queues", 10)
 	m.SetFooter("Esc to cancel")
 
 	rows := drawModal(t, m, 256)
@@ -215,8 +229,32 @@ func TestProgressModalUsesThePaletteForItsText(t *testing.T) {
 	if got := colorOf(rows[9], "Esc to cancel"); got != tcell.GetColor(p.Label) {
 		t.Errorf("footer color = %v, want the palette's label color", got)
 	}
-	if got := rows[4][ProgressModalWidth/2].fg; got != tcell.GetColor(p.Accent) {
+
+	m.Reset("Loading queues", 0)
+	rows = drawModal(t, m, 256)
+	spinner := strings.IndexRune(rowText(rows[4]), spinnerRune(0))
+	if spinner < 0 {
+		t.Fatalf("no spinner in %q", rowText(rows[4]))
+	}
+	spinnerCol := len([]rune(rowText(rows[4])[:spinner]))
+	if got := rows[4][spinnerCol].fg; got != tcell.GetColor(p.Accent) {
 		t.Errorf("spinner color = %v, want the palette's accent color", got)
+	}
+	if got := colorOf(rows[4], "Loading queues"); got != tcell.GetColor(p.Text) {
+		t.Errorf("spinner row title color = %v, want the palette's text color", got)
+	}
+}
+
+func TestProgressModalSpinnerRowNamesTheOperation(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset("Loading queues", 0)
+	rows := drawModal(t, m, 256)
+	want := string(spinnerRune(0)) + " Loading queues…"
+	if got := rowText(rows[4]); !strings.Contains(got, want) {
+		t.Errorf("spinner row = %q, want it to contain %q", got, want)
+	}
+	if got := rowText(rows[1]); strings.TrimSpace(strings.Trim(got, "│")) != "" {
+		t.Errorf("title row = %q, want it empty with the title in the spinner row", got)
 	}
 }
 
@@ -311,10 +349,10 @@ func TestProgressModalSpinnerAnimates(t *testing.T) {
 	m := NewProgressModal()
 	m.Reset("Loading queues", 0)
 	first := rowText(drawModal(t, m, 256)[4])
-	m.Tick()
+	m.SetFrame(1)
 	second := rowText(drawModal(t, m, 256)[4])
 	if first == second {
-		t.Errorf("spinner row didn't change after Tick: %q", first)
+		t.Errorf("spinner row didn't change with the frame: %q", first)
 	}
 }
 
