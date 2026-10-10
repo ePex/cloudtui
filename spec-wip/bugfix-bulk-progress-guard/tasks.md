@@ -21,12 +21,22 @@ passed inline in the session command), never the developer's real
    entry again) fails both new tests; all existing round tests pass
    with unique IDs. `go test -race ./...` clean.
 
-2. [ ] **Stop repeating when a round makes no progress** (plan §2).
+2. [x] **Stop repeating when a round makes no progress** (plan §2).
    `inRounds` tracks seen IDs, counts only new ones, and returns
    `errBulkNoProgress` (with both numbers in the message) when a round
    reports entries but nothing new. `cappedServer` gets a `stuck`
    option. Tests as in plan §3. Mutation-checked (without the check the
    stuck test hits the 1,000-request cap).
+   *Done 2026-10-10.* One refinement found by the tests: the IDs in the
+   final no-progress round were counted in an earlier round but are
+   evidently still there, so they come back off the total — a purge of
+   1,000 real messages plus 1 stuck one reports 1,000 removed, not
+   1,001. The stuck-message scenario is an inline fake server rather
+   than a `cappedServer` option (clearer for that one test). Task 1's
+   ID-less test now also expects the no-progress stop, since ID-less
+   entries keep coming after the real messages run out. Mutation:
+   without the stop, all 4 tests run the full 1,000 requests.
+   `go test -race ./...` clean.
 
 3. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and live through `mq-proxy`: purge and move-all on a

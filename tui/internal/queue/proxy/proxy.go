@@ -290,27 +290,53 @@ const maxBulkRounds = 1000
 // maxBulkRounds while the server still reports progress.
 var errBulkIncomplete = errors.New("incomplete")
 
-// inRounds repeats round until it acts on 0 messages and returns the total.
-// Nothing in the wire contract (spec/11) promises that one delete-messages/
-// move-messages call acts on every matching message - a server that
-// browses before consuming stops at the broker's browse limit - so a bulk
-// operation keeps asking until the server reports nothing left. Bounded by
-// maxBulkRounds so a server that misreports progress can't loop forever;
-// the context is checked between rounds. On error, the total so far comes
-// back alongside it.
-func inRounds(ctx context.Context, round func() (int, error)) (int, error) {
+// errBulkNoProgress is returned (wrapped) when a round reports messages
+// but none that an earlier round hadn't already reported.
+var errBulkNoProgress = errors.New("incomplete")
+
+// inRounds repeats round until the server reports nothing left, and
+// returns how many messages were removed. Nothing in the wire contract
+// (spec/11) promises that one delete-messages/move-messages call acts on
+// every matching message - a server that browses before consuming stops at
+// the broker's browse limit - so a bulk operation keeps asking.
+//
+// round returns the message IDs it reports (entries without an ID dropped)
+// and how many entries the response had. Only IDs not seen in an earlier
+// round count: a really removed message can't be reported again, so a
+// round that reports entries but nothing new made no progress - typically
+// a server reporting messages it browsed but couldn't consume - and ends
+// the repetition with errBulkNoProgress instead of repeating them until
+// maxBulkRounds. maxBulkRounds stays as the last resort; the context is
+// checked between rounds. On error, the total so far comes back alongside
+// it.
+func inRounds(ctx context.Context, round func() (ids []string, reported int, err error)) (int, error) {
+	seen := make(map[string]bool)
 	total := 0
 	for range maxBulkRounds {
 		if err := ctx.Err(); err != nil {
 			return total, err
 		}
-		n, err := round()
-		total += n
+		ids, reported, err := round()
+		fresh := 0
+		for _, id := range ids {
+			if !seen[id] {
+				seen[id] = true
+				fresh++
+			}
+		}
+		total += fresh
 		if err != nil {
 			return total, err
 		}
-		if n == 0 {
+		if reported == 0 {
 			return total, nil
+		}
+		if fresh == 0 {
+			// Everything this round reported was counted in an earlier
+			// round, yet it's still there: those weren't removed after all.
+			total -= len(ids)
+			return total, fmt.Errorf("%w: the server kept reporting %d message(s) it didn't remove (%d removed)",
+				errBulkNoProgress, reported, total)
 		}
 	}
 	return total, fmt.Errorf("%w after %d requests (%d messages so far); the server kept reporting progress",
@@ -322,28 +348,27 @@ func inRounds(ctx context.Context, round func() (int, error)) (int, error) {
 // single request.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	if filter.MaxCount > 0 {
-		ids, err := c.deleteOnce(ctx, queueName, filter)
+		ids, _, err := c.deleteOnce(ctx, queueName, filter)
 		return len(ids), err
 	}
-	return inRounds(ctx, func() (int, error) {
-		ids, err := c.deleteOnce(ctx, queueName, filter)
-		return len(ids), err
-	})
+	return inRounds(ctx, func() ([]string, int, error) { return c.deleteOnce(ctx, queueName, filter) })
 }
 
 // deleteOnce makes a single delete-messages request and returns the IDs
-// of the messages the server reports as deleted. An entry without a
+// of the messages the server reports as deleted, plus how many entries the
+// response had (inRounds tells "nothing left" from "no progress" by it).
+// An entry without a
 // message ID doesn't count: nothing says that message was really removed
 // — a server that browses before consuming can report a browsed message
 // whose consume came back empty (spec/11).
-func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) ([]string, error) {
+func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) ([]string, int, error) {
 	reqs := []deleteMessagesRequest{{SourceQueue: queueName, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[deletedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/delete-messages", reqs, &env); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	ids := make([]string, 0, len(env.Data))
 	for _, m := range env.Data {
@@ -351,33 +376,30 @@ func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.
 			ids = append(ids, m.MessageID)
 		}
 	}
-	return ids, nil
+	return ids, len(env.Data), nil
 }
 
 // MoveMessages implements queue.Backend, repeating like DeleteMessages
 // when filter has no MaxCount.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	if filter.MaxCount > 0 {
-		ids, err := c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+		ids, _, err := c.moveOnce(ctx, sourceQueue, targetQueue, filter)
 		return len(ids), err
 	}
-	return inRounds(ctx, func() (int, error) {
-		ids, err := c.moveOnce(ctx, sourceQueue, targetQueue, filter)
-		return len(ids), err
-	})
+	return inRounds(ctx, func() ([]string, int, error) { return c.moveOnce(ctx, sourceQueue, targetQueue, filter) })
 }
 
 // moveOnce makes a single move-messages request and returns the IDs of
-// the messages the server reports as moved — like deleteOnce, entries
-// without a message ID don't count.
-func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) ([]string, error) {
+// the messages the server reports as moved, plus the response's entry
+// count — like deleteOnce, entries without a message ID don't count.
+func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) ([]string, int, error) {
 	reqs := []moveMessagesRequest{{SourceQueue: sourceQueue, TargetQueue: targetQueue, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[movedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/move-messages", reqs, &env); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	ids := make([]string, 0, len(env.Data))
 	for _, m := range env.Data {
@@ -385,7 +407,7 @@ func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, 
 			ids = append(ids, m.MessageID)
 		}
 	}
-	return ids, nil
+	return ids, len(env.Data), nil
 }
 
 // envelopeErr builds a Go error from the first entry of a response
