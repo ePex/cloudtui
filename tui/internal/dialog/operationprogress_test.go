@@ -37,7 +37,11 @@ func TestOperationProgressShowAndHide(t *testing.T) {
 func TestOperationProgressDeterminateRendering(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Moving messages", 4)
+	catAtStart := op.cat.GetText(true)
 	op.SetProgress(2, 4)
+	if got := op.cat.GetText(true); got == catAtStart {
+		t.Error("cat did not move along the track with determinate progress")
+	}
 
 	text := renderedScreenText(t, op.Primitive(), 52, 10)
 	if !strings.Contains(text, "Moving messages") {
@@ -55,6 +59,7 @@ func TestOperationProgressIndeterminateAnimation(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Loading queues", 0)
 	before := op.bar.GetText(true)
+	catBefore := op.cat.GetText(true)
 	op.Tick()
 	after := op.bar.GetText(true)
 	if before == after {
@@ -62,6 +67,9 @@ func TestOperationProgressIndeterminateAnimation(t *testing.T) {
 	}
 	if strings.Contains(after, "%") {
 		t.Errorf("indeterminate indicator unexpectedly shows a percentage: %q", after)
+	}
+	if got := op.cat.GetText(true); got == catBefore {
+		t.Error("cat did not move along the track in indeterminate mode")
 	}
 	op.Hide()
 	before = op.cat.GetText(true)

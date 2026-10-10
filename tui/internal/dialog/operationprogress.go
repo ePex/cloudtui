@@ -15,6 +15,12 @@ const operationProgressPage = "operation-progress"
 
 var nyanColors = [...]string{"red", "yellow", "green", "cyan", "blue", "magenta"}
 
+const (
+	nyanTrackWidth     = 34
+	nyanCatWidth       = 5
+	nyanAnimationSteps = 12
+)
+
 // OperationProgress is a blocking visual for a slow queue operation. Call
 // Tick periodically while it is visible to animate the rainbow trail.
 type OperationProgress struct {
@@ -81,7 +87,7 @@ func (op *OperationProgress) Tick() {
 	if !op.visible {
 		return
 	}
-	op.frame = (op.frame + 1) % len(nyanColors)
+	op.frame = (op.frame + 1) % nyanAnimationSteps
 	op.render()
 }
 
@@ -113,12 +119,7 @@ func (op *OperationProgress) Primitive() tview.Primitive { return op.root }
 func (op *OperationProgress) Visible() bool { return op.visible }
 
 func (op *OperationProgress) render() {
-	var trail strings.Builder
-	for i := range nyanColors {
-		color := nyanColors[(i+op.frame)%len(nyanColors)]
-		fmt.Fprintf(&trail, "[%s]━[-]", color)
-	}
-	op.cat.SetText(trail.String() + "[white]=^.^=[-]")
+	op.cat.SetText(op.renderNyanTrack())
 
 	if op.total <= 0 {
 		op.counter.SetText("")
@@ -137,6 +138,40 @@ func (op *OperationProgress) render() {
 	bar := "[green]" + strings.Repeat("█", filled) + "[-]" + "[gray]" + strings.Repeat("░", width-filled) + "[-]"
 	op.bar.SetText(fmt.Sprintf("%s  %d%%", bar, percent))
 	op.counter.SetText(fmt.Sprintf("Message %d of %d", op.completed, op.total))
+}
+
+// renderNyanTrack places the cat at the current determinate progress point,
+// or bounces it along the rainbow track for opaque operations.
+func (op *OperationProgress) renderNyanTrack() string {
+	maxPosition := nyanTrackWidth - nyanCatWidth
+	position := 0
+	if op.total > 0 {
+		completed := op.completed
+		if completed > op.total {
+			completed = op.total
+		}
+		position = maxPosition * completed / op.total
+	} else {
+		step := op.frame
+		if step >= nyanAnimationSteps/2 {
+			step = nyanAnimationSteps - 1 - step
+		}
+		position = maxPosition * step / (nyanAnimationSteps/2 - 1)
+	}
+	trailWidth := position
+	var track strings.Builder
+	for i := 0; i < trailWidth; i++ {
+		color := nyanColors[(i+op.frame)%len(nyanColors)]
+		fmt.Fprintf(&track, "[%s]━[-]", color)
+	}
+	track.WriteString("[white]=^.^=[-]")
+	remaining := nyanTrackWidth - position - nyanCatWidth
+	if remaining > 0 {
+		track.WriteString("[gray]")
+		track.WriteString(strings.Repeat("─", remaining))
+		track.WriteString("[-]")
+	}
+	return track.String()
 }
 
 var _ ui.Themeable = (*OperationProgress)(nil)

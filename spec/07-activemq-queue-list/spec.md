@@ -70,9 +70,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   ends up reflecting the *most recently triggered* reload, never a
   slower, superseded one.
 - **Operation progress overlay**: each queue reload also opens the shared,
-  centered blocking `Working` modal labeled `Loading queues`. It animates a
-  Nyan Cat rainbow trail over an indeterminate moving bar while the backend
-  call runs; this call has no honest completed/total count. The inline
+  centered blocking `Working` modal labeled `Loading queues`. A Nyan Cat
+  travels back and forth along its rainbow track while the backend call runs;
+  this call has no honest completed/total count. The inline
   placeholder remains underneath the modal. The modal closes when the
   current load completes, and a stale superseded load cannot close a newer
   operation's modal. While visible, global hotkeys are suppressed to avoid
