@@ -81,6 +81,7 @@ Cleanup: `tmux send-keys -t verify 'q'; tmux kill-session -t verify`.
 | `a` / `n` | messages list | mark all / clear marks |
 | `d` / `m` | messages list | delete / move marked (or cursor row if nothing marked) |
 | `p` | queues, messages | purge (confirm dialog) |
+| `e` | queues, messages | export to NDJSON (path prompt; messages: marked, else shown) |
 | `n` / `e` / `d` / `Del`/`x` | connection manager | new / edit / duplicate / delete |
 | `Esc` | every overlay | cancel/close |
 

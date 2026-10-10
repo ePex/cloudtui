@@ -7,7 +7,8 @@ _Condensed from spec/13, spec/14, spec/15, spec/16, spec/17 — see those folder
 Operational actions on queues and messages, so common ActiveMQ admin tasks
 (clearing a DLQ, requeuing a message, draining a queue, injecting a test
 message) don't require the ActiveMQ web console. Builds on the queue list
-(spec/07) and message browser/detail (spec/08).
+(spec/07) and message browser/detail (spec/08). Saving messages to a file
+is covered separately in spec/23.
 
 ## Behavior / user flow
 

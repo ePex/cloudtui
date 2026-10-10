@@ -23,10 +23,10 @@ gate in `CLAUDE.md`.
 
 - **Export search results to a file.** CloudWatch/Datadog Logs results
   have no "save to file" action, which would help when pasting results
-  into an incident doc. (Queue messages got one: fe-message-export.)
+  into an incident doc. (Queue messages got one: spec/23.)
 
 - **Export and remove ("drain to file").** The message export
-  (fe-message-export) only browses, so on a queue bigger than the
+  (spec/23) only browses, so on a queue bigger than the
   broker's browse limit (~400 by default) it can't contain everything.
   A destructive variant would consume the messages in a transaction,
   write them to the file, and commit only once the file is complete —
@@ -35,7 +35,7 @@ gate in `CLAUDE.md`.
   confirm.
 
 - **Import an export.** Re-send the messages from an NDJSON export
-  (fe-message-export) into a queue — e.g. to move them to another
+  (spec/23) into a queue — e.g. to move them to another
   environment — keeping JMS type, correlation ID and headers. Could
   also go the other way: write an export as snippet files (spec/22) so
   single messages can be re-sent via "Load snippet…".

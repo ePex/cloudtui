@@ -47,6 +47,9 @@ this module.
   formatted on save), the `~/.cloudtui/snippets/` folder store, and
   reading files to import (see `spec/22-message-snippets`). No UI
   dependency.
+- `internal/export/` — NDJSON message export: the record format, the
+  atomic file write, and the default file name and folder (see
+  `spec/23-message-export`). No UI dependency.
 - `internal/devtool/` — JMX queue admin and mq-proxy process management,
   used by `cmd/devtool`.
 - `internal/awsprofile/` — read-only discovery of AWS CLI profiles from
