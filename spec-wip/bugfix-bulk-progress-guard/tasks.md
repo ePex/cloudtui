@@ -38,10 +38,20 @@ passed inline in the session command), never the developer's real
    without the stop, all 4 tests run the full 1,000 requests.
    `go test -race ./...` clean.
 
-3. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+3. [x] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and live through `mq-proxy`: purge and move-all on a
    1,000+ message queue still empty it and report the right count.
    Remove the scratch queues; stop `mq-proxy`.
+   *Done 2026-10-10.* `task test` exit 0 (mq-proxy-web 43/43), `task
+   test:tui:race` exit 0, smoke test PASS (isolated; the real
+   `cloudtui.log` untouched). Live through `mq-proxy`, 600 × TypeA +
+   600 × TypeB: move-all to a second queue → `Moved 1200 message(s) …`,
+   source 0, target 1,201 — in 4 `move-messages` requests of ~2 s each
+   (mq-proxy's transacted move hands them out in batches; the loop
+   completes it and the new no-progress check didn't misfire); then
+   purge of the 1,201-message target → `Purged 1201 message(s) …`,
+   empty. Queues and their statistics queues removed; `mq-proxy`
+   stopped.
    *Manual check by the user*, against the other server before its own
    fix (if available): purge a queue where a live consumer holds some
    messages → stops within seconds with the "incomplete" error instead
