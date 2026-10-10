@@ -98,28 +98,6 @@ func TestJMSTypePromptSuggestionsFiltersByPrefix(t *testing.T) {
 	}
 }
 
-func TestJMSTypePromptOnJMSTypeChangedTriggersScan(t *testing.T) {
-	jp, host := newTestJMSTypePrompt(t)
-	jp.queueName = "orders"
-	host.scanJMSTypesFn = blockForever
-
-	jp.onJMSTypeChanged(jmsTypeScanSentinel)
-
-	if !jp.scanning {
-		t.Error("scanning after selecting sentinel = false, want true")
-	}
-}
-
-func TestJMSTypePromptOnJMSTypeChangedIgnoresNormalText(t *testing.T) {
-	jp, _ := newTestJMSTypePrompt(t)
-
-	jp.onJMSTypeChanged("OrderCreated")
-
-	if jp.scanning {
-		t.Error("scanning = true after a normal (non-sentinel) text change")
-	}
-}
-
 func TestJMSTypePromptStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
 	jp.queueName = "orders"
@@ -194,15 +172,11 @@ func TestJMSTypePromptShowStartsAutomaticScan(t *testing.T) {
 func TestJMSTypePromptHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	jp, _ := newTestJMSTypePrompt(t)
 	jp.scanning = true
-	jp.field.SetText(jmsTypeScanSentinel) // left there by onJMSTypeChanged in the real flow
 
 	jp.handleScanResult(ui.JMSTypeScan{Types: []string{"ScannedType"}}, nil)
 
 	if jp.scanning {
 		t.Error("scanning after handleScanResult = true, want false")
-	}
-	if got := jp.field.GetText(); got != "" {
-		t.Errorf("field text after handleScanResult = %q, want empty", got)
 	}
 	got := jp.jmsTypeSuggestions("")
 	want := []string{"ScannedType", jmsTypeScanSentinel}
@@ -238,15 +212,15 @@ func TestJMSTypePromptHandleScanResultReportsTheLimit(t *testing.T) {
 func TestJMSTypePromptHandleScanResultErrorClearsFlag(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
 	jp.scanning = true
-	jp.field.SetText(jmsTypeScanSentinel)
+	jp.field.SetText("Typ") // typed while the scan ran
 
 	jp.handleScanResult(ui.JMSTypeScan{}, context.DeadlineExceeded)
 
 	if jp.scanning {
 		t.Error("scanning after handleScanResult error = true, want false")
 	}
-	if got := jp.field.GetText(); got != "" {
-		t.Errorf("field text after a failed scan = %q, want empty", got)
+	if got := jp.field.GetText(); got != "Typ" {
+		t.Errorf("field text after a failed scan = %q, want the typed %q kept", got, "Typ")
 	}
 	if !strings.Contains(host.status, "deadline exceeded") {
 		t.Errorf("status after scan error = %q, want it to mention the error", host.status)
@@ -275,44 +249,10 @@ func TestJMSTypePromptShowResetsState(t *testing.T) {
 	}
 }
 
-// TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel guards
-// against applying the JMS Type field's literal sentinel text as a
-// filter value: while the sentinel's own opt-in scan is in flight, the
-// field still holds that literal text (see onJMSTypeChanged's doc
-// comment for why it can't be cleared synchronously).
-//
-// SetText on the sentinel's own literal text fires the field's real
-// SetChangedFunc wiring — same as a live keystroke would — which starts
-// a real scan via onJMSTypeChanged/startScan. blockForever keeps that
-// scan from ever completing and touching jp.host concurrently with this
-// test's own continueNow() call below (found via -race: both would call
-// SetStatus without synchronization otherwise).
-func TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel(t *testing.T) {
-	jp, host := newTestJMSTypePrompt(t)
-	jp.queueName = "orders"
-	host.scanJMSTypesFn = blockForever
-	jp.field.SetText(jmsTypeScanSentinel)
-	continued := false
-	jp.onContinue = func(string) { continued = true }
-
-	jp.continueNow()
-
-	if continued {
-		t.Error("onContinue was called while the field held the scan-trigger sentinel")
-	}
-	if !strings.Contains(host.status, "scanning") {
-		t.Errorf("status = %q, want it to mention the in-progress scan", host.status)
-	}
-}
-
-// TestJMSTypePromptContinueNowProceedsWhileAutoScanInFlight is the
-// counterpart to the test above: jp.scanning alone (the automatic scan
-// from Show(), not the sentinel-triggered one) must NOT block
-// continueNow — only the field literally holding the sentinel's text
-// does. Without this distinction, "leave blank + Enter proceeds
-// immediately" would be broken for the entire, often-non-trivial
-// duration of the automatic scan, since Show() itself sets jp.scanning
-// synchronously.
+// TestJMSTypePromptContinueNowProceedsWhileAutoScanInFlight: a scan in
+// flight must not block continueNow — "leave blank + Enter proceeds
+// immediately" has to hold for the whole automatic scan, which Show()
+// starts synchronously.
 func TestJMSTypePromptContinueNowProceedsWhileAutoScanInFlight(t *testing.T) {
 	jp, _ := newTestJMSTypePrompt(t)
 	jp.scanning = true // simulating the automatic scan still in flight; field never touched
@@ -344,44 +284,6 @@ func TestJMSTypePromptContinueNowCallsOnContinueWithFieldText(t *testing.T) {
 	}
 }
 
-// TestJMSTypePromptEnterOnBlankFieldContinuesEvenWhileAutoScanInFlight is
-// a regression test found live (verify-live): with no free suggestion
-// tier, the sentinel used to be the sole, already-highlighted
-// autocomplete entry on an untouched field — tview.InputField's own
-// Enter handling accepts whatever's highlighted in an open drop-down
-// before ever reaching SetDoneFunc, so without the SetInputCapture guard
-// this test exercises, pressing Enter on a blank, fresh-from-Show()
-// field would accept the sentinel instead of continuing with no filter.
-// Now that Show() also starts an automatic scan synchronously (jmsTypeAutoScanCount),
-// this additionally confirms that scan being in flight doesn't block the
-// blank-field Enter either — only the field literally holding the
-// sentinel text does (see TestJMSTypePromptContinueNowRefusesWhileFieldHoldsSentinel).
-func TestJMSTypePromptEnterOnBlankFieldContinuesEvenWhileAutoScanInFlight(t *testing.T) {
-	jp, host := newTestJMSTypePrompt(t)
-	host.scanJMSTypesFn = blockForever // keeps the automatic scan "in flight" for the whole test
-	var got string
-	called := false
-	jp.Show("Purge", "orders", func(jmsType string) { called, got = true, jmsType }, nil)
-
-	if !jp.scanning {
-		t.Fatal("scanning after Show() = false, want true (the automatic scan should already be in flight)")
-	}
-
-	// Show() already opens the drop-down (its own eager Autocomplete()
-	// call) with the sentinel as the sole entry (scanned is nil at this
-	// point — the automatic scan is still in flight) — this is exactly
-	// the state a real "just press Enter" user hits immediately after
-	// pressing 'p'/'M'.
-	jp.field.GetInputCapture()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
-
-	if !called {
-		t.Fatal("onContinue was not called")
-	}
-	if got != "" {
-		t.Errorf("onContinue jmsType = %q, want empty (no filter)", got)
-	}
-}
-
 func TestJMSTypePromptContinueNowEmptyFieldMeansNoFilter(t *testing.T) {
 	jp, _ := newTestJMSTypePrompt(t)
 	var got string
@@ -407,5 +309,101 @@ func TestJMSTypePromptCloseCallsOnClose(t *testing.T) {
 	}
 	if jp.visible {
 		t.Error("visible after close() = true, want false")
+	}
+}
+
+// openSettledPrompt opens the prompt with its automatic scan blocked, then
+// completes that scan with TypeA — the drop-down holds TypeA plus the
+// scan entry, as a user sees it once the prompt has settled. continued
+// receives onContinue's argument.
+func openSettledPrompt(t *testing.T) (jp *JMSTypePrompt, host *testHost, continued **string) {
+	t.Helper()
+	jp, host = newTestJMSTypePrompt(t)
+	host.scanJMSTypesFn = blockForever
+	var got *string
+	jp.Show("Purge", "orders", func(s string) { got = &s }, func() {})
+	jp.handleScanResult(ui.JMSTypeScan{Types: []string{"TypeA"}}, nil)
+	return jp, host, &got
+}
+
+// TestJMSTypePromptKeysKeepTypedText is the regression test for Enter/Tab
+// picking the highlighted scan entry instead (spec-wip
+// bugfix-jmstype-scan-input, defect 2): without an arrow-key choice,
+// Enter continues with exactly what was typed and Tab keeps it.
+func TestJMSTypePromptKeysKeepTypedText(t *testing.T) {
+	for _, typed := range []string{"", "TypeB", "Type"} {
+		for _, key := range []tcell.Key{tcell.KeyEnter, tcell.KeyTab} {
+			jp, _, continued := openSettledPrompt(t)
+
+			press(jp.field, typed, key)
+
+			name := tcell.KeyNames[key] + " on " + typed
+			if jp.scanning {
+				t.Errorf("%s: started a scan", name)
+			}
+			if got := jp.field.GetText(); got != typed {
+				t.Errorf("%s: field = %q, want the typed text kept", name, got)
+			}
+			switch key {
+			case tcell.KeyEnter:
+				if *continued == nil || **continued != typed {
+					t.Errorf("%s: continued = %v, want %q", name, *continued, typed)
+				}
+			case tcell.KeyTab:
+				if *continued != nil || !jp.visible {
+					t.Errorf("%s: continued = %v, visible = %v; want the prompt still open", name, *continued, jp.visible)
+				}
+			}
+		}
+	}
+}
+
+func TestJMSTypePromptArrowChoiceThenEnterAcceptsThenContinues(t *testing.T) {
+	jp, _, continued := openSettledPrompt(t)
+
+	navigateTo(t, jp.field, jp.ac, "TypeA")
+	press(jp.field, tcell.KeyEnter)
+	if got := jp.field.GetText(); got != "TypeA" || *continued != nil {
+		t.Fatalf("after choosing: field = %q, continued = %v; want TypeA in the field, prompt still open", got, *continued)
+	}
+
+	press(jp.field, tcell.KeyEnter)
+	if *continued == nil || **continued != "TypeA" {
+		t.Errorf("second Enter: continued = %v, want TypeA", *continued)
+	}
+}
+
+func TestJMSTypePromptArrowChoiceOfScanEntryRunsTheWiderScan(t *testing.T) {
+	jp, _, continued := openSettledPrompt(t)
+
+	navigateTo(t, jp.field, jp.ac, jmsTypeScanSentinel)
+	press(jp.field, tcell.KeyEnter)
+
+	if !jp.scanning {
+		t.Fatal("choosing the scan entry didn't start a scan")
+	}
+	if got := jp.field.GetText(); got != "" {
+		t.Errorf("field = %q, want empty — the scan entry never goes into the field", got)
+	}
+	if *continued != nil {
+		t.Error("choosing the scan entry continued the purge")
+	}
+}
+
+// TestJMSTypePromptTextTypedDuringAutomaticScanSurvives is the regression
+// test for the automatic scan wiping typed text (defect 1).
+func TestJMSTypePromptTextTypedDuringAutomaticScanSurvives(t *testing.T) {
+	jp, host := newTestJMSTypePrompt(t)
+	host.scanJMSTypesFn = blockForever
+	jp.Show("Purge", "orders", nil, nil)
+
+	press(jp.field, "TypeB")
+	jp.handleScanResult(ui.JMSTypeScan{Types: []string{"TypeA"}}, nil)
+
+	if got := jp.field.GetText(); got != "TypeB" {
+		t.Errorf("field after the automatic scan = %q, want the typed TypeB", got)
+	}
+	if got := jp.jmsTypeSuggestions("Type"); len(got) != 2 || got[0] != "TypeA" {
+		t.Errorf("suggestions for Type = %v, want TypeA from the scan, then the scan entry", got)
 	}
 }

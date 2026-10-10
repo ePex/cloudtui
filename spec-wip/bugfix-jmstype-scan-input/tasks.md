@@ -31,7 +31,7 @@ TypeA messages is enough.
    test -race ./...` and passed (1m45s); Windows/macOS ran `go test
    ./...`; all 12 checks green.
 
-3. [ ] **Shared JMS Type autocomplete, wired into the purge/move-all
+3. [x] **Shared JMS Type autocomplete, wired into the purge/move-all
    prompt** (plan §1). New `jmstypeautocomplete.go` (`chosen` tracking,
    autocompleted callback, Enter/Tab input capture). `JMSTypePrompt`
    uses it; its sentinel detection, Enter-on-empty capture,
@@ -44,6 +44,23 @@ TypeA messages is enough.
    `p` again, Tab on the empty field → no scan, Enter → confirm for all
    messages (No); `p`, Down onto `TypeA`, Enter → field shows `TypeA`;
    Down onto the scan entry, Enter → scan runs, status shows it.
+   *Done 2026-10-10.* `jmsTypeAutocomplete` also records the entry the
+   arrow keys last reached (`highlighted`), which tests navigate by —
+   tview's sticky highlight makes "press Down N times" unreliable.
+   Removed tests: the two `onJMSTypeChanged` ones, "refuses while the
+   field holds the sentinel", and the Enter-on-empty capture test
+   (replaced by key-path tests through the real input handling).
+   Mutation-checked: disabling the capture fails 3 tests; restoring
+   `handleScanResult`'s `SetText("")` fails 2. `go test -race ./...`
+   clean. Live (scratch `HOME`, local broker, 5 × TypeA): typing `TypeB`
+   right after `p` survived the scan; Enter → `Purge …? All TypeB
+   messages…` (No); Tab on an empty field → no scan, then Enter → `All
+   messages…` (No); Down + Enter → field `TypeA`. The scan entry was
+   checked through `mq-proxy` because a local Jolokia scan of 5
+   messages finishes too fast to see its status: Down onto it + Enter →
+   a `maxCount=5000` browse in the `mq-proxy` log, field still empty.
+   Where Down starts depends on tview's sticky highlight (sometimes it
+   wraps to `TypeA` first) — tview behavior, not changed here.
 
 4. [ ] **Message filter uses the shared autocomplete** (plan §1).
    `MessageFilter`'s JMS Type field uses the helper; its sentinel
