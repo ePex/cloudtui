@@ -73,10 +73,12 @@ func TestResolveRejectsBinarySecret(t *testing.T) {
 // injection, so tests can drive Backend's retry/no-retry paths without a
 // real jolokia/proxy client or HTTP server.
 type fakeBackend struct {
-	listCalls   int
-	listFailN   int // List fails for the first listFailN calls
-	removeCalls int
-	removeFails bool
+	listCalls     int
+	listFailN     int // List fails for the first listFailN calls
+	removeCalls   int
+	removeFails   bool
+	browseHasMore bool // BrowseMessages' hasMore
+	purged        int  // PurgeQueue's count
 }
 
 func (f *fakeBackend) List(ctx context.Context) ([]queue.Summary, error) {
@@ -86,10 +88,12 @@ func (f *fakeBackend) List(ctx context.Context) ([]queue.Summary, error) {
 	}
 	return []queue.Summary{{Name: "q1"}}, nil
 }
-func (f *fakeBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
-	return nil, nil
+func (f *fakeBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
+	return nil, f.browseHasMore, nil
 }
-func (f *fakeBackend) PurgeQueue(ctx context.Context, queueName string) error { return nil }
+func (f *fakeBackend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
+	return f.purged, nil
+}
 func (f *fakeBackend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
 	f.removeCalls++
 	if f.removeFails {
@@ -159,6 +163,38 @@ func TestBackendListSurfacesErrorAfterRetryExhausted(t *testing.T) {
 	}
 	if fake.listCalls != 2 {
 		t.Errorf("inner List called %d times, want exactly 2 (initial + one retry, no more)", fake.listCalls)
+	}
+}
+
+func TestBackendBrowseMessagesPassesHasMoreThrough(t *testing.T) {
+	r := newTestResolver(func(context.Context, string, string) (string, bool, error) {
+		return "pw", false, nil
+	})
+	for _, want := range []bool{true, false} {
+		b := newTestBackend(r, "prof", &fakeBackend{browseHasMore: want})
+
+		_, got, err := b.BrowseMessages(context.Background(), "q1", queue.MessageFilter{})
+		if err != nil {
+			t.Fatalf("BrowseMessages() error = %v", err)
+		}
+		if got != want {
+			t.Errorf("BrowseMessages() hasMore = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestBackendPurgeQueuePassesCountThrough(t *testing.T) {
+	r := newTestResolver(func(context.Context, string, string) (string, bool, error) {
+		return "pw", false, nil
+	})
+	b := newTestBackend(r, "prof", &fakeBackend{purged: 42})
+
+	n, err := b.PurgeQueue(context.Background(), "q1")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 42 {
+		t.Errorf("PurgeQueue() = %d, want 42", n)
 	}
 }
 

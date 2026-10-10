@@ -4,6 +4,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,11 +40,15 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-// listEnvelope is the {data, errors} shape every list-returning
-// mq-proxy endpoint responds with.
+// listEnvelope is the {data, errors, hasMore, truncated} shape every
+// list-returning mq-proxy endpoint responds with. Only list-messages sets
+// hasMore (another page can be fetched) and truncated (the broker cut the
+// browse short) — see spec/11.
 type listEnvelope[T any] struct {
-	Data   []T        `json:"data"`
-	Errors []apiError `json:"errors"`
+	Data      []T        `json:"data"`
+	Errors    []apiError `json:"errors"`
+	HasMore   bool       `json:"hasMore"`
+	Truncated bool       `json:"truncated"`
 }
 
 // itemEnvelope is the {data, error} shape single-result mq-proxy
@@ -195,29 +200,32 @@ func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
 	return out, nil
 }
 
-// BrowseMessages implements queue.Backend.
-func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+// BrowseMessages implements queue.Backend. Its bool is "incomplete": either
+// of list-messages' hasMore or truncated — the TUI only needs to know the
+// queue holds more than it was shown, not which.
+func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	path := "/api/management/command/list-messages?" + browseQuery(queueName, filter)
 	var env listEnvelope[proxyMessage]
 	if err := c.getJSON(ctx, path, &env); err != nil {
-		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
+		return nil, false, fmt.Errorf("browse messages %q: %w", queueName, err)
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return nil, fmt.Errorf("browse messages %q: %w", queueName, err)
+		return nil, false, fmt.Errorf("browse messages %q: %w", queueName, err)
 	}
 	out := make([]queue.Message, len(env.Data))
 	for i, m := range env.Data {
 		out[i] = toQueueMessage(m)
 	}
-	return out, nil
+	return out, env.HasMore || env.Truncated, nil
 }
 
 // PurgeQueue implements queue.Backend.
-func (c *Client) PurgeQueue(ctx context.Context, queueName string) error {
-	if _, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{}); err != nil {
-		return fmt.Errorf("purge queue %q: %w", queueName, err)
+func (c *Client) PurgeQueue(ctx context.Context, queueName string) (int, error) {
+	n, err := c.DeleteMessages(ctx, queueName, queue.MessageFilter{})
+	if err != nil {
+		return n, fmt.Errorf("purge queue %q: %w", queueName, err)
 	}
-	return nil
+	return n, nil
 }
 
 // RemoveMessage implements queue.Backend.
@@ -248,7 +256,7 @@ func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, target
 func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) {
 	n, err := c.MoveMessages(ctx, sourceQueue, targetQueue, queue.MessageFilter{})
 	if err != nil {
-		return 0, fmt.Errorf("move all from %q to %q: %w", sourceQueue, targetQueue, err)
+		return n, fmt.Errorf("move all from %q to %q: %w", sourceQueue, targetQueue, err)
 	}
 	return n, nil
 }
@@ -273,8 +281,54 @@ func (c *Client) SendMessage(ctx context.Context, queueName string, sendReq queu
 	return nil
 }
 
-// DeleteMessages implements queue.Backend.
+// maxBulkRounds caps how many requests one bulk delete/move makes (see
+// inRounds). At the ~400 messages per request a browse-capped server
+// manages, that's 400,000 messages.
+const maxBulkRounds = 1000
+
+// errBulkIncomplete is returned (wrapped) when a bulk delete/move hits
+// maxBulkRounds while the server still reports progress.
+var errBulkIncomplete = errors.New("incomplete")
+
+// inRounds repeats round until it acts on 0 messages and returns the total.
+// Nothing in the wire contract (spec/11) promises that one delete-messages/
+// move-messages call acts on every matching message - a server that
+// browses before consuming stops at the broker's browse limit - so a bulk
+// operation keeps asking until the server reports nothing left. Bounded by
+// maxBulkRounds so a server that misreports progress can't loop forever;
+// the context is checked between rounds. On error, the total so far comes
+// back alongside it.
+func inRounds(ctx context.Context, round func() (int, error)) (int, error) {
+	total := 0
+	for range maxBulkRounds {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		n, err := round()
+		total += n
+		if err != nil {
+			return total, err
+		}
+		if n == 0 {
+			return total, nil
+		}
+	}
+	return total, fmt.Errorf("%w after %d requests (%d messages so far); the server kept reporting progress",
+		errBulkIncomplete, maxBulkRounds, total)
+}
+
+// DeleteMessages implements queue.Backend. Without a MaxCount ("all
+// matching") it repeats until nothing is left (inRounds); with one, it's a
+// single request.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+	if filter.MaxCount > 0 {
+		return c.deleteOnce(ctx, queueName, filter)
+	}
+	return inRounds(ctx, func() (int, error) { return c.deleteOnce(ctx, queueName, filter) })
+}
+
+// deleteOnce makes a single delete-messages request.
+func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	reqs := []deleteMessagesRequest{{SourceQueue: queueName, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[deletedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/delete-messages", reqs, &env); err != nil {
@@ -286,8 +340,17 @@ func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter qu
 	return len(env.Data), nil
 }
 
-// MoveMessages implements queue.Backend.
+// MoveMessages implements queue.Backend, repeating like DeleteMessages
+// when filter has no MaxCount.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+	if filter.MaxCount > 0 {
+		return c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+	}
+	return inRounds(ctx, func() (int, error) { return c.moveOnce(ctx, sourceQueue, targetQueue, filter) })
+}
+
+// moveOnce makes a single move-messages request.
+func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	reqs := []moveMessagesRequest{{SourceQueue: sourceQueue, TargetQueue: targetQueue, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[movedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/move-messages", reqs, &env); err != nil {

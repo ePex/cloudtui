@@ -68,7 +68,7 @@ type fakeViewHost struct {
 	awsSSOLoginFn            func(ctx context.Context, profile string, onCode func(code, url string)) error
 	loadedJMSTypes           []string
 	messagesQueueName        string
-	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) ([]string, error)
+	scanJMSTypesFn           func(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error)
 }
 
 // newFakeViewHost defaults backend to a no-op fakeQueueBackend (never nil)
@@ -114,9 +114,9 @@ func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}
 func (f *fakeViewHost) FocusMessages()                             {}
 func (f *fakeViewHost) LoadedJMSTypes() []string                   { return f.loadedJMSTypes }
 func (f *fakeViewHost) MessagesQueueName() string                  { return f.messagesQueueName }
-func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
+func (f *fakeViewHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error) {
 	if f.scanJMSTypesFn == nil {
-		return nil, nil
+		return ui.JMSTypeScan{}, nil
 	}
 	return f.scanJMSTypesFn(ctx, queueName, maxCount)
 }
@@ -307,7 +307,7 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 		{"MessagesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewMessagesView(host, dialog.NewMessageFilter(host),
 				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
-				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), func(string, queue.Message) {})
+				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), dialog.NewJMSTypePrompt(host), func(string, queue.Message) {})
 			v.searchInput.SetText("ord")
 			return v, nil
 		}},

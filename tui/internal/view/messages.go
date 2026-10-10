@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -44,10 +45,12 @@ type MessagesView struct {
 	sendMessage   *dialog.SendMessageOverlay
 	confirm       *dialog.ConfirmDialog
 	movePicker    *dialog.MovePicker
+	purge         purgeFlow
 	queueName     string
 	allMsgs       []queue.Message     // full set from the last load, pre-quick-search
 	quickSearch   string              // active quick-search text (client-side)
 	filter        queue.MessageFilter // active server-side filter
+	browseNote    string              // last load's "showing n of m"-style title note (browseNote)
 	msgs          []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
 	marked        map[string]bool     // message IDs currently marked
 	wrap          bool                // preview column word-wrap toggle
@@ -113,6 +116,18 @@ func (mv *MessagesView) Open(queueName string) {
 	mv.Load()
 }
 
+// restoreShortcuts returns focus to the message table and rewrites the
+// context panel's shortcut hints after an overlay opened from here closes
+// (the purge flow's JMS Type prompt) — QueuesView.restoreShortcuts' twin.
+func (mv *MessagesView) restoreShortcuts() {
+	mv.host.SetFocus(mv.table)
+	lines := make([]string, 0, len(mv.Shortcuts()))
+	for _, sc := range mv.Shortcuts() {
+		lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", mv.host.Config().Colors.Accent, sc.Key, sc.Description))
+	}
+	mv.host.SetContextHint(strings.Join(lines, "\n"))
+}
+
 func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 	wrap := "off"
 	if mv.wrap {
@@ -136,7 +151,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 
 // NewMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, onSelect func(queueName string, msg queue.Message)) *MessagesView {
+func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string, msg queue.Message)) *MessagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
@@ -152,6 +167,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 		AddItem(searchInput, 1, 0, false)
 
 	mv := &MessagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
+	mv.purge = purgeFlow{host: a, backend: a.Backend, prompt: jmsTypePrompt, confirm: confirm}
 	mv.setHeader()
 
 	searchInput.SetChangedFunc(func(text string) {
@@ -219,20 +235,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 			})
 			return nil
 		case event.Rune() == 'p':
-			name := mv.queueName
-			mv.confirm.Show(fmt.Sprintf("Purge %q? All messages will be deleted.", name), func() {
-				go func() {
-					err := a.Backend().PurgeQueue(context.Background(), name)
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							slog.Error("messages: purge failed", "queue", name, "error", err)
-							mv.showError(err)
-							return
-						}
-						mv.Load()
-					})
-				}()
-			})
+			mv.purge.start(mv.queueName, mv.restoreShortcuts, mv.Load, mv.showError)
 			return nil
 		case event.Rune() == 'j':
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
@@ -342,23 +345,75 @@ func withDefaultMaxCount(f queue.MessageFilter) queue.MessageFilter {
 	return f
 }
 
+// Load browses the queue in the background. An unfiltered browse also
+// fetches the queue's pending count, concurrently, so the title can say
+// when the browser shows only part of the queue (browseNote).
 func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
+	mv.browseNote = "" // the previous load's; a different queue or filter makes it wrong
+	mv.updateTitle()
 	go func() {
-		msgs, err := mv.host.Backend().BrowseMessages(context.Background(), queueName, filter)
+		ctx := context.Background()
+		backend := mv.host.Backend()
+		pending := int64(-1)
+		var wg sync.WaitGroup
+		if !narrowsMessages(filter) {
+			wg.Go(func() {
+				if n, ok := pendingCount(ctx, backend, queueName); ok {
+					pending = n
+				}
+			})
+		}
+		msgs, hasMore, err := backend.BrowseMessages(ctx, queueName, filter)
+		wg.Wait()
 		mv.host.QueueUpdateDraw(func() {
-			if err != nil {
-				slog.Error("messages: failed to browse messages", "queue", queueName, "error", err)
-				mv.showError(err)
-				return
-			}
-			mv.repaint(msgs)
-			if len(msgs) > 0 && msgs[0].ID == "" {
-				mv.host.SetStatus("[yellow]Note: limited message info — individual move/delete unavailable[-]")
-			}
+			mv.applyLoad(queueName, filter, msgs, hasMore, pending, err)
 		})
 	}()
+}
+
+// applyLoad applies a completed Load — split out from its goroutine so
+// tests can call it directly. pending is the queue's pending count, or -1
+// when it wasn't fetched (a filtered browse) or couldn't be read.
+func (mv *MessagesView) applyLoad(queueName string, filter queue.MessageFilter, msgs []queue.Message, hasMore bool, pending int64, err error) {
+	if err != nil {
+		slog.Error("messages: failed to browse messages", "queue", queueName, "error", err)
+		mv.showError(err)
+		return
+	}
+	mv.browseNote = browseNote(narrowsMessages(filter), len(msgs), hasMore, pending)
+	mv.updateTitle()
+	mv.repaint(msgs)
+	if len(msgs) > 0 && msgs[0].ID == "" {
+		mv.host.SetStatus("[yellow]Note: limited message info — individual move/delete unavailable[-]")
+	}
+}
+
+// narrowsMessages reports whether f selects a subset of the queue (by JMS
+// type, message ID or date) rather than just capping how many are shown —
+// only an unfiltered browse is comparable with the queue's pending count.
+func narrowsMessages(f queue.MessageFilter) bool {
+	return f.JMSType != "" || f.MessageID != "" || !f.FromDate.IsZero() || !f.ToDate.IsZero()
+}
+
+// browseNote says, for the title, when a browse of n messages shows only
+// part of what's on the queue — the broker stops browsing at its browse
+// limit (400 by default), and mq-proxy reports that as hasMore (spec-wip
+// bugfix-purge-completeness). Unfiltered with a known pending count, it
+// compares the two, which works even when hasMore doesn't; otherwise it
+// relies on hasMore. Empty when the browse looks complete.
+func browseNote(filtered bool, n int, hasMore bool, pending int64) string {
+	if !filtered && pending >= 0 {
+		if int64(n) < pending {
+			return fmt.Sprintf("showing %d of %d", n, pending)
+		}
+		return ""
+	}
+	if hasMore {
+		return fmt.Sprintf("first %d browsed, more on queue", n)
+	}
+	return ""
 }
 
 // applyQuickSearch sets the active quick-search text and re-filters the
@@ -372,13 +427,17 @@ func (mv *MessagesView) applyQuickSearch(s string) {
 }
 
 // updateTitle sets the table's border title, reflecting the queue name plus
-// whichever of the two filter mechanisms are active. Parens/brackets wrap
-// active segments only — see queues.go's updateTitle for why "(text)" is
-// used instead of "[text]" (square brackets are swallowed as color tags).
+// whichever of the two filter mechanisms are active, and the last load's
+// browseNote. Parens/brackets wrap active segments only — see queues.go's
+// updateTitle for why "(text)" is used instead of "[text]" (square
+// brackets are swallowed as color tags).
 func (mv *MessagesView) updateTitle() {
 	title := fmt.Sprintf(" Messages — %s ", mv.queueName)
 	if desc := describeMessageFilter(withDefaultMaxCount(mv.filter)); desc != "" {
 		title = fmt.Sprintf(" Messages — %s (filter: %s) ", mv.queueName, desc)
+	}
+	if mv.browseNote != "" {
+		title = strings.TrimRight(title, " ") + fmt.Sprintf(" (%s) ", mv.browseNote)
 	}
 	if mv.quickSearch != "" {
 		title = strings.TrimRight(title, " ") + fmt.Sprintf(" [search: %s] ", mv.quickSearch)

@@ -34,6 +34,7 @@ type QueuesView struct {
 	movePicker    *dialog.MovePicker
 	sendMessage   *dialog.SendMessageOverlay
 	jmsTypePrompt *dialog.JMSTypePrompt
+	purge         purgeFlow
 	filter        string          // active filter (empty = no filter)
 	allSummaries  []queue.Summary // full unfiltered list from last load
 	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
@@ -103,6 +104,7 @@ func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, mo
 		AddItem(filterInput, 1, 0, false)
 
 	qv := &QueuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, jmsTypePrompt: jmsTypePrompt, sortAsc: true}
+	qv.purge = purgeFlow{host: a, backend: func() queue.Backend { return qv.backend }, prompt: jmsTypePrompt, confirm: confirm}
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -149,10 +151,7 @@ func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, mo
 			if cell == nil || cell.Text == "" || row == 0 {
 				return nil
 			}
-			name := cell.Text
-			qv.jmsTypePrompt.Show("Purge", name, func(jmsType string) {
-				qv.confirmPurge(name, jmsType)
-			}, qv.restoreShortcuts)
+			qv.purge.start(cell.Text, qv.restoreShortcuts, qv.Load, qv.showError)
 			return nil
 		case 'M':
 			row, _ := qv.table.GetSelection()
@@ -202,54 +201,23 @@ func (qv *QueuesView) restoreShortcuts() {
 	qv.host.SetContextHint(strings.Join(lines, "\n"))
 }
 
-// confirmPurge shows the purge confirmation dialog for name, wording it
-// according to jmsType (empty = every message), and on confirmation
-// performs the purge via doPurge.
-func (qv *QueuesView) confirmPurge(name, jmsType string) {
-	question := fmt.Sprintf("Purge %q? All messages will be deleted.", name)
-	if jmsType != "" {
-		question = fmt.Sprintf("Purge %q? All %s messages will be deleted.", name, jmsType)
-	}
-	qv.confirm.Show(question, func() {
-		go func() {
-			err := qv.doPurge(context.Background(), name, jmsType)
-			qv.host.QueueUpdateDraw(func() {
-				if err != nil {
-					slog.Error("queues: purge failed", "queue", name, "jmsType", jmsType, "error", err)
-					qv.showError(err)
-					return
-				}
-				qv.Load()
-			})
-		}()
-	})
-}
-
-// doPurge dispatches to the backend call matching jmsType: PurgeQueue
-// (the existing fast, native path) when empty, or DeleteMessages with a
-// JMSType filter otherwise — see spec/09's "Preserving the existing
-// unfiltered path" for why these stay two different backend calls
-// rather than DeleteMessages with an always-empty-filter fallback.
-func (qv *QueuesView) doPurge(ctx context.Context, name, jmsType string) error {
-	if jmsType == "" {
-		return qv.backend.PurgeQueue(ctx, name)
-	}
-	_, err := qv.backend.DeleteMessages(ctx, name, queue.MessageFilter{JMSType: jmsType})
-	return err
-}
-
 // pickMoveAllTarget shows the move-picker for srcQueue, and on target
 // selection performs the move via doMoveAll.
 func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 	qv.movePicker.Show(srcQueue, func(target string) {
-		count, err := qv.doMoveAll(context.Background(), srcQueue, target, jmsType)
+		ctx := context.Background()
+		count, err := qv.doMoveAll(ctx, srcQueue, target, jmsType)
+		var warning string
+		if err == nil {
+			warning = filteredRemainderWarning(ctx, qv.backend, srcQueue, jmsType)
+		}
 		qv.host.QueueUpdateDraw(func() {
 			if err != nil {
 				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
 				qv.showError(err)
 				return
 			}
-			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target))
+			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
 			qv.Load()
 		})
 	}, qv.restoreShortcuts)
@@ -258,7 +226,7 @@ func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 // doMoveAll dispatches to the backend call matching jmsType:
 // MoveAllMessages (the existing fast, native path) when empty, or
 // MoveMessages with a JMSType filter otherwise — same reasoning as
-// doPurge above.
+// purge (purge.go).
 func (qv *QueuesView) doMoveAll(ctx context.Context, srcQueue, target, jmsType string) (int, error) {
 	if jmsType == "" {
 		return qv.backend.MoveAllMessages(ctx, srcQueue, target)

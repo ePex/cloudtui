@@ -23,7 +23,7 @@ type fakeQueueBackend struct {
 	// (see TestQueuesViewPurge*/TestQueuesViewMoveAll* below) — nil means
 	// the plain no-op default every other test in this file already
 	// relies on.
-	purgeQueueFn      func(ctx context.Context, queueName string) error
+	purgeQueueFn      func(ctx context.Context, queueName string) (int, error)
 	deleteMessagesFn  func(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error)
 	moveAllMessagesFn func(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 	moveMessagesFn    func(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error)
@@ -41,13 +41,13 @@ func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
 	return f.summaries, nil
 }
 
-func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, error) {
-	return nil, nil
+func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, bool, error) {
+	return nil, false, nil
 }
 
-func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) error {
+func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
 	if f.purgeQueueFn == nil {
-		return nil
+		return 0, nil
 	}
 	return f.purgeQueueFn(ctx, queueName)
 }
@@ -487,78 +487,6 @@ func TestQueuesViewPendingTextWhenZero(t *testing.T) {
 	fg, _, _ := pendingCell.Style.Decompose()
 	if fg != wantColor {
 		t.Errorf("pending cell color = %v, want text %v", fg, wantColor)
-	}
-}
-
-// TestQueuesViewDoPurgeUnfilteredCallsPurgeQueue confirms an empty
-// jmsType keeps using the existing fast, native PurgeQueue path rather
-// than DeleteMessages with an empty filter — see spec/09's "Preserving
-// the existing unfiltered path".
-func TestQueuesViewDoPurgeUnfilteredCallsPurgeQueue(t *testing.T) {
-	var gotQueue string
-	purgeCalled := false
-	deleteCalled := false
-	b := &fakeQueueBackend{
-		purgeQueueFn: func(_ context.Context, queueName string) error {
-			purgeCalled = true
-			gotQueue = queueName
-			return nil
-		},
-		deleteMessagesFn: func(context.Context, string, queue.MessageFilter) (int, error) {
-			deleteCalled = true
-			return 0, nil
-		},
-	}
-	_, qv := newTestQueuesViewWithBackend(t, b)
-
-	err := qv.doPurge(context.Background(), "orders", "")
-
-	if err != nil {
-		t.Fatalf("doPurge() error = %v", err)
-	}
-	if !purgeCalled {
-		t.Error("PurgeQueue was not called for an empty JMS type")
-	}
-	if deleteCalled {
-		t.Error("DeleteMessages was called for an empty JMS type, want PurgeQueue only")
-	}
-	if gotQueue != "orders" {
-		t.Errorf("queue passed to PurgeQueue = %q, want %q", gotQueue, "orders")
-	}
-}
-
-// TestQueuesViewDoPurgeFilteredCallsDeleteMessages confirms a non-empty
-// jmsType routes through DeleteMessages with the filter set, not
-// PurgeQueue.
-func TestQueuesViewDoPurgeFilteredCallsDeleteMessages(t *testing.T) {
-	var gotQueue string
-	var gotFilter queue.MessageFilter
-	purgeCalled := false
-	b := &fakeQueueBackend{
-		purgeQueueFn: func(context.Context, string) error {
-			purgeCalled = true
-			return nil
-		},
-		deleteMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) (int, error) {
-			gotQueue, gotFilter = queueName, filter
-			return 3, nil
-		},
-	}
-	_, qv := newTestQueuesViewWithBackend(t, b)
-
-	err := qv.doPurge(context.Background(), "orders", "OrderCreated")
-
-	if err != nil {
-		t.Fatalf("doPurge() error = %v", err)
-	}
-	if purgeCalled {
-		t.Error("PurgeQueue was called for a non-empty JMS type, want DeleteMessages only")
-	}
-	if gotQueue != "orders" {
-		t.Errorf("queue passed to DeleteMessages = %q, want %q", gotQueue, "orders")
-	}
-	if want := (queue.MessageFilter{JMSType: "OrderCreated"}); gotFilter != want {
-		t.Errorf("filter passed to DeleteMessages = %+v, want %+v", gotFilter, want)
 	}
 }
 

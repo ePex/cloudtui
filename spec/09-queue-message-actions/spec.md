@@ -14,23 +14,33 @@ message) don't require the ActiveMQ web console. Builds on the queue list
 ### Purge
 
 - **Queues list**: `p` on a queue row purges it.
-- **Messages list**: `p` purges the currently open queue (same flow).
+- **Messages list**: `p` purges the currently open queue — the exact same
+  flow, through the same code (`purgeFlow`, see Implementation notes), so
+  the two entry points can't drift apart.
 - **Message detail view**: `d` removes only the single message being
   viewed, then returns to the messages list.
 
 Both `p` entry points first open the **JMS Type filter prompt** (a single
 bordered `tview.InputField`, title `Purge "<queue name>" — JMS Type
 (optional)`) — see "Optional JMS Type filter" below for its shared shape
-with move-all. Leaving it blank and pressing Enter proceeds exactly as
-before. Entering a type narrows what's purged and changes the confirm
-dialog's wording accordingly.
+with move-all. Leaving it blank and pressing Enter purges every message.
+Entering a type narrows what's purged and changes the confirm dialog's
+wording accordingly.
 
 Purge then shows a confirmation dialog (`" Confirm "` title, question
 `Purge "<queue name>"? All messages will be deleted.` — or, with a JMS
 Type entered, `Purge "<queue name>"? All <type> messages will be
 deleted.`) with **No** as the default focus (prevents accidental
-deletion) and **Yes** to proceed. Selecting **Yes** closes the dialog and
-refreshes the queue list; **No**/Esc dismisses without changes.
+deletion) and **Yes** to proceed. **No**/Esc dismisses without changes.
+
+On **Yes**, the purge runs in the background. On success the status bar
+shows how many messages were deleted — `Purged <n> message(s) from
+"<queue name>"`, or `Purged <n> <type> message(s) from "<queue name>"`
+with a JMS Type — and the view it was started from (queue list or
+messages list) reloads. A purge with a JMS Type may add a warning that
+matching messages further back weren't reached (see "Broker limits on
+filtered purge/move-all" below). On error, the view shows the error
+instead.
 
 ### Move single message
 
@@ -69,8 +79,45 @@ refreshes the queue list; **No**/Esc dismisses without changes.
   The JMS Type prompt ahead of it is not itself a confirmation either —
   it's the filter-entry step, same role it plays for purge.
 - On success: reload the queues list, status bar shows the count of
-  messages moved. On error: status bar shows the error, queue list
-  unchanged.
+  messages moved (`Moved <n> message(s) from "<src>" to "<dst>"`) —
+  plus, with a JMS Type, the same possible warning as purge (see "Broker
+  limits on filtered purge/move-all" below). On error: status bar shows
+  the error, queue list unchanged.
+
+### Broker limits on filtered purge/move-all
+
+ActiveMQ only matches a consumer with a JMS selector — which is what a
+purge or move-all with a JMS Type uses on the proxy backend — against the
+messages it has paged into memory from the head of the queue (broker
+policy `maxPageSize`, default 200). Matching messages further back than
+that are never handed out: with 800 × TypeA followed by 800 × TypeB,
+purging `TypeB` deletes 0. How many it reaches varies with how much of
+the queue the broker happens to have paged in. (The Jolokia backend's
+filtered path browses first and acts per message, so it's bounded by the
+broker's browse limit, `maxBrowsePageSize`, default 400, instead — the
+same kind of limit, and the same warning applies.) JMS offers no
+side-effect-free way around this (see Implementation notes), and Amazon
+MQ exposes no JMX, so the TUI makes the limit visible instead:
+
+- After a successful purge or move-all **with a JMS Type**, the TUI reads
+  the queue's pending count. If more than 200 messages remain
+  (`filteredWindowWarnAt`, ActiveMQ's default `maxPageSize`), the result
+  line gets the suffix `— <m> message(s) remain; matching messages
+  further back may not have been reached`, e.g. `Purged 0 TypeB
+  message(s) from "orders" — 1600 message(s) remain; matching messages
+  further back may not have been reached`.
+- "May": the TUI can't tell whether the remaining messages include
+  matches. The threshold is a heuristic — on a broker configured with a
+  larger window the warning shows more often than needed, with a smaller
+  one it can miss.
+- Unfiltered purge/move-all never warn: an unfiltered consumer reaches
+  every message.
+- If the pending count can't be read, there's no warning (logged); the
+  operation itself still succeeded.
+- **Remedy** for a queue that really needs filtered operations beyond
+  the window: raise the broker's `maxPageSize` policy for that
+  destination. Neither the TUI nor mq-proxy changes broker
+  configuration.
 
 ### Optional JMS Type filter (purge and move-all)
 
@@ -101,7 +148,11 @@ what they act on:
   didn't surface the type wanted — same completeness caveat as spec/08's
   own scan tier applies to both (never guaranteed exhaustive; mq-proxy
   requires a positive `maxCount` on every `list-messages` call, so a
-  truly unbounded scan isn't possible on that backend either). This
+  truly unbounded scan isn't possible on that backend either). Either
+  scan stops at the broker's browse limit (400 by default) however much
+  it asks for; when the queue holds more, the status line says so —
+  `Scanned the first <n> messages — the queue holds more; types further
+  back aren't listed` (spec/08). This
   design was revised from an initially opt-in-only autocomplete after
   live feedback that a fresh prompt showing only that sentinel — with no
   indication it was an interactive entry rather than a static
@@ -150,7 +201,7 @@ what they act on:
 
 ```go
 // queue.Backend interface additions
-PurgeQueue(ctx context.Context, queueName string) error
+PurgeQueue(ctx context.Context, queueName string) (int, error) // returns count deleted (on error: deleted so far)
 DeleteMessage(ctx context.Context, queueName, messageID string) error
 MoveMessage(ctx context.Context, queueName, messageID, targetQueue string) error
 MoveAllMessages(ctx context.Context, sourceQueue, targetQueue string) (int, error) // returns count moved
@@ -186,6 +237,14 @@ every other queue operation (spec/07).
   loop via `removeMessage(java.lang.String)` — the last resort works
   universally and is fast enough in practice for the queue sizes this tool
   manages.
+- **Purge count per Jolokia tier**: `purgeQueue()` reports nothing, so
+  the queue's `QueueSize` attribute is read just before it; a message
+  arriving in between makes the count off by that many. If `QueueSize`
+  can't be read, tier 1 is skipped so the count is never made up.
+  `removeMatchingMessages` returns the number it removed (Jolokia
+  `value`); browse-and-remove counts successful removals and, on a
+  failed one, returns the count so far with the error. The proxy
+  backend's count is the sum of its rounds (spec/11).
 - **Single move**: Jolokia operation `moveMessageTo(java.lang.String,
   java.lang.String)` on the source queue MBean, args `[messageID,
   targetQueueName]` — reliable across deployments.
@@ -238,16 +297,34 @@ every other queue operation (spec/07).
   `MessageDetailView` (spec/07, 08); Jolokia implementations in
   `internal/queue/jolokia/`.
 - `tui/internal/dialog/jmstypeprompt.go` — `JMSTypePrompt`, the JMS Type
-  filter prompt shared by purge and move-all. `QueuesView.doPurge`/
-  `doMoveAll` (`tui/internal/view/queues.go`) are the small, directly
-  unit-tested dispatch functions that branch between the native
-  unfiltered calls and the filtered ones — separated out specifically so
-  that branch is testable without driving the confirm dialog or
-  move-picker's own async selection flow — this codebase has no unit
-  tests at that layer for either (`ConfirmDialog`/`SendMessageOverlay`
-  have no dedicated test files at all); bugs there have historically
-  only been caught by driving the real binary against a real broker
-  (spec/13), which is how this feature's own flows are verified too.
+  filter prompt shared by purge and move-all.
+- `tui/internal/view/purge.go` — `purgeFlow`, the purge action both
+  `QueuesView` and `MessagesView` call for `p`: JMS Type prompt →
+  confirm → backend call → status line. Each view passes its own
+  callbacks for closing the prompt (restore focus and shortcut hints),
+  success (reload) and error (show it). A purge inside an open queue
+  used to skip the prompt and always purge everything, while the queue
+  list's `p` asked for a type; one shared flow keeps them identical.
+  `purgeFlow.finish` (the result handling) is split out of the
+  background goroutine so it's unit-tested directly; `filteredRemainderWarning`
+  and `pendingCount` (also used by move-all and the message browser's
+  title, spec/08) live there too.
+- `purge`/`doMoveAll` are the small, directly unit-tested dispatch
+  functions that branch between the native unfiltered calls and the
+  filtered ones — separated out specifically so that branch is testable
+  without driving the confirm dialog or move-picker's own async
+  selection flow. The flows themselves are verified by driving the real
+  binary against a real broker (spec/13).
+- **Why filtered purge/move-all don't work around the broker's limits**
+  (verified live): browsing sees only the first `maxBrowsePageSize`
+  (400) messages, filtered or not; consuming everything and
+  acknowledging only matches (ActiveMQ's individual-acknowledge mode)
+  stalled after 800 of 1,600 messages and handed every other message
+  back flagged as redelivered and out of order; moving everything to a
+  temporary queue and moving the rest back would give every kept
+  message a new ID and timestamp. All change or risk real data, so none
+  is attempted; the limit is reported instead (see "Broker limits on
+  filtered purge/move-all").
 - **Why a blank JMS Type filter still calls `PurgeQueue`/
   `MoveAllMessages`, not `DeleteMessages`/`MoveMessages` with an empty
   filter.** The unfiltered calls use a single native JMX selector call
@@ -334,6 +411,9 @@ every other queue operation (spec/07).
 ## Out of scope (deliberate)
 
 - Progress indicators for large purges/moves; no undo.
+- Reaching matching messages beyond the broker's paging/browse limits
+  for filtered purge/move-all (see "Broker limits on filtered
+  purge/move-all"), and changing broker configuration.
 - Bulk-purge of multiple queues at once.
 - Creating a new destination queue on the fly from the picker.
 - Message templates or send history.

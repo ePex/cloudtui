@@ -86,6 +86,10 @@ one.
   keyed by message ID, not row index. Applying the filter, opening a
   different queue, or a delete/move action completing all reset back to
   a single first page (all of which already trigger a full reload).
+  Paging stops at the broker's browse limit (400 by default): there
+  `hasMore` is false and "Load more" disappears, even if the queue holds
+  more. The response's `truncated` (spec/11) says so, but the console
+  doesn't show it yet.
   Every row has a checkbox; a header checkbox
   (checked/indeterminate/unchecked synced to selection vs. total) plus
   "Select all"/"Select none" buttons operate on the currently-loaded list

@@ -54,11 +54,38 @@ Kotlin side, `@ModelAttribute`), which is why the shape is:
   beginning rather than erroring.
 
 Each returned message includes the real JMS `jmsType` header (not
-inferred). The response also carries **`hasMore: Boolean`**, true when at
-least one more message exists beyond the returned page — shared on
-`mq-proxy`'s `ListResponse<T>` (also used by `list-queues`, where it's
-simply unused and defaults `false`) rather than forking a
-message-specific response type.
+inferred). The response also carries two booleans, shared on
+`mq-proxy`'s `ListResponse<T>` (also used by `list-queues` and
+delete/move, where they're simply unused and default `false`) rather
+than forking a message-specific response type:
+
+- **`hasMore`** — another page can be fetched: `maxCount` was reached
+  and at least one more matching message follows. This is what a "Load
+  more" pages on (`mq-proxy-web`, spec/21).
+- **`truncated`** — the browse ended before `maxCount` only because the
+  broker cut it short: the queue holds messages this browse couldn't
+  see, and paging can't reach them either.
+
+A JMS `QueueBrowser` on ActiveMQ never sees more than the broker's
+`maxBrowsePageSize` (default **400**) messages, filtered or not, and its
+enumeration just ends there — indistinguishable from the end of the
+queue. So when `mq-proxy`'s enumeration ends before `maxCount`, it
+compares the browse window with the queue depth from the statistics
+plugin (the same `fetchStats` `list-queues` uses): an unfiltered pass's
+enumerated count *is* the window; a filtered pass's isn't (the broker
+applies the selector itself), so it counts the window with a second,
+unfiltered, count-only browse. Depth larger than the window →
+`truncated: true`. Without the statistics plugin it can't tell, keeps
+`false`, and logs a warning — and every browse that ends early then
+waits up to `fetchStats`' 3 s reply timeout first. Browsing never
+returns messages beyond the window; `truncated` only makes the cut
+visible.
+
+**Why two fields:** reporting the cut through `hasMore` was tried first
+and broke `mq-proxy-web`'s "Load more" — on any queue over 400 messages
+it stayed visible forever, every click returning an empty page (the
+cursor is found by browsing, so the next page can't get past the window
+either).
 
 ### `send-message` (POST)
 
@@ -83,6 +110,16 @@ serialization):
 unset means "match everything" (purge / move-all), a deliberately
 preserved, tested behavior, unlike `list-messages`.
 
+**Nothing in the contract promises that one call acts on every matching
+message.** `mq-proxy` consumes until a receive times out, so an
+unfiltered delete/move empties the queue in one call; a server that
+browses first and then consumes each browsed message stops at the
+browse window (~400) per call. Clients repeat until a call acts on 0
+messages (see the Go client below). With a filter, `mq-proxy`'s
+selector consumer only reaches matches among the messages the broker
+has paged in (`maxPageSize`, default 200) — see spec/09's "Broker limits
+on filtered purge/move-all".
+
 ### Errors
 
 `BindException` (constructor-binding/query-binding failures, e.g. a
@@ -103,6 +140,24 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   spec/22).
 - Sends `returnBody=true` always when browsing (the message browser needs
   the body for its preview column — spec/08).
+- `BrowseMessages` returns `hasMore || truncated` as its bool
+  (`queue.Backend.BrowseMessages` is `([]Message, bool, error)`) — the
+  TUI only needs "the queue holds more than shown", not which; the
+  message browser's title and the JMS Type scans use it (spec/08).
+- **Bulk delete/move repeat until nothing is left.** `PurgeQueue`,
+  `MoveAllMessages`, and `DeleteMessages`/`MoveMessages` **without a
+  `MaxCount`** send `delete-messages`/`move-messages` in rounds (`inRounds`)
+  until a round acts on 0 messages, and return the sum — so they're
+  complete against a server that caps per call. With a `MaxCount` (incl.
+  `RemoveMessage`/`MoveMessage`'s `MaxCount: 1`) it's a single request.
+  Guards: at most `maxBulkRounds` (1,000) rounds — hitting it returns an
+  "incomplete" error (`errBulkIncomplete`) with the count so far, so a
+  server that misreports progress can't loop the TUI forever; the
+  context is checked between rounds; a failed round ends the loop with
+  the count so far alongside the error. Against `mq-proxy` an unfiltered
+  purge is one deleting round plus one returning 0 — which costs one more
+  receive timeout (~2 s, see Gotchas).
+- `PurgeQueue` returns the number deleted (`(int, error)`, spec/09).
 - `SendMessage` populates `send-message`'s `jmsType`/`headers`/`groupId`/
   `correlationId` fields directly from `queue.SendMessageRequest` (spec/09) —
   a 1:1 passthrough, no client-side precedence logic needed since
@@ -153,6 +208,13 @@ tooling. Manual/on-demand only — not wired into CI (needs a live broker).
   delete/move/purge always waits up to that timeout before concluding "no
   more matches" — accepted, matches this file's existing
   `fetchStats`/`consumer.receive(3_000)` precedent.
+- **How far a filtered browse gets varies.** With a selector, the broker
+  sometimes scans slightly past `maxBrowsePageSize` before stopping: a
+  `jmsType=TypeB` browse over 800 × TypeA then 800 × TypeB returned 0
+  in one run and 48 (stable across repeats) in another, depending on
+  what the broker had paged in. Likewise a filtered delete reached 0 in
+  one run and 112 in another. Don't test for exact counts there —
+  `truncated`/the TUI's warning are what's reliable.
 - **Spring nested query-param binding only activates when the outer bound
   object has a required field.** A bare `@ModelAttribute filter:
   QueueMessageFilter` parameter (all-optional fields) silently binds
@@ -192,10 +254,13 @@ tooling. Manual/on-demand only — not wired into CI (needs a live broker).
 
 ## Out of scope (deliberate)
 
-- **The Go client above does not send `filter.afterMessageId` or read
-  `hasMore`** — the TUI can already re-browse with a different `maxCount`
-  from its own UI, so pagination wasn't needed there; `filter.afterMessageId`/
-  `hasMore` exist for `mq-proxy-web`'s "Load more" (spec/21), not the TUI.
+- **The Go client above does not send `filter.afterMessageId`** — it
+  reads `hasMore`/`truncated` to say when a browse is incomplete, but doesn't page:
+  the server finds the cursor by browsing, which stops at the same
+  browse window, so paging can't get past it. `filter.afterMessageId`
+  exists for `mq-proxy-web`'s "Load more" (spec/21).
+- Getting past the broker's browse/paging windows (`maxBrowsePageSize`,
+  `maxPageSize`) — not possible over JMS without side effects (spec/09).
 - No configurable TUI-side default `maxCount` (fixed at 500).
 - No retry for POST requests, no backoff/retry-count configuration for
   GET retries, no proactive connection warm-up on activation.

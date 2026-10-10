@@ -48,7 +48,7 @@ class QueueController(private val brokerService: BrokerService) {
             query.filter,
             returnBody = query.returnBody ?: true,
         )
-        return ListResponse(data = result.data, hasMore = result.hasMore)
+        return ListResponse(data = result.data, hasMore = result.hasMore, truncated = result.truncated)
     }
 
     @PostMapping("/send-message")

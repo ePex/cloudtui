@@ -53,10 +53,10 @@ func renderedScreenText(t *testing.T, prim tview.Primitive, width, height int) s
 type fakeQueueBackend struct{}
 
 func (f *fakeQueueBackend) List(_ context.Context) ([]queue.Summary, error) { return nil, nil }
-func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, error) {
-	return nil, nil
+func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, bool, error) {
+	return nil, false, nil
 }
-func (f *fakeQueueBackend) PurgeQueue(_ context.Context, _ string) error        { return nil }
+func (f *fakeQueueBackend) PurgeQueue(_ context.Context, _ string) (int, error) { return 0, nil }
 func (f *fakeQueueBackend) RemoveMessage(_ context.Context, _, _ string) error  { return nil }
 func (f *fakeQueueBackend) MoveMessage(_ context.Context, _, _, _ string) error { return nil }
 func (f *fakeQueueBackend) MoveAllMessages(_ context.Context, _, _ string) (int, error) {

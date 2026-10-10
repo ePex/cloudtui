@@ -271,33 +271,33 @@ func (b *Backend) List(ctx context.Context) ([]queue.Summary, error) {
 	return cur.List(ctx)
 }
 
-func (b *Backend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+func (b *Backend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	out, err := cur.BrowseMessages(ctx, queueName, filter)
+	out, hasMore, err := cur.BrowseMessages(ctx, queueName, filter)
 	if err == nil {
-		return out, nil
+		return out, hasMore, nil
 	}
 	b.refresh()
 	cur, rerr := b.current(ctx)
 	if rerr != nil {
-		return out, err
+		return out, hasMore, err
 	}
 	return cur.BrowseMessages(ctx, queueName, filter)
 }
 
-func (b *Backend) PurgeQueue(ctx context.Context, queueName string) error {
+func (b *Backend) PurgeQueue(ctx context.Context, queueName string) (int, error) {
 	cur, err := b.current(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if err := cur.PurgeQueue(ctx, queueName); err != nil {
+	n, err := cur.PurgeQueue(ctx, queueName)
+	if err != nil {
 		b.refresh()
-		return err
 	}
-	return nil
+	return n, err
 }
 
 func (b *Backend) RemoveMessage(ctx context.Context, queueName, messageID string) error {

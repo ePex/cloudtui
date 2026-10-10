@@ -22,7 +22,7 @@ func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *d
 	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
-	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(string, queue.Message) {})
+	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(string, queue.Message) {})
 }
 
 // newTestMessagesViewWithMsgs builds a MessagesView already populated via
@@ -221,7 +221,7 @@ func TestMessagesViewWrapSelectedFuncOpensCorrectMessage(t *testing.T) {
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	var selected queue.Message
-	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, func(_ string, m queue.Message) {
+	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(_ string, m queue.Message) {
 		selected = m
 	})
 	mv.repaint([]queue.Message{
@@ -391,6 +391,93 @@ func TestMessagesViewTitleUpdatesWithFilterAndSearch(t *testing.T) {
 	}
 }
 
+func TestBrowseNote(t *testing.T) {
+	tests := []struct {
+		name     string
+		filtered bool
+		n        int
+		hasMore  bool
+		pending  int64
+		want     string
+	}{
+		{"unfiltered, broker stopped at 400", false, 400, true, 1600, "showing 400 of 1600"},
+		{"unfiltered, maxCount reached", false, 500, true, 1600, "showing 500 of 1600"},
+		{"unfiltered, hasMore wrongly false", false, 400, false, 1600, "showing 400 of 1600"},
+		{"unfiltered, whole queue", false, 10, false, 10, ""},
+		{"unfiltered, pending unknown, hasMore", false, 400, true, -1, "first 400 browsed, more on queue"},
+		{"unfiltered, pending unknown, complete", false, 10, false, -1, ""},
+		{"filtered, hasMore", true, 0, true, -1, "first 0 browsed, more on queue"},
+		{"filtered, complete", true, 3, false, -1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := browseNote(tt.filtered, tt.n, tt.hasMore, tt.pending); got != tt.want {
+				t.Errorf("browseNote() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNarrowsMessages(t *testing.T) {
+	tests := []struct {
+		name string
+		f    queue.MessageFilter
+		want bool
+	}{
+		{"max count only", queue.MessageFilter{MaxCount: 500}, false},
+		{"JMS type", queue.MessageFilter{JMSType: "TypeB", MaxCount: 500}, true},
+		{"message ID", queue.MessageFilter{MessageID: "ID:1"}, true},
+		{"from date", queue.MessageFilter{FromDate: time.Unix(1, 0)}, true},
+		{"to date", queue.MessageFilter{ToDate: time.Unix(1, 0)}, true},
+	}
+	for _, tt := range tests {
+		if got := narrowsMessages(tt.f); got != tt.want {
+			t.Errorf("%s: narrowsMessages() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestMessagesViewApplyLoadSetsTheTitleNote covers what a completed Load
+// does with hasMore and the pending count: the note lands in the title,
+// between the filter description and the quick search.
+func TestMessagesViewApplyLoadSetsTheTitleNote(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	unfiltered := withDefaultMaxCount(queue.MessageFilter{})
+
+	mv.applyLoad("orders", unfiltered, make([]queue.Message, 400), true, 1600, nil)
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: max=500) (showing 400 of 1600) "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+
+	mv.filter = queue.MessageFilter{JMSType: "TypeB"}
+	mv.applyQuickSearch("foo")
+	mv.applyLoad("orders", withDefaultMaxCount(mv.filter), nil, true, -1, nil)
+	want := " Messages — orders (filter: type=TypeB max=500) (first 0 browsed, more on queue) [search: foo] "
+	if got := mv.table.GetTitle(); got != want {
+		t.Errorf("filtered title = %q, want %q", got, want)
+	}
+
+	mv.applyLoad("orders", withDefaultMaxCount(mv.filter), nil, false, -1, nil)
+	if got, want := mv.table.GetTitle(), " Messages — orders (filter: type=TypeB max=500) [search: foo] "; got != want {
+		t.Errorf("complete browse title = %q, want %q (no note)", got, want)
+	}
+}
+
+// TestMessagesViewTitleNoteActuallyRenders guards against the note being
+// swallowed as a color tag when drawn (titles use "(…)", never "[…]").
+func TestMessagesViewTitleNoteActuallyRenders(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+
+	mv.applyLoad("orders", withDefaultMaxCount(queue.MessageFilter{}), make([]queue.Message, 400), true, 1600, nil)
+
+	rendered := renderedScreenText(t, mv.table, 120, 10)
+	if !strings.Contains(rendered, "(showing 400 of 1600)") {
+		t.Errorf("rendered screen = %q, want it to contain %q", rendered, "(showing 400 of 1600)")
+	}
+}
+
 func TestWithDefaultMaxCount(t *testing.T) {
 	tests := []struct {
 		name string
@@ -525,6 +612,41 @@ func TestMessagesViewRepaintClearsMarks(t *testing.T) {
 	mv.repaint([]queue.Message{{ID: "msg-1", Timestamp: time.Unix(1, 0)}})
 	if len(mv.marked) != 0 {
 		t.Errorf("marked after repaint() = %v, want empty (marks reset on reload)", mv.marked)
+	}
+}
+
+// TestMessagesViewPurgeKeyShowsJMSTypePrompt is the regression test for
+// purge inside a queue skipping the JMS Type prompt (spec-wip
+// bugfix-purge-completeness, defect 3): 'p' must open the prompt first,
+// exactly like the queue list's 'p'.
+func TestMessagesViewPurgeKeyShowsJMSTypePrompt(t *testing.T) {
+	_, confirm, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+
+	mv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+
+	if !mv.purge.prompt.Visible() {
+		t.Error("JMS Type prompt is not visible after pressing 'p'")
+	}
+	if confirm.Visible() {
+		t.Error("confirm dialog is visible before the JMS Type prompt was continued past")
+	}
+}
+
+// TestMessagesViewPurgePromptContinuesToConfirm follows the purge past the
+// prompt: Enter on a blank JMS Type continues to the confirm dialog.
+func TestMessagesViewPurgePromptContinuesToConfirm(t *testing.T) {
+	_, confirm, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	mv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+
+	mv.purge.prompt.Primitive().InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if mv.purge.prompt.Visible() {
+		t.Error("JMS Type prompt still visible after Enter on a blank field")
+	}
+	if !confirm.Visible() {
+		t.Error("confirm dialog not visible after continuing past the JMS Type prompt")
 	}
 }
 

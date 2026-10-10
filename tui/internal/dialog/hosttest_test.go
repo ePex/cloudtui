@@ -38,7 +38,7 @@ type testHost struct {
 	toggledFavorite         *toggledFavoriteCall
 	loadedJMSTypes          []string
 	messagesQueueName       string
-	scanJMSTypesFn          func(ctx context.Context, queueName string, maxCount int) ([]string, error)
+	scanJMSTypesFn          func(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error)
 	reloadedQueue           string
 	appliedFilter           *queue.MessageFilter
 	focusMessagesCalls      int
@@ -107,9 +107,9 @@ func (h *testHost) FocusMessages()                            { h.focusMessagesC
 
 func (h *testHost) LoadedJMSTypes() []string  { return h.loadedJMSTypes }
 func (h *testHost) MessagesQueueName() string { return h.messagesQueueName }
-func (h *testHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error) {
+func (h *testHost) ScanJMSTypes(ctx context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error) {
 	if h.scanJMSTypesFn == nil {
-		return nil, nil
+		return ui.JMSTypeScan{}, nil
 	}
 	return h.scanJMSTypesFn(ctx, queueName, maxCount)
 }

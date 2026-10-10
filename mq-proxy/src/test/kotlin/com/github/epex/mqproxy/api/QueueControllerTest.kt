@@ -105,6 +105,24 @@ class QueueControllerTest {
             .andExpect {
                 status { isOk() }
                 jsonPath("$.hasMore") { value(true) }
+                jsonPath("$.truncated") { value(false) }
+            }
+    }
+
+    @Test
+    @WithMockUser
+    fun `listMessages returns truncated separately from hasMore`() {
+        every { brokerService.browseMessages("orders", QueueMessageFilter(maxCount = 5000)) } returns BrokerService.BrowseResult(
+            data = emptyList(),
+            hasMore = false,
+            truncated = true,
+        )
+
+        mockMvc.get("/api/management/command/list-messages?sourceQueue=orders&filter.maxCount=5000")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.hasMore") { value(false) }
+                jsonPath("$.truncated") { value(true) }
             }
     }
 

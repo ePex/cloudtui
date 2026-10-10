@@ -183,9 +183,9 @@ func (jp *JMSTypePrompt) startScan(maxCount int) {
 	jp.scanning = true
 	jp.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", maxCount))
 	go func() {
-		types, err := jp.host.ScanJMSTypes(context.Background(), jp.queueName, maxCount)
+		scan, err := jp.host.ScanJMSTypes(context.Background(), jp.queueName, maxCount)
 		jp.host.QueueUpdateDraw(func() {
-			jp.handleScanResult(types, err)
+			jp.handleScanResult(scan, err)
 		})
 	}()
 }
@@ -195,7 +195,7 @@ func (jp *JMSTypePrompt) startScan(maxCount int) {
 // way MessageFilter's is (see its doc comment). Applies equally whether
 // the completed scan was Show's automatic one or the sentinel's opt-in
 // wider one — the caller doesn't need to distinguish which.
-func (jp *JMSTypePrompt) handleScanResult(types []string, err error) {
+func (jp *JMSTypePrompt) handleScanResult(scan ui.JMSTypeScan, err error) {
 	jp.scanning = false
 	// Clears whatever the field was showing when the scan that just
 	// completed was started — "" if it was the automatic scan (the
@@ -207,8 +207,8 @@ func (jp *JMSTypePrompt) handleScanResult(types []string, err error) {
 		jp.host.SetStatus(fmt.Sprintf("[red]JMS type scan failed: %s[-]", err))
 		return
 	}
-	jp.scanned = types
-	jp.host.SetStatus("")
+	jp.scanned = scan.Types
+	jp.host.SetStatus(scanStatus(scan))
 	jp.field.Autocomplete()
 }
 

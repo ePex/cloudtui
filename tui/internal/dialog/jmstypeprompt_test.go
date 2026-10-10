@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 func newTestJMSTypePrompt(t *testing.T) (*JMSTypePrompt, *testHost) {
@@ -22,7 +24,7 @@ func newTestJMSTypePrompt(t *testing.T) (*JMSTypePrompt, *testHost) {
 // spawns races the test's own assertions on jp's fields, which -race
 // would (correctly) flag even on runs where the race happens not to
 // change the asserted values.
-func blockForever(context.Context, string, int) ([]string, error) {
+func blockForever(context.Context, string, int) (ui.JMSTypeScan, error) {
 	select {}
 }
 
@@ -123,7 +125,7 @@ func TestJMSTypePromptStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	jp.queueName = "orders"
 	calls := 0
 	entered := make(chan struct{})
-	host.scanJMSTypesFn = func(context.Context, string, int) ([]string, error) {
+	host.scanJMSTypesFn = func(context.Context, string, int) (ui.JMSTypeScan, error) {
 		calls++
 		close(entered) // happens-after calls++, so the test's read below is race-free
 		select {}
@@ -144,10 +146,10 @@ func TestJMSTypePromptStartScanUsesQueueNameAndMaxCount(t *testing.T) {
 	done := make(chan struct{})
 	var gotQueue string
 	var gotMax int
-	host.scanJMSTypesFn = func(_ context.Context, queueName string, maxCount int) ([]string, error) {
+	host.scanJMSTypesFn = func(_ context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error) {
 		gotQueue, gotMax = queueName, maxCount
 		close(done)
-		return nil, nil
+		return ui.JMSTypeScan{}, nil
 	}
 
 	jp.startScan(jmsTypeScanCount)
@@ -172,10 +174,10 @@ func TestJMSTypePromptShowStartsAutomaticScan(t *testing.T) {
 	done := make(chan struct{})
 	var gotQueue string
 	var gotMax int
-	host.scanJMSTypesFn = func(_ context.Context, queueName string, maxCount int) ([]string, error) {
+	host.scanJMSTypesFn = func(_ context.Context, queueName string, maxCount int) (ui.JMSTypeScan, error) {
 		gotQueue, gotMax = queueName, maxCount
 		close(done)
-		return []string{"OrderCreated"}, nil
+		return ui.JMSTypeScan{Types: []string{"OrderCreated"}}, nil
 	}
 
 	jp.Show("Purge", "orders", nil, nil)
@@ -194,7 +196,7 @@ func TestJMSTypePromptHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	jp.scanning = true
 	jp.field.SetText(jmsTypeScanSentinel) // left there by onJMSTypeChanged in the real flow
 
-	jp.handleScanResult([]string{"ScannedType"}, nil)
+	jp.handleScanResult(ui.JMSTypeScan{Types: []string{"ScannedType"}}, nil)
 
 	if jp.scanning {
 		t.Error("scanning after handleScanResult = true, want false")
@@ -209,12 +211,36 @@ func TestJMSTypePromptHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	}
 }
 
+func TestJMSTypePromptHandleScanResultReportsTheLimit(t *testing.T) {
+	tests := []struct {
+		name string
+		scan ui.JMSTypeScan
+		want string
+	}{
+		{"queue holds more", ui.JMSTypeScan{Types: []string{"TypeA"}, Scanned: 400, HasMore: true},
+			"Scanned the first 400 messages — the queue holds more; types further back aren't listed"},
+		{"whole queue scanned", ui.JMSTypeScan{Types: []string{"TypeA"}, Scanned: 10}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jp, host := newTestJMSTypePrompt(t)
+			host.status = "Scanning up to 500 messages for JMS types..."
+
+			jp.handleScanResult(tt.scan, nil)
+
+			if host.status != tt.want {
+				t.Errorf("status = %q, want %q", host.status, tt.want)
+			}
+		})
+	}
+}
+
 func TestJMSTypePromptHandleScanResultErrorClearsFlag(t *testing.T) {
 	jp, host := newTestJMSTypePrompt(t)
 	jp.scanning = true
 	jp.field.SetText(jmsTypeScanSentinel)
 
-	jp.handleScanResult(nil, context.DeadlineExceeded)
+	jp.handleScanResult(ui.JMSTypeScan{}, context.DeadlineExceeded)
 
 	if jp.scanning {
 		t.Error("scanning after handleScanResult error = true, want false")

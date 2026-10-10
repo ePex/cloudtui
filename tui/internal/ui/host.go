@@ -59,5 +59,15 @@ type Host interface {
 	// more types without changing what's displayed in the Messages view.
 	LoadedJMSTypes() []string
 	MessagesQueueName() string
-	ScanJMSTypes(ctx context.Context, queueName string, maxCount int) ([]string, error)
+	ScanJMSTypes(ctx context.Context, queueName string, maxCount int) (JMSTypeScan, error)
+}
+
+// JMSTypeScan is a completed ScanJMSTypes: the distinct JMS types found
+// among the Scanned messages, and whether the queue holds more than the
+// scan saw (the backend's hasMore — the broker stops browsing at its
+// browse limit, so a scan can end well short of maxCount).
+type JMSTypeScan struct {
+	Types   []string
+	Scanned int
+	HasMore bool
 }

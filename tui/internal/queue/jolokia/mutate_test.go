@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -186,51 +187,144 @@ func TestSendMessageJolokiaError(t *testing.T) {
 	}
 }
 
-func TestPurgeQueueDirectOperation(t *testing.T) {
-	requestCount := 0
+// purgeServer fakes the Jolokia calls PurgeQueue makes. It answers each
+// request by its operation ("read:<attribute>" for reads) from responses,
+// with a Jolokia status 500 for anything not listed, and records the
+// operations in the order they arrived.
+func purgeServer(t *testing.T, responses map[string]any) (*httptest.Server, *[]string) {
+	t.Helper()
+	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		json.NewEncoder(w).Encode(map[string]any{
-			"status": 200,
-			"value":  true,
-		})
+		var req struct {
+			Type      string `json:"type"`
+			Operation string `json:"operation"`
+			Attribute string `json:"attribute"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		key := req.Operation
+		if req.Type == "read" {
+			key = "read:" + req.Attribute
+		}
+		calls = append(calls, key)
+		resp, ok := responses[key]
+		if !ok {
+			resp = map[string]any{"status": 500, "error": "No operation " + key + " found"}
+		}
+		json.NewEncoder(w).Encode(resp)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv, &calls
+}
 
-	c := newTestClient(srv.URL)
-	err := c.PurgeQueue(context.Background(), "myQueue")
+func ok(value any) map[string]any { return map[string]any{"status": 200, "value": value} }
+
+func TestPurgeQueueDirectOperationReportsQueueSize(t *testing.T) {
+	srv, calls := purgeServer(t, map[string]any{
+		"read:QueueSize": ok(float64(7)),
+		"purgeQueue()":   ok(nil),
+	})
+
+	n, err := newTestClient(srv.URL).PurgeQueue(context.Background(), "myQueue")
 	if err != nil {
 		t.Fatalf("PurgeQueue() error = %v", err)
 	}
-	if requestCount != 1 {
-		t.Errorf("requestCount = %d, want 1 (only purgeQueue())", requestCount)
+	if n != 7 {
+		t.Errorf("PurgeQueue() = %d, want 7 (QueueSize read before purging)", n)
+	}
+	if want := []string{"read:QueueSize", "purgeQueue()"}; !slices.Equal(*calls, want) {
+		t.Errorf("calls = %v, want %v", *calls, want)
 	}
 }
 
 func TestPurgeQueueRemoveMatchingFallback(t *testing.T) {
-	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		if requestCount == 1 {
-			json.NewEncoder(w).Encode(map[string]any{
-				"status": 500,
-				"error":  "No operation purgeQueue found",
-			})
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"status": 200,
-			"value":  float64(3),
-		})
-	}))
-	defer srv.Close()
+	srv, calls := purgeServer(t, map[string]any{
+		"read:QueueSize": ok(float64(7)),
+		"removeMatchingMessages(java.lang.String)": ok(float64(3)),
+	})
 
-	c := newTestClient(srv.URL)
-	err := c.PurgeQueue(context.Background(), "myQueue")
+	n, err := newTestClient(srv.URL).PurgeQueue(context.Background(), "myQueue")
 	if err != nil {
 		t.Fatalf("PurgeQueue() error = %v", err)
 	}
-	if requestCount != 2 {
-		t.Errorf("requestCount = %d, want 2 (purgeQueue + removeMatchingMessages)", requestCount)
+	if n != 3 {
+		t.Errorf("PurgeQueue() = %d, want 3 (removeMatchingMessages' own count)", n)
+	}
+	want := []string{"read:QueueSize", "purgeQueue()", "removeMatchingMessages(java.lang.String)"}
+	if !slices.Equal(*calls, want) {
+		t.Errorf("calls = %v, want %v", *calls, want)
+	}
+}
+
+func TestPurgeQueueSkipsDirectOperationWhenQueueSizeUnreadable(t *testing.T) {
+	srv, calls := purgeServer(t, map[string]any{
+		"purgeQueue()": ok(nil),
+		"removeMatchingMessages(java.lang.String)": ok(float64(3)),
+	})
+
+	n, err := newTestClient(srv.URL).PurgeQueue(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 3 {
+		t.Errorf("PurgeQueue() = %d, want 3", n)
+	}
+	if slices.Contains(*calls, "purgeQueue()") {
+		t.Errorf("calls = %v, want no purgeQueue() without a QueueSize to report", *calls)
+	}
+}
+
+func TestPurgeQueueBrowseAndRemoveCountsRemovals(t *testing.T) {
+	srv, _ := purgeServer(t, map[string]any{
+		"browseMessages()": ok([]map[string]any{
+			{"messageId": "ID:1", "timestamp": int64(1721000000000), "text": "a"},
+			{"messageId": "ID:2", "timestamp": int64(1721000000000), "text": "b"},
+		}),
+		"removeMessage(java.lang.String)": ok(true),
+	})
+
+	n, err := newTestClient(srv.URL).PurgeQueue(context.Background(), "myQueue")
+	if err != nil {
+		t.Fatalf("PurgeQueue() error = %v", err)
+	}
+	if n != 2 {
+		t.Errorf("PurgeQueue() = %d, want 2", n)
+	}
+}
+
+func TestPurgeQueueBrowseAndRemoveReportsPartialCountOnError(t *testing.T) {
+	removes := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Operation string `json:"operation"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		switch req.Operation {
+		case "browseMessages()":
+			json.NewEncoder(w).Encode(ok([]map[string]any{
+				{"messageId": "ID:1", "timestamp": int64(1721000000000), "text": "a"},
+				{"messageId": "ID:2", "timestamp": int64(1721000000000), "text": "b"},
+				{"messageId": "ID:3", "timestamp": int64(1721000000000), "text": "c"},
+			}))
+		case "removeMessage(java.lang.String)":
+			removes++
+			if removes == 3 {
+				json.NewEncoder(w).Encode(map[string]any{"status": 500, "error": "boom"})
+				return
+			}
+			json.NewEncoder(w).Encode(ok(true))
+		default:
+			json.NewEncoder(w).Encode(map[string]any{"status": 500, "error": "unsupported"})
+		}
+	}))
+	defer srv.Close()
+
+	n, err := newTestClient(srv.URL).PurgeQueue(context.Background(), "myQueue")
+	if err == nil {
+		t.Fatal("PurgeQueue() error = nil, want the failed removal")
+	}
+	if n != 2 {
+		t.Errorf("PurgeQueue() = %d, want 2 (removed before the failure)", n)
 	}
 }

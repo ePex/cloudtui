@@ -266,10 +266,13 @@ components:
             $ref: "#/components/schemas/ApiError"
         hasMore:
           type: boolean
+        truncated:
+          type: boolean
       required:
       - data
       - errors
       - hasMore
+      - truncated
     MovedMessageDto:
       type: object
       properties:
@@ -307,10 +310,13 @@ components:
             $ref: "#/components/schemas/ApiError"
         hasMore:
           type: boolean
+        truncated:
+          type: boolean
       required:
       - data
       - errors
       - hasMore
+      - truncated
     ListResponseQueueSummary:
       type: object
       properties:
@@ -324,10 +330,13 @@ components:
             $ref: "#/components/schemas/ApiError"
         hasMore:
           type: boolean
+        truncated:
+          type: boolean
       required:
       - data
       - errors
       - hasMore
+      - truncated
     QueueSummary:
       type: object
       properties:
@@ -380,10 +389,13 @@ components:
             $ref: "#/components/schemas/ApiError"
         hasMore:
           type: boolean
+        truncated:
+          type: boolean
       required:
       - data
       - errors
       - hasMore
+      - truncated
     MessageSummary:
       type: object
       properties:

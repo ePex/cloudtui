@@ -194,14 +194,14 @@ func TestLoadedJMSTypesNilMessagesViewDoesNotPanic(t *testing.T) {
 // wiring test — only BrowseMessages is exercised, so every other method
 // panics rather than returning a silently-wrong zero value.
 type fakeBrowseBackend struct {
-	browseMessagesFn func(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error)
+	browseMessagesFn func(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error)
 }
 
 func (f *fakeBrowseBackend) List(context.Context) ([]queue.Summary, error) { panic("not used") }
-func (f *fakeBrowseBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+func (f *fakeBrowseBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	return f.browseMessagesFn(ctx, queueName, filter)
 }
-func (f *fakeBrowseBackend) PurgeQueue(context.Context, string) error { panic("not used") }
+func (f *fakeBrowseBackend) PurgeQueue(context.Context, string) (int, error) { panic("not used") }
 func (f *fakeBrowseBackend) RemoveMessage(context.Context, string, string) error {
 	panic("not used")
 }
@@ -236,10 +236,10 @@ func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
 	var gotQueue string
 	var gotFilter queue.MessageFilter
 	a.backend = &fakeBrowseBackend{
-		browseMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, error) {
+		browseMessagesFn: func(_ context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 			gotQueue = queueName
 			gotFilter = filter
-			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, nil
+			return []queue.Message{{JMSType: "a"}, {JMSType: "b"}, {JMSType: "a"}}, true, nil
 		},
 	}
 
@@ -255,8 +255,11 @@ func TestScanJMSTypesCallsBrowseWithNoJMSTypeFilter(t *testing.T) {
 		t.Errorf("filter passed to BrowseMessages = %+v, want %+v", gotFilter, want)
 	}
 	want := []string{"a", "b"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("ScanJMSTypes() = %v, want %v", got, want)
+	if len(got.Types) != len(want) || got.Types[0] != want[0] || got.Types[1] != want[1] {
+		t.Errorf("ScanJMSTypes().Types = %v, want %v", got.Types, want)
+	}
+	if got.Scanned != 3 || !got.HasMore {
+		t.Errorf("ScanJMSTypes() Scanned, HasMore = %d, %v; want 3, true (passed through from the browse)", got.Scanned, got.HasMore)
 	}
 }
 
@@ -264,8 +267,8 @@ func TestScanJMSTypesPropagatesBackendError(t *testing.T) {
 	a := New(config.Default())
 	wantErr := context.DeadlineExceeded
 	a.backend = &fakeBrowseBackend{
-		browseMessagesFn: func(context.Context, string, queue.MessageFilter) ([]queue.Message, error) {
-			return nil, wantErr
+		browseMessagesFn: func(context.Context, string, queue.MessageFilter) ([]queue.Message, bool, error) {
+			return nil, false, wantErr
 		},
 	}
 
