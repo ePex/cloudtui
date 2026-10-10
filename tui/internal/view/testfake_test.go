@@ -60,6 +60,7 @@ type fakeViewHost struct {
 	progressDone     int
 	progressVisible  bool
 	progressFinishes []uint64
+	progressHistory  []int
 
 	listParametersFn         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
 	revealParameterFn        func(ctx context.Context, profile, name string) (string, error)
@@ -103,6 +104,7 @@ func (f *fakeViewHost) StartOperationProgress(label string, total int) uint64 {
 func (f *fakeViewHost) UpdateOperationProgress(id uint64, completed, total int) {
 	if id == f.progressID {
 		f.progressDone, f.progressTotal = completed, total
+		f.progressHistory = append(f.progressHistory, completed)
 	}
 }
 func (f *fakeViewHost) FinishOperationProgress(id uint64) {

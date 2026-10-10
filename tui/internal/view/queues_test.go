@@ -27,6 +27,8 @@ type fakeQueueBackend struct {
 	deleteMessagesFn  func(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error)
 	moveAllMessagesFn func(ctx context.Context, sourceQueue, targetQueue string) (int, error)
 	moveMessagesFn    func(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error)
+	removeMessageFn   func(ctx context.Context, queueName, messageID string) error
+	moveMessageFn     func(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 	// listFn overrides List entirely when set — used by the Load()
 	// loading-indicator/stale-response tests below to control timing and
 	// inject errors, without disturbing every other test's plain
@@ -57,11 +59,17 @@ func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) (in
 	return f.purgeQueueFn(ctx, queueName)
 }
 
-func (f *fakeQueueBackend) RemoveMessage(_ context.Context, _, _ string) error {
+func (f *fakeQueueBackend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
+	if f.removeMessageFn != nil {
+		return f.removeMessageFn(ctx, queueName, messageID)
+	}
 	return nil
 }
 
-func (f *fakeQueueBackend) MoveMessage(_ context.Context, _, _, _ string) error {
+func (f *fakeQueueBackend) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
+	if f.moveMessageFn != nil {
+		return f.moveMessageFn(ctx, sourceQueue, messageID, targetQueue)
+	}
 	return nil
 }
 

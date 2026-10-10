@@ -732,34 +732,43 @@ func (mv *MessagesView) deleteMarked() {
 		mv.host.SetStatus("[yellow]No message marked or selected[-]")
 		return
 	}
-	a := mv.host
 	queueName := mv.queueName
 	question := fmt.Sprintf("Delete message from %q?", queueName)
 	if len(mv.markedIDs()) > 0 {
 		question = fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName)
 	}
 	mv.confirm.Show(question, func() {
-		go func() {
-			failed := 0
-			for _, id := range ids {
-				if err := a.Backend().RemoveMessage(context.Background(), queueName, id); err != nil {
-					slog.Error("messages: bulk delete failed", "queue", queueName, "id", id, "error", err)
-					failed++
-				}
-			}
-			a.QueueUpdateDraw(func() {
-				switch {
-				case failed > 0:
-					a.SetStatus(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
-				case len(ids) == 1:
-					a.SetStatus("Deleted message")
-				default:
-					a.SetStatus(fmt.Sprintf("Deleted %d message(s)", len(ids)))
-				}
-				mv.Load()
-			})
-		}()
+		mv.deleteMessages(ids, queueName)
 	})
+}
+
+func (mv *MessagesView) deleteMessages(ids []string, queueName string) {
+	a := mv.host
+	total := len(ids)
+	progressID := a.StartOperationProgress(fmt.Sprintf("Deleting %d message(s) from %s", total, queueName), total)
+	go func() {
+		failed := 0
+		for completed, id := range ids {
+			if err := a.Backend().RemoveMessage(context.Background(), queueName, id); err != nil {
+				slog.Error("messages: bulk delete failed", "queue", queueName, "id", id, "error", err)
+				failed++
+			}
+			count := completed + 1
+			a.QueueUpdateDraw(func() { a.UpdateOperationProgress(progressID, count, total) })
+		}
+		a.QueueUpdateDraw(func() {
+			a.FinishOperationProgress(progressID)
+			switch {
+			case failed > 0:
+				a.SetStatus(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
+			case len(ids) == 1:
+				a.SetStatus("Deleted message")
+			default:
+				a.SetStatus(fmt.Sprintf("Deleted %d message(s)", len(ids)))
+			}
+			mv.Load()
+		})
+	}()
 }
 
 // moveMarked opens the move picker once and, on target selection, moves
@@ -783,28 +792,38 @@ func (mv *MessagesView) moveMarked() {
 		a.SetContextHint(strings.Join(lines, "\n"))
 	}
 	mv.movePicker.Show(srcQueue, func(target string) {
-		go func() {
-			failed := 0
-			for _, id := range ids {
-				if err := a.Backend().MoveMessage(context.Background(), srcQueue, id, target); err != nil {
-					slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
-					failed++
-				}
-			}
-			a.QueueUpdateDraw(func() {
-				switch {
-				case failed > 0:
-					a.SetStatus(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
-				case len(ids) == 1:
-					a.SetStatus(fmt.Sprintf("Moved message to %q", target))
-				default:
-					a.SetStatus(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
-				}
-				restore()
-				mv.Load()
-			})
-		}()
+		a.QueueUpdateDraw(func() { mv.moveMessages(ids, srcQueue, target, restore) })
 	}, restore)
+}
+
+func (mv *MessagesView) moveMessages(ids []string, srcQueue, target string, restore func()) {
+	a := mv.host
+	total := len(ids)
+	progressID := a.StartOperationProgress(fmt.Sprintf("Moving %d message(s) from %s", total, srcQueue), total)
+	go func() {
+		failed := 0
+		for completed, id := range ids {
+			if err := a.Backend().MoveMessage(context.Background(), srcQueue, id, target); err != nil {
+				slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
+				failed++
+			}
+			count := completed + 1
+			a.QueueUpdateDraw(func() { a.UpdateOperationProgress(progressID, count, total) })
+		}
+		a.QueueUpdateDraw(func() {
+			a.FinishOperationProgress(progressID)
+			switch {
+			case failed > 0:
+				a.SetStatus(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
+			case len(ids) == 1:
+				a.SetStatus(fmt.Sprintf("Moved message to %q", target))
+			default:
+				a.SetStatus(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
+			}
+			restore()
+			mv.Load()
+		})
+	}()
 }
 
 func (mv *MessagesView) showError(err error) {
