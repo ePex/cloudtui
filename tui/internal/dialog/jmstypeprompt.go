@@ -182,8 +182,11 @@ func (jp *JMSTypePrompt) startScan(maxCount int) {
 	}
 	jp.scanning = true
 	jp.host.SetStatus(fmt.Sprintf("Scanning up to %d messages for JMS types...", maxCount))
+	// Read on this (UI) goroutine: Show writes queueName, and the prompt
+	// can be reopened before the scan goroutine gets to run.
+	queueName := jp.queueName
 	go func() {
-		scan, err := jp.host.ScanJMSTypes(context.Background(), jp.queueName, maxCount)
+		scan, err := jp.host.ScanJMSTypes(context.Background(), queueName, maxCount)
 		jp.host.QueueUpdateDraw(func() {
 			jp.handleScanResult(scan, err)
 		})

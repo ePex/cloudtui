@@ -88,9 +88,12 @@ runs plain `go test ./...` (no `-race`), so it went unnoticed.
     the form normally does, so Apply filters by it.
 - Unchanged: choosing the scan entry runs the wider scan and clears its
   own text when done; Esc closes the drop-down or the dialog as today.
-- **`go test -race ./internal/dialog/` passes.** The fix is in the test
-  (the automatic scan must not complete concurrently with it), not in
-  production code.
+- **`go test -race ./internal/dialog/` passes.** Mostly a test fix (the
+  automatic scan must not complete concurrently with it). *Amended
+  2026-10-10 (task 1):* with that fixed, a second race showed up that is
+  real: `startScan`'s goroutine read `jp.queueName` lazily, while
+  reopening the prompt (`Show`) writes it. The scan now copies the queue
+  name on the UI goroutine before starting.
 - **CI runs the TUI tests with `-race` on the Ubuntu job**, so a data
   race fails the build. One platform is enough to catch races; macOS
   and Windows keep running plain `go test`. (Decided 2026-10-10.)

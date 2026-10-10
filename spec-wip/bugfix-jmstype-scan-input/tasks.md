@@ -10,11 +10,16 @@ developer's real `~/.cloudtui` — whose active connection is a shared
 remote environment — is never used. A disposable queue with a few
 TypeA messages is enough.
 
-1. [ ] **Fix the racing test** (plan §2). The theming test's
+1. [x] **Fix the racing test** (plan §2). The theming test's
    `JMSTypePrompt` case blocks the automatic scan. First, so `-race` is
    clean before CI starts enforcing it.
    *Check:* `go test -race ./internal/dialog/` passes; reverting the
    one-line fix brings the race back.
+   *Done 2026-10-10.* The test fix alone left a second, real race:
+   `startScan`'s goroutine read `jp.queueName` while a reopened prompt's
+   `Show` wrote it. Fixed by copying the name before starting the
+   goroutine (spec.md amended). Each fix alone still fails `-race`;
+   both together pass, three runs in a row, and `go test ./...` passes.
 
 2. [ ] **CI runs the TUI tests with `-race` on Ubuntu** (plan §3). New
    `task test:tui:race`; the `tui` job runs it on Linux and `task
