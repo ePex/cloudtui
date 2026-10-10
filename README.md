@@ -143,6 +143,101 @@ Press `:q` to quit.
 On a message detail page, press `c` to copy the queue name, message
 summary, displayed headers and properties, and full body to the clipboard.
 
+## Connecting to ActiveMQ
+
+cloudtui starts with a local Jolokia example connection. To connect to a
+broker, create a connection in the app from **Settings → Connections**, or
+copy and edit the example files below. The files live under
+`~/.cloudtui/` (on Windows, `%USERPROFILE%\.cloudtui\`):
+
+```sh
+# macOS / Linux
+mkdir -p ~/.cloudtui/connections
+cp tui/connections/jolokia.example.yaml ~/.cloudtui/connections/jolokia.yaml
+cp tui/connections/proxy.example.yaml ~/.cloudtui/connections/proxy.yaml
+```
+
+For an installed release, the example files are in the source repository;
+you can instead create the files by hand or use the in-app connection
+manager. Jolokia and proxy connections are stored separately so you can
+configure either or both. Keep these local files private: they can contain
+broker credentials.
+
+### Jolokia connection
+
+Use the Jolokia backend when the broker exposes its Jolokia HTTP endpoint.
+In `connections/jolokia.yaml`, set the broker name and endpoint URL, then
+enter the broker's Jolokia username and password:
+
+```yaml
+- name: staging
+  backend: jolokia
+  queue:
+    brokerName: my-broker
+    url: https://broker.example.com/api/jolokia
+    username: cloudtui
+    # password: set in the app, or use MQPROXY_CLIENT_PASSWORD
+```
+
+The URL must be reachable from the machine running cloudtui, and the
+Jolokia user needs permission to inspect and manage queues. For a local
+ActiveMQ development broker, the common default is
+`http://localhost:8161/api/jolokia`.
+
+### Amazon MQ / brokers without Jolokia
+
+Amazon MQ does not expose Jolokia. Use the `proxy` backend, which connects
+to the broker over OpenWire and presents an HTTP API to cloudtui. The proxy
+must run somewhere that can reach the broker's OpenWire endpoint (normally
+port `61617` for Amazon MQ over TLS); cloudtui only needs to reach the proxy.
+Your team may already provide a shared proxy URL. Otherwise, run the
+[`mq-proxy`](mq-proxy/README.md) service yourself; it requires Java 21+.
+
+Configure the proxy's broker connection and its own HTTP Basic credentials
+on the machine running mq-proxy (for example with `BROKER_URL`,
+`BROKER_USERNAME`, `BROKER_PASSWORD`, `PROXY_AUTH_USERNAME`, and
+`PROXY_AUTH_PASSWORD`). Then add the client-side connection in
+`connections/proxy.yaml`:
+
+```yaml
+- name: aws-staging
+  backend: proxy
+  proxy:
+    url: https://mq-proxy.example.com
+    username: cloudtui
+    # password: the proxy's HTTP Basic password
+```
+
+These are two credential pairs: `BROKER_USERNAME`/`BROKER_PASSWORD` are
+for the ActiveMQ broker; `username` and `password` in cloudtui's proxy
+connection authenticate to mq-proxy. If running both locally, the proxy
+defaults to `http://localhost:8080`, with HTTP Basic credentials
+`cloudtui` / `changeme`; change those defaults before exposing the service
+outside your machine.
+
+For either backend, a password can be entered in the connection manager,
+stored in the matching YAML file, or read from AWS Secrets Manager. To use
+a secret, set `passwordSecret` and `passwordSecretAWSProfile` on that
+connection (under `queue` for Jolokia, `proxy` for mq-proxy); the secret's
+raw string value becomes the password. The AWS profile must be able to read
+that secret. Keep the profile name with the connection so it resolves
+consistently, regardless of the profile selected for AWS browsing.
+
+### AWS profiles (optional)
+
+AWS setup is usually already done if the AWS CLI works on your machine.
+cloudtui reads profiles from `~/.aws/config` and `~/.aws/credentials`
+(or `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` if set); it does
+not need a separate cloudtui AWS config. Select a profile under **Settings
+→ AWS Profiles** to browse Parameter Store, Secrets Manager, CloudWatch
+Logs, or CodePipeline. For example, authenticate an SSO profile first with
+`aws sso login --profile my-profile`. If its SSO session expires while
+cloudtui is using AWS, cloudtui can prompt for sign-in again.
+
+AWS is optional for broker connections with a directly supplied password.
+It is only needed for AWS-backed views or when a connection reads its
+password from Secrets Manager.
+
 ## Message snippets
 
 Snippets are reusable ActiveMQ messages: a body plus an optional JMS
