@@ -38,7 +38,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    cat's ears; the night sky turned gray on 256-color terminals (now
    exactly xterm color 17); the spinner now sits next to the title.
 
-3. [ ] **Mutations never cut off mid-request** (plan §4). Proxy: round
+3. [x] **Mutations never cut off mid-request** (plan §4). Proxy: round
    requests use `context.WithoutCancel`, `inRounds` returns the total
    plus `context.Canceled` when stopped between rounds. Both backends:
    every mutating HTTP request uses `context.WithoutCancel`. Tests: an

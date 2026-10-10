@@ -27,19 +27,35 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) (int, error) 
 		c.cfg.BrokerName, queueName,
 	)
 
+	// A stop (cancelled ctx) is checked before each step: a failed step
+	// otherwise means "try the next tier", so a step cut short by the stop
+	// must not lead to a purge by another route.
+	stopped := func(removed int) (int, error) {
+		return removed, fmt.Errorf("purge queue %s: %w", queueName, ctx.Err())
+	}
+
 	// Tier 1: purgeQueue() — simplest, not available on all deployments.
 	if size, err := c.readQueueSize(ctx, mbean); err == nil {
+		if ctx.Err() != nil {
+			return stopped(0)
+		}
 		if err := c.execSimple(ctx, mbean, "purgeQueue()"); err == nil {
 			return size, nil
 		}
 	}
 
 	// Tier 2: removeMatchingMessages("TRUE") — store path, avoids browse failure.
+	if ctx.Err() != nil {
+		return stopped(0)
+	}
 	if n, err := c.removeMatchingMessages(ctx, mbean, "TRUE"); err == nil {
 		return n, nil
 	}
 
 	// Tier 3: browse-and-remove.
+	if ctx.Err() != nil {
+		return stopped(0)
+	}
 	msgs, _, err := c.BrowseMessages(ctx, queueName, queue.MessageFilter{})
 	if err != nil {
 		return 0, fmt.Errorf("purge queue %s: browse: %w", queueName, err)
@@ -47,6 +63,9 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) (int, error) 
 
 	removed := 0
 	for _, msg := range msgs {
+		if ctx.Err() != nil {
+			return stopped(removed)
+		}
 		reqBody := map[string]any{
 			"type":      "exec",
 			"mbean":     mbean,
@@ -58,7 +77,7 @@ func (c *Client) PurgeQueue(ctx context.Context, queueName string) (int, error) 
 			return removed, fmt.Errorf("purge queue %s: marshal removeMessage: %w", queueName, err)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 		if err != nil {
 			return removed, fmt.Errorf("purge queue %s: removeMessage request: %w", queueName, err)
 		}
@@ -97,7 +116,8 @@ func (c *Client) readQueueSize(ctx context.Context, mbean string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read QueueSize marshal: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	// Part of a purge, so it finishes like the purge's other requests.
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("read QueueSize request: %w", err)
 	}
@@ -139,7 +159,7 @@ func (c *Client) execSimple(ctx context.Context, mbean, operation string) error 
 	if err != nil {
 		return fmt.Errorf("%s marshal: %w", operation, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("%s request: %w", operation, err)
 	}
@@ -177,7 +197,7 @@ func (c *Client) removeMatchingMessages(ctx context.Context, mbean, selector str
 	if err != nil {
 		return 0, fmt.Errorf("removeMatchingMessages marshal: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("removeMatchingMessages request: %w", err)
 	}
@@ -225,7 +245,7 @@ func (c *Client) RemoveMessage(ctx context.Context, queueName, messageID string)
 		return fmt.Errorf("removeMessage marshal: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("removeMessage request: %w", err)
 	}
@@ -273,7 +293,7 @@ func (c *Client) MoveMessage(ctx context.Context, sourceQueue, messageID, target
 		return fmt.Errorf("moveMessage marshal: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("moveMessage request: %w", err)
 	}
@@ -322,7 +342,7 @@ func (c *Client) MoveAllMessages(ctx context.Context, sourceQueue, targetQueue s
 		return 0, fmt.Errorf("moveAllMessages marshal: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("moveAllMessages request: %w", err)
 	}
@@ -379,7 +399,7 @@ func (c *Client) SendMessage(ctx context.Context, queueName string, sendReq queu
 	if err != nil {
 		return fmt.Errorf("sendTextMessage marshal: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(sendCtx(ctx), http.MethodPost, c.cfg.URL, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("sendTextMessage request: %w", err)
 	}
@@ -436,4 +456,13 @@ func sendMessageHeaders(req queue.SendMessageRequest) map[string]string {
 		headers["JMSXGroupID"] = req.GroupID
 	}
 	return headers
+}
+
+// sendCtx is the context for a request that changes the broker, or is a
+// step of an operation that does. It ignores cancellation, so a stop (Esc
+// in the progress modal, spec-wip fe-progress-modal) never abandons a
+// request that may already have been applied, losing its result; callers
+// check ctx between requests instead.
+func sendCtx(ctx context.Context) context.Context {
+	return context.WithoutCancel(ctx)
 }

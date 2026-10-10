@@ -35,30 +35,39 @@ func filterMessages(msgs []queue.Message, filter queue.MessageFilter) []queue.Me
 }
 
 // DeleteMessages implements queue.Backend: browses queueName filtered by
-// filter, and removes each match via RemoveMessage.
+// filter, and removes each match via RemoveMessage. It stops before the
+// next removal once ctx is cancelled; on a stop or error the count so far
+// comes back alongside the error.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	matches, _, err := c.BrowseMessages(ctx, queueName, filter)
 	if err != nil {
 		return 0, fmt.Errorf("delete messages from %q: %w", queueName, err)
 	}
-	for _, m := range matches {
+	for i, m := range matches {
+		if err := ctx.Err(); err != nil {
+			return i, fmt.Errorf("delete messages from %q: %w", queueName, err)
+		}
 		if err := c.RemoveMessage(ctx, queueName, m.ID); err != nil {
-			return 0, fmt.Errorf("delete messages from %q: %w", queueName, err)
+			return i, fmt.Errorf("delete messages from %q: %w", queueName, err)
 		}
 	}
 	return len(matches), nil
 }
 
 // MoveMessages implements queue.Backend: browses sourceQueue filtered by
-// filter, and moves each match via MoveMessage.
+// filter, and moves each match via MoveMessage, stopping like
+// DeleteMessages.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	matches, _, err := c.BrowseMessages(ctx, sourceQueue, filter)
 	if err != nil {
 		return 0, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
 	}
-	for _, m := range matches {
+	for i, m := range matches {
+		if err := ctx.Err(); err != nil {
+			return i, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
+		}
 		if err := c.MoveMessage(ctx, sourceQueue, m.ID, targetQueue); err != nil {
-			return 0, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
+			return i, fmt.Errorf("move messages from %q to %q: %w", sourceQueue, targetQueue, err)
 		}
 	}
 	return len(matches), nil

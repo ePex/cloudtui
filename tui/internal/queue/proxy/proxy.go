@@ -471,12 +471,17 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 }
 
 // postJSON JSON-encodes body, POSTs it, and JSON-decodes the response into out.
+// Every POST changes the broker (reads are GETs), so it ignores ctx's
+// cancellation: a stop (Esc in the progress modal, spec-wip
+// fe-progress-modal) never abandons a request that may already have been
+// applied, losing its result. Bulk operations stop between requests
+// instead (inRounds).
 func (c *Client) postJSON(ctx context.Context, path string, body any, out any) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encoding request: %w", err)
 	}
-	return c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(encoded)), out)
+	return c.doRequest(context.WithoutCancel(ctx), http.MethodPost, path, strings.NewReader(string(encoded)), out)
 }
 
 // doRequest executes an HTTP request against the proxy.

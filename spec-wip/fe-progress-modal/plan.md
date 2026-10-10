@@ -130,6 +130,20 @@ they run to the end and report normally. Reads (`List`,
 `BrowseMessages`) keep using the caller's context unchanged, which is
 what makes Esc on a load immediate.
 
+As built:
+- Proxy: `postJSON` uses `context.WithoutCancel` (every POST is a
+  mutation; reads are GETs); `inRounds` already checked the context
+  between rounds.
+- Jolokia: every request inside a mutation, including purge's
+  `QueueSize` read, uses `sendCtx` (`context.WithoutCancel`). Purge
+  checks the context before each tier, because a failed tier otherwise
+  means "try the next one", and a stop must not lead to a purge by
+  another route. The browse-and-remove fallback and the filtered
+  `DeleteMessages` / `MoveMessages` loops check it before each message.
+- On a stop or an error, the Jolokia filtered loops now return the count
+  so far alongside the error (they returned 0), like the proxy backend
+  already did.
+
 ## 5. `:progress-demo` — `internal/app/promptcommands.go`
 
 Two table entries: `progress-demo` and `progress-demo spinner`. Both

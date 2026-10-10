@@ -3,6 +3,7 @@ package jolokia
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,5 +140,71 @@ func TestClientMoveMessages(t *testing.T) {
 	}
 	if len(movedArgs) != 1 || movedArgs[0][0] != "ID:1" || movedArgs[0][1] != "archive" {
 		t.Errorf("moved args = %v, want [[ID:1 archive]]", movedArgs)
+	}
+}
+
+// TestClientDeleteMessagesStopsBetweenRemovals: a stop during a removal
+// lets it finish, removes nothing more, and reports the count so far
+// (spec-wip fe-progress-modal).
+func TestClientDeleteMessagesStopsBetweenRemovals(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var removedIDs []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var op jolokiaOp
+		json.NewDecoder(r.Body).Decode(&op)
+		switch op.Operation {
+		case "browseMessages()":
+			json.NewEncoder(w).Encode(map[string]any{"status": 200, "value": []map[string]any{
+				{"messageId": "ID:1", "timestamp": int64(1721000000000), "text": "a"},
+				{"messageId": "ID:2", "timestamp": int64(1721000001000), "text": "b"},
+			}})
+		case "removeMessage(java.lang.String)":
+			removedIDs = append(removedIDs, op.Arguments[0])
+			cancel()
+			json.NewEncoder(w).Encode(map[string]any{"status": 200, "value": true})
+		}
+	}))
+	defer srv.Close()
+
+	n, err := newTestClient(srv.URL).DeleteMessages(ctx, "orders", queue.MessageFilter{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("DeleteMessages() error = %v, want context.Canceled", err)
+	}
+	if n != 1 || len(removedIDs) != 1 {
+		t.Errorf("DeleteMessages() = %d, removed %v; want 1 after removing ID:1 only", n, removedIDs)
+	}
+}
+
+// TestClientMoveMessagesReportsTheCountSoFarOnError: a failing move
+// reports the moves before it instead of 0.
+func TestClientMoveMessagesReportsTheCountSoFarOnError(t *testing.T) {
+	moves := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var op jolokiaOp
+		json.NewDecoder(r.Body).Decode(&op)
+		switch op.Operation {
+		case "browseMessages()":
+			json.NewEncoder(w).Encode(map[string]any{"status": 200, "value": []map[string]any{
+				{"messageId": "ID:1", "timestamp": int64(1721000000000), "text": "a"},
+				{"messageId": "ID:2", "timestamp": int64(1721000001000), "text": "b"},
+			}})
+		case "moveMessageTo(java.lang.String,java.lang.String)":
+			moves++
+			if moves == 2 {
+				json.NewEncoder(w).Encode(map[string]any{"status": 500, "error": "broken"})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"status": 200, "value": true})
+		}
+	}))
+	defer srv.Close()
+
+	n, err := newTestClient(srv.URL).MoveMessages(context.Background(), "orders", "archive", queue.MessageFilter{})
+	if err == nil {
+		t.Fatal("MoveMessages() error = nil, want the failed second move")
+	}
+	if n != 1 {
+		t.Errorf("MoveMessages() = %d, want 1 (moved before the failure)", n)
 	}
 }
