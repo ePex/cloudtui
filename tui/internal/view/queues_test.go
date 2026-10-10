@@ -32,6 +32,8 @@ type fakeQueueBackend struct {
 	// inject errors, without disturbing every other test's plain
 	// f.summaries default.
 	listFn func(ctx context.Context) ([]queue.Summary, error)
+	// browseFn overrides BrowseMessages when set (the export tests).
+	browseFn func(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error)
 }
 
 func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
@@ -41,7 +43,10 @@ func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
 	return f.summaries, nil
 }
 
-func (f *fakeQueueBackend) BrowseMessages(_ context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, bool, error) {
+func (f *fakeQueueBackend) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
+	if f.browseFn != nil {
+		return f.browseFn(ctx, queueName, filter)
+	}
 	return nil, false, nil
 }
 
@@ -97,7 +102,7 @@ func newTestQueuesViewWithBackend(t *testing.T, b *fakeQueueBackend) (*fakeViewH
 	movePicker := dialog.NewMovePicker(host)
 	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
-	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
+	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, dialog.NewTextPrompt(host), func(string) {})
 }
 
 func TestQueuesViewHeaderLabels(t *testing.T) {
@@ -625,7 +630,7 @@ func newTestQueuesViewWithDrawSignal(t *testing.T, b *fakeQueueBackend, bufSize 
 	movePicker := dialog.NewMovePicker(host)
 	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	jmsTypePrompt := dialog.NewJMSTypePrompt(host)
-	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, func(string) {})
+	return host, NewQueuesView(host, b, confirm, movePicker, sendMessage, jmsTypePrompt, dialog.NewTextPrompt(host), func(string) {})
 }
 
 func TestQueuesViewShowReauthWaitingThenDone(t *testing.T) {

@@ -48,13 +48,16 @@ Default file name: `<queue>-<UTC timestamp>.ndjson`, e.g.
   `<Downloads>/<default file name>` (`~/Downloads` when it exists,
   otherwise the home directory; resolved per OS). Esc cancels. An
   existing file is never overwritten silently: a confirm dialog asks
-  `<path> exists. Overwrite?` (No is the default); No returns to the
-  path prompt to pick another name.
+  `Overwrite the existing file <name>?` (No is the default); No returns
+  to the path prompt to pick another name. (*Amended in task 3:* the
+  first wording, `<path> exists. Overwrite?`, put the question out of
+  sight behind a long path in the three-row confirm.)
 - **Result** in the status line: `Exported <n> message(s) to <path>`.
   When the export can't be complete, it says so in the same line —
-  `Exported 400 of 1,600 message(s) to <path> — the broker's browse
-  limit`, using the pending count / `hasMore` the way the message
-  browser's title does (spec/08). Errors (can't write, browse failed)
+  `Exported 400 of 1600 message(s) (the broker's browse limit) to
+  <path>`, using the pending count / `hasMore` the way the message
+  browser's title does (spec/08). The note comes before the path, which
+  can be long enough to run off the status line. (*Amended in task 3.*) Errors (can't write, browse failed)
   show in the status line; nothing half-written is left behind.
 - Works with both backends (Jolokia and proxy).
 

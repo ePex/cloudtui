@@ -38,7 +38,7 @@ with `jq`.
    temp-file cleanup, inferred JMS type kept. `go test -race ./...`
    clean.
 
-3. [ ] **TUI export flow, `e` in the queue list** (plan §3). Shared
+3. [x] **TUI export flow, `e` in the queue list** (plan §3). Shared
    `exportFlow` (path prompt → overwrite confirm → collect → write →
    status line), wired into `QueuesView` with a fresh browse capped at
    `MaxMessages` plus the pending count. Tests as in plan §3 for the
@@ -49,6 +49,26 @@ with `jq`.
    1,600-message queue → `… 400 of 1,600, the broker's browse limit`;
    `e` again with the same path → overwrite confirm: No reopens the
    prompt, Yes overwrites.
+   *Done 2026-10-10.* The flow continues from the prompt's `onClose`
+   (after it handed focus back), not from `onSubmit`, so the overwrite
+   confirm keeps focus. Two wordings changed after seeing them live
+   (spec.md amended): the result line puts the "of <total>" note before
+   the path (a long path cut it off), and the confirm asks `Overwrite
+   the existing file <name>?` (a long path pushed the question out of
+   the three-row dialog; now covered by a rendering test).
+   `fakeQueueBackend` gained a `browseFn`. Mutations caught: no
+   overwrite check (the No test), path-first confirm wording. `go test
+   -race ./...` clean. Live, `mq-proxy`: 10-message queue → `Exported
+   10 message(s)`, file 10 valid lines, real `TypeA`, full bodies,
+   owner-only; 1,600-message queue → `Exported 400 of 1600 message(s)
+   (the broker's browse limit)`, 400 lines; overwrite confirm: No →
+   prompt reopens with the same path, Yes → file replaced. Jolokia: the
+   1,600 queue → same "400 of 1600" note (from the pending count —
+   Jolokia never reports `hasMore`); 10-message queue → 10 lines, with
+   the JMS headers Jolokia provides (delivery mode, destination,
+   priority, …). Over Jolokia the queue list also shows the broker's
+   `ActiveMQ.Statistics.Destination.*` queues (mq-proxy hides them);
+   exporting one gives 0 messages, correctly.
 
 4. [ ] **TUI: `e` in the message list** (plan §3). Marked messages, or
    else the shown ones; `MessagesView` keeps the last load's `hasMore`/
