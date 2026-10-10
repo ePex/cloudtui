@@ -2,7 +2,6 @@ package view
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,8 +81,10 @@ func NewMessageDetailView(a ui.MessageDetailHost, movePicker *dialog.MovePicker,
 			srcQueue := dv.queueName
 			msgID := dv.msg.ID
 			dv.movePicker.Show(srcQueue, func(target string) {
-				err := dv.host.Backend().MoveMessage(context.Background(), srcQueue, msgID, target)
+				op := dv.host.StartOperation(fmt.Sprintf("Moving message from %q to %q", srcQueue, target), 0, ui.OpStoppable)
+				err := dv.host.Backend().MoveMessage(op.Ctx(), srcQueue, msgID, target)
 				dv.host.QueueUpdateDraw(func() {
+					op.Finish()
 					if err != nil {
 						slog.Error("move: failed", "src", srcQueue, "dst", target, "id", msgID, "error", err)
 						dv.host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))
@@ -106,9 +107,11 @@ func NewMessageDetailView(a ui.MessageDetailHost, movePicker *dialog.MovePicker,
 			queueName := dv.queueName
 			msgID := dv.msg.ID
 			dv.confirm.Show(fmt.Sprintf("Delete message from %q?", queueName), func() {
+				op := dv.host.StartOperation(fmt.Sprintf("Deleting message from %q", queueName), 0, ui.OpStoppable)
 				go func() {
-					err := dv.host.Backend().RemoveMessage(context.Background(), queueName, msgID)
+					err := dv.host.Backend().RemoveMessage(op.Ctx(), queueName, msgID)
 					dv.host.QueueUpdateDraw(func() {
+						op.Finish()
 						if err != nil {
 							slog.Error("message detail: remove failed", "queue", queueName, "id", msgID, "error", err)
 							dv.host.SetStatus(fmt.Sprintf("[red]Error: %s[-]", err))

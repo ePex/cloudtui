@@ -69,7 +69,20 @@ func (h *testHost) SetFocus(p tview.Primitive) { h.focused = p }
 func (h *testHost) FocusMain()                 { h.focusMainCalls++ }
 func (h *testHost) QueueUpdateDraw(f func())   { f() }
 
-func (h *testHost) SetStatus(text string)      { h.status = text }
+func (h *testHost) SetStatus(text string) { h.status = text }
+
+// StartOperation returns an operation that never stops; no overlay in
+// this package starts one.
+func (h *testHost) StartOperation(string, int, ui.OpKind) ui.Operation { return noopOperation{} }
+
+// noopOperation is a ui.Operation that records nothing.
+type noopOperation struct{}
+
+func (noopOperation) Ctx() context.Context     { return context.Background() }
+func (noopOperation) Stopped() bool            { return false }
+func (noopOperation) Step(int, int)            {}
+func (noopOperation) SetDetail(string)         {}
+func (noopOperation) Finish()                  {}
 func (h *testHost) SetContextHint(text string) { h.contextHint = text }
 
 func (h *testHost) Config() config.Config        { return h.cfg }

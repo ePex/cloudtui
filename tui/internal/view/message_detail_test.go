@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/snippet"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 func newTestMessageDetailView(t *testing.T) (*fakeViewHost, *dialog.MovePicker, *dialog.ConfirmDialog, *MessageDetailView) {
@@ -336,5 +338,34 @@ func TestMessageDetailViewRestoreFocus(t *testing.T) {
 		if !strings.Contains(host.contextHint, key) {
 			t.Errorf("context hint %q is missing %s", host.contextHint, key)
 		}
+	}
+}
+
+func TestMessageDetailViewDeleteRunsAnOperation(t *testing.T) {
+	base := newFakeViewHost()
+	removed := make(chan string, 1)
+	base.backend = &fakeQueueBackend{removeMessageFn: func(_ context.Context, _, id string) error {
+		removed <- id
+		return nil
+	}}
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, 1)}
+	confirm := dialog.NewConfirmDialog(host)
+	dv := NewMessageDetailView(host, dialog.NewMovePicker(host), confirm,
+		dialog.NewSnippetSaveDialog(host, snippet.NewStore(t.TempDir()), confirm), func() {}, func() {})
+	dv.Render("orders", queue.Message{ID: "ID:1", Timestamp: time.Now()})
+
+	dv.textView.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone))
+	confirmYes(confirm)
+	<-host.drawn
+
+	op := host.lastOperation()
+	if op == nil || op.title != `Deleting message from "orders"` || op.kind != ui.OpStoppable {
+		t.Fatalf("operation = %+v, want the single delete, stoppable", op)
+	}
+	if !op.isFinished() {
+		t.Error("delete operation not finished")
+	}
+	if id := <-removed; id != "ID:1" {
+		t.Errorf("removed %q, want ID:1", id)
 	}
 }

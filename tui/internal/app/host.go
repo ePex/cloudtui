@@ -25,6 +25,10 @@ func (a *App) QueueUpdateDraw(f func())   { a.tv.QueueUpdateDraw(f) }
 func (a *App) SetStatus(text string)      { a.statusBar.SetText(text) }
 func (a *App) SetContextHint(text string) { a.contextPanel.SetText(text) }
 
+func (a *App) StartOperation(title string, total int, kind ui.OpKind) ui.Operation {
+	return a.ops.start(title, total, kind, false)
+}
+
 func (a *App) Config() config.Config { return a.cfg }
 
 func (a *App) SwitchTheme(name string)      { a.switchTheme(name) }

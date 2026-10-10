@@ -3,9 +3,11 @@ package jolokia
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/queue"
@@ -326,5 +328,176 @@ func TestPurgeQueueBrowseAndRemoveReportsPartialCountOnError(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("PurgeQueue() = %d, want 2 (removed before the failure)", n)
+	}
+}
+
+// heldPurgeServer is purgeServer with one operation held: the request for
+// hold signals arrived, then waits for release before it's answered.
+func heldPurgeServer(t *testing.T, responses map[string]any, hold string) (srv *httptest.Server, calls func() []string, arrived, release chan struct{}) {
+	t.Helper()
+	arrived, release = make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	var got []string
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Type      string `json:"type"`
+			Operation string `json:"operation"`
+			Attribute string `json:"attribute"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		key := req.Operation
+		if req.Type == "read" {
+			key = "read:" + req.Attribute
+		}
+		mu.Lock()
+		got = append(got, key)
+		mu.Unlock()
+		if key == hold {
+			close(arrived)
+			<-release
+		}
+		resp, ok := responses[key]
+		if !ok {
+			resp = map[string]any{"status": 500, "error": "No operation " + key + " found"}
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	t.Cleanup(srv.Close)
+	calls = func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+	return srv, calls, arrived, release
+}
+
+// purgeResult is what PurgeQueue returned, sent from a goroutine.
+type purgeResult struct {
+	n   int
+	err error
+}
+
+// TestPurgeQueueStopDuringTheSizeReadPurgesNothing: a stop while the
+// QueueSize read is in flight lets the read finish, then purges nothing
+// (spec/24).
+func TestPurgeQueueStopDuringTheSizeReadPurgesNothing(t *testing.T) {
+	srv, calls, arrived, release := heldPurgeServer(t, map[string]any{
+		"read:QueueSize": ok(float64(7)),
+		"purgeQueue()":   ok(nil),
+		"removeMatchingMessages(java.lang.String)": ok(float64(7)),
+	}, "read:QueueSize")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan purgeResult)
+	go func() {
+		n, err := newTestClient(srv.URL).PurgeQueue(ctx, "myQueue")
+		done <- purgeResult{n, err}
+	}()
+	<-arrived
+	cancel()
+	close(release)
+	got := <-done
+
+	if !errors.Is(got.err, context.Canceled) || got.n != 0 {
+		t.Fatalf("PurgeQueue() = %d, %v; want 0, context.Canceled", got.n, got.err)
+	}
+	for _, op := range calls() {
+		if op != "read:QueueSize" {
+			t.Errorf("calls = %v, want nothing after the read", calls())
+			break
+		}
+	}
+}
+
+// TestPurgeQueueDirectOperationFinishesDespiteAStop: a purgeQueue() that's
+// been sent finishes and reports its count.
+func TestPurgeQueueDirectOperationFinishesDespiteAStop(t *testing.T) {
+	srv, _, arrived, release := heldPurgeServer(t, map[string]any{
+		"read:QueueSize": ok(float64(7)),
+		"purgeQueue()":   ok(nil),
+	}, "purgeQueue()")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan purgeResult)
+	go func() {
+		n, err := newTestClient(srv.URL).PurgeQueue(ctx, "myQueue")
+		done <- purgeResult{n, err}
+	}()
+	<-arrived
+	cancel()
+	close(release)
+	if got := <-done; got.err != nil || got.n != 7 {
+		t.Errorf("PurgeQueue() = %d, %v; want 7, nil (the sent purge finishes)", got.n, got.err)
+	}
+}
+
+// TestPurgeQueueBrowseAndRemoveStopsBetweenRemovals: the last-resort
+// browse-and-remove stops before the next message once stopped, and
+// reports how many it removed.
+func TestPurgeQueueBrowseAndRemoveStopsBetweenRemovals(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	removes := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Operation string `json:"operation"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		switch req.Operation {
+		case "browseMessages()":
+			json.NewEncoder(w).Encode(ok([]map[string]any{
+				{"messageId": "ID:1", "timestamp": int64(1721000000000), "text": "a"},
+				{"messageId": "ID:2", "timestamp": int64(1721000000000), "text": "b"},
+				{"messageId": "ID:3", "timestamp": int64(1721000000000), "text": "c"},
+			}))
+		case "removeMessage(java.lang.String)":
+			removes++
+			cancel() // the stop arrives while the first removal is in flight
+			json.NewEncoder(w).Encode(ok(true))
+		default:
+			json.NewEncoder(w).Encode(map[string]any{"status": 500, "error": "no"})
+		}
+	}))
+	defer srv.Close()
+
+	n, err := newTestClient(srv.URL).PurgeQueue(ctx, "myQueue")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PurgeQueue() error = %v, want context.Canceled", err)
+	}
+	if n != 1 || removes != 1 {
+		t.Errorf("PurgeQueue() = %d after %d removal(s), want 1 after 1", n, removes)
+	}
+}
+
+// TestPurgeQueueStopDuringAFailingTierTriesNoOther: a stop while
+// purgeQueue() is in flight, which then fails, doesn't go on to the next
+// purge route.
+func TestPurgeQueueStopDuringAFailingTierTriesNoOther(t *testing.T) {
+	srv, calls, arrived, release := heldPurgeServer(t, map[string]any{
+		"read:QueueSize": ok(float64(7)),
+		"removeMatchingMessages(java.lang.String)": ok(float64(7)),
+	}, "purgeQueue()") // not in responses: it fails
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan purgeResult)
+	go func() {
+		n, err := newTestClient(srv.URL).PurgeQueue(ctx, "myQueue")
+		done <- purgeResult{n, err}
+	}()
+	<-arrived
+	cancel()
+	close(release)
+	got := <-done
+
+	if !errors.Is(got.err, context.Canceled) || got.n != 0 {
+		t.Fatalf("PurgeQueue() = %d, %v; want 0, context.Canceled", got.n, got.err)
+	}
+	if slices.Contains(calls(), "removeMatchingMessages(java.lang.String)") {
+		t.Errorf("calls = %v, want no fallback after the stop", calls())
 	}
 }

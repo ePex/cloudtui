@@ -92,6 +92,30 @@ wait_for() {
   return 1
 }
 
+# wait_settled waits until no blocking operation runs. The app swallows
+# keys from the moment an operation starts — before its progress modal
+# appears at 250 ms — so text being on screen isn't enough before the
+# next key. Two identical captures 0.6 s apart without the modal footer
+# mean none runs: a visible modal animates every 100 ms, and any
+# operation still running after 250 ms shows it.
+wait_settled() {
+  local timeout="${1:-10}" tries prev out
+  tries=$((timeout * 5 / 3))
+  prev="$(cap)"
+  for ((i = 0; i < tries; i++)); do
+    sleep 0.6
+    out="$(cap)"
+    if [[ "$out" == "$prev" && "$out" != *"Esc to cancel"* && "$out" != *"Stopping after"* ]]; then
+      return 0
+    fi
+    prev="$out"
+  done
+  log "FAIL: timed out after ${timeout}s waiting for operations to finish"
+  echo "--- last screen ---" >&2
+  cap >&2
+  return 1
+}
+
 # filter_queues sets the queues-list filter to needle. '/' on that view
 # restores whatever filter text was last applied (queues.go:
 # filterInput.SetText(qv.filter)) rather than starting empty, so clear it
@@ -141,6 +165,7 @@ send 'h'
 sleep 0.2
 send 'Enter'
 wait_for "Queues" 5 >/dev/null
+wait_settled
 
 log "confirming $SRC_QUEUE is listed and empty..."
 filter_queues "$SRC_QUEUE"
@@ -149,12 +174,13 @@ out="$(wait_for "$SRC_QUEUE" 5)"
 log "seeding 3 messages into $SRC_QUEUE..."
 go run ./cmd/seedqueue "$SRC_QUEUE" 3 >/dev/null
 send 'r'
-sleep 0.5
+wait_settled
 out="$(wait_for "$SRC_QUEUE" 5)"
 [[ "$out" == *"3"* ]] || { log "FAIL: expected a pending count of 3 for $SRC_QUEUE"; echo "$out" >&2; exit 1; }
 
 log "browsing messages..."
 send 'Enter'
+wait_settled
 wait_for "order." 5 >/dev/null # sample seedqueue bodies contain "order.<event>"
 
 log "marking all and deleting..."
@@ -166,10 +192,12 @@ send 'Down'
 sleep 0.1
 send 'Enter'
 wait_for "Deleted 3 message(s)" 5 >/dev/null
+wait_settled
 
 log "seeding 2 more messages for the move test..."
 go run ./cmd/seedqueue "$SRC_QUEUE" 2 >/dev/null
 send 'r'
+wait_settled
 wait_for "order." 5 >/dev/null
 
 log "marking all and moving to $DST_QUEUE..."
@@ -185,10 +213,11 @@ send 'Enter'
 sleep 0.2
 send 'Enter'
 wait_for "Moved 2 message(s)" 5 >/dev/null
+wait_settled
 
 log "verifying $DST_QUEUE actually received them..."
 send 'Escape'
-sleep 0.2
+wait_settled
 filter_queues "$DST_QUEUE"
 out="$(wait_for "$DST_QUEUE" 5)"
 [[ "$out" == *"2"* ]] || { log "FAIL: expected a pending count of 2 for $DST_QUEUE"; echo "$out" >&2; exit 1; }
@@ -203,9 +232,11 @@ sleep 0.3
 for ((i = 0; i < EXISTING_CONN_COUNT; i++)); do send 'Down'; sleep 0.05; done
 send 'Enter'
 wait_for "AMQ Connection: $CONN_NAME" 5 >/dev/null
+wait_settled
 
 log "confirming the proxy backend sees the same broker state ($DST_QUEUE)..."
 send 'r'
+wait_settled
 wait_for "$DST_QUEUE" 8 >/dev/null
 
 send 'q'

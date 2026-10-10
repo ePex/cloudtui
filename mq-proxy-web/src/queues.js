@@ -1,9 +1,10 @@
 import { $, showError, clearError, escapeHtml, makeButton, showView } from './dom.js';
-import { apiCall, buildBulkFilter } from './api.js';
+import { apiCall, buildBulkFilter, isAbortError } from './api.js';
 import { state } from './state.js';
 import { openMessages } from './messages.js';
 import { openMovePicker } from './movepicker.js';
 import { jmsTypePrompt, confirmDialog, openSendModal } from './dialogs.js';
+import { startOperation } from './progress.js';
 
 // Client-side only — list-queues (spec/11) has no server-side filter
 // param, so this narrows the already-fetched list. Case-insensitive
@@ -25,17 +26,27 @@ export function sortQueues(queues, column, direction) {
   });
 }
 
+// Runs under the progress overlay; Esc cancels the request and puts the
+// last-loaded list back, saying how to retry.
 export function loadQueues() {
   clearError($('queuesError'));
+  $('queuesInfo').hidden = true;
   var tbody = $('queuesTable').querySelector('tbody');
   tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
-  return apiCall(state.conn, 'list-queues').then(function (queues) {
+  var op = startOperation({ title: 'Loading queues', abortable: true });
+  return apiCall(state.conn, 'list-queues', { signal: op.signal }).then(function (queues) {
     state.queues = queues || [];
     applyQueueView();
   }, function (err) {
+    if (isAbortError(err)) {
+      applyQueueView();
+      $('queuesInfo').textContent = 'Loading cancelled — press Refresh to retry';
+      $('queuesInfo').hidden = false;
+      return;
+    }
     tbody.innerHTML = '';
     showError($('queuesError'), err);
-  });
+  }).finally(op.finish);
 }
 
 // Applies the current filter text + sort column/direction to
@@ -85,6 +96,19 @@ function renderQueues(queues) {
   });
 }
 
+// purgeTitle and moveAllTitle are the progress overlay's titles, worded
+// like the TUI's.
+export function purgeTitle(queueName, jmsType) {
+  return jmsType ? 'Purging ' + jmsType + ' messages from "' + queueName + '"' : 'Purging "' + queueName + '"';
+}
+
+export function moveAllTitle(queueName, target, jmsType) {
+  var what = jmsType ? jmsType + ' messages' : 'all messages';
+  return 'Moving ' + what + ' from "' + queueName + '" to "' + target + '"';
+}
+
+// Purge and move all are one request each, under the progress overlay:
+// one that's sent can't be taken back, so Esc only says it's stopping.
 export function purgeQueue(queueName) {
   jmsTypePrompt('Purge "' + queueName + '" — JMS Type (optional)', queueName).then(function (result) {
     if (result.cancelled) return;
@@ -94,12 +118,13 @@ export function purgeQueue(queueName) {
       : 'Purge "' + queueName + '"? All messages will be deleted.';
     confirmDialog(question).then(function (confirmed) {
       if (!confirmed) return;
+      var op = startOperation({ title: purgeTitle(queueName, result.jmsType) });
       apiCall(state.conn, 'delete-messages', {
         method: 'POST',
         body: [{ sourceQueue: queueName, filter: filter }],
       }).then(loadQueues, function (err) {
         showError($('queuesError'), err);
-      });
+      }).finally(op.finish);
     });
   });
 }
@@ -109,10 +134,11 @@ export function moveAllMessages(queueName) {
     if (result.cancelled) return;
     var filter = buildBulkFilter(result.jmsType);
     openMovePicker(queueName, function (target) {
+      var op = startOperation({ title: moveAllTitle(queueName, target, result.jmsType) });
       return apiCall(state.conn, 'move-messages', {
         method: 'POST',
         body: [{ sourceQueue: queueName, targetQueue: target, filter: filter }],
-      }).then(loadQueues);
+      }).then(loadQueues).finally(op.finish);
     }, $('queuesError'));
   });
 }

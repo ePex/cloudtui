@@ -15,7 +15,12 @@ opened by pressing Enter on a queue row.
 
 1. User moves the cursor to a queue row in the Queues view and presses
    **Enter** — the Messages view opens, titled with the queue name, and
-   loads messages asynchronously.
+   loads messages asynchronously. The load (and every reload) runs as an
+   abortable operation in the progress modal (spec/24): after 250 ms a
+   spinner `Loading messages from "<queue>"…` blocks the keys; Esc
+   cancels the request, the list drops its messages and marks (they may
+   be another queue's), and the table shows `Loading cancelled — press r
+   to retry`.
 2. Table columns: a narrow **mark** column (blank, or `✓` when marked),
    **ID**, **Type**, **Corr.ID**, **Timestamp**, **Preview** (first
    2000 chars of the body — plenty for the vast majority of messages;
@@ -91,11 +96,16 @@ Delete (`d`) and move (`m`) act on the marked set when one exists, and fall
 back to the single message under the cursor when nothing is marked (so
 `d`/`m` double as a single-item shortcut without requiring an explicit mark
 first) — see spec/09 for the actions themselves. Only a genuinely
-empty target (empty list, or a cursor row with no ID) is a no-op. Bulk
-delete/move run in a goroutine (unlike the single-item path, which calls the
-backend synchronously) so a large batch doesn't visibly freeze the UI, and
-tolerate partial failure — one bad message doesn't abort the rest of the
-batch; the status bar reports how many of the batch actually succeeded.
+empty target (empty list, or a cursor row with no ID) is a no-op. Both
+run in a goroutine as stoppable operations in the progress modal
+(spec/24): a marked set as a counted rainbow bar (`3 of 10`, one request
+per message), the cursor row with the spinner. They tolerate partial
+failure — one bad message doesn't abort the rest of the batch. Esc
+stops before the next message. The status bar reports the outcome:
+`Deleted 10 message(s)` (`Deleted message` for one), `Deleted 9/10
+message(s); 1 failed`, `Deleted 3 of 10 message(s); cancelled` (plus
+`; 1 failed` before `; cancelled` when some failed); moves say `Moved …
+to "<queue>"`.
 
 Export (`e`) likewise uses the marked set when one exists, but falls
 back to every message currently shown rather than the cursor row — see

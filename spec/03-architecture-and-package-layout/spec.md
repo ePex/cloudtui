@@ -56,6 +56,9 @@ type Host interface {
     // Status / context feedback
     SetStatus(text string)
     SetContextHint(text string)
+    // Blocking progress modal (spec/24): one operation at a time;
+    // starting another replaces it.
+    StartOperation(title string, total int, kind OpKind) Operation
 
     // Config / theme
     Config() config.Config
@@ -78,6 +81,8 @@ type Host interface {
     FocusMessages()
 }
 ```
+
+`OpKind` (`OpAbortable` / `OpStoppable`) and `Operation` live in `internal/ui/operation.go`; `*App` implements `StartOperation` in `internal/app/operation.go` (the `opRunner`), the modal itself is `dialog.ProgressModal` (`internal/dialog/progress.go`), and the `:progress-demo` fake operation is `internal/app/demo.go`.
 
 `*App` implements this in `internal/app/host.go`. Config-mutating logic (e.g. `SaveConnection`, `DeleteConnection`, `SetActiveAWSProfile`) lives on `*App` itself, not inline in the dialog's `save`/`delete`/`activate` methods — the dialogs call these named, task-shaped `Host` methods rather than mutating `a.cfg` fields directly, which is what makes them portable to a separate package in the first place.
 

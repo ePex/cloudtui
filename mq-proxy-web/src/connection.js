@@ -35,6 +35,9 @@ export function tryConnect(conn) {
   clearError($('connectError'));
   return apiCall(conn, 'list-queues').then(function () {
     state.conn = conn;
+    // Another connection's queues must not come back if this first load
+    // is cancelled (loadQueues puts the last-loaded list back).
+    state.queues = [];
     storeConnection(conn);
     $('connLabel').textContent = conn.baseUrl + ' (' + conn.username + ')';
     showView('queuesView');

@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -24,6 +25,10 @@ var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUE
 // ShowReauthDone reverts to, so both stay in sync.
 const loadingQueuesStatus = "Loading queues…"
 
+// loadCancelledStatus replaces a list's rows when the user cancels its
+// load with Esc in the progress modal (spec/24).
+const loadCancelledStatus = "Loading cancelled — press r to retry"
+
 type QueuesView struct {
 	table         *tview.Table
 	filterInput   *tview.InputField
@@ -41,6 +46,7 @@ type QueuesView struct {
 	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
 	sortAsc       bool            // true = ascending
 	loadSeq       int             // incremented per Load() call; guards against a stale response landing after a newer one
+	loadOp        ui.Operation    // the running Load()'s progress-modal operation, for the AWS SSO text
 }
 
 var _ ui.View = (*QueuesView)(nil)
@@ -213,25 +219,49 @@ func (qv *QueuesView) restoreShortcuts() {
 }
 
 // pickMoveAllTarget shows the move-picker for srcQueue, and on target
-// selection performs the move via doMoveAll.
+// selection performs the move via runMoveAll.
 func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 	qv.movePicker.Show(srcQueue, func(target string) {
-		ctx := context.Background()
-		count, err := qv.doMoveAll(ctx, srcQueue, target, jmsType)
-		var warning string
-		if err == nil {
-			warning = filteredRemainderWarning(ctx, qv.backend, srcQueue, jmsType)
-		}
-		qv.host.QueueUpdateDraw(func() {
-			if err != nil {
-				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
-				qv.showError(err)
-				return
-			}
-			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
-			qv.Load()
-		})
+		qv.runMoveAll(srcQueue, target, jmsType)
 	}, qv.restoreShortcuts)
+}
+
+// runMoveAll moves srcQueue's messages (or only jmsType's) to target via
+// doMoveAll, as a stoppable operation in the progress modal (spec/24),
+// and reports the result. It blocks on the backend,
+// so it must run off the UI goroutine (the move picker calls onSelect in
+// a goroutine of its own).
+func (qv *QueuesView) runMoveAll(srcQueue, target, jmsType string) {
+	op := qv.host.StartOperation(moveAllTitle(srcQueue, target, jmsType), 0, ui.OpStoppable)
+	count, err := qv.doMoveAll(op.Ctx(), srcQueue, target, jmsType)
+	err = unlessQueueEmptied(qv.backend, srcQueue, jmsType, err)
+	var warning string
+	if err == nil {
+		warning = filteredRemainderWarning(context.Background(), qv.backend, srcQueue, jmsType)
+	}
+	qv.host.QueueUpdateDraw(func() {
+		op.Finish()
+		if errors.Is(err, context.Canceled) {
+			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + cancelledSuffix)
+			qv.Load()
+			return
+		}
+		if err != nil {
+			slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
+			qv.showError(err)
+			return
+		}
+		qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
+		qv.Load()
+	})
+}
+
+// moveAllTitle is the progress modal's title for a move-all.
+func moveAllTitle(srcQueue, target, jmsType string) string {
+	if jmsType == "" {
+		return fmt.Sprintf("Moving all messages from %q to %q", srcQueue, target)
+	}
+	return fmt.Sprintf("Moving %s messages from %q to %q", jmsType, srcQueue, target)
 }
 
 // doMoveAll dispatches to the backend call matching jmsType:
@@ -283,16 +313,26 @@ func (qv *QueuesView) setHeader() {
 // connection's queues with no indication a fetch is even in progress).
 // loadSeq guards against a slow, superseded response clobbering a newer
 // one if Load() is called again (another connection switch, or `r`)
-// before the first call resolves.
+// before the first call resolves. The load runs as an abortable
+// operation in the progress modal: Esc cancels the request and leaves
+// loadCancelledStatus in the table.
 func (qv *QueuesView) Load() {
 	qv.loadSeq++
 	seq := qv.loadSeq
 	qv.showStatus(loadingQueuesStatus)
+	op := qv.host.StartOperation("Loading queues", 0, ui.OpAbortable)
+	qv.loadOp = op
 	go func() {
-		summaries, err := qv.backend.List(context.Background())
+		summaries, err := qv.backend.List(op.Ctx())
 		qv.host.QueueUpdateDraw(func() {
+			op.Finish()
 			if seq != qv.loadSeq {
 				return // superseded by a newer Load()
+			}
+			qv.loadOp = nil
+			if op.Stopped() {
+				qv.showStatus(loadCancelledStatus)
+				return
 			}
 			if err != nil {
 				slog.Error("queues: failed to list queues", "error", err)
@@ -452,10 +492,20 @@ func (qv *QueuesView) showStatus(msg string) {
 // reflects that instead of sitting on a generic "Loading queues…" for
 // the whole wait — then reverts once login completes, right before the
 // fetch itself retries.
+//
+// The progress modal covers the table during a load, so the same text
+// also goes to the modal's detail line — it carries the device code the
+// user needs.
 func (qv *QueuesView) ShowReauthWaiting(msg string) {
 	qv.showStatus(msg)
+	if qv.loadOp != nil {
+		qv.loadOp.SetDetail(msg)
+	}
 }
 
 func (qv *QueuesView) ShowReauthDone() {
 	qv.showStatus(loadingQueuesStatus)
+	if qv.loadOp != nil {
+		qv.loadOp.SetDetail("")
+	}
 }

@@ -77,6 +77,7 @@ mq-proxy-web/
     messages.js     # message list/detail: pagination, bulk actions
     movepicker.js   # move-target picker, DLQ-tier ordering
     dialogs.js      # JMS Type prompt, confirm dialog, send modal
+    progress.js     # blocking progress overlay, #progress-demo
     main.js         # entry point — wires every view's static controls
     *.test.js       # co-located tests, import directly from the module
                      # next to them

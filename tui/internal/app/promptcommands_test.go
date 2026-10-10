@@ -17,6 +17,7 @@ func TestPromptSuggestionsEmptyPrefixReturnsFullList(t *testing.T) {
 	want := []string{
 		"quit", "home", "settings", "log",
 		"aq", "connections", "ap", "awsprofiles",
+		"progress-demo", "progress-demo spinner",
 		"theme ",
 		"queues", "snippets", "ssm-parameters", "secrets-manager",
 		"cloudwatch-logs", "datadog-logs", "codepipeline",

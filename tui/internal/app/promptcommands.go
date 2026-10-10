@@ -26,6 +26,8 @@ func promptCommandTable() []promptCommand {
 		{names: []string{"l", "log"}, run: func(a *App) { a.SwitchTo("log") }},
 		{names: []string{"aq", "connections"}, run: func(a *App) { a.connManager.Show() }},
 		{names: []string{"ap", "awsprofiles"}, run: func(a *App) { a.awsProfiles.Show() }},
+		{names: []string{"progress-demo"}, run: func(a *App) { a.runProgressDemo(false) }},
+		{names: []string{"progress-demo spinner"}, run: func(a *App) { a.runProgressDemo(true) }},
 	}
 }
 

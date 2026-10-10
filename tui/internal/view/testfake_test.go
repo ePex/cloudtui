@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,6 +47,9 @@ var _ ui.MessagesHost = (*fakeViewHost)(nil)
 type fakeViewHost struct {
 	cfg     config.Config
 	backend queue.Backend
+
+	operations []*fakeOperation
+	opsMu      sync.Mutex
 
 	focused     tview.Primitive
 	shownPage   string
@@ -108,7 +112,117 @@ func (f *fakeViewHost) ListAWSProfiles(ctx context.Context) ([]awsprofile.Profil
 func (f *fakeViewHost) ToggleFavorite(kind config.FavoriteKind, profile, name string) {
 	f.cfg.AWSFavorites = f.cfg.AWSFavorites.Toggle(kind, profile, name)
 }
-func (f *fakeViewHost) ReloadAfterSend(queueName string)           {}
+func (f *fakeViewHost) ReloadAfterSend(queueName string) {}
+
+// StartOperation records the operation a view starts in f.operations;
+// tests read it back with lastOperation and press "Esc" with stop.
+func (f *fakeViewHost) StartOperation(title string, total int, kind ui.OpKind) ui.Operation {
+	ctx, cancel := context.WithCancel(context.Background())
+	op := &fakeOperation{title: title, total: total, kind: kind, ctx: ctx, cancel: cancel}
+	f.opsMu.Lock()
+	f.operations = append(f.operations, op)
+	f.opsMu.Unlock()
+	return op
+}
+
+// operationsSnapshot is a copy of every operation started so far.
+func (f *fakeViewHost) operationsSnapshot() []*fakeOperation {
+	f.opsMu.Lock()
+	defer f.opsMu.Unlock()
+	return append([]*fakeOperation(nil), f.operations...)
+}
+
+// stepsTaken is a copy of the steps the view reported.
+func (o *fakeOperation) stepsTaken() [][2]int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([][2]int(nil), o.steps...)
+}
+
+// confirmYes answers Yes in c, as the user would.
+func confirmYes(c *dialog.ConfirmDialog) {
+	prim := c.Primitive()
+	focus := func(p tview.Primitive) {}
+	var focusTree func(tview.Primitive)
+	focusTree = func(p tview.Primitive) { p.Focus(focusTree) }
+	focusTree(prim)
+	prim.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), focus)
+	prim.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), focus)
+}
+
+// lastOperation is the most recently started operation, or nil.
+func (f *fakeViewHost) lastOperation() *fakeOperation {
+	f.opsMu.Lock()
+	defer f.opsMu.Unlock()
+	if len(f.operations) == 0 {
+		return nil
+	}
+	return f.operations[len(f.operations)-1]
+}
+
+// fakeOperation is a ui.Operation that records what the view reports.
+type fakeOperation struct {
+	title string
+	total int
+	kind  ui.OpKind
+	ctx   context.Context
+
+	mu       sync.Mutex
+	cancel   context.CancelFunc
+	steps    [][2]int
+	detail   string
+	stopped  bool
+	finished bool
+}
+
+// stop is the user pressing Esc.
+func (o *fakeOperation) stop() {
+	o.mu.Lock()
+	o.stopped = true
+	o.mu.Unlock()
+	o.cancel()
+}
+
+// isFinished reports whether the view finished the operation.
+func (o *fakeOperation) isFinished() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.finished
+}
+
+// detailText is the operation's current detail line.
+func (o *fakeOperation) detailText() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.detail
+}
+
+func (o *fakeOperation) Ctx() context.Context { return o.ctx }
+
+func (o *fakeOperation) Stopped() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.stopped
+}
+
+func (o *fakeOperation) Step(done, failed int) {
+	o.mu.Lock()
+	o.steps = append(o.steps, [2]int{done, failed})
+	o.mu.Unlock()
+}
+
+func (o *fakeOperation) SetDetail(text string) {
+	o.mu.Lock()
+	o.detail = text
+	o.mu.Unlock()
+}
+
+func (o *fakeOperation) Finish() {
+	o.mu.Lock()
+	o.finished = true
+	o.mu.Unlock()
+	o.cancel()
+}
 func (f *fakeViewHost) MessagesFilter() queue.MessageFilter        { return queue.MessageFilter{} }
 func (f *fakeViewHost) ApplyMessagesFilter(fl queue.MessageFilter) {}
 func (f *fakeViewHost) FocusMessages()                             {}

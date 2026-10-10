@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -833,6 +834,92 @@ func TestInRoundsStopsWhenTheContextIsCancelledBetweenRounds(t *testing.T) {
 	}
 	if n != 2 || rounds != 1 {
 		t.Errorf("inRounds() = %d after %d rounds, want 2 after 1", n, rounds)
+	}
+}
+
+// heldRoundServer answers delete-messages with 400 message IDs, holding
+// the first request until release is closed; arrived is closed once that
+// first request is in.
+type heldRoundServer struct {
+	arrived, release chan struct{}
+	mu               sync.Mutex
+	requests         int
+}
+
+func newHeldRoundServer() *heldRoundServer {
+	return &heldRoundServer{arrived: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (s *heldRoundServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	s.requests++
+	first := s.requests == 1
+	round := s.requests
+	s.mu.Unlock()
+	if first {
+		close(s.arrived)
+		<-s.release
+	}
+	data := make([]map[string]string, 400)
+	for i := range data {
+		data[i] = map[string]string{"messageId": fmt.Sprintf("ID:%d-%d", round, i)}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
+}
+
+// TestPurgeQueueStopFinishesTheRoundInFlight: a stop while a round's
+// request is in flight lets that request finish and count, then starts no
+// further round (spec/24).
+func TestPurgeQueueStopFinishesTheRoundInFlight(t *testing.T) {
+	s := newHeldRoundServer()
+	c, stop := newTestClient(t, s)
+	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type result struct {
+		n   int
+		err error
+	}
+	done := make(chan result)
+	go func() {
+		n, err := c.PurgeQueue(ctx, "orders")
+		done <- result{n, err}
+	}()
+	<-s.arrived
+	cancel()
+	close(s.release)
+	got := <-done
+
+	if !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("PurgeQueue() error = %v, want context.Canceled", got.err)
+	}
+	if got.n != 400 {
+		t.Errorf("PurgeQueue() = %d, want 400 (the round in flight counts)", got.n)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.requests != 1 {
+		t.Errorf("requests = %d, want 1 (no round after the stop)", s.requests)
+	}
+}
+
+// TestRemoveMessageIgnoresAStopMidRequest: a single removal that's been
+// sent finishes even if the context is cancelled meanwhile.
+func TestRemoveMessageIgnoresAStopMidRequest(t *testing.T) {
+	s := newHeldRoundServer()
+	c, stop := newTestClient(t, s)
+	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error)
+	go func() { done <- c.RemoveMessage(ctx, "orders", "ID:1-0") }()
+	<-s.arrived
+	cancel()
+	close(s.release)
+	if err := <-done; err != nil {
+		t.Errorf("RemoveMessage() error = %v, want the sent request to finish", err)
 	}
 }
 

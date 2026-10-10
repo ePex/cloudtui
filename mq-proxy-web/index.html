@@ -214,6 +214,130 @@
   #movePickerList { list-style: none; margin: 0.5rem 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
   #movePickerList li { padding: 0.45rem 0.65rem; cursor: pointer; }
   #movePickerList li:hover { background: var(--panel-alt); }
+
+  /* Progress overlay (spec/24). It's unhidden as soon
+     as an operation starts, invisible but catching clicks; .shown (after
+     250 ms) fades the backdrop and box in. Animations only run while
+     it's shown, and only move transform/background-position. */
+  .progress-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: progress;
+  }
+  .progress-overlay .progress-box { visibility: hidden; max-width: 460px; }
+  .progress-overlay.shown { background: rgba(0, 0, 0, 0.35); }
+  .progress-overlay.shown .progress-box { visibility: visible; }
+  .progress-box h3 { margin: 0 0 1rem; font-size: 1rem; overflow-wrap: anywhere; }
+  /* The rainbow and cat colors are fixed, matching the TUI's bar; the box
+     around them follows the page's light/dark palette. */
+  .progress-track {
+    --p: 0;
+    position: relative;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: #00005f;
+    background-image:
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px),
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px);
+    background-size: 48px 18px, 32px 36px;
+    background-position: 0 4px, 16px 22px;
+  }
+  .progress-overlay.shown .progress-track { animation: progress-stars 2s linear infinite; }
+  @keyframes progress-stars {
+    to { background-position: -48px 4px, -16px 22px; }
+  }
+  /* Six bands with hard stops; it ends under the middle of the cat. */
+  .progress-rainbow {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: max(0px, calc(var(--p) * 100% - 30px));
+    background: linear-gradient(to bottom,
+      #ff0000 0 16.66%, #ff9900 16.66% 33.33%, #ffff00 33.33% 50%,
+      #33ff00 50% 66.66%, #0099ff 66.66% 83.33%, #6633ff 83.33% 100%);
+  }
+  /* 10x6 pixels at 6px each; the sprite holds both frames side by side. */
+  .progress-cat {
+    position: absolute;
+    top: 0;
+    left: max(0px, calc(var(--p) * 100% - 60px));
+    width: 60px;
+    height: 36px;
+    background-image: var(--cat-sprite);
+    background-size: 120px 36px;
+    image-rendering: pixelated;
+  }
+  .progress-overlay.shown .progress-cat { animation: progress-cat 0.4s steps(2) infinite; }
+  @keyframes progress-cat {
+    to { background-position: -120px 0; }
+  }
+  .progress-spinner { display: flex; justify-content: center; padding: 0.25rem 0; }
+  /* The orbiting cat (uncounted operations): a starry disc; inside it one
+     element spins, carrying the rainbow arc and the cat at its head. The
+     cat sits at 12 o'clock and the lap runs clockwise, so it runs nose
+     first with its feet toward the middle. The ring's centerline is at
+     radius 34px, six 3px bands, red outside like the bar's top band. */
+  .orbit {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background-color: #00005f;
+    background-image:
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px),
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px);
+    background-size: 32px 24px, 24px 32px;
+    background-position: 4px 6px, 16px 18px;
+  }
+  .progress-overlay.shown .orbit { animation: progress-orbit-stars 3s linear infinite; }
+  @keyframes progress-orbit-stars {
+    to { background-position: -28px 6px, -8px 18px; }
+  }
+  .orbit-spin { position: absolute; inset: 0; }
+  .progress-overlay.shown .orbit-spin { animation: progress-orbit 1.2s linear infinite; }
+  @keyframes progress-orbit {
+    to { transform: rotate(360deg); }
+  }
+  /* The trail: the six bands as rings, cut to the ~110° behind the cat
+     and fading out toward the tail; it ends under the cat's middle. */
+  .orbit-trail {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle,
+      transparent 0 25px, #6633ff 25px 28px, #0099ff 28px 31px, #33ff00 31px 34px,
+      #ffff00 34px 37px, #ff9900 37px 40px, #ff0000 40px 43px, transparent 43px);
+    -webkit-mask-image: conic-gradient(transparent 0 250deg, #000 355deg, transparent 355deg);
+    mask-image: conic-gradient(transparent 0 250deg, #000 355deg, transparent 355deg);
+  }
+  /* The same sprite as on the bar, at 3px per pixel: 30x18, both frames
+     side by side in 60x18. */
+  .orbit-cat {
+    position: absolute;
+    left: 33px;
+    top: 5px;
+    width: 30px;
+    height: 18px;
+    background-image: var(--cat-sprite);
+    background-size: 60px 18px;
+    image-rendering: pixelated;
+  }
+  .progress-overlay.shown .orbit-cat { animation: progress-orbit-cat 0.4s steps(2) infinite; }
+  @keyframes progress-orbit-cat {
+    to { background-position: -60px 0; }
+  }
+  .progress-spinner .spinner-static { display: none; color: var(--muted); }
+  #progressCount { margin: 0.6rem 0 0; font-size: 0.9rem; min-height: 1.2em; }
+  #progressFooter { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-overlay.shown .progress-track,
+    .progress-overlay.shown .progress-cat { animation: none; }
+    .progress-spinner .orbit { display: none; }
+    .progress-spinner .spinner-static { display: inline; }
+  }
 </style>
 </head>
 <body>
@@ -242,6 +366,7 @@
       </label>
       <button type="submit" class="btn-primary">Connect</button>
     </form>
+    <p id="connectInfo" class="info" hidden></p>
     <p id="connectError" class="error" hidden></p>
   </section>
 
@@ -265,6 +390,7 @@
       </thead>
       <tbody></tbody>
     </table>
+    <p id="queuesInfo" class="info" hidden></p>
     <p id="queuesError" class="error" hidden></p>
   </section>
 
@@ -359,6 +485,27 @@
       <button id="sendSubmit" type="button" class="btn-primary">Send</button>
     </div>
     <p id="sendError" class="error" hidden></p>
+  </div>
+</div>
+
+<div id="progressOverlay" class="progress-overlay" hidden>
+  <div class="modal-box progress-box" role="status" aria-live="polite">
+    <h3 id="progressTitle"></h3>
+    <div id="progressTrack" class="progress-track">
+      <div class="progress-rainbow"></div>
+      <div class="progress-cat"></div>
+    </div>
+    <div id="progressSpinner" class="progress-spinner">
+      <div class="orbit" aria-hidden="true">
+        <div class="orbit-spin">
+          <div class="orbit-trail"></div>
+          <div class="orbit-cat"></div>
+        </div>
+      </div>
+      <span class="spinner-static">Working…</span>
+    </div>
+    <p id="progressCount"></p>
+    <p id="progressFooter"></p>
   </div>
 </div>
 

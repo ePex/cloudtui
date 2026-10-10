@@ -359,15 +359,18 @@ func withDefaultMaxCount(f queue.MessageFilter) queue.MessageFilter {
 
 // Load browses the queue in the background. An unfiltered browse also
 // fetches the queue's pending count, concurrently, so the title can say
-// when the browser shows only part of the queue (browseNote).
+// when the browser shows only part of the queue (browseNote). It runs as
+// an abortable operation in the progress modal: Esc cancels the requests
+// and leaves loadCancelledStatus in the table.
 func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	mv.browseNote = "" // the previous load's; a different queue or filter makes it wrong
 	mv.loadHasMore, mv.loadPending = false, -1
 	mv.updateTitle()
+	op := mv.host.StartOperation(fmt.Sprintf("Loading messages from %q", queueName), 0, ui.OpAbortable)
 	go func() {
-		ctx := context.Background()
+		ctx := op.Ctx()
 		backend := mv.host.Backend()
 		pending := int64(-1)
 		var wg sync.WaitGroup
@@ -381,9 +384,30 @@ func (mv *MessagesView) Load() {
 		msgs, hasMore, err := backend.BrowseMessages(ctx, queueName, filter)
 		wg.Wait()
 		mv.host.QueueUpdateDraw(func() {
+			op.Finish()
+			if op.Stopped() {
+				mv.showCancelled()
+				return
+			}
 			mv.applyLoad(queueName, filter, msgs, hasMore, pending, err)
 		})
 	}()
+}
+
+// showCancelled drops whatever the table held — it may be another queue's
+// or filter's messages, which d/m must not act on — and leaves
+// loadCancelledStatus in its place.
+func (mv *MessagesView) showCancelled() {
+	mv.repaint(nil)
+	for mv.table.GetRowCount() > 1 {
+		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
+	}
+	mv.table.SetCell(1, 0,
+		tview.NewTableCell(loadCancelledStatus).
+			SetTextColor(tcell.GetColor(mv.host.Config().Colors.Accent)).
+			SetSelectable(false).
+			SetExpansion(3),
+	)
 }
 
 // applyLoad applies a completed Load — split out from its goroutine so
@@ -725,7 +749,9 @@ func (mv *MessagesView) clearMarks() {
 // deleteMarked confirms and deletes every marked message, or — if nothing is
 // marked — the single message under the cursor. Each deletion is
 // independent, so one failure doesn't stop the rest; the status bar reports
-// how many of the batch actually succeeded.
+// how many of the batch actually succeeded. It runs as a stoppable
+// operation in the progress modal, counted for marked messages ("3 of 10",
+// one request each); Esc stops it before the next message.
 func (mv *MessagesView) deleteMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
@@ -734,38 +760,73 @@ func (mv *MessagesView) deleteMarked() {
 	}
 	a := mv.host
 	queueName := mv.queueName
+	marked := len(mv.markedIDs()) > 0
 	question := fmt.Sprintf("Delete message from %q?", queueName)
-	if len(mv.markedIDs()) > 0 {
+	title, total := fmt.Sprintf("Deleting message from %q", queueName), 0
+	if marked {
 		question = fmt.Sprintf("Delete %d marked message(s) from %q?", len(ids), queueName)
+		title, total = fmt.Sprintf("Deleting %d message(s) from %q", len(ids), queueName), len(ids)
 	}
 	mv.confirm.Show(question, func() {
+		op := a.StartOperation(title, total, ui.OpStoppable)
 		go func() {
-			failed := 0
-			for _, id := range ids {
-				if err := a.Backend().RemoveMessage(context.Background(), queueName, id); err != nil {
+			done, failed := runEach(op, ids, func(id string) error {
+				err := a.Backend().RemoveMessage(op.Ctx(), queueName, id)
+				if err != nil {
 					slog.Error("messages: bulk delete failed", "queue", queueName, "id", id, "error", err)
-					failed++
 				}
-			}
+				return err
+			})
 			a.QueueUpdateDraw(func() {
-				switch {
-				case failed > 0:
-					a.SetStatus(fmt.Sprintf("[red]Deleted %d/%d message(s); %d failed[-]", len(ids)-failed, len(ids), failed))
-				case len(ids) == 1:
-					a.SetStatus("Deleted message")
-				default:
-					a.SetStatus(fmt.Sprintf("Deleted %d message(s)", len(ids)))
-				}
+				op.Finish()
+				a.SetStatus(bulkStatus("Deleted", "", done, failed, len(ids)))
 				mv.Load()
 			})
 		}()
 	})
 }
 
+// runEach calls do for each id, one after another, reporting progress to
+// op after each and stopping before the next once the user pressed Esc.
+// It returns how many were attempted and how many of those failed.
+func runEach(op ui.Operation, ids []string, do func(id string) error) (done, failed int) {
+	for _, id := range ids {
+		if op.Stopped() {
+			break
+		}
+		if do(id) != nil {
+			failed++
+		}
+		done++
+		op.Step(done, failed)
+	}
+	return done, failed
+}
+
+// bulkStatus is the status line after a bulk delete/move: verb ("Deleted",
+// "Moved") of done attempts, failed of which failed, out of total, and
+// target (" to \"queue\"" for a move, else empty). Fewer attempts than
+// total means the user stopped it.
+func bulkStatus(verb, target string, done, failed, total int) string {
+	succeeded := done - failed
+	switch {
+	case done < total && failed > 0:
+		return fmt.Sprintf("[red]%s %d of %d message(s)%s; %d failed; cancelled[-]", verb, succeeded, total, target, failed)
+	case done < total:
+		return fmt.Sprintf("[yellow]%s %d of %d message(s)%s; cancelled[-]", verb, succeeded, total, target)
+	case failed > 0:
+		return fmt.Sprintf("[red]%s %d/%d message(s)%s; %d failed[-]", verb, succeeded, total, target, failed)
+	case total == 1:
+		return fmt.Sprintf("%s message%s", verb, target)
+	default:
+		return fmt.Sprintf("%s %d message(s)%s", verb, total, target)
+	}
+}
+
 // moveMarked opens the move picker once and, on target selection, moves
 // every marked message there, or — if nothing is marked — the single
 // message under the cursor. As with deleteMarked, one failure doesn't stop
-// the rest.
+// the rest, and it runs in the progress modal, stoppable with Esc.
 func (mv *MessagesView) moveMarked() {
 	ids := mv.targetIDs()
 	if len(ids) == 0 {
@@ -782,29 +843,37 @@ func (mv *MessagesView) moveMarked() {
 		}
 		a.SetContextHint(strings.Join(lines, "\n"))
 	}
+	marked := len(mv.markedIDs()) > 0
 	mv.movePicker.Show(srcQueue, func(target string) {
-		go func() {
-			failed := 0
-			for _, id := range ids {
-				if err := a.Backend().MoveMessage(context.Background(), srcQueue, id, target); err != nil {
-					slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
-					failed++
-				}
-			}
-			a.QueueUpdateDraw(func() {
-				switch {
-				case failed > 0:
-					a.SetStatus(fmt.Sprintf("[red]Moved %d/%d message(s) to %q; %d failed[-]", len(ids)-failed, len(ids), target, failed))
-				case len(ids) == 1:
-					a.SetStatus(fmt.Sprintf("Moved message to %q", target))
-				default:
-					a.SetStatus(fmt.Sprintf("Moved %d message(s) to %q", len(ids), target))
-				}
-				restore()
-				mv.Load()
-			})
-		}()
+		mv.runBulkMove(srcQueue, target, ids, marked, restore)
 	}, restore)
+}
+
+// runBulkMove moves ids from srcQueue to target, one request each, as a
+// stoppable operation in the progress modal — counted when the ids are
+// marked messages — then reports, runs restore and reloads. It blocks on
+// the backend, so it must run off the UI goroutine (the move picker calls
+// onSelect in a goroutine of its own).
+func (mv *MessagesView) runBulkMove(srcQueue, target string, ids []string, marked bool, restore func()) {
+	a := mv.host
+	title, total := fmt.Sprintf("Moving message from %q to %q", srcQueue, target), 0
+	if marked {
+		title, total = fmt.Sprintf("Moving %d message(s) from %q to %q", len(ids), srcQueue, target), len(ids)
+	}
+	op := a.StartOperation(title, total, ui.OpStoppable)
+	done, failed := runEach(op, ids, func(id string) error {
+		err := a.Backend().MoveMessage(op.Ctx(), srcQueue, id, target)
+		if err != nil {
+			slog.Error("messages: bulk move failed", "src", srcQueue, "dst", target, "id", id, "error", err)
+		}
+		return err
+	})
+	a.QueueUpdateDraw(func() {
+		op.Finish()
+		a.SetStatus(bulkStatus("Moved", fmt.Sprintf(" to %q", target), done, failed, len(ids)))
+		restore()
+		mv.Load()
+	})
 }
 
 func (mv *MessagesView) showError(err error) {

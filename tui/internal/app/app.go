@@ -119,6 +119,10 @@ type App struct {
 	getPipelineState           func(ctx context.Context, profile, pipelineName string) ([]awscodepipeline.StageStatus, error)
 	notify                     func(title, message string)
 	screen                     tcell.Screen
+	// ops runs the blocking operations and draws their progress modal
+	// (spec/24).
+	ops      *opRunner
+	progress *dialog.ProgressModal
 	// secretResolver resolves AWS-Secrets-Manager-backed connection
 	// passwords (see internal/queue/secretbackend /
 	// spec/56-fe-amq-connection-aws-secret-password).
@@ -222,11 +226,20 @@ func New(cfg config.Config) *App {
 
 	// tview.Application never exposes its tcell.Screen directly (no
 	// GetScreen()); SetAfterDrawFunc is the only hook that hands it back,
-	// so capture it once here for CopyToClipboard's use. Reserved for this
-	// purpose — if another feature ever needs an after-draw hook too, chain
-	// it from here rather than overwriting.
+	// so capture it once here for CopyToClipboard's use. Shared with the
+	// progress modal, which is drawn here on top of everything rather than
+	// as a page: showing a page would move focus to it. If another feature
+	// ever needs an after-draw hook too, chain it from here rather than
+	// overwriting.
+	a.progress = dialog.NewProgressModal()
+	a.ops = newOpRunner(a.progress, func() {
+		// QueueUpdateDraw blocks until the UI goroutine runs it, so it
+		// can't be called from there directly.
+		go a.tv.QueueUpdateDraw(func() {})
+	})
 	a.tv.SetAfterDrawFunc(func(screen tcell.Screen) {
 		a.screen = screen
+		a.ops.draw(screen)
 	})
 
 	// All shell primitives are constructed.
@@ -469,6 +482,7 @@ func New(cfg config.Config) *App {
 		a.awsProfiles,
 	}
 	a.themables = []ui.Themeable{
+		a.progress,
 		a.settingsV,
 		a.logV,
 		a.queuesV,
@@ -526,6 +540,11 @@ func (a *App) Run() error {
 // onGlobalKey handles the app's hotkeys (h/s/q/?) and the ':' command
 // prompt, all inert while the prompt or any input field has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
+	// A running operation blocks every key but Esc and Ctrl+C, before
+	// anything else gets to see them (spec/24).
+	if ev, ok := a.ops.keyEvent(event); ok {
+		return ev
+	}
 	// HasFocus(), not an a.tv.GetFocus() identity check: tview.DropDown
 	// delegates focus to a private, internal *tview.List once its popup
 	// is open (Focus(delegate) calls delegate(d.list), not d.Box.Focus),

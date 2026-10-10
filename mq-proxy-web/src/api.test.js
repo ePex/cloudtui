@@ -15,6 +15,11 @@ import {
   buildBulkDeleteBody,
   buildBulkMoveBody,
   apiCall,
+  isAbortError,
+  BULK_BATCH_SIZE,
+  chunk,
+  runBatches,
+  bulkSummary,
 } from './api.js';
 
 test('buildAuthHeader encodes username:password as HTTP Basic', () => {
@@ -231,4 +236,124 @@ test('apiCall rejects with the server error message on a non-ok HTTP response', 
     /Bad credentials/,
   );
   delete global.fetch;
+});
+
+test('apiCall passes the abort signal to fetch', async () => {
+  const controller = new AbortController();
+  let seen;
+  global.fetch = async (url, opts) => {
+    seen = opts.signal;
+    return { ok: true, status: 200, json: async () => ({ data: [], errors: [] }) };
+  };
+  await apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues', { signal: controller.signal });
+  assert.equal(seen, controller.signal);
+  delete global.fetch;
+});
+
+test('apiCall rejects with an AbortError when the request is cancelled', async () => {
+  const controller = new AbortController();
+  global.fetch = (url, opts) => new Promise((resolve, reject) => {
+    opts.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+  });
+  const call = apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues', { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(call, (err) => isAbortError(err));
+  delete global.fetch;
+});
+
+test('apiCall rejects with an AbortError when cancelled while reading the body', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => { throw new DOMException('aborted', 'AbortError'); },
+  });
+  await assert.rejects(
+    apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues'),
+    (err) => isAbortError(err),
+  );
+  delete global.fetch;
+});
+
+test('isAbortError tells a cancel from a real failure', () => {
+  assert.equal(isAbortError(new DOMException('aborted', 'AbortError')), true);
+  assert.equal(isAbortError(new Error('HTTP 500')), false);
+  assert.equal(isAbortError(null), false);
+});
+
+test('chunk splits into batches of at most size, in order', () => {
+  assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  assert.deepEqual(chunk([1, 2], 25), [[1, 2]]);
+  assert.deepEqual(chunk([], 25), []);
+});
+
+// fakeBatchCall answers each request with a message entry per ID in its
+// body, minus those in missing; it fails the request for a batch listed
+// in failBatches (by index). It records each batch's IDs.
+function fakeBatchCall(missing = [], failBatches = []) {
+  const batches = [];
+  const call = async (verb, opts) => {
+    const ids = opts.body.map((r) => r.filter.messageId);
+    batches.push({ verb, ids });
+    if (failBatches.includes(batches.length - 1)) throw new Error('HTTP 500 boom');
+    return ids.filter((id) => !missing.includes(id)).map((id) => ({ messageId: id }));
+  };
+  return { call, batches };
+}
+
+const ids = (n) => Array.from({ length: n }, (_, i) => 'ID:' + i);
+const body = (batch) => buildBulkDeleteBody('orders', batch);
+
+test('runBatches sends batches of 25 one after another and reports each step', async () => {
+  const { call, batches } = fakeBatchCall();
+  const steps = [];
+  const result = await runBatches(call, ids(60), body, 'delete-messages', {
+    onStep: (done, failed) => steps.push([done, failed]),
+    stopped: () => false,
+  });
+  assert.equal(BULK_BATCH_SIZE, 25);
+  assert.deepEqual(batches.map((b) => b.ids.length), [25, 25, 10]);
+  assert.ok(batches.every((b) => b.verb === 'delete-messages'));
+  assert.deepEqual(steps, [[25, 0], [50, 0], [60, 0]]);
+  assert.deepEqual(result, { done: 60, failed: 0, cancelled: false, lastError: null });
+});
+
+test('runBatches counts messages a response does not report as failed', async () => {
+  const { call } = fakeBatchCall(['ID:3', 'ID:30', 'ID:31']);
+  const result = await runBatches(call, ids(50), body, 'delete-messages', { onStep: () => {}, stopped: () => false });
+  assert.equal(result.done, 50);
+  assert.equal(result.failed, 3);
+});
+
+test('runBatches does not count ID-less entries', async () => {
+  const call = async () => [{ messageId: 'ID:0' }, {}, { messageId: null }];
+  const result = await runBatches(call, ids(3), body, 'delete-messages', { onStep: () => {}, stopped: () => false });
+  assert.equal(result.failed, 2);
+});
+
+test('runBatches counts a failed request as a failed batch and goes on', async () => {
+  const { call, batches } = fakeBatchCall([], [1]);
+  const result = await runBatches(call, ids(60), body, 'delete-messages', { onStep: () => {}, stopped: () => false });
+  assert.equal(batches.length, 3);
+  assert.equal(result.done, 60);
+  assert.equal(result.failed, 25);
+  assert.equal(result.lastError.message, 'HTTP 500 boom');
+});
+
+test('runBatches stops before the next batch once stopped', async () => {
+  const { call, batches } = fakeBatchCall();
+  let stop = false;
+  const result = await runBatches(call, ids(100), body, 'delete-messages', {
+    onStep: (done) => { if (done === 50) stop = true; },
+    stopped: () => stop,
+  });
+  assert.equal(batches.length, 2);
+  assert.deepEqual(result, { done: 50, failed: 0, cancelled: true, lastError: null });
+});
+
+test('bulkSummary words the result like the TUI', () => {
+  assert.equal(bulkSummary('Deleted', '', 100, 0, 100), 'Deleted 100 message(s)');
+  assert.equal(bulkSummary('Deleted', '', 1, 0, 1), 'Deleted message');
+  assert.equal(bulkSummary('Deleted', '', 50, 0, 100), 'Deleted 50 of 100 message(s); cancelled');
+  assert.equal(bulkSummary('Moved', ' to "dlq"', 50, 3, 100), 'Moved 47 of 100 message(s) to "dlq"; 3 failed; cancelled');
+  assert.equal(bulkSummary('Deleted', '', 100, 3, 100), 'Deleted 97/100 message(s); 3 failed');
 });

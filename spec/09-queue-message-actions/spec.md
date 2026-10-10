@@ -19,7 +19,11 @@ is covered separately in spec/23.
   flow, through the same code (`purgeFlow`, see Implementation notes), so
   the two entry points can't drift apart.
 - **Message detail view**: `d` removes only the single message being
-  viewed, then returns to the messages list.
+  viewed, then returns to the messages list. The removal (like the
+  detail view's single move below) runs as a stoppable operation in the
+  progress modal (spec/24) — `Deleting message from "<queue>"` /
+  `Moving message from "<queue>" to "<target>"` — with the spinner; one
+  request, so Esc only says it's stopping.
 
 Both `p` entry points first open the **JMS Type filter prompt** (a single
 bordered `tview.InputField`, title `Purge "<queue name>" — JMS Type
@@ -42,6 +46,18 @@ messages list) reloads. A purge with a JMS Type may add a warning that
 matching messages further back weren't reached (see "Broker limits on
 filtered purge/move-all" below). On error, the view shows the error
 instead.
+
+While it runs, the purge is a stoppable operation in the progress modal
+(spec/24): after 250 ms a spinner `Purging "<queue>"…` (`Purging <type>
+messages from "<queue>"…` with a type) blocks the keys. A request that's
+been sent is never cut off: Esc changes the modal's last line to
+`Stopping after the current request…`, and a purge that runs in rounds
+(proxy backend, spec/11) stops before the next round. Its result line
+then ends in ` (cancelled)` — unless it was unfiltered and the queue's
+pending count reads 0 afterwards (mq-proxy usually empties the queue in
+its first request, so the stop only skipped the check for more): then it
+reports as complete. A Jolokia purge is one call per tier and runs to
+the end.
 
 ### Move single message
 
@@ -84,6 +100,10 @@ instead.
   plus, with a JMS Type, the same possible warning as purge (see "Broker
   limits on filtered purge/move-all" below). On error: status bar shows
   the error, queue list unchanged.
+- While it runs: a stoppable operation in the progress modal (spec/24),
+  titled `Moving all messages from "<src>" to "<dst>"` (`Moving <type>
+  messages …` with a type); Esc behaves exactly as for purge above,
+  including ` (cancelled)` and the empty-queue exception.
 
 ### Broker limits on filtered purge/move-all
 
@@ -244,7 +264,17 @@ every other queue operation (spec/07).
   then `removeMatchingMessages("TRUE")`, then a manual browse-and-remove
   loop via `removeMessage(java.lang.String)` — the last resort works
   universally and is fast enough in practice for the queue sizes this tool
-  manages.
+  manages. It checks the context before each tier, since a failed tier
+  otherwise means "try the next one" and a stop must not lead to a purge
+  by another route.
+- **Mutations are never cut off mid-request** (spec/24): in both
+  backends, every request inside a mutation (purge — including its
+  `QueueSize` read —, move-all, remove, move, the filtered delete/move)
+  runs with `context.WithoutCancel(ctx)` (Jolokia's `sendCtx`); the
+  caller's context is checked only between steps. The browse-and-remove
+  fallback and the filtered `DeleteMessages`/`MoveMessages` loops check
+  it before each message and, on a stop or an error, return the count so
+  far alongside it.
 - **Purge count per Jolokia tier**: `purgeQueue()` reports nothing, so
   the queue's `QueueSize` attribute is read just before it; a message
   arriving in between makes the count off by that many. If `QueueSize`

@@ -232,6 +232,15 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 				se.ShowEdit("orders/created.json", snippet.Snippet{JMSType: "OrderCreated", Body: "{\n  \"id\": 1\n}"}, func(string) {}, func() {})
 			}
 		}},
+		{"ProgressModal", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			pm := NewProgressModal()
+			return pm, func() {
+				pm.Reset("Deleting 10 message(s)", 10)
+				pm.SetProgress(3, 1)
+				pm.SetDetail("Waiting for the broker")
+				pm.SetFooter("Esc to cancel")
+			}
+		}},
 		{"AWSProfilesPicker", false, func(t *testing.T, host *testHost) (overlay, func()) {
 			ap := NewAWSProfilesPicker(host)
 			return ap, func() {
