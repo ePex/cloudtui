@@ -50,6 +50,27 @@ opened by pressing Enter on a queue row.
    rows, since a purely cosmetic toggle has no logical reason to
    invalidate either.
 
+**The title says when the list shows only part of the queue.** The
+broker stops browsing at its browse limit (`maxBrowsePageSize`, default
+400) whatever `max=` asks for, so without this a 1,600-message queue
+would silently show 400:
+
+- **Unfiltered** (no JMS type, message ID or date filter — `max=` alone
+  doesn't count): `Load` fetches the queue's pending count via `List`
+  concurrently with the browse, and the title gets `(showing <n> of
+  <pending>)` whenever fewer messages are shown than are pending, e.g.
+  ` Messages — orders (filter: max=500) (showing 400 of 1600) `. This
+  doesn't depend on the backend's `hasMore`, so it also works where
+  `hasMore` is unavailable (Jolokia, or `mq-proxy` without the
+  statistics plugin).
+- **Filtered**: the pending count isn't comparable, so the title relies
+  on `hasMore` (spec/11) and shows `(first <n> browsed, more on queue)`.
+- If the pending count can't be read, an unfiltered load falls back to
+  the filtered wording when `hasMore` is true, and to no note otherwise.
+- The note sits between the filter description and the quick search, is
+  cleared at the start of every load (so it never shows for the wrong
+  queue or filter), and costs one extra `List` call per unfiltered load.
+
 Multi-select, independent of the table cursor:
 
 - **space** — toggle the mark on the row under the cursor, then advance the
@@ -135,7 +156,13 @@ reloads and are reflected in the table title):
   `list-messages` endpoint requires a positive `maxCount` on every call
   (spec/11), so an unbounded browse isn't possible there, and an
   unbounded Jolokia fetch risks real latency on a very large queue — the
-  scan can only ever widen the sample. The scanned set is dialog-local,
+  scan can only ever widen the sample. It also stops at the broker's
+  browse limit (400 by default) however much it asks for; when the
+  backend reports `hasMore`, the status line says `Scanned the first <n>
+  messages — the queue holds more; types further back aren't listed`
+  (shared with the purge/move-all prompt, spec/09), so a type that's
+  only further back isn't silently missing. `Host.ScanJMSTypes` returns
+  a `ui.JMSTypeScan{Types, Scanned, HasMore}` for this. The scanned set is dialog-local,
   merged into suggestions only for the rest of that dialog session, and
   reset on every `Show()` (never persisted or cached across queues/opens).
   While a scan is in flight, the field visibly holds the sentinel's own
@@ -170,8 +197,12 @@ type MessageFilter struct {
     MaxCount  int
 }
 
-// Backend interface
-BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, error)
+// Backend interface. The bool (called hasMore in the code) means
+// "incomplete": more matching messages exist beyond the returned ones, or
+// may exist beyond the part of the queue the broker let the backend
+// browse. The proxy backend returns list-messages' hasMore || truncated
+// (spec/11); the Jolokia backend always returns false.
+BrowseMessages(ctx context.Context, queueName string, filter MessageFilter) ([]Message, bool, error)
 ```
 
 Detail view header labels, mapped from Jolokia's `browseMessages()` keys:

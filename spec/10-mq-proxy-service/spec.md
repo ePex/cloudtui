@@ -56,6 +56,15 @@ send a new message, and purge a queue. See spec/11 for the exact
 route shapes, request/response DTOs, and the filter query-param
 conventions as they exist today.
 
+Everything goes through plain JMS, so the broker's own limits apply:
+browsing sees at most `maxBrowsePageSize` (default 400) messages, and a
+filtered (selector) consumer only reaches matches among the
+`maxPageSize` (default 200) messages paged in from the head of the
+queue. The service can't get past either without side effects
+(spec/09); it reports a cut-short browse through `list-messages`'
+`truncated` instead, which relies on the statistics broker plugin — the
+same dependency `list-queues`' counts already have (spec/11).
+
 ## API documentation
 
 - `springdoc-openapi-starter-webmvc-ui` serves a live, dynamically
