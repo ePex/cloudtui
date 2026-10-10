@@ -255,14 +255,15 @@ func TestBrowseMessagesNonStringHeaderValue(t *testing.T) {
 	}
 }
 
-func TestBrowseMessagesHasMore(t *testing.T) {
+func TestBrowseMessagesIncomplete(t *testing.T) {
 	tests := []struct {
 		name     string
 		envelope map[string]any
 		want     bool
 	}{
-		{"true", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": true}, true},
-		{"false", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": false}, false},
+		{"hasMore", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": true}, true},
+		{"truncated", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": false, "truncated": true}, true},
+		{"neither", map[string]any{"data": []any{}, "errors": []any{}, "hasMore": false, "truncated": false}, false},
 		{"absent", map[string]any{"data": []any{}, "errors": []any{}}, false},
 	}
 	for _, tt := range tests {
@@ -277,7 +278,7 @@ func TestBrowseMessagesHasMore(t *testing.T) {
 				t.Fatalf("BrowseMessages() error = %v", err)
 			}
 			if got != tt.want {
-				t.Errorf("BrowseMessages() hasMore = %v, want %v", got, tt.want)
+				t.Errorf("BrowseMessages() incomplete = %v, want %v", got, tt.want)
 			}
 		})
 	}

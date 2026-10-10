@@ -135,10 +135,16 @@ documents.
   JMX operation), the plan decides how the count is obtained (e.g. the
   queue's pending count read just before purging).
 - **Browsing tells the truth about being incomplete**:
-  - `mq-proxy`'s `list-messages` sets `hasMore` to true when more
-    matching messages exist beyond the page **or may exist beyond the
-    part of the queue the broker let it browse**, which it detects when
-    the queue holds more messages than the browser saw.
+  - `mq-proxy`'s `list-messages` gains **`truncated: Boolean`**, true
+    when the broker cut the browse short — detected when the queue holds
+    more messages than the browser saw. `hasMore` keeps its meaning,
+    "another page can be fetched" (`maxCount` reached with more
+    behind it), which the web console's "Load more" (spec/21) relies
+    on. *Amended 2026-10-10 during merge-back:* the first version set
+    `hasMore` itself for a cut-short browse, which left the web
+    console's "Load more" visible forever on any queue over 400
+    messages, every click returning an empty page (verified live).
+  - The TUI treats either flag as "incomplete".
   - The message browser shows that in its title, e.g.
     `showing 400 of 1,600` when unfiltered, or `first 400 browsed, more
     on queue` when filtered (the pending count isn't comparable to a

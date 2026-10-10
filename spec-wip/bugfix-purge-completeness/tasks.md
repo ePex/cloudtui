@@ -174,3 +174,29 @@ otherwise.
    JMS Type prompt → `Purged 1488 message(s) …`, queue empty. Both
    scratch queues and their two `ActiveMQ.Statistics.Destination.*`
    request queues removed from the local broker.
+
+10. [x] **mq-proxy: report a cut-short browse as `truncated`, not
+    `hasMore`** (added during merge-back; spec.md and plan §1 amended).
+    `BrowseResult` gets `truncated`; `hasMore` goes back to "`maxCount`
+    reached with more behind it". The TUI proxy client decodes
+    `truncated` and returns `hasMore || truncated`. mq-proxy-web is
+    unchanged (it ignores unknown fields). Tests: `BrokerServiceTest`
+    (the window cases now assert `truncated`, `hasMore` false), the
+    controller's response shape, the proxy client (`truncated` alone →
+    incomplete).
+    *Live check:* paging a 600-message queue 200 at a time like "Load
+    more" → pages of 200, 200, then `hasMore: false` with `truncated:
+    true`; the TUI title still reads `showing 400 of 600`; a filtered
+    browse still shows `first … browsed, more on queue`.
+    *Done 2026-10-10.* `truncated` is only reported when the browse
+    ended before `maxCount`; with `maxCount` reached, `hasMore` already
+    says "incomplete" and the depth check is skipped as before.
+    `openapi.yaml` regenerated (`task openapi:proxy`): `truncated` added
+    to the four list-response schemas, nothing else. Mutation-checked on
+    both sides (`hasMore = true` again fails both window tests; dropping
+    `truncated` in the Go client fails its case). Live, 600 × TypeA:
+    paging 200 at a time → page 1 `hasMore: true`, page 2 `hasMore:
+    false, truncated: true` — "Load more" stops; TUI unfiltered title
+    `(showing 400 of 600)`; filtered by `TypeA` (where only `truncated`
+    can signal the cut) `(first 400 browsed, more on queue)`. Temporary
+    queue and its statistics queue removed.

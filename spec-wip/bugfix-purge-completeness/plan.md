@@ -5,6 +5,13 @@ both modules: `mq-proxy/` (Kotlin) and `tui/` (Go).
 
 ## 1. mq-proxy: honest `hasMore` on `list-messages`
 
+> **Amended 2026-10-10 (task 10):** the cut-short case goes into a new
+> `truncated` field instead of `hasMore`, which keeps meaning "another
+> page can be fetched" — setting `hasMore` broke the web console's "Load
+> more" (spec.md). The detection below is unchanged; only where its
+> result goes changes. The TUI's proxy client returns `hasMore ||
+> truncated` as `BrowseMessages`' bool.
+
 `BrokerService.doBrowse` (`mq-proxy/.../service/BrokerService.kt`) sets
 `hasMore` only when it stops early because `maxCount` was reached. When the
 browser enumeration ends by itself, it can't tell "queue exhausted" from

@@ -346,7 +346,7 @@ class BrokerServiceTest {
     }
 
     @Test
-    fun `browseMessages hasMore is true when the broker stopped browsing before the end of the queue`() {
+    fun `browseMessages reports truncated, not hasMore, when the broker stopped browsing before the end of the queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val msg1 = stubTextMessage(session, id = "ID:1")
@@ -356,11 +356,13 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
 
         assertThat(result.data.map { it.messageId }).containsExactly("ID:1", "ID:2")
-        assertThat(result.hasMore).isTrue()
+        // No further page can be fetched - a "Load more" must stop here.
+        assertThat(result.hasMore).isFalse()
+        assertThat(result.truncated).isTrue()
     }
 
     @Test
-    fun `browseMessages hasMore is false when the browser saw the whole queue`() {
+    fun `browseMessages is neither truncated nor hasMore when the browser saw the whole queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val msg1 = stubTextMessage(session, id = "ID:1")
@@ -370,10 +372,11 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
 
         assertThat(result.hasMore).isFalse()
+        assertThat(result.truncated).isFalse()
     }
 
     @Test
-    fun `browseMessages filtered hasMore is true when the browse window is smaller than the queue`() {
+    fun `browseMessages filtered is truncated when the browse window is smaller than the queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         // No TypeB within the window the broker lets the browser see.
@@ -383,11 +386,12 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter(jmsType = "TypeB", maxCount = 5_000))
 
         assertThat(result.data).isEmpty()
-        assertThat(result.hasMore).isTrue()
+        assertThat(result.hasMore).isFalse()
+        assertThat(result.truncated).isTrue()
     }
 
     @Test
-    fun `browseMessages filtered hasMore is false when the browse window covers the queue`() {
+    fun `browseMessages filtered is not truncated when the browse window covers the queue`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val match = stubTextMessage(session, id = "ID:2", jmsType = "TypeB")
@@ -398,10 +402,11 @@ class BrokerServiceTest {
 
         assertThat(result.data.map { it.messageId }).containsExactly("ID:2")
         assertThat(result.hasMore).isFalse()
+        assertThat(result.truncated).isFalse()
     }
 
     @Test
-    fun `browseMessages hasMore stays false when the queue depth is unavailable`() {
+    fun `browseMessages is not truncated when the queue depth is unavailable`() {
         val conn = mockConnection()
         val session = stubSession(conn)
         val msg1 = stubTextMessage(session, id = "ID:1")
@@ -410,6 +415,7 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 5_000))
 
         assertThat(result.hasMore).isFalse()
+        assertThat(result.truncated).isFalse()
     }
 
     @Test
@@ -423,6 +429,7 @@ class BrokerServiceTest {
         val result = service.browseMessages("orders", QueueMessageFilter(maxCount = 1))
 
         assertThat(result.hasMore).isTrue()
+        assertThat(result.truncated).isFalse()
         verify(exactly = 0) { session.createTemporaryQueue() }
     }
 

@@ -82,10 +82,13 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
     /**
      * Pages through [browseMessages] starting just after [QueueMessageFilter.afterMessageId]
      * (spec/11's pagination). [hasMore] is true when at least one more matching
-     * message exists beyond this page, or may exist beyond the part of the queue
-     * the broker let the browser see (see [isBrowseWindowTruncated]).
+     * message exists beyond this page - another page can be fetched. [truncated]
+     * is true when the browse ended before maxCount only because the broker cut
+     * it short (see [isBrowseWindowTruncated]): the queue holds messages this
+     * browse couldn't see, and paging can't reach them either. Kept apart so a
+     * "Load more" paging on [hasMore] doesn't keep offering empty pages.
      */
-    data class BrowseResult(val data: List<MessageSummary>, val hasMore: Boolean)
+    data class BrowseResult(val data: List<MessageSummary>, val hasMore: Boolean, val truncated: Boolean = false)
 
     /**
      * One [doBrowse] pass: its [result], whether the cursor was found, and how
@@ -107,7 +110,7 @@ class BrokerService(private val connectionFactory: ActiveMQConnectionFactory) {
             if (pass.result.hasMore || !isBrowseWindowTruncated(session, queueName, filter, pass.enumerated)) {
                 pass.result
             } else {
-                pass.result.copy(hasMore = true)
+                pass.result.copy(truncated = true)
             }
         } finally {
             connection.close()

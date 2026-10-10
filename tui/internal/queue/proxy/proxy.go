@@ -40,12 +40,15 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-// listEnvelope is the {data, errors, hasMore} shape every list-returning
-// mq-proxy endpoint responds with. Only list-messages sets hasMore.
+// listEnvelope is the {data, errors, hasMore, truncated} shape every
+// list-returning mq-proxy endpoint responds with. Only list-messages sets
+// hasMore (another page can be fetched) and truncated (the broker cut the
+// browse short) — see spec/11.
 type listEnvelope[T any] struct {
-	Data    []T        `json:"data"`
-	Errors  []apiError `json:"errors"`
-	HasMore bool       `json:"hasMore"`
+	Data      []T        `json:"data"`
+	Errors    []apiError `json:"errors"`
+	HasMore   bool       `json:"hasMore"`
+	Truncated bool       `json:"truncated"`
 }
 
 // itemEnvelope is the {data, error} shape single-result mq-proxy
@@ -197,8 +200,9 @@ func (c *Client) List(ctx context.Context) ([]queue.Summary, error) {
 	return out, nil
 }
 
-// BrowseMessages implements queue.Backend, passing list-messages' hasMore
-// through as is.
+// BrowseMessages implements queue.Backend. Its bool is "incomplete": either
+// of list-messages' hasMore or truncated — the TUI only needs to know the
+// queue holds more than it was shown, not which.
 func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error) {
 	path := "/api/management/command/list-messages?" + browseQuery(queueName, filter)
 	var env listEnvelope[proxyMessage]
@@ -212,7 +216,7 @@ func (c *Client) BrowseMessages(ctx context.Context, queueName string, filter qu
 	for i, m := range env.Data {
 		out[i] = toQueueMessage(m)
 	}
-	return out, env.HasMore, nil
+	return out, env.HasMore || env.Truncated, nil
 }
 
 // PurgeQueue implements queue.Backend.
