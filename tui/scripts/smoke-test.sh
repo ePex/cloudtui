@@ -136,6 +136,18 @@ log "launching TUI in tmux session $SESSION..."
 tmux new-session -d -s "$SESSION" -x 130 -y 40 "$BIN"
 wait_for "CLOUDTUI" 10 >/dev/null
 
+log "previewing the progress overlay without broker requests..."
+send ':'
+sleep 0.15
+send 'progress-demo'
+send 'Enter'
+sleep 0.15
+send 'Enter' # accept the autocomplete entry if it consumed the first Enter
+wait_for "Preview: moving messages from orders" 5 >/dev/null
+wait_for "=^.^=" 5 >/dev/null
+wait_for "100%" 8 >/dev/null
+wait_for "Progress preview complete" 5 >/dev/null
+
 log "opening queues list..."
 send 'h'
 sleep 0.2

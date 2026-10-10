@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -24,6 +25,63 @@ func (a *App) QueueUpdateDraw(f func())   { a.tv.QueueUpdateDraw(f) }
 
 func (a *App) SetStatus(text string)      { a.statusBar.SetText(text) }
 func (a *App) SetContextHint(text string) { a.contextPanel.SetText(text) }
+
+// StartOperationProgress opens the shared blocking progress overlay and
+// returns an ownership token. A newer operation supersedes older tokens,
+// so a stale completion cannot hide the newer operation's indicator.
+func (a *App) StartOperationProgress(label string, total int) uint64 {
+	a.progressSeq++
+	a.progressActive = a.progressSeq
+	a.stopOperationProgressTicker()
+	id := a.progressActive
+	a.operationProgress.Show(label, total)
+	stop := make(chan struct{})
+	a.progressStop = stop
+	go func() {
+		ticker := time.NewTicker(120 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				a.QueueUpdateDraw(func() {
+					if a.progressActive == id {
+						a.operationProgress.Tick()
+					}
+				})
+			}
+		}
+	}()
+	return id
+}
+
+// UpdateOperationProgress applies progress only while id still owns the
+// shared overlay.
+func (a *App) UpdateOperationProgress(id uint64, completed, total int) {
+	if id != a.progressActive {
+		return
+	}
+	a.operationProgress.SetProgress(completed, total)
+}
+
+// FinishOperationProgress closes the overlay only for its current owner.
+func (a *App) FinishOperationProgress(id uint64) {
+	if id != a.progressActive {
+		return
+	}
+	a.stopOperationProgressTicker()
+	a.progressActive = 0
+	a.operationProgress.Hide()
+}
+
+func (a *App) stopOperationProgressTicker() {
+	if a.progressStop == nil {
+		return
+	}
+	close(a.progressStop)
+	a.progressStop = nil
+}
 
 func (a *App) Config() config.Config { return a.cfg }
 

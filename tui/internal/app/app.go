@@ -50,34 +50,35 @@ type App struct {
 	overlayVisible []visibler
 	// themables is every view/overlay that recolors itself on a live theme
 	// switch — reapplyTheme loops over this instead of naming each type.
-	themables        []ui.Themeable
-	views            []ui.View
-	cfg              config.Config
-	infoPanel        *tview.TextView
-	divider          *tview.TextView
-	contextPanel     *tview.TextView
-	logoPanel        *tview.TextView
-	statusBar        *tview.TextView
-	settingsV        *view.SettingsView
-	logV             *view.LogView
-	queuesV          *view.QueuesView
-	messagesV        *view.MessagesView
-	messageDetailV   *view.MessageDetailView
-	snippetsV        *view.SnippetsView
-	confirm          *dialog.ConfirmDialog
-	movePicker       *dialog.MovePicker
-	sendMessage      *dialog.SendMessageOverlay
-	snippetPicker    *dialog.SnippetPicker
-	snippetSave      *dialog.SnippetSaveDialog
-	textPrompt       *dialog.TextPrompt
-	snippetEditor    *dialog.SnippetEditor
-	connManager      *dialog.ConnManager
-	connEditor       *dialog.ConnEditor
-	messageFilter    *dialog.MessageFilter
-	jmsTypePrompt    *dialog.JMSTypePrompt
-	timeRangeModal   *dialog.TimeRangeModal
-	datadogEditor    *dialog.DatadogEditor
-	amqManagerEditor *dialog.AMQManagerSettingsEditor
+	themables         []ui.Themeable
+	views             []ui.View
+	cfg               config.Config
+	infoPanel         *tview.TextView
+	divider           *tview.TextView
+	contextPanel      *tview.TextView
+	logoPanel         *tview.TextView
+	statusBar         *tview.TextView
+	settingsV         *view.SettingsView
+	logV              *view.LogView
+	queuesV           *view.QueuesView
+	messagesV         *view.MessagesView
+	messageDetailV    *view.MessageDetailView
+	snippetsV         *view.SnippetsView
+	confirm           *dialog.ConfirmDialog
+	operationProgress *dialog.OperationProgress
+	movePicker        *dialog.MovePicker
+	sendMessage       *dialog.SendMessageOverlay
+	snippetPicker     *dialog.SnippetPicker
+	snippetSave       *dialog.SnippetSaveDialog
+	textPrompt        *dialog.TextPrompt
+	snippetEditor     *dialog.SnippetEditor
+	connManager       *dialog.ConnManager
+	connEditor        *dialog.ConnEditor
+	messageFilter     *dialog.MessageFilter
+	jmsTypePrompt     *dialog.JMSTypePrompt
+	timeRangeModal    *dialog.TimeRangeModal
+	datadogEditor     *dialog.DatadogEditor
+	amqManagerEditor  *dialog.AMQManagerSettingsEditor
 	// pendingCloudWatchPattern is a one-shot CorrelationID queued by
 	// FE 41's Datadog->CloudWatch jump, consumed by OpenLogSearch and
 	// dropped by SwitchTo if abandoned — see spec/41.
@@ -123,6 +124,9 @@ type App struct {
 	// passwords (see internal/queue/secretbackend /
 	// spec/56-fe-amq-connection-aws-secret-password).
 	secretResolver *secretbackend.SecretResolver
+	progressSeq    uint64
+	progressActive uint64
+	progressStop   chan struct{}
 }
 
 // New builds the app shell with cfg as the starting configuration.
@@ -241,6 +245,7 @@ func New(cfg config.Config) *App {
 	// overlay Primitives are still wired up in their original position
 	// further down.
 	a.confirm = dialog.NewConfirmDialog(a)
+	a.operationProgress = dialog.NewOperationProgress(a)
 	a.movePicker = dialog.NewMovePicker(a)
 	// An unresolvable home directory leaves the snippet store rootless:
 	// every snippet action then reports "snippets folder unavailable"
@@ -432,7 +437,8 @@ func New(cfg config.Config) *App {
 		AddPage("amq-manager-settings", amqManagerSettingsOverlay, true, false).
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
-		AddPage("confirm", confirmOverlay, true, false)
+		AddPage("confirm", confirmOverlay, true, false).
+		AddPage("operation-progress", ui.Centered(a.operationProgress.Primitive(), 68, 12), true, false)
 
 	a.SwitchTo(a.views[0].Name())
 
@@ -467,6 +473,7 @@ func New(cfg config.Config) *App {
 		a.amqManagerEditor,
 		a.themePicker,
 		a.awsProfiles,
+		a.operationProgress,
 	}
 	a.themables = []ui.Themeable{
 		a.settingsV,
@@ -502,6 +509,7 @@ func New(cfg config.Config) *App {
 		a.amqManagerEditor,
 		a.themePicker,
 		a.awsProfiles,
+		a.operationProgress,
 	}
 	// Apply every view/overlay's palette once now, not only on a live
 	// theme switch: some widgets (e.g. the pickers' selection highlight,
@@ -621,6 +629,31 @@ func (a *App) onPromptDone(key tcell.Key) {
 	default:
 		a.SwitchTo(cmd)
 	}
+}
+
+// previewOperationProgress runs a broker-free, simulated move so users can
+// inspect the animated overlay with :progress-demo.
+func (a *App) previewOperationProgress() {
+	const total = 42
+	id := a.StartOperationProgress("Preview: moving messages from orders", total)
+	go func() {
+		for completed := 1; completed <= total; completed++ {
+			time.Sleep(90 * time.Millisecond)
+			count := completed
+			a.QueueUpdateDraw(func() {
+				if a.progressActive == id {
+					a.UpdateOperationProgress(id, count, total)
+				}
+			})
+		}
+		a.QueueUpdateDraw(func() {
+			if a.progressActive != id {
+				return
+			}
+			a.FinishOperationProgress(id)
+			a.SetStatus("Progress preview complete (no broker requests were made)")
+		})
+	}()
 }
 
 // switchTheme applies the named built-in palette, saves config, and repaints

@@ -69,6 +69,16 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   resolves, the first's eventual result is discarded — the table always
   ends up reflecting the *most recently triggered* reload, never a
   slower, superseded one.
+- **Operation progress overlay**: each queue reload also opens the shared,
+  centered blocking `Working` modal labeled `Loading queues`. A small
+  two-frame pixel-art Nyan Cat is composited into the rainbow progress bar
+  and travels back and forth while the backend call runs;
+  its pixels use colored terminal half-blocks,
+  this call has no honest completed/total count. The inline
+  placeholder remains underneath the modal. The modal closes when the
+  current load completes, and a stale superseded load cannot close a newer
+  operation's modal. While visible, global hotkeys are suppressed to avoid
+  starting conflicting queue work.
 - **AWS SSO re-auth**: on a connection whose password comes from AWS
   Secrets Manager, if the reload's fetch hits an expired SSO session,
   the "Loading queues…" placeholder switches to "AWS SSO session
@@ -116,6 +126,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   spec/03 for the current `internal/view` package layout — `QueuesView`
   depends on plain `ui.Host` (it calls no resource-specific host
   method at all).
+- The reusable progress modal is `tui/internal/dialog/operationprogress.go`;
+  the app owns its page and animation ticker, and queue loading starts it via
+  `ui.Host`.
 - The Jolokia client (`tui/internal/queue/jolokia/`) reads queue summaries,
   including Enqueue/DequeueCount, from the broker MBean over Jolokia HTTP
   using only `net/http` + `encoding/json` — no JMX library dependency.

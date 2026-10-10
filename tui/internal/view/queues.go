@@ -216,6 +216,15 @@ func (qv *QueuesView) restoreShortcuts() {
 // selection performs the move via doMoveAll.
 func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 	qv.movePicker.Show(srcQueue, func(target string) {
+		qv.host.QueueUpdateDraw(func() {
+			qv.executeMoveAll(srcQueue, target, jmsType)
+		})
+	}, qv.restoreShortcuts)
+}
+
+func (qv *QueuesView) executeMoveAll(srcQueue, target, jmsType string) {
+	progressID := qv.host.StartOperationProgress("Moving all messages from "+srcQueue, 0)
+	go func() {
 		ctx := context.Background()
 		count, err := qv.doMoveAll(ctx, srcQueue, target, jmsType)
 		var warning string
@@ -223,6 +232,7 @@ func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 			warning = filteredRemainderWarning(ctx, qv.backend, srcQueue, jmsType)
 		}
 		qv.host.QueueUpdateDraw(func() {
+			qv.host.FinishOperationProgress(progressID)
 			if err != nil {
 				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
 				qv.showError(err)
@@ -231,7 +241,7 @@ func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
 			qv.Load()
 		})
-	}, qv.restoreShortcuts)
+	}()
 }
 
 // doMoveAll dispatches to the backend call matching jmsType:
@@ -287,10 +297,12 @@ func (qv *QueuesView) setHeader() {
 func (qv *QueuesView) Load() {
 	qv.loadSeq++
 	seq := qv.loadSeq
+	progressID := qv.host.StartOperationProgress("Loading queues", 0)
 	qv.showStatus(loadingQueuesStatus)
 	go func() {
 		summaries, err := qv.backend.List(context.Background())
 		qv.host.QueueUpdateDraw(func() {
+			qv.host.FinishOperationProgress(progressID)
 			if seq != qv.loadSeq {
 				return // superseded by a newer Load()
 			}

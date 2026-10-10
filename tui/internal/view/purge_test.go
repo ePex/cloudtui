@@ -102,6 +102,67 @@ func newTestPurgeFlow(host *fakeViewHost) purgeFlow {
 	}
 }
 
+func TestPurgeFlowExecuteShowsAndFinishesIndeterminateProgress(t *testing.T) {
+	host := newFakeViewHost()
+	release := make(chan struct{})
+	done := make(chan struct{})
+	purgeFlow{
+		host: host,
+		backend: func() queue.Backend {
+			return &fakeQueueBackend{purgeQueueFn: func(context.Context, string) (int, error) {
+				<-release
+				return 2, nil
+			}}
+		},
+	}.execute("orders", "", func() {
+		if host.progressVisible {
+			t.Error("purge completion callback ran before progress was hidden")
+		}
+		close(done)
+	}, func(err error) { t.Errorf("onError(%v) called on success", err) })
+
+	if !host.progressVisible || host.progressLabel != "Purging orders" || host.progressTotal != 0 {
+		t.Fatalf("progress at start = visible %v, label %q, total %d", host.progressVisible, host.progressLabel, host.progressTotal)
+	}
+	close(release)
+	<-done
+	if host.progressVisible {
+		t.Error("purge left progress visible after success")
+	}
+	if got := host.status; got != `Purged 2 message(s) from "orders"` {
+		t.Errorf("status after purge = %q", got)
+	}
+}
+
+func TestPurgeFlowExecuteHidesProgressOnError(t *testing.T) {
+	host := newFakeViewHost()
+	wantErr := errors.New("broker unavailable")
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	purgeFlow{
+		host: host,
+		backend: func() queue.Backend {
+			return &fakeQueueBackend{purgeQueueFn: func(context.Context, string) (int, error) {
+				<-release
+				return 0, wantErr
+			}}
+		},
+	}.execute("orders", "", func() { t.Error("onDone called on failure") }, func(err error) {
+		done <- err
+	})
+
+	if !host.progressVisible {
+		t.Fatal("purge did not show progress before the backend returned")
+	}
+	close(release)
+	if got := <-done; got != wantErr {
+		t.Errorf("onError got %v, want %v", got, wantErr)
+	}
+	if host.progressVisible {
+		t.Error("purge left progress visible after error")
+	}
+}
+
 func TestPurgeFlowFinishSuccessSetsStatusThenCallsOnDone(t *testing.T) {
 	tests := []struct {
 		jmsType, want string

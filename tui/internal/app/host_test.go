@@ -7,7 +7,46 @@ import (
 
 	"github.com/ePex/cloudtui/tui/internal/config"
 	"github.com/ePex/cloudtui/tui/internal/queue"
+	"github.com/gdamore/tcell/v2"
 )
+
+func TestOperationProgressHostOwnsOverlayLifecycle(t *testing.T) {
+	a := New(config.Default())
+	first := a.StartOperationProgress("Loading queues", 0)
+	if !a.operationProgress.Visible() {
+		t.Fatal("StartOperationProgress did not show the overlay")
+	}
+	if name, _ := a.rootPages.GetFrontPage(); name != "operation-progress" {
+		t.Errorf("front page = %q, want operation-progress", name)
+	}
+
+	second := a.StartOperationProgress("Deleting from orders", 4)
+	if second == first {
+		t.Fatal("a replacement operation reused the old ownership token")
+	}
+	a.UpdateOperationProgress(first, 3, 4)
+	rows, _, _ := renderedRows(t, a.operationProgress.Primitive(), 54, 14)
+	if got := strings.Join(rows, "\n"); !strings.Contains(got, "Deleting from orders") {
+		t.Errorf("stale update changed the displayed operation: %q", got)
+	}
+	a.FinishOperationProgress(first)
+	if !a.operationProgress.Visible() {
+		t.Error("stale completion hid the current operation")
+	}
+	a.UpdateOperationProgress(second, 2, 4)
+	rows, _, _ = renderedRows(t, a.operationProgress.Primitive(), 54, 14)
+	if got := strings.Join(rows, "\n"); !strings.Contains(got, "50%") || !strings.Contains(got, "Message 2 of 4") {
+		t.Errorf("current progress update was not applied: %q", got)
+	}
+	key := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
+	if got := a.onGlobalKey(key); got != key {
+		t.Errorf("global quit hotkey while operation active returned %v, want it blocked", got)
+	}
+	a.FinishOperationProgress(second)
+	if a.operationProgress.Visible() {
+		t.Error("current completion left the overlay visible")
+	}
+}
 
 // TestSaveDatadogConfigPersists confirms App's real SaveDatadogConfig
 // (the ui.Host method the Datadog editor overlay calls) actually

@@ -1,7 +1,10 @@
 package view
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +26,104 @@ func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *d
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(string, queue.Message) {})
+}
+
+func newProgressTestMessagesView(t *testing.T, backend *fakeQueueBackend, drawBuffer int) (*drawSignalingHost, *MessagesView) {
+	t.Helper()
+	base := newFakeViewHost()
+	base.backend = backend
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, drawBuffer)}
+	confirm := dialog.NewConfirmDialog(host)
+	messageFilter := dialog.NewMessageFilter(host)
+	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
+	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, dialog.NewMovePicker(host), dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(string, queue.Message) {})
+	mv.queueName = "orders"
+	return host, mv
+}
+
+func TestMessagesViewDeleteProgressCountsAttemptsIncludingFailures(t *testing.T) {
+	release := make(chan struct{})
+	wantErr := errors.New("delete failed")
+	var deleted []string
+	backend := &fakeQueueBackend{
+		removeMessageFn: func(_ context.Context, _, id string) error {
+			if len(deleted) == 0 {
+				<-release
+			}
+			deleted = append(deleted, id)
+			if id == "b" {
+				return wantErr
+			}
+			return nil
+		},
+	}
+	host, mv := newProgressTestMessagesView(t, backend, 5)
+	ids := []string{"a", "b", "c"}
+
+	mv.deleteMessages(ids, "orders")
+	if !host.progressVisible || host.progressLabel != "Deleting 3 message(s) from orders" || host.progressTotal != 3 {
+		t.Fatalf("delete progress at start = visible %v, label %q, total %d", host.progressVisible, host.progressLabel, host.progressTotal)
+	}
+	close(release)
+	for range 5 { // three item updates, completion, and message reload
+		<-host.drawn
+	}
+	if !reflect.DeepEqual(host.progressHistory, []int{1, 2, 3}) {
+		t.Errorf("delete progress updates = %v, want [1 2 3]", host.progressHistory)
+	}
+	if host.progressVisible || host.progressDone != 3 || host.progressTotal != 3 {
+		t.Errorf("delete progress at end = visible %v, %d/%d", host.progressVisible, host.progressDone, host.progressTotal)
+	}
+	if !reflect.DeepEqual(deleted, ids) {
+		t.Errorf("deleted IDs = %v, want %v", deleted, ids)
+	}
+	if want := "[red]Deleted 2/3 message(s); 1 failed[-]"; host.status != want {
+		t.Errorf("status after partial delete = %q, want %q", host.status, want)
+	}
+}
+
+func TestMessagesViewMoveProgressCountsEachMessage(t *testing.T) {
+	release := make(chan struct{})
+	var moved []string
+	backend := &fakeQueueBackend{
+		moveMessageFn: func(_ context.Context, src, id, target string) error {
+			if len(moved) == 0 {
+				<-release
+			}
+			if src != "orders" || target != "orders-archive" {
+				t.Errorf("MoveMessage(%q, %q, %q), want source orders and target orders-archive", src, id, target)
+			}
+			moved = append(moved, id)
+			return nil
+		},
+	}
+	host, mv := newProgressTestMessagesView(t, backend, 5)
+	ids := []string{"a", "b", "c"}
+	restored := 0
+
+	mv.moveMessages(ids, "orders", "orders-archive", func() { restored++ })
+	if !host.progressVisible || host.progressLabel != "Moving 3 message(s) from orders" || host.progressTotal != 3 {
+		t.Fatalf("move progress at start = visible %v, label %q, total %d", host.progressVisible, host.progressLabel, host.progressTotal)
+	}
+	close(release)
+	for range 5 { // three item updates, completion, and message reload
+		<-host.drawn
+	}
+	if !reflect.DeepEqual(host.progressHistory, []int{1, 2, 3}) {
+		t.Errorf("move progress updates = %v, want [1 2 3]", host.progressHistory)
+	}
+	if host.progressVisible || host.progressDone != 3 || host.progressTotal != 3 {
+		t.Errorf("move progress at end = visible %v, %d/%d", host.progressVisible, host.progressDone, host.progressTotal)
+	}
+	if !reflect.DeepEqual(moved, ids) {
+		t.Errorf("moved IDs = %v, want %v", moved, ids)
+	}
+	if restored != 1 {
+		t.Errorf("restore calls = %d, want 1", restored)
+	}
+	if want := `Moved 3 message(s) to "orders-archive"`; host.status != want {
+		t.Errorf("status after move = %q, want %q", host.status, want)
+	}
 }
 
 // newTestMessagesViewWithMsgs builds a MessagesView already populated via
