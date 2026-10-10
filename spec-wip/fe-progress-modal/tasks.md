@@ -192,7 +192,31 @@ done. Live checks run with an isolated HOME and a separate tmux server
    disc and show `Working…`. Dark Reader's styles removed for the check
    again.
 
-10. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+10. [x] **Regression run.** `task test`, `task test:tui:race`, smoke test
     (isolated), and the live checks from tasks 2, 4, 5, 7, 8 and 9 in one
     session. Remove scratch queues; stop mq-proxy and any local page
     server.
+    *Done (2026-10-10):* `task test` (Go, mq-proxy, 78 web tests) and
+    `task test:tui:race` pass; the smoke test passes (scratch HOME, own
+    tmux server). TUI: `:progress-demo` (rainbow, `n of 20 (k failed)`,
+    keys ignored, Esc → `Progress demo cancelled`), `:progress-demo
+    spinner`, `TERM=ansi` at 60 columns → spinner with `5 of 20`. Slow
+    loads through a fake proxy: no modal on a fast load (0 of 20
+    captures), `⠧ Loading queues…`, `s`/`d` ignored, Esc → `Loading
+    cancelled — press r to retry`, `r` → modal again; the same for
+    messages. Proxy: 200 marked, Esc → `Deleted 16 of 200 message(s);
+    cancelled`, broker 184; purge of 1,600 with Esc → `Stopping after
+    the current request…`, `Purged 1600 message(s)…`, broker 0.
+    Jolokia: counted bar (`357 of 400`), `Deleted 400 message(s)`, purge
+    with Esc runs to the end, `Purged 1200 message(s)…`. Web (Chrome):
+    the demo counts, then the orbiting cat; a click and typing are
+    blocked, Esc → `Progress demo cancelled`; queue, message and Load
+    more loads cancel with the right retry lines, two loads at once
+    cancel with one Esc. Real mq-proxy: delete 100 with Esc at `25 of
+    100` → `Deleted 50 of 100 message(s); cancelled` (50 left); move 30
+    counted, move 10 spinner; detail delete and move; move all (0 / 49);
+    purge with Esc → `Stopping after the current request…`, emptied.
+    Scratch queues removed; mq-proxy, the fake proxy and the page server
+    stopped. Found on the way, not caused by this feature (reproduced on
+    `main`): Down in an empty message list hangs the TUI at 100 % CPU,
+    looping in tview's `Table` input handler. That's a separate bugfix.
