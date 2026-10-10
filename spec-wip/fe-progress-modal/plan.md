@@ -182,9 +182,17 @@ works with no connection.
   - cat: an inline SVG pixel cat as a `data:` URI, two frames swapped by
     a `steps(2)` animation; stars: a repeating radial-gradient
     background drifting via `background-position`;
-  - spinner: a CSS border spinner;
+  - spinner: the orbiting cat — a square stage with the night-sky
+    background (a dark circle with the drifting stars) and, inside it,
+    one rotating element (`transform: rotate`, ~1.2 s per lap) holding
+    the rainbow trail and the cat. The trail is a ring cut to a ~110°
+    arc: a `conic-gradient` mask over six concentric ring bands
+    (`radial-gradient` hard stops, red outside to purple inside, the
+    same band colors as the bar), fading out toward its tail end. The
+    cat sits at the head of the arc, rotated so it runs along the
+    tangent, reusing the same sprite and `steps(2)` frame animation;
   - `@media (prefers-reduced-motion: reduce)` turns the animations off
-    and swaps the spinner for the static `Working…` text.
+    and swaps the orbiting cat for the static `Working…` text.
   Only transform/background-position animate, and only while the
   overlay is shown.
 - **`src/api.js`**: `apiCall` passes `opts.signal` to `fetch`; an

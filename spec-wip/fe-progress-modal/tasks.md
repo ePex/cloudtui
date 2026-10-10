@@ -169,7 +169,19 @@ done. Live checks run with an isolated HOME and a separate tmux server
    background tab Chrome slows timers, so the overlay showed about 1 s
    in rather than at 250 ms (the delay is unit-tested).
 
-9. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
-   (isolated), and the live checks from tasks 2, 4, 5, 7 and 8 in one
-   session. Remove scratch queues; stop mq-proxy and any local page
-   server.
+9. [ ] **Web: orbiting cat spinner** (spec "Web console specifics",
+   plan §6). Replace the CSS ring spinner with the pixel cat running
+   around a circle, trailing a rainbow arc, on a starry dark disc. CSS
+   only, in `index.html`, plus the markup; the sprite stays the one
+   from `catSpriteSvg`. Not unit-testable (pure CSS animation), so
+   checked live.
+   *Live check (Chrome, page on http://localhost):* `#progress-demo` →
+   after the counted part, the cat circles with the rainbow arc behind
+   it, nose first, legs animating; it looks right in light and dark
+   mode and at phone width; a slow load (fake proxy) shows it too; the
+   reduced-motion rules show the static `Working…` instead.
+
+10. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+    (isolated), and the live checks from tasks 2, 4, 5, 7, 8 and 9 in one
+    session. Remove scratch queues; stop mq-proxy and any local page
+    server.

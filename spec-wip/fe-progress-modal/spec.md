@@ -110,13 +110,20 @@ What can be stopped depends on what's already been sent:
 ## Web console specifics
 
 - The same overlay, built with HTML/CSS (no new dependency): a rainbow
-  bar with a small pixel cat, or a CSS spinner; the same 250 ms / 400 ms
+  bar with a small pixel cat, or the orbiting cat below; the same 250 ms / 400 ms
   timing, title, count line and Esc behavior. It blocks clicks on the
   page underneath. The animation is plain CSS and runs only while the
   overlay is visible.
+- **Orbiting cat instead of a plain spinner:** for uncounted
+  operations the web overlay shows the same pixel cat running around a
+  circle over the starry night sky, trailing a short rainbow arc behind
+  it (red to purple bands, curved with the circle). The cat leans into
+  the run, nose first; its legs and tail keep their two-frame
+  animation. The TUI keeps its braille spinner.
 - **Reduced motion:** when the OS asks for reduced motion
   (`prefers-reduced-motion`), the bar and cat stay still (the bar still
-  grows with progress) and the spinner becomes a static `Working…`.
+  grows with progress), and the orbiting cat gives way to a static
+  `Working…`.
 - **Bulk delete/move in batches:** today the console sends a bulk
   delete/move as **one** request listing every selected message
   (spec/21), so there's nothing to count. It now sends them in
