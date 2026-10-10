@@ -438,7 +438,7 @@ func New(cfg config.Config) *App {
 		AddPage("theme-picker", themePickerOverlay, true, false).
 		AddPage("aws-profiles", awsProfilesOverlay, true, false).
 		AddPage("confirm", confirmOverlay, true, false).
-		AddPage("operation-progress", ui.Centered(a.operationProgress.Primitive(), 54, 14), true, false)
+		AddPage("operation-progress", ui.Centered(a.operationProgress.Primitive(), 68, 12), true, false)
 
 	a.SwitchTo(a.views[0].Name())
 

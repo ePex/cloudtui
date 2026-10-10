@@ -71,8 +71,9 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   slower, superseded one.
 - **Operation progress overlay**: each queue reload also opens the shared,
   centered blocking `Working` modal labeled `Loading queues`. A small
-  two-frame pixel-art Nyan Cat, rendered as colored terminal half-blocks,
-  travels back and forth along its rainbow track while the backend call runs;
+  two-frame pixel-art Nyan Cat is composited into the rainbow progress bar
+  and travels back and forth while the backend call runs;
+  its pixels use colored terminal half-blocks,
   this call has no honest completed/total count. The inline
   placeholder remains underneath the modal. The modal closes when the
   current load completes, and a stale superseded load cannot close a newer

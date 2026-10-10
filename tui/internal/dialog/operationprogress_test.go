@@ -96,18 +96,14 @@ func TestOperationProgressDeterminateRendering(t *testing.T) {
 func TestOperationProgressIndeterminateAnimation(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Loading queues", 0)
-	before := op.bar.GetText(true)
-	catBefore := op.cat.GetText(true)
+	before := op.cat.GetText(true)
 	op.Tick()
-	after := op.bar.GetText(true)
+	after := op.cat.GetText(true)
 	if before == after {
-		t.Fatalf("Tick() did not move the indeterminate indicator: %q", before)
+		t.Fatalf("Tick() did not animate the indeterminate progress: %q", before)
 	}
-	if strings.Contains(after, "%") {
-		t.Errorf("indeterminate indicator unexpectedly shows a percentage: %q", after)
-	}
-	if got := op.cat.GetText(true); got == catBefore {
-		t.Error("cat did not move along the track in indeterminate mode")
+	if got := op.progress.GetText(true); got != "Working…" {
+		t.Errorf("indeterminate status = %q, want Working…", got)
 	}
 	op.Hide()
 	before = op.cat.GetText(true)
@@ -117,14 +113,24 @@ func TestOperationProgressIndeterminateAnimation(t *testing.T) {
 	}
 }
 
+func TestNyanSpriteFramesHaveExpectedDimensions(t *testing.T) {
+	for frameIndex, frame := range nyanSpriteFrames {
+		if len(frame) != nyanSpriteHeight {
+			t.Errorf("frame %d height = %d, want %d", frameIndex, len(frame), nyanSpriteHeight)
+		}
+		for rowIndex, row := range frame {
+			if len(row) != nyanCatWidth {
+				t.Errorf("frame %d row %d width = %d, want %d", frameIndex, rowIndex, len(row), nyanCatWidth)
+			}
+		}
+	}
+}
+
 func TestOperationProgressClampsCompletedCount(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Deleting", 3)
 	op.SetProgress(8, 3)
-	if got := op.bar.GetText(true); !strings.Contains(got, "100%") {
-		t.Errorf("clamped bar = %q, want 100%%", got)
-	}
-	if got := op.counter.GetText(true); got != "Message 3 of 3" {
-		t.Errorf("clamped counter = %q, want Message 3 of 3", got)
+	if got := op.progress.GetText(true); !strings.Contains(got, "100%") || !strings.Contains(got, "Message 3 of 3") {
+		t.Errorf("clamped progress = %q, want 100%% and Message 3 of 3", got)
 	}
 }
