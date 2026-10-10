@@ -23,9 +23,20 @@ with `jq`.
    reported as present) fails its test. `go test -race ./...` clean. No
    spec referenced the moved helpers.
 
-2. [ ] **`internal/export` package** (plan §2). `Record`/`NewRecord`,
+2. [x] **`internal/export` package** (plan §2). `Record`/`NewRecord`,
    `WriteFile` (temp file + rename), `DefaultFileName`, `DefaultDir`,
    `MaxMessages`. Unit tests as in plan §2, mutation-checked.
+   *Done 2026-10-10.* Details settled here: timestamps carry
+   milliseconds (`2026-10-10T13:30:00.123Z`) and are omitted when
+   unknown; the correlation ID isn't repeated inside `headers`; HTML
+   escaping is off so bodies stay readable; the file is created
+   owner-readable only (it can hold message contents). The "existing
+   file stays intact" case is tested by making the final move fail
+   (target is a directory) — the temp file is cleaned up and the target
+   untouched. `DefaultDir` tests set both `HOME` and `USERPROFILE`
+   (CI runs Windows too). Mutations caught: HTML escaping on, no
+   temp-file cleanup, inferred JMS type kept. `go test -race ./...`
+   clean.
 
 3. [ ] **TUI export flow, `e` in the queue list** (plan §3). Shared
    `exportFlow` (path prompt → overwrite confirm → collect → write →
