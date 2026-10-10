@@ -4,7 +4,7 @@ Each task needs its own approval before it starts, and is pushed once
 done. Live checks run with an isolated HOME and a separate tmux server
 (`tmux -L`), never against the real `~/.cloudtui`.
 
-1. [ ] **Modal primitive** (plan §1). `dialog/progress.go`: `ProgressModal`
+1. [x] **Modal primitive** (plan §1). `dialog/progress.go`: `ProgressModal`
    with the pure `rainbowCells` / `catCells` / `spinnerRune` helpers,
    theme support, and `SimulationScreen` tests: rainbow at 0 %, 50 %,
    100 % on a 256-color screen; spinner plus `3 of 10` on a 16-color

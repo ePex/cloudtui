@@ -23,15 +23,16 @@ web console (section 6).
     color bands via `▀` (fg = upper band, bg = lower band); the trail
     covers `width*done/total` columns; stars (`·`, `✦`) on the rest,
     their positions shifting with `frame`.
-  - `catCells(frame)` — a small cat (about 6×3 cells of half-block
-    pixels, two frames: legs/tail alternate), drawn at the trail's head
-    and clamped to the bar.
+  - the cat — 10×3 cells of half-block pixels, two frames (tail and
+    legs alternate) — is painted by `rainbowCells` too, with its head at
+    the trail's end (`catLeft`), or at the bar's start while the trail
+    is shorter than the cat.
   - `spinnerRune(frame)` — the braille spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`.
 - Colors: rainbow and cat are fixed `tcell.NewRGBColor` values (the
   terminal maps them to 256 colors); border, title, text and spinner use
   the theme (`ui.Themeable`, `ApplyTheme`) like the other dialogs.
-- Fixed size: 60×9 cells, centered via `ui.Centered`; the bar shrinks to
-  the modal's inner width on narrow terminals.
+- Fixed size: 60×11 cells (title, bar, count, two detail rows for the
+  AWS SSO text, footer), centered via `ui.Centered`.
 
 ## 2. TUI: running operations — `ui.Host.StartOperation`
 
