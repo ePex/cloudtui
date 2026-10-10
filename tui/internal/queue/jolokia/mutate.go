@@ -460,7 +460,7 @@ func sendMessageHeaders(req queue.SendMessageRequest) map[string]string {
 
 // sendCtx is the context for a request that changes the broker, or is a
 // step of an operation that does. It ignores cancellation, so a stop (Esc
-// in the progress modal, spec-wip fe-progress-modal) never abandons a
+// in the progress modal, spec/24) never abandons a
 // request that may already have been applied, losing its result; callers
 // check ctx between requests instead.
 func sendCtx(ctx context.Context) context.Context {

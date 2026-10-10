@@ -120,7 +120,7 @@ type App struct {
 	notify                     func(title, message string)
 	screen                     tcell.Screen
 	// ops runs the blocking operations and draws their progress modal
-	// (spec-wip fe-progress-modal).
+	// (spec/24).
 	ops      *opRunner
 	progress *dialog.ProgressModal
 	// secretResolver resolves AWS-Secrets-Manager-backed connection
@@ -541,7 +541,7 @@ func (a *App) Run() error {
 // prompt, all inert while the prompt or any input field has focus.
 func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	// A running operation blocks every key but Esc and Ctrl+C, before
-	// anything else gets to see them (spec-wip fe-progress-modal).
+	// anything else gets to see them (spec/24).
 	if ev, ok := a.ops.keyEvent(event); ok {
 		return ev
 	}

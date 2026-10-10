@@ -43,7 +43,8 @@ A fixed three-row layout:
 Two complementary mechanisms:
 
 - **Single-key hotkeys** (active whenever no prompt/filter/form field is focused): `h` → home, `s` → settings, `l` → log, `q` → quit, `?` → help modal, `:` → command prompt.
-- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, plus later features add their own shortcuts (`:aq`, `:ap`, ...), and the name of any registered view (`:queues`, `:settings`, `:log`, ...). The special commands and their aliases live in a single table (`promptCommandTable()` in `internal/app`) shared by both execution and autocomplete, so the two can't drift out of sync. `h`/`s`/`l`/`q` (but not the two-letter aliases) are excluded from autocomplete *suggestions* specifically because they duplicate the single-key hotkeys above — see "Command prompt autocomplete" below.
+- **Blocking operations**: while an operation runs in the progress modal (spec/24) — queue/message loads, purge, move, delete — the app's key handler checks for it first and swallows every key except Esc (cancel/stop) and Ctrl+C (quit), from the moment the operation starts.
+- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, `:progress-demo` / `:progress-demo spinner` (spec/24), plus later features add their own shortcuts (`:aq`, `:ap`, ...), and the name of any registered view (`:queues`, `:settings`, `:log`, ...). The special commands and their aliases live in a single table (`promptCommandTable()` in `internal/app`) shared by both execution and autocomplete, so the two can't drift out of sync. `h`/`s`/`l`/`q` (but not the two-letter aliases) are excluded from autocomplete *suggestions* specifically because they duplicate the single-key hotkeys above — see "Command prompt autocomplete" below.
 
 ### Command prompt autocomplete
 

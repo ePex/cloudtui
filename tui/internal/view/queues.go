@@ -26,7 +26,7 @@ var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUE
 const loadingQueuesStatus = "Loading queues…"
 
 // loadCancelledStatus replaces a list's rows when the user cancels its
-// load with Esc in the progress modal (spec-wip fe-progress-modal).
+// load with Esc in the progress modal (spec/24).
 const loadCancelledStatus = "Loading cancelled — press r to retry"
 
 type QueuesView struct {
@@ -227,8 +227,8 @@ func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 }
 
 // runMoveAll moves srcQueue's messages (or only jmsType's) to target via
-// doMoveAll, as a stoppable operation in the progress modal (spec-wip
-// fe-progress-modal), and reports the result. It blocks on the backend,
+// doMoveAll, as a stoppable operation in the progress modal (spec/24),
+// and reports the result. It blocks on the backend,
 // so it must run off the UI goroutine (the move picker calls onSelect in
 // a goroutine of its own).
 func (qv *QueuesView) runMoveAll(srcQueue, target, jmsType string) {

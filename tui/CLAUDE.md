@@ -23,7 +23,7 @@ this module.
   remove disposable queues via JMX, start/stop a local mq-proxy instance
   (`task test:queue:add`/`remove`, `task dev:proxy:start`/`stop`).
 - `internal/app/` — the application shell: layout, global hotkeys, view routing.
-- `internal/dialog/` — modal overlay types (confirm, connection
+- `internal/dialog/` — modal overlay types (confirm, progress modal, connection
   manager/editor, message filter, time range, send message, snippet
   browser/picker/save/editor, text prompt, Datadog/AMQ Manager settings,
   theme/AWS profile pickers) implementing internal/ui's Host contract.

@@ -1,9 +1,8 @@
-// Blocking progress overlay for slow operations (spec-wip
-// fe-progress-modal): a rainbow bar with a pixel cat for counted
-// operations, the cat running around a circle otherwise. Esc cancels;
-// clicks and other keys are blocked from the moment an operation starts,
-// the overlay only shows once it has run for SHOW_DELAY_MS and then stays
-// at least MIN_VISIBLE_MS. The pure helpers are exported for tests; nothing here
+// Blocking progress overlay for slow operations (spec/24): a rainbow bar
+// with a pixel cat for counted operations, the cat running around a
+// circle otherwise. Esc cancels; clicks and other keys are blocked from
+// the moment an operation starts, the overlay only shows once it has run
+// for SHOW_DELAY_MS and then stays at least MIN_VISIBLE_MS. The pure helpers are exported for tests; nothing here
 // touches the DOM until the first operation starts.
 
 export var SHOW_DELAY_MS = 250;

@@ -27,7 +27,7 @@ type purgeFlow struct {
 // confirmed purge, on the UI goroutine: onDone on success or a stop
 // (after the status line is set), onError on failure. The purge runs as
 // a stoppable operation in the progress modal; Esc stops it before its
-// next request (spec-wip fe-progress-modal).
+// next request (spec/24).
 func (pf purgeFlow) start(queueName string, onClose, onDone func(), onError func(error)) {
 	pf.prompt.Show("Purge", queueName, func(jmsType string) {
 		pf.confirm.Show(purgeQuestion(queueName, jmsType), func() {

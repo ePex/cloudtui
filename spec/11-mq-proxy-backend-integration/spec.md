@@ -175,7 +175,12 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   - At most `maxBulkRounds` (1,000) rounds — the last resort, returning
     "incomplete" (`errBulkIncomplete`) with the count so far.
   - The context is checked between rounds; a failed round ends the loop
-    with the count so far alongside the error.
+    with the count so far alongside the error. A cancelled context (Esc
+    in the progress modal, spec/24) ends it the same way, with
+    `context.Canceled`, but never aborts a round in flight: every POST
+    (`postJSON`, i.e. every mutation) runs with
+    `context.WithoutCancel`. Reads (GETs) keep the caller's context, so
+    Esc cancels a load at once.
 
   Against `mq-proxy` an unfiltered purge is one deleting round plus one
   returning 0 — which costs one more receive timeout (~2 s, see

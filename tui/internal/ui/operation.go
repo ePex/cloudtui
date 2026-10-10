@@ -2,8 +2,7 @@ package ui
 
 import "context"
 
-// OpKind is what Esc does to a running operation (spec-wip
-// fe-progress-modal).
+// OpKind is what Esc does to a running operation (spec/24).
 type OpKind int
 
 const (

@@ -218,7 +218,7 @@ export function isAbortError(err) {
 // How many messages one delete-messages/move-messages request handles
 // when deleting or moving selected messages: few enough requests for
 // mq-proxy's per-request auth check, enough steps for a real progress
-// count (spec-wip fe-progress-modal).
+// count (spec/24).
 export var BULK_BATCH_SIZE = 25;
 
 // chunk splits items into arrays of at most size, in order.

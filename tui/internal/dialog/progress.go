@@ -189,8 +189,8 @@ func progressCount(done, total, failed int) string {
 	return s
 }
 
-// ProgressModal is the blocking progress overlay (spec-wip
-// fe-progress-modal): the operation's title, then a rainbow bar with a
+// ProgressModal is the blocking progress overlay (spec/24): the
+// operation's title, then a rainbow bar with a
 // cat for a counted operation on a screen with enough colors, otherwise
 // a spinner; a count line, an optional detail text and a footer. It only
 // draws: showing it, animating it (SetFrame) and handling keys belong to

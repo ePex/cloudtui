@@ -869,7 +869,7 @@ func (s *heldRoundServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // TestPurgeQueueStopFinishesTheRoundInFlight: a stop while a round's
 // request is in flight lets that request finish and count, then starts no
-// further round (spec-wip fe-progress-modal).
+// further round (spec/24).
 func TestPurgeQueueStopFinishesTheRoundInFlight(t *testing.T) {
 	s := newHeldRoundServer()
 	c, stop := newTestClient(t, s)

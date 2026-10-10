@@ -71,6 +71,14 @@ one.
   navigates back to it; no manual "Refresh" click needed after any of
   the app's own actions (it still exists for external changes the app
   can't know about).
+- **Progress overlay** (spec/24): the queue list, message list and
+  "Load more" loads, Purge, Move all, and the delete/move actions run
+  under a blocking overlay (shown after 250 ms; keys and clicks
+  blocked; Esc cancels): a rainbow bar with a pixel cat when counted,
+  otherwise the cat running around a circle. A cancelled load says how
+  to retry in the view's info line (`Loading cancelled — press Refresh
+  to retry` / `… Apply …` / `… Load more …`). Opening the page with
+  `#progress-demo` plays a demo without a connection.
 - **Message list**: `list-messages` with `returnBody=true` and a
   client-side default `filter.maxCount` of 500 (editable, shown in the
   view's title) — mirrors the TUI client's own default, satisfying
@@ -96,11 +104,18 @@ one.
   "Select all"/"Select none" buttons operate on the currently-loaded list
   (client-side — selection isn't a server concept, and resets on every
   reload). One or more selected messages enables "Delete selected"/"Move
-  selected…", each sending one `delete-messages`/`move-messages` array
+  selected…", which send one `delete-messages`/`move-messages` array
   element per selected message (`filter.messageId` + `maxCount: 1` each)
   — the bulk-array shape spec/11 documents as existing "for
   bulk-operation parity" but, until this page, never actually used by
-  either client. Row click opens message detail.
+  either client — in **batches of 25** elements per request, one request
+  after the other, under the progress overlay's counted bar (spec/24;
+  25 or fewer is a single request with the spinner). Esc stops before
+  the next batch. After the reload, the info line reports the outcome in
+  the TUI's wording (`Deleted 100 message(s)`, `Deleted 50 of 100
+  message(s); cancelled`, `Moved 97/100 message(s) to "<queue>"; 3
+  failed`); messages a batch's response doesn't list count as failed.
+  Row click opens message detail.
   An **"Export"** button in the toolbar downloads the selected
   messages, or everything the JMS Type filter matches (all pages, up to
   10,000), as an NDJSON file, and reports the result in an info line
@@ -112,7 +127,8 @@ one.
   mirroring the TUI's own Headers section, spec/08 — `mq-proxy` always
   returns this map, independent of `returnBody`; the section is omitted
   entirely when the map is empty), then the body. Delete (single
-  `delete-messages` call) and Move… (opens the target-queue picker).
+  `delete-messages` call) and Move… (opens the target-queue picker),
+  each under the progress overlay's spinner (spec/24).
 - **Purge / Move all (drain)**: an optional JMS Type prompt — blank means
   "match everything" (`filter.maxCount` stays unset, matching the TUI's
   `PurgeQueue`/`MoveAllMessages` vs. `DeleteMessages`/`MoveMessages`
@@ -180,6 +196,7 @@ mq-proxy-web/
     messages.js     # message list/detail: pagination, bulk actions
     movepicker.js   # move-target picker, DLQ-tier ordering
     dialogs.js      # JMS Type prompt, confirm dialog, send modal
+    progress.js     # blocking progress overlay, #progress-demo (spec/24)
     main.js         # entry point — wires every view's static controls
     *.test.js       # co-located tests, import directly from the module next to them
   index.html   # dev template: markup + inline <style>, <script type="module" src="./src/main.js">
@@ -232,7 +249,8 @@ mq-proxy-web/
   that belongs with its own concern. Only the pure logic (auth header,
   envelope parsing, query building, purge/move-all filter branching, DLQ
   move-target ordering, bulk request bodies, header sorting, export
-  records/paging/summary — spec/23) is unit tested; DOM rendering/click-handling is not.
+  records/paging/summary — spec/23, batching and the progress overlay's
+  timing and wording — spec/24) is unit tested; DOM rendering/click-handling is not.
 - CORS preflight behavior is tested with a full `@SpringBootTest`
   (`webEnvironment = RANDOM_PORT`) hitting a real embedded server, not a
   `@WebMvcTest` slice — a slice test gave false 401s for this specific

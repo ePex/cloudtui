@@ -11,7 +11,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// Timing of the progress modal (spec-wip fe-progress-modal): it shows only
+// Timing of the progress modal (spec/24): it shows only
 // once an operation has run for opShowDelay, then stays up at least
 // opMinVisible so it doesn't flash; opFrameInterval paces its animation.
 const (

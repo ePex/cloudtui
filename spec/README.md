@@ -10,7 +10,7 @@ a feature area's behavior changes, its `spec.md` is updated in place
 rather than gaining a new dated entry. Bugfixes and change requests don't
 get their own folder here — they're folded into the area they correct.
 
-Numbering is a 1–23 reading order (foundational/infra first), not a
+Numbering is a 1–24 reading order (foundational/infra first), not a
 chronological counter — see the table below.
 
 | Folder | Covers |
@@ -38,6 +38,7 @@ chronological counter — see the table below.
 | [21-amq-web-console](21-amq-web-console/spec.md) | Static web console for browsing/managing ActiveMQ queues via mq-proxy |
 | [22-message-snippets](22-message-snippets/spec.md) | Message snippet library: save from the detail view, load into the send dialog |
 | [23-message-export](23-message-export/spec.md) | Export a queue's messages to an NDJSON file, from the TUI and the web console |
+| [24-progress-modal](24-progress-modal/spec.md) | Blocking progress modal for slow queue operations (rainbow bar, spinner, Esc), in the TUI and the web console |
 
 ## Relationship to `spec-wip/`
 

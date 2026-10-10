@@ -381,7 +381,7 @@ type purgeResult struct {
 
 // TestPurgeQueueStopDuringTheSizeReadPurgesNothing: a stop while the
 // QueueSize read is in flight lets the read finish, then purges nothing
-// (spec-wip fe-progress-modal).
+// (spec/24).
 func TestPurgeQueueStopDuringTheSizeReadPurgesNothing(t *testing.T) {
 	srv, calls, arrived, release := heldPurgeServer(t, map[string]any{
 		"read:QueueSize": ok(float64(7)),

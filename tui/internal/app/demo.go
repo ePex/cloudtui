@@ -7,7 +7,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// The progress demo (":progress-demo", spec-wip fe-progress-modal): a
+// The progress demo (":progress-demo", spec/24): a
 // counted run of demoSteps steps, one every demoStepInterval, every
 // demoFailEvery-th one "failing", then an uncounted run of
 // demoSpinnerDuration. No backend involved.

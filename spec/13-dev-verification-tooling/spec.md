@@ -76,6 +76,18 @@ the same broker state.
 - Does not test the connection *editor* UI itself (that's
   `connections_test.go`'s job) — only needs a connection to exist, which
   `add-proxy-conn` provides directly.
+- Waits with `wait_settled` before sending the next key after anything
+  that runs an operation (load, reload, delete, move, connection
+  switch). The app swallows keys from the moment an operation starts,
+  before its progress modal shows (spec/24), so screen text alone can't
+  tell it has ended: `wait_settled` waits for two identical captures
+  0.6 s apart without the modal's footer (`Esc to cancel` / `Stopping
+  after …`). A visible modal animates every 100 ms, and anything still
+  running after 250 ms shows it.
+- To run it isolated, set `HOME` to a scratch folder with a Jolokia
+  connection to the local broker, and `TMUX_TMPDIR` to a *short* path
+  for a separate tmux server: a long one makes the socket name too long
+  on macOS.
 
 ### `docs/demo/` — README demo recordings
 

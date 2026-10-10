@@ -145,7 +145,7 @@ func TestClientMoveMessages(t *testing.T) {
 
 // TestClientDeleteMessagesStopsBetweenRemovals: a stop during a removal
 // lets it finish, removes nothing more, and reports the count so far
-// (spec-wip fe-progress-modal).
+// (spec/24).
 func TestClientDeleteMessagesStopsBetweenRemovals(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
