@@ -5,12 +5,22 @@ done. Live checks run with an isolated HOME and a separate tmux server
 (`TMUX_TMPDIR` set to a short path), never against the real
 `~/.cloudtui`.
 
-1. [ ] **`ui.AutocompleteStyles`** (plan "Theme switches").
+1. [x] **`ui.AutocompleteStyles`** (plan "Theme switches").
    `internal/ui/style.go` + `style_test.go`: return the background, row
    and selection styles for a palette; `StyleInputFieldAutocomplete`
    uses it. Test: the returned styles match the palette's colors, and
    `StyleInputFieldAutocomplete` still renders the same as before. No
    behavior change.
+   *Done (2026-10-10):* `AutocompleteStyles(p)` returns
+   `(background, main, selected)` in `SetAutocompleteStyles` order.
+   `TestAutocompleteStyles` checks the three values against the palette;
+   `TestStyleInputFieldAutocompleteDrawsAutocompleteStyles` draws an
+   opened drop-down and checks the current entry in the selection
+   colors and the other in the row colors. Mutation-checked: with the
+   field given the row style as its selected style, the rendering test
+   fails (`alpha` drawn on the panel background). `task test:tui`,
+   gofmt and vet pass. Merge-back: add `AutocompleteStyles` to
+   spec/03's `style.go` helper list.
 
 2. [ ] **Two looks in `jmsTypeAutocomplete`** (plan "Approach",
    "Theme switches").

@@ -123,6 +123,22 @@ func StyleDropDown(dd *tview.DropDown, p config.Palette) *tview.DropDown {
 // blend factor.
 const AutocompletePanelBlend = 0.15
 
+// AutocompleteStyles returns the colors StyleInputFieldAutocomplete gives
+// an autocomplete drop-down, in tview.InputField.SetAutocompleteStyles'
+// order: the popup's background, its rows, and its current row. Unselected
+// rows sit on the background tinted toward the accent (see
+// StyleInputFieldAutocomplete); the current row uses the selection colors.
+func AutocompleteStyles(p config.Palette) (background tcell.Color, main, selected tcell.Style) {
+	background = BlendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), AutocompletePanelBlend)
+	main = tcell.StyleDefault.
+		Foreground(tcell.GetColor(p.Text)).
+		Background(background)
+	selected = tcell.StyleDefault.
+		Foreground(tcell.GetColor(p.SelectionText)).
+		Background(tcell.GetColor(p.SelectionBg))
+	return background, main, selected
+}
+
 // StyleInputFieldAutocomplete applies palette colors to i's autocomplete
 // drop-down. tview's InputField sizes the drop-down's popup to exactly fit
 // its entries and gives no way to draw a real border around it (see
@@ -140,16 +156,7 @@ const AutocompletePanelBlend = 0.15
 // field has been focused and left once. A focused field (someone is
 // typing in it) is left alone rather than blurred under tview's feet.
 func StyleInputFieldAutocomplete(i *tview.InputField, p config.Palette) *tview.InputField {
-	panelBg := BlendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), AutocompletePanelBlend)
-	i.SetAutocompleteStyles(
-		panelBg,
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.Text)).
-			Background(panelBg),
-		tcell.StyleDefault.
-			Foreground(tcell.GetColor(p.SelectionText)).
-			Background(tcell.GetColor(p.SelectionBg)),
-	)
+	i.SetAutocompleteStyles(AutocompleteStyles(p))
 	if !i.HasFocus() {
 		i.Blur()
 	}

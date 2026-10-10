@@ -429,8 +429,8 @@ func TestStyleInputFieldAutocompleteReturnsField(t *testing.T) {
 	// tview.InputField exposes no getter for its autocomplete styles, so
 	// the resulting colors can't be asserted directly here; this at least
 	// confirms StyleInputFieldAutocomplete returns the same field (for
-	// chaining) rather than panicking or discarding it. Visual
-	// verification is manual.
+	// chaining) rather than panicking or discarding it. The drawn colors
+	// are checked by TestStyleInputFieldAutocompleteDrawsAutocompleteStyles.
 	if i == nil {
 		t.Fatal("StyleInputFieldAutocomplete() returned nil")
 	}
@@ -475,6 +475,54 @@ func TestStyleInputFieldAutocompleteRecolorsCachedDropDown(t *testing.T) {
 	restartedRows := renderCells(t, openDropDown(newAutocompleteField(t, "cyberpunk")), 30, 4)
 	for _, entry := range []string{"alpha", "beta"} {
 		assertSameCells(t, [][]renderedCell{findText(t, liveRows, entry)}, [][]renderedCell{findText(t, restartedRows, entry)})
+	}
+}
+
+func TestAutocompleteStyles(t *testing.T) {
+	p := config.Palette{
+		Background:    "#1a1b26",
+		Text:          "#c0caf5",
+		Accent:        "#ff79c6",
+		SelectionBg:   "#2ac3de",
+		SelectionText: "#1a1b26",
+	}
+	background, main, selected := AutocompleteStyles(p)
+
+	wantBg := BlendColors(tcell.GetColor(p.Background), tcell.GetColor(p.Accent), AutocompletePanelBlend)
+	if background != wantBg {
+		t.Errorf("background = %v, want the background blended toward the accent (%v)", background, wantBg)
+	}
+	if fg, bg, _ := main.Decompose(); fg != tcell.GetColor(p.Text) || bg != wantBg {
+		t.Errorf("main = %v on %v, want %s on the panel background %v", fg, bg, p.Text, wantBg)
+	}
+	if fg, bg, _ := selected.Decompose(); fg != tcell.GetColor(p.SelectionText) || bg != tcell.GetColor(p.SelectionBg) {
+		t.Errorf("selected = %v on %v, want %s on %s", fg, bg, p.SelectionText, p.SelectionBg)
+	}
+}
+
+// TestStyleInputFieldAutocompleteDrawsAutocompleteStyles checks the
+// drop-down really draws with AutocompleteStyles: the current entry (a new
+// list starts on the first one) in the selected style, the others in the
+// row style.
+func TestStyleInputFieldAutocompleteDrawsAutocompleteStyles(t *testing.T) {
+	p := mustPalette(t, "dark")
+	rows := renderCells(t, openDropDown(newAutocompleteField(t, "dark")), 30, 4)
+
+	_, main, selected := AutocompleteStyles(p)
+	for _, tt := range []struct {
+		entry string
+		style tcell.Style
+	}{
+		{"alpha", selected},
+		{"beta", main},
+	} {
+		fg, bg, _ := tt.style.Decompose()
+		for _, c := range findText(t, rows, tt.entry) {
+			if c.fg != fg || c.bg != bg {
+				t.Errorf("%s: cell %q drawn %v on %v, want %v on %v", tt.entry, c.r, c.fg, c.bg, fg, bg)
+				break
+			}
+		}
 	}
 }
 
