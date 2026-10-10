@@ -21,7 +21,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    spec.md now lists only the keys that hang. With the clamp,
    everything passes.
 
-2. [ ] **Wire it into `onGlobalKey`** (plan "Approach").
+2. [x] **Wire it into `onGlobalKey`** (plan "Approach").
    `internal/app/app.go`: clamp the focused `*tview.Table` right after
    the progress modal's key check. `app_test.go`: with a stale-selection
    table focused, the key passes through unchanged and the selection is
@@ -32,6 +32,15 @@ done. Live checks run with an isolated HOME and a separate tmux server
    list: move down a few rows, filter to no match, the same keys: no
    hang; clear the filter and navigate a full list normally (the
    cursor still skips the header row).
+   *Done (2026-10-10):* the app test fails with the clamp call removed
+   (`selected row = 4, want 0`) and passes with it. Live (tmux,
+   scratch HOME, local broker, scratch queues `hangfull` with 30
+   messages and `hangempty`): opened `hangfull`, moved down 6 rows,
+   back, opened `hangempty`, then ↓ ↑ `j` `k` PgDn Home End: no hang,
+   CPU 0.0 %, `h` went home. Queue list: moved down 4 rows, filtered to
+   `zzznomatch`, the same keys: CPU 0.0 %. Cleared the filter, then
+   Home ↓ ↑ Enter opened the first queue, not the header. Scratch
+   queues removed.
 
 3. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and the live checks from task 2 in one session. Remove
