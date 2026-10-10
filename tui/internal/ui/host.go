@@ -23,6 +23,11 @@ type Host interface {
 	// Status / context feedback
 	SetStatus(text string)
 	SetContextHint(text string)
+	// Operation progress is managed by the host so views don't need to know
+	// about the root pages stack. Call these methods on the UI goroutine.
+	StartOperationProgress(label string, total int) uint64
+	UpdateOperationProgress(id uint64, completed, total int)
+	FinishOperationProgress(id uint64)
 
 	// Config / theme
 	Config() config.Config

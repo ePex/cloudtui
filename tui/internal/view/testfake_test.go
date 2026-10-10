@@ -81,12 +81,15 @@ func newFakeViewHost() *fakeViewHost {
 }
 
 // -- ui.Host: recorded state where a test needs to assert on it --
-func (f *fakeViewHost) SetFocus(p tview.Primitive) { f.focused = p }
-func (f *fakeViewHost) SetStatus(text string)      { f.status = text }
-func (f *fakeViewHost) SetContextHint(text string) { f.contextHint = text }
-func (f *fakeViewHost) Config() config.Config      { return f.cfg }
-func (f *fakeViewHost) Backend() queue.Backend     { return f.backend }
-func (f *fakeViewHost) QueueUpdateDraw(fn func())  { fn() } // no real event loop; run inline
+func (f *fakeViewHost) SetFocus(p tview.Primitive)                { f.focused = p }
+func (f *fakeViewHost) SetStatus(text string)                     { f.status = text }
+func (f *fakeViewHost) SetContextHint(text string)                { f.contextHint = text }
+func (f *fakeViewHost) StartOperationProgress(string, int) uint64 { return 0 }
+func (f *fakeViewHost) UpdateOperationProgress(uint64, int, int)  {}
+func (f *fakeViewHost) FinishOperationProgress(uint64)            {}
+func (f *fakeViewHost) Config() config.Config                     { return f.cfg }
+func (f *fakeViewHost) Backend() queue.Backend                    { return f.backend }
+func (f *fakeViewHost) QueueUpdateDraw(fn func())                 { fn() } // no real event loop; run inline
 
 // -- ui.Host: no-ops (nothing under test needs these) --
 func (f *fakeViewHost) ShowPage(name string)         {}

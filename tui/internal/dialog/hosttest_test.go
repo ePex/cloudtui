@@ -69,8 +69,11 @@ func (h *testHost) SetFocus(p tview.Primitive) { h.focused = p }
 func (h *testHost) FocusMain()                 { h.focusMainCalls++ }
 func (h *testHost) QueueUpdateDraw(f func())   { f() }
 
-func (h *testHost) SetStatus(text string)      { h.status = text }
-func (h *testHost) SetContextHint(text string) { h.contextHint = text }
+func (h *testHost) SetStatus(text string)                     { h.status = text }
+func (h *testHost) SetContextHint(text string)                { h.contextHint = text }
+func (h *testHost) StartOperationProgress(string, int) uint64 { return 0 }
+func (h *testHost) UpdateOperationProgress(uint64, int, int)  {}
+func (h *testHost) FinishOperationProgress(uint64)            {}
 
 func (h *testHost) Config() config.Config        { return h.cfg }
 func (h *testHost) SwitchTheme(name string)      { h.switchedTheme = name }
