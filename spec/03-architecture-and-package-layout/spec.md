@@ -27,7 +27,7 @@ Current file contents (production `.go` files; each also has a colocated `_test.
 - `theme.go` — the `Themeable` interface (recolor-on-theme-switch contract) and `ApplyTviewStyles` (the single palette → `tview.Styles` mapping)
 - `topbar.go`, `statusbar.go`, `help.go`, `notify.go` — generic chrome widgets (top bar layout, status bar, help modal, OS desktop notifications)
 - `filter.go` — shared inline-filter-input widget behavior
-- `style.go` — shared tview styling helpers usable by both dialogs and views: `StyleList`, `StyleForm`, `StyleFilterInput`, `StyleDropDown`/`StyleFormDropDown`, `StyleInputFieldAutocomplete`. Each re-applies what a widget copies at construction, so a live theme switch matches a restart (see spec/04).
+- `style.go` — shared tview styling helpers usable by both dialogs and views: `StyleList`, `StyleForm`, `StyleFilterInput`, `StyleDropDown`/`StyleFormDropDown`, `StyleInputFieldAutocomplete` (colors from `AutocompleteStyles`, which the JMS Type autocomplete also uses directly). Each re-applies what a widget copies at construction, so a live theme switch matches a restart (see spec/04).
 - `timerange.go` — the `TimeRange`/`TimeRangeMode`/time-range-preset types shared by the CloudWatch and Datadog log views and the time-range modal dialog
 
 **`internal/ui/views`** — the home dashboard's own rendering (`home.go`, `SectionInfo`/`ViewInfo` types, `NewHome`); a separate sub-package from `internal/view`, not to be confused with it.
