@@ -49,6 +49,8 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
   sort change, or re-entering the view) resets the table selection to the
   first data row. Scroll position is deliberately *not* preserved across
   navigations — this is intentional UX, not a gap.
+- **Export**: `e` exports the selected queue's messages to an NDJSON
+  file (spec/23).
 - **Reload**: `r` reloads the queue list from the active backend
   (Jolokia or mq-proxy, spec/11).
 - **Auto-refresh on activate**: entering the view (via Home, `:queues`, or

@@ -22,7 +22,7 @@ func newTestMessagesView(t *testing.T) (*fakeViewHost, *dialog.ConfirmDialog, *d
 	sendMessage := dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host))
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
-	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(string, queue.Message) {})
+	return host, confirm, movePicker, NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(string, queue.Message) {})
 }
 
 // newTestMessagesViewWithMsgs builds a MessagesView already populated via
@@ -67,7 +67,7 @@ func TestMessagesViewShortcutRPresent(t *testing.T) {
 
 func TestMessagesViewShortcutsIncludeMultiSelectKeys(t *testing.T) {
 	_, _, _, mv := newTestMessagesView(t)
-	want := []string{"space", "a", "n", "d", "m"}
+	want := []string{"space", "a/n", "d", "m", "e"} // a/n share a line: the panel holds 12
 	for _, k := range want {
 		found := false
 		for _, s := range mv.Shortcuts() {
@@ -221,7 +221,7 @@ func TestMessagesViewWrapSelectedFuncOpensCorrectMessage(t *testing.T) {
 	confirm := dialog.NewConfirmDialog(host)
 	movePicker := dialog.NewMovePicker(host)
 	var selected queue.Message
-	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), func(_ string, m queue.Message) {
+	mv := NewMessagesView(host, messageFilter, sendMessage, confirm, movePicker, dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(_ string, m queue.Message) {
 		selected = m
 	})
 	mv.repaint([]queue.Message{
@@ -475,6 +475,99 @@ func TestMessagesViewTitleNoteActuallyRenders(t *testing.T) {
 	rendered := renderedScreenText(t, mv.table, 120, 10)
 	if !strings.Contains(rendered, "(showing 400 of 1600)") {
 		t.Errorf("rendered screen = %q, want it to contain %q", rendered, "(showing 400 of 1600)")
+	}
+}
+
+// loadedMessages applies a completed load of n messages (TypeA, then TypeB
+// alternating), as Load would.
+func loadedMessages(mv *MessagesView, n int, hasMore bool, pending int64) {
+	msgs := make([]queue.Message, n)
+	for i := range msgs {
+		typ := "TypeA"
+		if i%2 == 1 {
+			typ = "TypeB"
+		}
+		msgs[i] = queue.Message{ID: fmt.Sprintf("ID:%d", i), JMSType: typ, Timestamp: time.Unix(int64(i), 0)}
+	}
+	mv.applyLoad("orders", withDefaultMaxCount(queue.MessageFilter{}), msgs, hasMore, pending, nil)
+}
+
+func TestMessagesViewExportSetMarkedOnly(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	loadedMessages(mv, 6, true, 1600)
+	mv.marked = map[string]bool{"ID:1": true, "ID:4": true}
+
+	set := mv.exportSet()
+
+	if len(set.msgs) != 2 || set.total != 0 || set.hasMore {
+		t.Errorf("set = %d msgs, total %d, hasMore %v; want exactly the 2 marked, never incomplete", len(set.msgs), set.total, set.hasMore)
+	}
+}
+
+func TestMessagesViewExportSetShownRespectsQuickSearch(t *testing.T) {
+	_, _, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	loadedMessages(mv, 6, false, 6)
+	mv.applyQuickSearch("TypeB")
+
+	set := mv.exportSet()
+
+	if len(set.msgs) != 3 {
+		t.Fatalf("set has %d msgs, want the 3 TypeB ones shown", len(set.msgs))
+	}
+	for _, m := range set.msgs {
+		if m.JMSType != "TypeB" {
+			t.Errorf("exported %s, which the quick search hides", m.ID)
+		}
+	}
+	if set.total != 0 || set.hasMore {
+		t.Errorf("total %d, hasMore %v; want no note — the load saw the whole queue", set.total, set.hasMore)
+	}
+}
+
+func TestMessagesViewExportSetSaysWhenTheLoadWasIncomplete(t *testing.T) {
+	tests := []struct {
+		name        string
+		hasMore     bool
+		pending     int64
+		wantTotal   int64
+		wantHasMore bool
+	}{
+		{"pending known", true, 1600, 1600, true},
+		{"hasMore only, pending unknown", true, -1, 0, true},
+		{"complete", false, 4, 0, false},
+	}
+	for _, tt := range tests {
+		_, _, _, mv := newTestMessagesView(t)
+		mv.queueName = "orders"
+		loadedMessages(mv, 4, tt.hasMore, tt.pending)
+
+		set := mv.exportSet()
+
+		if set.total != tt.wantTotal || set.hasMore != tt.wantHasMore {
+			t.Errorf("%s: total %d, hasMore %v; want %d, %v", tt.name, set.total, set.hasMore, tt.wantTotal, tt.wantHasMore)
+		}
+		if tt.wantTotal > 0 && !strings.Contains(exportedStatus("/x", set), "4 of 1600 message(s) (only what the list shows)") {
+			t.Errorf("%s: status = %q", tt.name, exportedStatus("/x", set))
+		}
+	}
+}
+
+func TestMessagesViewExportKey(t *testing.T) {
+	host, _, _, mv := newTestMessagesView(t)
+	mv.queueName = "orders"
+	press := func() { mv.table.GetInputCapture()(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)) }
+
+	press()
+	if mv.export.prompt.Visible() || !strings.Contains(host.status, "No messages to export") {
+		t.Errorf("empty list: prompt visible %v, status %q; want no prompt and a note", mv.export.prompt.Visible(), host.status)
+	}
+
+	loadedMessages(mv, 3, false, 3)
+	press()
+	if !mv.export.prompt.Visible() {
+		t.Error("'e' with messages shown didn't open the export prompt")
 	}
 }
 

@@ -51,11 +51,14 @@ type MessagesView struct {
 	quickSearch   string              // active quick-search text (client-side)
 	filter        queue.MessageFilter // active server-side filter
 	browseNote    string              // last load's "showing n of m"-style title note (browseNote)
-	msgs          []queue.Message     // sorted, quick-search-filtered snapshot, index 0 = row 1
-	marked        map[string]bool     // message IDs currently marked
-	wrap          bool                // preview column word-wrap toggle
-	rowToIdx      []int               // row -> index into msgs; index 0 unused (header placeholder)
-	idxToRow      []int               // msgs index -> that item's primary row
+	loadHasMore   bool                // last load: the backend reported more (for the export's note)
+	loadPending   int64               // last load: the queue's pending count, -1 if unknown
+	export        exportFlow
+	msgs          []queue.Message // sorted, quick-search-filtered snapshot, index 0 = row 1
+	marked        map[string]bool // message IDs currently marked
+	wrap          bool            // preview column word-wrap toggle
+	rowToIdx      []int           // row -> index into msgs; index 0 unused (header placeholder)
+	idxToRow      []int           // msgs index -> that item's primary row
 }
 
 var _ ui.Themeable = (*MessagesView)(nil)
@@ -135,13 +138,13 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 	}
 	return []ui.Shortcut{
 		{Key: "space", Description: "mark"},
-		{Key: "a", Description: "mark all"},
-		{Key: "n", Description: "clear marks"},
+		{Key: "a/n", Description: "mark all/none"},
 		{Key: "d", Description: "delete marked/current"},
 		{Key: "m", Description: "move marked/current"},
 		{Key: "r", Description: "refresh"},
 		{Key: "p", Description: "purge"},
 		{Key: "c", Description: "create message"},
+		{Key: "e", Description: "export marked/shown"},
 		{Key: "/", Description: "quick search"},
 		{Key: "f", Description: "filter"},
 		{Key: "w", Description: "wrap: " + wrap},
@@ -151,7 +154,7 @@ func (mv *MessagesView) Shortcuts() []ui.Shortcut {
 
 // NewMessagesView constructs the messages view. The queue name is set later
 // via app.OpenMessages before the view is shown.
-func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string, msg queue.Message)) *MessagesView {
+func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sendMessage *dialog.SendMessageOverlay, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, jmsTypePrompt *dialog.JMSTypePrompt, textPrompt *dialog.TextPrompt, onSelect func(queueName string, msg queue.Message)) *MessagesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Messages ")
 	table.SetSelectable(true, false)
@@ -168,6 +171,7 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 
 	mv := &MessagesView{table: table, searchInput: searchInput, flex: flex, host: a, messageFilter: messageFilter, sendMessage: sendMessage, confirm: confirm, movePicker: movePicker}
 	mv.purge = purgeFlow{host: a, backend: a.Backend, prompt: jmsTypePrompt, confirm: confirm}
+	mv.export = newExportFlow(a, textPrompt, confirm)
 	mv.setHeader()
 
 	searchInput.SetChangedFunc(func(text string) {
@@ -222,6 +226,14 @@ func NewMessagesView(a ui.MessagesHost, messageFilter *dialog.MessageFilter, sen
 				lines = append(lines, fmt.Sprintf("[%s]<%s>[-] %s", a.Config().Colors.Accent, sc.Key, sc.Description))
 			}
 			a.SetContextHint(strings.Join(lines, "\n"))
+			return nil
+		case event.Rune() == 'e':
+			set := mv.exportSet()
+			if len(set.msgs) == 0 {
+				mv.host.SetStatus("[yellow]No messages to export[-]")
+				return nil
+			}
+			mv.export.start(mv.queueName, func(context.Context) (exportSet, error) { return set, nil }, mv.restoreShortcuts)
 			return nil
 		case event.Rune() == 'c':
 			name := mv.queueName
@@ -352,6 +364,7 @@ func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	mv.browseNote = "" // the previous load's; a different queue or filter makes it wrong
+	mv.loadHasMore, mv.loadPending = false, -1
 	mv.updateTitle()
 	go func() {
 		ctx := context.Background()
@@ -383,6 +396,7 @@ func (mv *MessagesView) applyLoad(queueName string, filter queue.MessageFilter, 
 		return
 	}
 	mv.browseNote = browseNote(narrowsMessages(filter), len(msgs), hasMore, pending)
+	mv.loadHasMore, mv.loadPending = hasMore, pending
 	mv.updateTitle()
 	mv.repaint(msgs)
 	if len(msgs) > 0 && msgs[0].ID == "" {
@@ -592,6 +606,28 @@ func (mv *MessagesView) refreshMarkerColumn() {
 
 // markedIDs returns the IDs of currently marked messages, in the table's
 // current display order.
+// exportSet is what 'e' exports: the marked messages if any are marked —
+// exactly those, never "incomplete" — otherwise every message shown (the
+// server-side filter and quick search applied). The latter says when the
+// last load itself was incomplete, so "of <pending>" reaches the result
+// line (spec-wip fe-message-export).
+func (mv *MessagesView) exportSet() exportSet {
+	if len(mv.marked) > 0 {
+		var msgs []queue.Message
+		for _, m := range mv.msgs {
+			if mv.marked[m.ID] {
+				msgs = append(msgs, m)
+			}
+		}
+		return exportSet{msgs: msgs}
+	}
+	set := exportSet{msgs: append([]queue.Message(nil), mv.msgs...), hasMore: mv.loadHasMore, why: "only what the list shows"}
+	if mv.loadPending > int64(len(mv.allMsgs)) {
+		set.total = mv.loadPending
+	}
+	return set
+}
+
 func (mv *MessagesView) markedIDs() []string {
 	ids := make([]string, 0, len(mv.marked))
 	for _, m := range mv.msgs {

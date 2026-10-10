@@ -12,6 +12,15 @@ import { state } from './state.js';
 import { loadQueues } from './queues.js';
 import { openMovePicker } from './movepicker.js';
 import { confirmDialog, openSendModal } from './dialogs.js';
+import {
+  EXPORT_CAP,
+  toExportRecord,
+  toNdjson,
+  exportFileName,
+  fetchAllForExport,
+  exportSummary,
+  downloadNdjson,
+} from './export.js';
 
 export function openMessages(queueName) {
   state.currentQueue = queueName;
@@ -28,6 +37,7 @@ export function loadMessages() {
   var jmsType = $('msgFilterType').value.trim();
   $('messagesTitle').textContent = queueName + ' (max=' + maxCount + ')';
   clearError($('messagesError'));
+  $('messagesInfo').hidden = true;
   state.selectedMessageIds = new Set();
   state.messagesHasMore = false;
   $('loadMoreMessagesBtn').hidden = true;
@@ -153,8 +163,38 @@ function openMessageDetail(message) {
   showView('messageDetailView');
 }
 
+// "Export": the selected messages if any are selected (already loaded),
+// otherwise everything the current JMS Type filter matches — all pages,
+// not just the loaded ones, up to EXPORT_CAP — downloaded as NDJSON
+// (spec-wip fe-message-export). The result line says when it can't be
+// everything: the server reported truncated, the cap stopped it, or the
+// queue's message count (from the queue list) is higher.
+function exportMessages() {
+  var queueName = state.currentQueue;
+  var info = $('messagesInfo');
+  clearError($('messagesError'));
+  info.hidden = false;
+  info.textContent = 'Exporting…';
+  var selected = state.messages.filter(function (m) { return state.selectedMessageIds.has(m.messageId); });
+  var collect = selected.length > 0
+    ? Promise.resolve({ messages: selected, truncated: false, capped: false, selection: true })
+    : fetchAllForExport(apiCall, state.conn, queueName, $('msgFilterType').value.trim(),
+      parseInt($('msgFilterMax').value, 10) || DEFAULT_MAX_COUNT, EXPORT_CAP);
+  collect.then(function (result) {
+    var records = result.messages.map(function (m) { return toExportRecord(m, queueName); });
+    downloadNdjson(exportFileName(queueName, new Date()), toNdjson(records));
+    var queue = state.queues.find(function (q) { return q.name === queueName; });
+    var total = !result.selection && !$('msgFilterType').value.trim() && queue ? queue.messageCount : 0;
+    info.textContent = exportSummary(records.length, total, result.truncated, result.capped);
+  }, function (err) {
+    info.hidden = true;
+    showError($('messagesError'), err);
+  });
+}
+
 // Wires the messages view's own static controls — called once at startup.
 export function initMessages() {
+  $('exportMessagesBtn').addEventListener('click', exportMessages);
   $('loadMoreMessagesBtn').addEventListener('click', loadMoreMessages);
 
   $('selectAllMessagesBtn').addEventListener('click', selectAllMessages);

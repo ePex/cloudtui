@@ -78,7 +78,8 @@ Multi-select, independent of the table cursor:
 - **a** — mark every message that has an ID (some limited-info Jolokia
   responses lack one and can't be marked, same restriction single
   delete/move already have).
-- **n** — clear all marks.
+- **n** — clear all marks. The shortcut panel lists both as one `a/n`
+  entry (`mark all/none`), to stay within its 12 rows.
 - Marks do not survive a reload/refresh — `repaint()` always clears them,
   since a refreshed list may reorder or drop rows and a mark keyed by an ID
   that no longer matches its row would be confusing.
@@ -95,6 +96,10 @@ delete/move run in a goroutine (unlike the single-item path, which calls the
 backend synchronously) so a large batch doesn't visibly freeze the UI, and
 tolerate partial failure — one bad message doesn't abort the rest of the
 batch; the status bar reports how many of the batch actually succeeded.
+
+Export (`e`) likewise uses the marked set when one exists, but falls
+back to every message currently shown rather than the cursor row — see
+spec/23.
 
 ### Message Detail view
 

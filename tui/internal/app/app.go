@@ -266,9 +266,9 @@ func New(cfg config.Config) *App {
 
 	a.settingsV = view.NewSettingsView(a, a.themePicker, a.connManager, a.awsProfiles, a.datadogEditor, a.amqManagerEditor)
 
-	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.OpenMessages)
+	a.queuesV = view.NewQueuesView(a, a.backend, a.confirm, a.movePicker, a.sendMessage, a.jmsTypePrompt, a.textPrompt, a.OpenMessages)
 	a.snippetsV = view.NewSnippetsView(a, snippets, a.confirm, a.snippetEditor, a.textPrompt)
-	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.jmsTypePrompt, a.OpenMessageDetail)
+	a.messagesV = view.NewMessagesView(a, a.messageFilter, a.sendMessage, a.confirm, a.movePicker, a.jmsTypePrompt, a.textPrompt, a.OpenMessageDetail)
 	a.messageDetailV = view.NewMessageDetailView(a, a.movePicker, a.confirm, a.snippetSave,
 		func() {
 			a.pages.SwitchToPage("messages")

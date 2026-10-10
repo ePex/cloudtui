@@ -17,6 +17,8 @@ A terminal UI for managing cloud resources.
   - delete or move messages one at a time, marked, or all at once
   - send new messages with JMS Type, correlation and group IDs, and
     custom headers
+  - export a queue's messages, or just the marked ones, to an NDJSON
+    file (`e`), without removing them
 
   When moving out of a `dlq.*` queue, the matching queue is offered
   first, so requeuing a dead-letter queue takes a couple of keys.

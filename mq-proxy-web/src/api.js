@@ -18,17 +18,20 @@ export function buildAuthHeader(username, password) {
 // (spec/11's pagination) is only meaningful on list-messages responses
 // — everywhere else it's just the server's own unused-there default,
 // false.
+// truncated (the broker cut a list-messages browse short, spec/11) is
+// carried the same way as hasMore.
 export function parseEnvelope(json) {
   if (!json || typeof json !== 'object') {
-    return { data: undefined, errors: [], hasMore: false };
+    return { data: undefined, errors: [], hasMore: false, truncated: false };
   }
+  var flags = { hasMore: json.hasMore === true, truncated: json.truncated === true };
   if (Array.isArray(json.errors)) {
-    return { data: json.data, errors: json.errors, hasMore: json.hasMore === true };
+    return { data: json.data, errors: json.errors, hasMore: flags.hasMore, truncated: flags.truncated };
   }
   if (json.error) {
-    return { data: json.data, errors: [json.error], hasMore: json.hasMore === true };
+    return { data: json.data, errors: [json.error], hasMore: flags.hasMore, truncated: flags.truncated };
   }
-  return { data: json.data, errors: [], hasMore: json.hasMore === true };
+  return { data: json.data, errors: [], hasMore: flags.hasMore, truncated: flags.truncated };
 }
 
 export function errorMessageFrom(envelope, fallback) {
@@ -191,6 +194,7 @@ export function apiCall(conn, verb, opts) {
       // where the server doesn't send hasMore at all.
       if (envelope.data && typeof envelope.data === 'object') {
         envelope.data.hasMore = envelope.hasMore;
+        envelope.data.truncated = envelope.truncated;
       }
       return envelope.data;
     });

@@ -35,6 +35,7 @@ type QueuesView struct {
 	sendMessage   *dialog.SendMessageOverlay
 	jmsTypePrompt *dialog.JMSTypePrompt
 	purge         purgeFlow
+	export        exportFlow
 	filter        string          // active filter (empty = no filter)
 	allSummaries  []queue.Summary // full unfiltered list from last load
 	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
@@ -82,13 +83,14 @@ func (qv *QueuesView) Shortcuts() []ui.Shortcut {
 		{Key: "p", Description: "purge"},
 		{Key: "M", Description: "move queue"},
 		{Key: "c", Description: "create message"},
+		{Key: "e", Description: "export"},
 		{Key: "/", Description: "filter"},
 		{Key: "o/O", Description: "sort col/dir"},
 	}
 }
 
 // NewQueuesView constructs the queues view backed by b.
-func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, jmsTypePrompt *dialog.JMSTypePrompt, onSelect func(queueName string)) *QueuesView {
+func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, movePicker *dialog.MovePicker, sendMessage *dialog.SendMessageOverlay, jmsTypePrompt *dialog.JMSTypePrompt, textPrompt *dialog.TextPrompt, onSelect func(queueName string)) *QueuesView {
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" Queues ")
 	table.SetSelectable(true, false)
@@ -105,6 +107,7 @@ func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, mo
 
 	qv := &QueuesView{table: table, filterInput: filterInput, flex: flex, host: a, backend: b, confirm: confirm, movePicker: movePicker, sendMessage: sendMessage, jmsTypePrompt: jmsTypePrompt, sortAsc: true}
 	qv.purge = purgeFlow{host: a, backend: func() queue.Backend { return qv.backend }, prompt: jmsTypePrompt, confirm: confirm}
+	qv.export = newExportFlow(a, textPrompt, confirm)
 	qv.setHeader()
 
 	filterInput.SetChangedFunc(func(text string) {
@@ -172,6 +175,14 @@ func NewQueuesView(a ui.Host, b queue.Backend, confirm *dialog.ConfirmDialog, mo
 			}
 			name := cell.Text
 			qv.sendMessage.Show(name, qv.restoreShortcuts)
+			return nil
+		case 'e':
+			row, _ := qv.table.GetSelection()
+			cell := qv.table.GetCell(row, 0)
+			if cell == nil || cell.Text == "" || row == 0 {
+				return nil
+			}
+			qv.export.start(cell.Text, collectQueue(qv.backend, cell.Text), qv.restoreShortcuts)
 			return nil
 		}
 		return event

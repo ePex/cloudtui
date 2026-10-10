@@ -88,8 +88,9 @@ one.
   a single first page (all of which already trigger a full reload).
   Paging stops at the broker's browse limit (400 by default): there
   `hasMore` is false and "Load more" disappears, even if the queue holds
-  more. The response's `truncated` (spec/11) says so, but the console
-  doesn't show it yet.
+  more. The response's `truncated` (spec/11) says so; the console uses
+  it for the Export button's result line (below), not for the list
+  itself.
   Every row has a checkbox; a header checkbox
   (checked/indeterminate/unchecked synced to selection vs. total) plus
   "Select all"/"Select none" buttons operate on the currently-loaded list
@@ -100,6 +101,10 @@ one.
   — the bulk-array shape spec/11 documents as existing "for
   bulk-operation parity" but, until this page, never actually used by
   either client. Row click opens message detail.
+  An **"Export"** button in the toolbar downloads the selected
+  messages, or everything the JMS Type filter matches (all pages, up to
+  10,000), as an NDJSON file, and reports the result in an info line
+  under the toolbar — see spec/23.
 - **Message detail**: four fields (Queue, Message ID, JMS Type,
   Timestamp — `MessageSummary.sourceQueue`, spec/11, falls back to the
   currently-open queue if ever unset), then a **Headers** section listing
@@ -226,8 +231,8 @@ mq-proxy-web/
   `main.js` a thin entry point rather than a dumping ground for logic
   that belongs with its own concern. Only the pure logic (auth header,
   envelope parsing, query building, purge/move-all filter branching, DLQ
-  move-target ordering, bulk request bodies, header sorting) is unit
-  tested; DOM rendering/click-handling is not.
+  move-target ordering, bulk request bodies, header sorting, export
+  records/paging/summary — spec/23) is unit tested; DOM rendering/click-handling is not.
 - CORS preflight behavior is tested with a full `@SpringBootTest`
   (`webEnvironment = RANDOM_PORT`) hitting a real embedded server, not a
   `@WebMvcTest` slice — a slice test gave false 401s for this specific

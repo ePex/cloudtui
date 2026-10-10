@@ -300,14 +300,14 @@ func TestViewsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 		{"QueuesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewQueuesView(host, host.backend, dialog.NewConfirmDialog(host), dialog.NewMovePicker(host),
 				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
-				dialog.NewJMSTypePrompt(host), func(string) {})
+				dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(string) {})
 			v.filterInput.SetText("ord")
 			return v, nil
 		}},
 		{"MessagesView", func(t *testing.T, host *fakeViewHost) (themedView, func()) {
 			v := NewMessagesView(host, dialog.NewMessageFilter(host),
 				dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
-				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), dialog.NewJMSTypePrompt(host), func(string, queue.Message) {})
+				dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host), func(string, queue.Message) {})
 			v.searchInput.SetText("ord")
 			return v, nil
 		}},
