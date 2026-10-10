@@ -11,11 +11,17 @@ says so: Jolokia (`admin`/`admin` on the local broker) and this repo's
 `mq-proxy`. Exported files go to a scratch directory and are inspected
 with `jq`.
 
-1. [ ] **Move the shared message fields into `internal/queue`** (plan
+1. [x] **Move the shared message fields into `internal/queue`** (plan
    §1). `queue.HeaderFields()`, `queue.DecodePropertyValue`,
    `(Message).Body()`; the detail view and its clipboard text use them.
    No behavior change — existing detail-view tests must pass unchanged;
    new unit tests for the moved functions.
+   *Done 2026-10-10.* New `internal/queue/fields.go` (+ tests); the
+   detail view's snippet save, clipboard text and render now call
+   `Body()`/`HeaderFields()`/`DecodePropertyValue` (−73/+21 lines there).
+   Existing view tests pass unchanged; `Body()` mutation (empty body
+   reported as present) fails its test. `go test -race ./...` clean. No
+   spec referenced the moved helpers.
 
 2. [ ] **`internal/export` package** (plan §2). `Record`/`NewRecord`,
    `WriteFile` (temp file + rename), `DefaultFileName`, `DefaultDir`,

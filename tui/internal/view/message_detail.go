@@ -147,8 +147,8 @@ func (dv *MessageDetailView) restoreFocus() {
 // dropped. No other header is kept. A message without a text body (e.g.
 // binary) can't be saved.
 func snippetFromMessage(msg queue.Message) (snippet.Snippet, error) {
-	body, _ := msg.RawFields["text"].(string)
-	if body == "" {
+	body, ok := msg.Body()
+	if !ok {
 		return snippet.Snippet{}, errors.New("message has no text body to save as a snippet")
 	}
 	sn := snippet.Snippet{Body: body}
@@ -167,27 +167,6 @@ func prettyJSON(s string) string {
 	return buf.String()
 }
 
-type detailHeaderField struct {
-	label string
-	key   string
-}
-
-func messageDetailHeaderFields() []detailHeaderField {
-	return []detailHeaderField{
-		{"JMSCorrelationID", "jMSCorrelationID"},
-		{"JMSDeliveryMode", "jMSDeliveryMode"},
-		{"JMSDestination", "jMSDestination"},
-		{"JMSExpiration", "jMSExpiration"},
-		{"JMSRedelivered", "jMSRedelivered"},
-		{"JMSReplyTo", "jMSReplyTo"},
-		{"JMSXGroupID", "groupID"},
-		{"JMSXGroupSeq", "groupSequence"},
-		{"JMSXUserID", "userID"},
-		{"Priority", "jMSPriority"},
-		{"PropertiesText", "properties"},
-	}
-}
-
 // messageClipboardText builds a readable, uncolored representation of the
 // current detail page. It uses the full body rather than the queue-list
 // preview and shares the same header mapping and value decoding as Render.
@@ -199,70 +178,42 @@ func messageClipboardText(queueName string, msg queue.Message) string {
 	fmt.Fprintf(&b, "Timestamp: %s\n", msg.Timestamp.Local().Format("2006-01-02 15:04:05"))
 
 	b.WriteString("\nHeaders:\n")
-	for _, field := range messageDetailHeaderFields() {
+	for _, field := range queue.HeaderFields() {
 		if msg.RawFields == nil {
-			fmt.Fprintf(&b, "%s: <nil>\n", field.label)
+			fmt.Fprintf(&b, "%s: <nil>\n", field.Label)
 			continue
 		}
-		if field.key == "properties" {
-			b.WriteString(field.label + ":")
+		if field.Key == "properties" {
+			b.WriteString(field.Label + ":")
 			b.WriteByte('\n')
-			if properties, ok := msg.RawFields[field.key].(map[string]any); ok {
+			if properties, ok := msg.RawFields[field.Key].(map[string]any); ok {
 				keys := make([]string, 0, len(properties))
 				for key := range properties {
 					keys = append(keys, key)
 				}
 				sort.Strings(keys)
 				for _, key := range keys {
-					fmt.Fprintf(&b, "  %s: %s\n", key, decodePropertyValue(properties[key]))
+					fmt.Fprintf(&b, "  %s: %s\n", key, queue.DecodePropertyValue(properties[key]))
 				}
 			}
 			continue
 		}
 		var value any
 		if msg.RawFields != nil {
-			value = msg.RawFields[field.key]
+			value = msg.RawFields[field.Key]
 		}
-		fmt.Fprintf(&b, "%s: %v\n", field.label, value)
+		fmt.Fprintf(&b, "%s: %v\n", field.Label, value)
 	}
 
 	b.WriteString("\nBody:\n")
-	body, _ := msg.RawFields["text"].(string)
-	if body == "" {
+	body, ok := msg.Body()
+	if !ok {
 		body = "(binary)"
 	} else if formatted := prettyJSON(body); formatted != "" {
 		body = formatted
 	}
 	b.WriteString(body)
 	return b.String()
-}
-
-// decodePropertyValue converts a Jolokia property value to a human-readable
-// string. ActiveMQ serialises string properties as ByteSequence objects:
-// a map with a "data" key holding a []any of float64 byte values.
-// Those are decoded to a UTF-8 string. All other values fall back to %v.
-func decodePropertyValue(v any) string {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return fmt.Sprintf("%v", v)
-	}
-	dataRaw, hasData := m["data"]
-	if !hasData {
-		return fmt.Sprintf("%v", v)
-	}
-	items, ok := dataRaw.([]any)
-	if !ok {
-		return fmt.Sprintf("%v", v)
-	}
-	bs := make([]byte, len(items))
-	for i, item := range items {
-		f, ok := item.(float64)
-		if !ok {
-			return fmt.Sprintf("%v", v)
-		}
-		bs[i] = byte(f)
-	}
-	return string(bs)
 }
 
 // Render builds and displays the detail text for msg in the context of queueName.
@@ -288,15 +239,15 @@ func (dv *MessageDetailView) Render(queueName string, msg queue.Message) {
 	// — Headers section —
 	fmt.Fprintf(&b, "\n[%s]Headers:[-]\n", accent)
 
-	for _, f := range messageDetailHeaderFields() {
+	for _, f := range queue.HeaderFields() {
 		if msg.RawFields == nil {
-			fmt.Fprintf(&b, "[%s]%s:[-] [%s]<nil>[-]\n", accent, f.label, text)
+			fmt.Fprintf(&b, "[%s]%s:[-] [%s]<nil>[-]\n", accent, f.Label, text)
 			continue
 		}
-		raw := msg.RawFields[f.key]
-		if f.key == "properties" {
+		raw := msg.RawFields[f.Key]
+		if f.Key == "properties" {
 			// properties is a map of property name → value (possibly ByteSequence).
-			fmt.Fprintf(&b, "[%s]%s:[-]\n", accent, f.label)
+			fmt.Fprintf(&b, "[%s]%s:[-]\n", accent, f.Label)
 			if props, ok := raw.(map[string]any); ok {
 				keys := make([]string, 0, len(props))
 				for k := range props {
@@ -304,22 +255,19 @@ func (dv *MessageDetailView) Render(queueName string, msg queue.Message) {
 				}
 				sort.Strings(keys)
 				for _, k := range keys {
-					decoded := decodePropertyValue(props[k])
+					decoded := queue.DecodePropertyValue(props[k])
 					fmt.Fprintf(&b, "  [%s]%s:[-] [%s]%s[-]\n", accent, k, text, tview.Escape(decoded))
 				}
 			}
 		} else {
-			fmt.Fprintf(&b, "[%s]%s:[-] [%s]%s[-]\n", accent, f.label, text, tview.Escape(fmt.Sprintf("%v", raw)))
+			fmt.Fprintf(&b, "[%s]%s:[-] [%s]%s[-]\n", accent, f.Label, text, tview.Escape(fmt.Sprintf("%v", raw)))
 		}
 	}
 
 	// — Body section —
 	fmt.Fprintf(&b, "\n[%s]Body:[-]\n", accent)
-	var body string
-	if msg.RawFields != nil {
-		body, _ = msg.RawFields["text"].(string)
-	}
-	if body == "" {
+	body, ok := msg.Body()
+	if !ok {
 		body = "(binary)"
 	} else if pretty := prettyJSON(body); pretty != "" {
 		body = pretty
