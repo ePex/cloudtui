@@ -165,6 +165,27 @@ func TestOnGlobalKeyPassesThroughOtherKeys(t *testing.T) {
 	}
 }
 
+func TestOnGlobalKeyClampsTheFocusedTablesSelection(t *testing.T) {
+	a := New(config.Default())
+	table := tview.NewTable().SetSelectable(true, false).SetFixed(1, 0)
+	for r := 0; r <= 5; r++ {
+		table.SetCell(r, 0, tview.NewTableCell("x").SetSelectable(r > 0))
+	}
+	table.Select(4, 0)
+	// Refilled with only its header, like an emptied list after a reload.
+	table.Clear()
+	table.SetCell(0, 0, tview.NewTableCell("H").SetSelectable(false))
+	a.tv.SetFocus(table)
+
+	event := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+	if got := a.onGlobalKey(event); got != event {
+		t.Errorf("onGlobalKey(Down) = %v, want event passed through unchanged", got)
+	}
+	if row, _ := table.GetSelection(); row != 0 {
+		t.Errorf("selected row = %d, want 0 (inside the header-only table)", row)
+	}
+}
+
 func TestOnGlobalKeyPassesThroughWhenPromptFocused(t *testing.T) {
 	a := New(config.Default())
 	a.tv.SetFocus(a.prompt)

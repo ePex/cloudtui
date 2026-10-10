@@ -141,6 +141,11 @@ this before adding or restyling a widget.
   instead (see `dialog.SnippetSaveDialog`).
 - **`tview.Form` remembers its focused item across `Show` calls.** Reset
   it with `form.SetFocus(0)` when reopening a form.
+- **`tview.Table` keeps its selection across `Clear`.** Arrow keys in a
+  table emptied below its selection (only the non-selectable header
+  left) loop forever at 100 % CPU. The app's key handler clamps the
+  focused table's selection first (`ui.ClampTableSelection`), so new
+  tables are covered; don't remove that call. See `spec/01`.
 - **Testing rendering:** draw the primitive on a
   `tcell.NewSimulationScreen` and read `GetContents()` for runes and
   styles; `internal/ui/style_test.go` has helpers. For a theme fix,

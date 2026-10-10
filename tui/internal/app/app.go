@@ -545,6 +545,12 @@ func (a *App) onGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if ev, ok := a.ops.keyEvent(event); ok {
 		return ev
 	}
+	// A table whose content shrank below its selection would make
+	// tview's arrow-key navigation loop forever; keep the selection
+	// inside it before the table sees the key.
+	if t, ok := a.tv.GetFocus().(*tview.Table); ok {
+		ui.ClampTableSelection(t)
+	}
 	// HasFocus(), not an a.tv.GetFocus() identity check: tview.DropDown
 	// delegates focus to a private, internal *tview.List once its popup
 	// is open (Focus(delegate) calls delegate(d.list), not d.Box.Focus),
