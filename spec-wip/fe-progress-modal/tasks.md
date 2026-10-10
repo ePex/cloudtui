@@ -94,10 +94,20 @@ done. Live checks run with an isolated HOME and a separate tmux server
    single move isn't unit-tested (it runs through the move picker's
    async queue list); it shares its code shape with the tested single
    delete.
-6. [ ] **Smoke test and TUI regression** (plan §Testing). Make
+6. [x] **Smoke test and TUI regression** (plan §Testing). Make
    `tui/scripts/smoke-test.sh` wait for operations to finish before
    sending the next key; `task test`, `task test:tui:race`, smoke test
    (isolated).
+   *Done (2026-10-10):* `wait_settled` waits for two identical captures
+   0.6 s apart without the modal footer. Keys are swallowed before the
+   modal shows, so screen text alone can't tell an operation has ended.
+   It runs after every load, reload, delete, move and connection
+   switch, and replaces the fixed sleeps there. `task test` and
+   `task test:tui:race` pass; the smoke test passes with a scratch HOME
+   (local broker, admin/admin) and its own tmux server via
+   `TMUX_TMPDIR`, which must be a short path: the long scratchpad path
+   made the socket name too long on macOS. Its scratch queues were
+   removed afterwards and mq-proxy was stopped.
 
 7. [ ] **Web: overlay, demo and loads** (plan §6). `src/progress.js`
    with `createShowTimer` (unit-tested), the overlay markup/CSS in
