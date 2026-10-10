@@ -251,7 +251,10 @@ every other queue operation (spec/07).
   `removeMatchingMessages` returns the number it removed (Jolokia
   `value`); browse-and-remove counts successful removals and, on a
   failed one, returns the count so far with the error. The proxy
-  backend's count is the sum of its rounds (spec/11).
+  backend's count is the number of distinct message IDs its rounds
+  reported, minus any it kept reporting at the end (spec/11). A proxy
+  purge or move-all that stops for lack of progress shows the
+  "incomplete" error (with both numbers) instead of the result line.
 - **Single move**: Jolokia operation `moveMessageTo(java.lang.String,
   java.lang.String)` on the source queue MBean, args `[messageID,
   targetQueueName]` — reliable across deployments.

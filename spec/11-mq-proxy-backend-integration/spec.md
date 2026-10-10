@@ -144,19 +144,43 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   (`queue.Backend.BrowseMessages` is `([]Message, bool, error)`) — the
   TUI only needs "the queue holds more than shown", not which; the
   message browser's title and the JMS Type scans use it (spec/08).
+- **Only entries with a message ID count.** `delete-messages`/
+  `move-messages` responses are read as the IDs they report; an entry
+  without a `messageId` isn't evidence that anything was removed (a
+  server that browses before consuming can report a browsed message whose
+  consume came back empty). So `RemoveMessage`/`MoveMessage` report "not
+  found" for a response holding only an ID-less entry.
 - **Bulk delete/move repeat until nothing is left.** `PurgeQueue`,
   `MoveAllMessages`, and `DeleteMessages`/`MoveMessages` **without a
   `MaxCount`** send `delete-messages`/`move-messages` in rounds (`inRounds`)
-  until a round acts on 0 messages, and return the sum — so they're
-  complete against a server that caps per call. With a `MaxCount` (incl.
-  `RemoveMessage`/`MoveMessage`'s `MaxCount: 1`) it's a single request.
-  Guards: at most `maxBulkRounds` (1,000) rounds — hitting it returns an
-  "incomplete" error (`errBulkIncomplete`) with the count so far, so a
-  server that misreports progress can't loop the TUI forever; the
-  context is checked between rounds; a failed round ends the loop with
-  the count so far alongside the error. Against `mq-proxy` an unfiltered
-  purge is one deleting round plus one returning 0 — which costs one more
-  receive timeout (~2 s, see Gotchas).
+  until a round reports no entries — so they're complete against a server
+  that caps per call. With a `MaxCount` (incl. `RemoveMessage`/
+  `MoveMessage`'s `MaxCount: 1`) it's a single request. Guards:
+  - **No progress ends it.** The loop remembers every ID reported during
+    the operation and counts only new ones. A round that reports entries
+    but nothing new — only IDs already seen, or only ID-less entries —
+    ends it with an "incomplete" error (`errBulkNoProgress`): `the server
+    kept reporting <k> message(s) it didn't remove (<n> removed)`. A
+    really removed message can't be reported again (mq-proxy consumes
+    each once; a moved message gets a new ID in the target), so this
+    catches a server that keeps reporting messages it can't consume —
+    e.g. ones a live consumer holds — within one round of the last real
+    progress, instead of repeating until the cap with a consume timeout
+    per stuck message (found by reading such a server's code: ~3 hours
+    for one stuck message). The IDs in that final round were counted
+    earlier but are evidently still there, so they come back off the
+    total. Chosen over re-reading the queue's pending count per round:
+    no extra request, and it doesn't misfire while producers keep
+    adding messages.
+  - At most `maxBulkRounds` (1,000) rounds — the last resort, returning
+    "incomplete" (`errBulkIncomplete`) with the count so far.
+  - The context is checked between rounds; a failed round ends the loop
+    with the count so far alongside the error.
+
+  Against `mq-proxy` an unfiltered purge is one deleting round plus one
+  returning 0 — which costs one more receive timeout (~2 s, see
+  Gotchas); its transacted move-all can take several rounds (seen live:
+  1,200 messages in 4 requests), which the loop completes.
 - `PurgeQueue` returns the number deleted (`(int, error)`, spec/09).
 - `SendMessage` populates `send-message`'s `jmsType`/`headers`/`groupId`/
   `correlationId` fields directly from `queue.SendMessageRequest` (spec/09) —

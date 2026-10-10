@@ -590,12 +590,16 @@ func TestMoveMessagesSendsFilter(t *testing.T) {
 // way a server that browses before consuming stops at the broker's browse
 // limit). It records each request's filter; failOn makes that request
 // (1-based) fail with HTTP 502, and stuck makes every request report
-// perRound messages without ever running out.
+// perRound messages without ever running out. Every message reported gets
+// its own ID, like a real server; noID adds that many entries without a
+// messageId to every response.
 type cappedServer struct {
 	remaining int
 	perRound  int
 	failOn    int
 	stuck     bool
+	noID      int
+	nextID    int
 	filters   []queueMessageFilter
 }
 
@@ -617,12 +621,58 @@ func (s *cappedServer) handler(t *testing.T) http.Handler {
 			n = s.perRound
 		}
 		s.remaining -= n
-		data := make([]map[string]string, n)
-		for i := range data {
-			data[i] = map[string]string{"messageId": fmt.Sprintf("ID:%d", i)}
+		data := make([]map[string]string, 0, n+s.noID)
+		for range n {
+			data = append(data, map[string]string{"messageId": fmt.Sprintf("ID:%d", s.nextID)})
+			s.nextID++
+		}
+		for range s.noID {
+			data = append(data, map[string]string{"messageId": ""})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
 	})
+}
+
+// TestBulkCountsOnlyEntriesWithAnID: an entry without a messageId isn't
+// evidence that a message was removed (a server that browses before
+// consuming can report one whose consume came back empty).
+func TestBulkCountsOnlyEntriesWithAnID(t *testing.T) {
+	s := &cappedServer{remaining: 500, perRound: 200, noID: 2}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+
+	if n != 500 {
+		t.Errorf("PurgeQueue() = %d, want 500 (the ID-less entries don't count)", n)
+	}
+	// The ID-less entries keep coming once the real messages are gone — a
+	// round with nothing new — so it ends as incomplete, not after 1,000.
+	if !errors.Is(err, errBulkNoProgress) || len(s.filters) != 4 {
+		t.Errorf("PurgeQueue() error = %v after %d requests, want errBulkNoProgress after 4", err, len(s.filters))
+	}
+}
+
+func TestSingleMessageCallsTreatAnIDLessEntryAsNotFound(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		call func(*Client) error
+	}{
+		{"RemoveMessage", func(c *Client) error { return c.RemoveMessage(context.Background(), "orders", "ID:1") }},
+		{"MoveMessage", func(c *Client) error { return c.MoveMessage(context.Background(), "orders", "ID:1", "archive") }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(w, http.StatusOK, map[string]any{"data": []map[string]string{{"messageId": ""}}, "errors": []any{}})
+			}))
+			defer stop()
+
+			err := tt.call(c)
+			if err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Errorf("error = %v, want \"not found\" — the server didn't say which message it acted on", err)
+			}
+		})
+	}
 }
 
 func TestPurgeQueueRepeatsUntilNothingIsLeft(t *testing.T) {
@@ -773,16 +823,80 @@ func TestInRoundsStopsWhenTheContextIsCancelledBetweenRounds(t *testing.T) {
 	defer cancel()
 	rounds := 0
 
-	n, err := inRounds(ctx, func() (int, error) {
+	n, err := inRounds(ctx, func() ([]string, int, error) {
 		rounds++
 		cancel() // cancelled after this round completes
-		return 400, nil
+		return []string{"ID:1", "ID:2"}, 2, nil
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("inRounds() error = %v, want context.Canceled", err)
 	}
-	if n != 400 || rounds != 1 {
-		t.Errorf("inRounds() = %d after %d rounds, want 400 after 1", n, rounds)
+	if n != 2 || rounds != 1 {
+		t.Errorf("inRounds() = %d after %d rounds, want 2 after 1", n, rounds)
+	}
+}
+
+// TestPurgeQueueStopsWhenTheServerKeepsReportingTheSameMessage is the
+// regression test for spec-wip bugfix-bulk-progress-guard: a server that
+// reports a browsed message it couldn't consume in every round used to keep
+// the client repeating until maxBulkRounds.
+func TestPurgeQueueStopsWhenTheServerKeepsReportingTheSameMessage(t *testing.T) {
+	calls := 0
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		data := []map[string]string{{"messageId": "ID:stuck"}}
+		if calls <= 3 { // 1,000 real messages in rounds of 400, 400, 200
+			for i := range min(400, 1000-(calls-1)*400) {
+				data = append(data, map[string]string{"messageId": fmt.Sprintf("ID:%d-%d", calls, i)})
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": data, "errors": []any{}})
+	}))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+
+	if !errors.Is(err, errBulkNoProgress) {
+		t.Fatalf("PurgeQueue() error = %v, want errBulkNoProgress", err)
+	}
+	if n != 1000 {
+		t.Errorf("PurgeQueue() = %d, want 1000 (the stuck one, still reported at the end, wasn't removed)", n)
+	}
+	if calls != 4 {
+		t.Errorf("requests = %d, want 4 (3 with progress, 1 reporting only the stuck message)", calls)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "kept reporting 1 message(s)") || !strings.Contains(msg, "1000 removed") {
+		t.Errorf("error = %q, want it to name the 1 message kept reported and the 1000 removed", msg)
+	}
+}
+
+func TestPurgeQueueStopsWhenOnlyIDLessEntriesAreReported(t *testing.T) {
+	s := &cappedServer{noID: 3}
+	c, stop := newTestClient(t, s.handler(t))
+	defer stop()
+
+	n, err := c.PurgeQueue(context.Background(), "orders")
+
+	if !errors.Is(err, errBulkNoProgress) {
+		t.Fatalf("PurgeQueue() error = %v, want errBulkNoProgress", err)
+	}
+	if n != 0 || len(s.filters) != 1 {
+		t.Errorf("PurgeQueue() = %d after %d requests, want 0 after 1", n, len(s.filters))
+	}
+}
+
+func TestMoveAllMessagesStopsWhenTheServerMakesNoProgress(t *testing.T) {
+	calls := 0
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		writeJSON(w, http.StatusOK, map[string]any{"data": []map[string]string{{"messageId": "ID:stuck"}}, "errors": []any{}})
+	}))
+	defer stop()
+
+	n, err := c.MoveAllMessages(context.Background(), "orders", "archive")
+
+	if !errors.Is(err, errBulkNoProgress) || n != 0 || calls != 2 {
+		t.Errorf("MoveAllMessages() = %d, %v after %d requests; want 0, errBulkNoProgress after 2", n, err, calls)
 	}
 }
 
