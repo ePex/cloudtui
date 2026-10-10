@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/ePex/cloudtui/tui/internal/ui"
@@ -118,37 +119,6 @@ func TestJMSTypeSuggestionsDedupesLoadedAndScanned(t *testing.T) {
 	}
 }
 
-// TestOnJMSTypeChangedTriggersScan confirms selecting the sentinel
-// synchronously marks a scan in flight. It deliberately does not wait for
-// startScan's actual goroutine to complete — like this codebase's view
-// load() methods, that path only completes with a running tview event
-// loop (see TestHandleScanResultMergesIntoSuggestions for the completion
-// half, tested directly instead, including where the field's text
-// actually gets cleared — see onJMSTypeChanged's doc comment for why not
-// here).
-func TestOnJMSTypeChangedTriggersScan(t *testing.T) {
-	mf, host := newTestMessageFilter(t)
-	host.scanJMSTypesFn = func(context.Context, string, int) (ui.JMSTypeScan, error) {
-		select {} // never returns; this test only checks the synchronous part
-	}
-
-	mf.onJMSTypeChanged(jmsTypeScanSentinel)
-
-	if !mf.scanning {
-		t.Error("scanning after selecting sentinel = false, want true")
-	}
-}
-
-func TestOnJMSTypeChangedIgnoresNormalText(t *testing.T) {
-	mf, _ := newTestMessageFilter(t)
-
-	mf.onJMSTypeChanged("OrderCreated")
-
-	if mf.scanning {
-		t.Error("scanning = true after a normal (non-sentinel) text change")
-	}
-}
-
 func TestStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	calls := 0
@@ -169,13 +139,12 @@ func TestStartScanIgnoresDuplicateWhileInFlight(t *testing.T) {
 }
 
 // TestHandleScanResultMergesIntoSuggestions covers startScan's
-// completion path directly (see the doc comment on
-// TestOnJMSTypeChangedTriggersScan for why it isn't exercised through
-// the real goroutine).
+// completion path directly — like this codebase's view load() methods,
+// the goroutine path only completes with a running tview event loop.
 func TestHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	mf.scanning = true
-	mf.jmsTypeItem.SetText(jmsTypeScanSentinel) // left there by onJMSTypeChanged in the real flow
+	mf.jmsTypeItem.SetText("Typ") // typed while the scan ran
 	host.loadedJMSTypes = []string{"OrderCreated"}
 
 	mf.handleScanResult(ui.JMSTypeScan{Types: []string{"ScannedType"}}, nil)
@@ -183,8 +152,8 @@ func TestHandleScanResultMergesIntoSuggestions(t *testing.T) {
 	if mf.scanning {
 		t.Error("scanning after handleScanResult = true, want false")
 	}
-	if got := mf.jmsTypeItem.GetText(); got != "" {
-		t.Errorf("field text after handleScanResult = %q, want empty", got)
+	if got := mf.jmsTypeItem.GetText(); got != "Typ" {
+		t.Errorf("field text after handleScanResult = %q, want the typed %q kept", got, "Typ")
 	}
 	got := mf.jmsTypeSuggestions("")
 	want := []string{"OrderCreated", "ScannedType", jmsTypeScanSentinel}
@@ -225,15 +194,15 @@ func TestHandleScanResultReportsTheLimit(t *testing.T) {
 func TestHandleScanResultErrorSetsStatusAndClearsFlag(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	mf.scanning = true
-	mf.jmsTypeItem.SetText(jmsTypeScanSentinel)
+	mf.jmsTypeItem.SetText("Typ")
 
 	mf.handleScanResult(ui.JMSTypeScan{}, context.DeadlineExceeded)
 
 	if mf.scanning {
 		t.Error("scanning after handleScanResult error = true, want false")
 	}
-	if got := mf.jmsTypeItem.GetText(); got != "" {
-		t.Errorf("field text after a failed scan = %q, want empty (cleared even on error)", got)
+	if got := mf.jmsTypeItem.GetText(); got != "Typ" {
+		t.Errorf("field text after a failed scan = %q, want the typed %q kept", got, "Typ")
 	}
 	if !strings.Contains(host.status, "deadline exceeded") {
 		t.Errorf("status after scan error = %q, want it to mention the error", host.status)
@@ -258,20 +227,87 @@ func TestShowResetsScannedState(t *testing.T) {
 	}
 }
 
-// TestApplyRefusesWhileScanning guards against applying the JMS Type
-// field's literal sentinel text as a filter value: while a scan is in
-// flight, the field still holds that text (see onJMSTypeChanged's doc
-// comment for why it can't be cleared synchronously).
-func TestApplyRefusesWhileScanning(t *testing.T) {
+// TestApplyWhileScanningUsesTheTypedText: the field only ever holds what
+// the user typed (the scan entry's text never goes in), so applying while
+// a scan runs is safe and filters by that text.
+func TestApplyWhileScanningUsesTheTypedText(t *testing.T) {
 	mf, host := newTestMessageFilter(t)
 	mf.scanning = true
+	mf.jmsTypeItem.SetText("TypeB")
 
 	mf.apply()
 
-	if host.appliedFilter != nil {
-		t.Errorf("ApplyMessagesFilter was called while scanning: %+v", *host.appliedFilter)
+	if host.appliedFilter == nil || host.appliedFilter.JMSType != "TypeB" {
+		t.Errorf("applied filter = %+v, want JMSType TypeB", host.appliedFilter)
 	}
-	if !strings.Contains(host.status, "scanning") {
-		t.Errorf("status = %q, want it to mention the in-progress scan", host.status)
+}
+
+// openSettledFilter opens the filter with TypeA among the loaded types and
+// the form's own focus handling installed (Form.Focus sets the handler that
+// moves to the next field on Tab/Enter). focused receives whatever the
+// form hands focus to — without a running app nothing really gets focus,
+// so Form.GetFocusedItemIndex can't tell.
+func openSettledFilter(t *testing.T) (mf *MessageFilter, focused *tview.Primitive) {
+	t.Helper()
+	mf, host := newTestMessageFilter(t)
+	host.loadedJMSTypes = []string{"TypeA"}
+	host.scanJMSTypesFn = blockForever
+	mf.Show()
+	var got tview.Primitive
+	mf.form.Focus(func(p tview.Primitive) { got = p })
+	return mf, &got
+}
+
+// TestMessageFilterKeysKeepTypedText is the regression test for Enter/Tab
+// picking the highlighted scan entry (spec-wip bugfix-jmstype-scan-input,
+// defect 2): without an arrow-key choice, both keep the typed text and
+// move on to the next form field.
+func TestMessageFilterKeysKeepTypedText(t *testing.T) {
+	for _, typed := range []string{"", "TypeB", "Type"} {
+		for _, key := range []tcell.Key{tcell.KeyEnter, tcell.KeyTab} {
+			mf, focused := openSettledFilter(t)
+
+			press(mf.jmsTypeItem, typed, key)
+
+			name := tcell.KeyNames[key] + " on " + typed
+			if mf.scanning {
+				t.Errorf("%s: started a scan", name)
+			}
+			if got := mf.jmsTypeItem.GetText(); got != typed {
+				t.Errorf("%s: field = %q, want the typed text kept", name, got)
+			}
+			if *focused != mf.form.GetFormItem(1) {
+				t.Errorf("%s: focus didn't move on to the From field", name)
+			}
+		}
+	}
+}
+
+func TestMessageFilterArrowChoiceAcceptsTheType(t *testing.T) {
+	mf, focused := openSettledFilter(t)
+
+	navigateTo(t, mf.jmsTypeItem, mf.ac, "TypeA")
+	press(mf.jmsTypeItem, tcell.KeyEnter)
+
+	if got := mf.jmsTypeItem.GetText(); got != "TypeA" {
+		t.Errorf("field = %q, want the chosen TypeA", got)
+	}
+	if *focused != mf.form.GetFormItem(0) {
+		t.Error("focus moved on — the key should only accept the choice")
+	}
+}
+
+func TestMessageFilterArrowChoiceOfScanEntryRunsTheScan(t *testing.T) {
+	mf, _ := openSettledFilter(t)
+	press(mf.jmsTypeItem, "Ty")
+
+	navigateTo(t, mf.jmsTypeItem, mf.ac, jmsTypeScanSentinel)
+	press(mf.jmsTypeItem, tcell.KeyEnter)
+
+	if !mf.scanning {
+		t.Fatal("choosing the scan entry didn't start a scan")
+	}
+	if got := mf.jmsTypeItem.GetText(); got != "Ty" {
+		t.Errorf("field = %q, want the typed %q — the scan entry never goes into the field", got, "Ty")
 	}
 }

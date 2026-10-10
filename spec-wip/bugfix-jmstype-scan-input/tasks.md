@@ -62,7 +62,7 @@ TypeA messages is enough.
    Where Down starts depends on tview's sticky highlight (sometimes it
    wraps to `TypeA` first) — tview behavior, not changed here.
 
-4. [ ] **Message filter uses the shared autocomplete** (plan §1).
+4. [x] **Message filter uses the shared autocomplete** (plan §1).
    `MessageFilter`'s JMS Type field uses the helper; its sentinel
    detection, `handleScanResult`'s field clearing and `apply()`'s
    "still scanning" refusal go. Tests as in plan §1 for the filter
@@ -71,6 +71,24 @@ TypeA messages is enough.
    Enter → title shows `type=TypeB`; `f`, Tab from the empty field →
    focus moves to From, no scan; Down onto the scan entry, Enter → scan
    runs.
+   *Done 2026-10-10.* `startScan` also reads the queue name on the UI
+   goroutine now (same lazy-read pattern as task 1). Found live and
+   fixed in the shared helper: with the scan entry as the *only*
+   suggestion (no types loaded, e.g. a filtered-empty list), Down can't
+   move tview's highlight, so no navigation was reported and the entry
+   couldn't be chosen from the keyboard — Up/Down with a single
+   suggestion now count as choosing it (test written first, failed,
+   then passed). Form-focus tests record what `Form.Focus` hands focus
+   to (`GetFocusedItemIndex` is -1 without a running app).
+   Mutation-checked: wiring the field without the helper fails all 3
+   filter key tests. `go test -race ./...` clean. Live, through
+   `mq-proxy` (5 × TypeA): `TypeB` + Tab ×4 + Enter on Apply → title
+   `(filter: type=TypeB max=500)`, no scan; Tab from an emptied field →
+   the next keystroke landed in From, no scan; Down + Enter on the lone
+   scan entry → a new `maxCount=5000` browse in the `mq-proxy` log,
+   field still empty. Also seen, not part of this bugfix: the filter
+   reopens with focus where it was left (e.g. on Apply) —
+   `MessageFilter.Show` doesn't reset the form's focus.
 
 5. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated `HOME` + separate tmux server), and the live checks from

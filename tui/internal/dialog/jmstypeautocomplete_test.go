@@ -102,6 +102,27 @@ func TestJMSTypeAutocompleteChosenScanEntryRunsTheScan(t *testing.T) {
 	}
 }
 
+// TestJMSTypeAutocompleteArrowOnASingleEntryChoosesIt: with no types to
+// suggest, the scan entry is the drop-down's only entry. Down can't move
+// the highlight in a one-entry list, so tview reports no navigation — yet
+// it's exactly when the user needs the scan (found live).
+func TestJMSTypeAutocompleteArrowOnASingleEntryChoosesIt(t *testing.T) {
+	for _, key := range []tcell.Key{tcell.KeyDown, tcell.KeyUp} {
+		field := tview.NewInputField()
+		scans := 0
+		newJMSTypeAutocomplete(field, func(string) []string {
+			return []string{jmsTypeScanSentinel}
+		}, func() { scans++ })
+		field.Autocomplete()
+
+		press(field, key, tcell.KeyEnter)
+
+		if scans != 1 {
+			t.Errorf("%s then Enter on the only entry: scans = %d, want 1", tcell.KeyNames[key], scans)
+		}
+	}
+}
+
 func TestJMSTypeAutocompleteNavigationKeepsTheDropDownAndText(t *testing.T) {
 	field, ac, _, _ := newTestAutocomplete(t)
 

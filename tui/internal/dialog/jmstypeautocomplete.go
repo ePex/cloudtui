@@ -75,16 +75,30 @@ func (ac *jmsTypeAutocomplete) autocompleted(text string, _ int, source int) boo
 	return true
 }
 
-// capture runs before tview's own key handling. On Enter/Tab with nothing
-// chosen it closes the drop-down — tview has no public "close", but
-// Autocomplete() with no entries removes it — so the key reaches the
-// field's normal handling with the typed text untouched. A no-op when no
-// drop-down is open.
+// capture runs before tview's own key handling.
+//
+// On Enter/Tab with nothing chosen it closes the drop-down — tview has no
+// public "close", but Autocomplete() with no entries removes it — so the
+// key reaches the field's normal handling with the typed text untouched.
+// A no-op when no drop-down is open.
+//
+// On Up/Down with a single suggestion it records that entry as chosen:
+// the highlight can't move in a one-entry list, so tview reports no
+// navigation — and that's typically the scan entry alone, when there are
+// no types to suggest yet, exactly when the user needs it.
 func (ac *jmsTypeAutocomplete) capture(event *tcell.EventKey) *tcell.EventKey {
-	if (event.Key() == tcell.KeyEnter || event.Key() == tcell.KeyTab) && !ac.chosen {
-		ac.suppress = true
-		ac.field.Autocomplete()
-		ac.suppress = false
+	switch event.Key() {
+	case tcell.KeyEnter, tcell.KeyTab:
+		if !ac.chosen {
+			ac.suppress = true
+			ac.field.Autocomplete()
+			ac.suppress = false
+		}
+	case tcell.KeyDown, tcell.KeyUp:
+		if entries := ac.suggestions(ac.field.GetText()); len(entries) == 1 {
+			ac.chosen = true
+			ac.highlighted = entries[0]
+		}
 	}
 	return event
 }
