@@ -43,6 +43,13 @@ matching messages further back weren't reached (see "Broker limits on
 filtered purge/move-all" below). On error, the view shows the error
 instead.
 
+While purge runs, a centered blocking `Working` modal labeled with the
+queue name displays the animated Nyan Cat rainbow trail and an indeterminate
+moving bar. The backend purge is an opaque call without a reliable internal
+progress count, including when the backend implements it as multiple fallback
+rounds. The modal closes before the existing result message or error is
+reported and before the view reloads.
+
 ### Move single message
 
 1. From the message detail view, `m` opens a queue-picker overlay listing
@@ -84,6 +91,21 @@ instead.
   plus, with a JMS Type, the same possible warning as purge (see "Broker
   limits on filtered purge/move-all" below). On error: status bar shows
   the error, queue list unchanged.
+
+While the backend move-all call runs, a blocking `Working` modal identifies
+the source queue and displays the same indeterminate Nyan animation. This
+operation does not expose a trustworthy completed/total count. The overlay
+closes before success or error feedback and the existing queue reload.
+
+### Bulk delete and move progress
+
+Deleting or moving multiple selected messages from the Messages view opens
+the same blocking progress modal, labeled with the action, message count, and
+source queue. Since the view invokes the backend once per selected message,
+the modal shows a determinate Nyan-style bar and advances after each attempt;
+failed attempts count as completed work. The overlay closes before existing
+partial-failure or success feedback and the messages list reload/focus flow.
+Single-message detail actions are unchanged.
 
 ### Broker limits on filtered purge/move-all
 
@@ -422,7 +444,9 @@ every other queue operation (spec/07).
 
 ## Out of scope (deliberate)
 
-- Progress indicators for large purges/moves; no undo.
+- A meaningful percentage or substep count during opaque queue loads,
+  move-all, or purge backend calls; those operations use an indeterminate
+  animated indicator. No undo.
 - Reaching matching messages beyond the broker's paging/browse limits
   for filtered purge/move-all (see "Broker limits on filtered
   purge/move-all"), and changing broker configuration.

@@ -43,7 +43,7 @@ A fixed three-row layout:
 Two complementary mechanisms:
 
 - **Single-key hotkeys** (active whenever no prompt/filter/form field is focused): `h` → home, `s` → settings, `l` → log, `q` → quit, `?` → help modal, `:` → command prompt.
-- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, plus later features add their own shortcuts (`:aq`, `:ap`, ...), and the name of any registered view (`:queues`, `:settings`, `:log`, ...). The special commands and their aliases live in a single table (`promptCommandTable()` in `internal/app`) shared by both execution and autocomplete, so the two can't drift out of sync. `h`/`s`/`l`/`q` (but not the two-letter aliases) are excluded from autocomplete *suggestions* specifically because they duplicate the single-key hotkeys above — see "Command prompt autocomplete" below.
+- **`:command` prompt**: `:h`/`:home`, `:s`/`:settings`, `:l`/`:log`, `:q`/`:quit`, `:theme <name>`, plus later features add their own shortcuts (`:aq`, `:ap`, ...), and the name of any registered view (`:queues`, `:settings`, `:log`, ...). `:progress-demo` simulates a 42-message operation without making backend requests, so the queue-operation progress visual can be previewed safely. The special commands and their aliases live in a single table (`promptCommandTable()` in `internal/app`) shared by both execution and autocomplete, so the two can't drift out of sync. `h`/`s`/`l`/`q` (but not the two-letter aliases) are excluded from autocomplete *suggestions* specifically because they duplicate the single-key hotkeys above — see "Command prompt autocomplete" below.
 
 ### Command prompt autocomplete
 
