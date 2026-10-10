@@ -44,7 +44,9 @@ filtered purge/move-all" below). On error, the view shows the error
 instead.
 
 While purge runs, a centered blocking `Working` modal labeled with the
-queue name displays a Nyan Cat traveling along an animated rainbow track.
+queue name displays a two-frame pixel-art Nyan Cat traveling along an
+animated rainbow track. Its pixels are drawn with colored terminal
+half-blocks, so the TUI does not depend on terminal-specific image support.
 The cat moves back and forth because the backend purge is an opaque call
 without a reliable internal
 progress count, including when the backend implements it as multiple fallback
@@ -94,7 +96,8 @@ reported and before the view reloads.
   the error, queue list unchanged.
 
 While the backend move-all call runs, a blocking `Working` modal identifies
-the source queue and animates the cat back and forth along its rainbow track.
+the source queue and animates the pixel-art cat back and forth along its
+rainbow track.
 This operation does not expose a trustworthy completed/total count. The overlay
 closes before success or error feedback and the existing queue reload.
 
@@ -103,8 +106,9 @@ closes before success or error feedback and the existing queue reload.
 Deleting or moving multiple selected messages from the Messages view opens
 the same blocking progress modal, labeled with the action, message count, and
 source queue. Since the view invokes the backend once per selected message,
-the modal shows a determinate Nyan-style bar, with the cat traveling forward
-along the rainbow to match progress, and advances after each attempt.
+the modal shows a determinate Nyan-style bar, with the pixel-art cat
+traveling forward along the rainbow to match progress, and advances after
+each attempt.
 A separate line below the bar shows the current message attempt and total
 (for example, `Message 3 of 10`); failed attempts count as completed work.
 The overlay closes before existing partial-failure or success feedback and

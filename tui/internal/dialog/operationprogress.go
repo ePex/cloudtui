@@ -15,10 +15,44 @@ const operationProgressPage = "operation-progress"
 
 var nyanColors = [...]string{"red", "yellow", "green", "cyan", "blue", "magenta"}
 
+var nyanPixelColors = map[rune]string{
+	'#': "#493B4A", // pastry outline and paws
+	'g': "#888888", // shaded fur
+	'G': "#D6D6D6", // light fur
+	'p': "#F39CCB", // pastry frosting
+	'r': "#F65D91", // sprinkles
+	'c': "#56D8DE",
+	'y': "#FFE36E",
+}
+
+var nyanSpriteFrames = [][]string{
+	{
+		"...........g.g..",
+		"..........gggg..",
+		"..########GGggg.",
+		".#ppppppppGg#gG.",
+		".#prcyprcpGgggG.",
+		".#ppppppppGgggG.",
+		"..########GGggg.",
+		"....#..#....#..#",
+	},
+	{
+		"...........g.g..",
+		"..........gggg..",
+		"..########GGggg.",
+		".#ppppppppGg#gG.",
+		".#pcyprycpGgggG.",
+		".#ppppppppGgggG.",
+		"..########GGggg.",
+		"...#..#....#..#.",
+	},
+}
+
 const (
 	nyanTrackWidth     = 34
-	nyanCatWidth       = 5
+	nyanCatWidth       = 16
 	nyanAnimationSteps = 12
+	nyanSpriteHeight   = 8
 )
 
 // OperationProgress is a blocking visual for a slow queue operation. Call
@@ -28,8 +62,10 @@ type OperationProgress struct {
 	root      *tview.Flex
 	label     *tview.TextView
 	cat       *tview.TextView
+	trail     *tview.TextView
 	bar       *tview.TextView
 	counter   *tview.TextView
+	background string
 	visible   bool
 	completed int
 	total     int
@@ -38,15 +74,17 @@ type OperationProgress struct {
 
 // NewOperationProgress builds the reusable operation progress overlay.
 func NewOperationProgress(host ui.Host) *OperationProgress {
-	op := &OperationProgress{host: host}
+	op := &OperationProgress{host: host, background: "black"}
 	op.label = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
-	op.cat = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
+	op.cat = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true).SetWrap(false)
+	op.trail = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.bar = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.counter = tview.NewTextView().SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
 	op.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(nil, 1, 0, false).
 		AddItem(op.label, 1, 0, false).
-		AddItem(op.cat, 1, 0, false).
+		AddItem(op.cat, nyanSpriteHeight/2, 0, false).
+		AddItem(op.trail, 1, 0, false).
 		AddItem(op.bar, 1, 0, false).
 		AddItem(op.counter, 1, 0, false).
 		AddItem(nil, 1, 0, false)
@@ -104,8 +142,9 @@ func (op *OperationProgress) Hide() {
 // ApplyPalette recolors the overlay when the user switches themes.
 func (op *OperationProgress) ApplyPalette(p config.Palette) {
 	bg := tcell.GetColor(p.Background)
+	op.background = p.Background
 	op.root.SetBackgroundColor(bg).SetBorderColor(tcell.GetColor(p.Border)).SetTitleColor(tcell.GetColor(p.Border))
-	for _, text := range []*tview.TextView{op.label, op.cat, op.bar, op.counter} {
+	for _, text := range []*tview.TextView{op.label, op.cat, op.trail, op.bar, op.counter} {
 		text.SetBackgroundColor(bg)
 		text.SetTextColor(tcell.GetColor(p.Text))
 	}
@@ -119,7 +158,8 @@ func (op *OperationProgress) Primitive() tview.Primitive { return op.root }
 func (op *OperationProgress) Visible() bool { return op.visible }
 
 func (op *OperationProgress) render() {
-	op.cat.SetText(op.renderNyanTrack())
+	op.cat.SetText(op.renderNyanSprite())
+	op.trail.SetText(op.renderNyanTrack())
 
 	if op.total <= 0 {
 		op.counter.SetText("")
@@ -143,35 +183,69 @@ func (op *OperationProgress) render() {
 // renderNyanTrack places the cat at the current determinate progress point,
 // or bounces it along the rainbow track for opaque operations.
 func (op *OperationProgress) renderNyanTrack() string {
-	maxPosition := nyanTrackWidth - nyanCatWidth
-	position := 0
-	if op.total > 0 {
-		completed := op.completed
-		if completed > op.total {
-			completed = op.total
-		}
-		position = maxPosition * completed / op.total
-	} else {
-		step := op.frame
-		if step >= nyanAnimationSteps/2 {
-			step = nyanAnimationSteps - 1 - step
-		}
-		position = maxPosition * step / (nyanAnimationSteps/2 - 1)
-	}
+	position := op.nyanPosition()
 	trailWidth := position
 	var track strings.Builder
 	for i := 0; i < trailWidth; i++ {
 		color := nyanColors[(i+op.frame)%len(nyanColors)]
 		fmt.Fprintf(&track, "[%s]━[-]", color)
 	}
-	track.WriteString("[white]=^.^=[-]")
-	remaining := nyanTrackWidth - position - nyanCatWidth
+	remaining := nyanTrackWidth - position
 	if remaining > 0 {
 		track.WriteString("[gray]")
 		track.WriteString(strings.Repeat("─", remaining))
 		track.WriteString("[-]")
 	}
 	return track.String()
+}
+
+func (op *OperationProgress) nyanPosition() int {
+	maxPosition := nyanTrackWidth - nyanCatWidth
+	if op.total > 0 {
+		completed := op.completed
+		if completed > op.total {
+			completed = op.total
+		}
+		return maxPosition * completed / op.total
+	}
+	step := op.frame
+	if step >= nyanAnimationSteps/2 {
+		step = nyanAnimationSteps - 1 - step
+	}
+	return maxPosition * step / (nyanAnimationSteps/2 - 1)
+}
+
+// renderNyanSprite turns a tiny two-frame pixel sprite into half-block
+// terminal cells. This gives the modal a GIF-like cat animation without
+// requiring a terminal-specific image protocol.
+func (op *OperationProgress) renderNyanSprite() string {
+	frame := nyanSpriteFrames[op.frame%len(nyanSpriteFrames)]
+	position := op.nyanPosition()
+	var sprite strings.Builder
+	for row := 0; row < nyanSpriteHeight; row += 2 {
+		sprite.WriteString(strings.Repeat(" ", position))
+		for col := 0; col < nyanCatWidth; col++ {
+			top := nyanPixelColors[rune(frame[row][col])]
+			bottom := nyanPixelColors[rune(frame[row+1][col])]
+			switch {
+			case top == "" && bottom == "":
+				sprite.WriteByte(' ')
+			case top == "":
+				fmt.Fprintf(&sprite, "[%s:%s]▄[-]", bottom, op.background)
+			case bottom == "":
+				fmt.Fprintf(&sprite, "[%s:%s]▀[-]", top, op.background)
+			case top == bottom:
+				fmt.Fprintf(&sprite, "[%s]█[-]", top)
+			default:
+				fmt.Fprintf(&sprite, "[%s:%s]▀[-]", top, bottom)
+			}
+		}
+		sprite.WriteString(strings.Repeat(" ", nyanTrackWidth-position-nyanCatWidth))
+		if row+2 < nyanSpriteHeight {
+			sprite.WriteByte('\n')
+		}
+	}
+	return sprite.String()
 }
 
 var _ ui.Themeable = (*OperationProgress)(nil)

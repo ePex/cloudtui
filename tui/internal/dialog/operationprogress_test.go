@@ -3,6 +3,10 @@ package dialog
 import (
 	"strings"
 	"testing"
+
+	"github.com/gdamore/tcell/v2"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
 )
 
 func TestOperationProgressShowAndHide(t *testing.T) {
@@ -34,6 +38,40 @@ func TestOperationProgressShowAndHide(t *testing.T) {
 	}
 }
 
+func TestOperationProgressPixelSpriteUsesMultipleColors(t *testing.T) {
+	op := NewOperationProgress(newTestHost())
+	op.ApplyPalette(config.Default().Colors)
+	op.Show("Moving messages", 10)
+	op.SetProgress(5, 10)
+
+	const width, height = 54, 14
+	op.Primitive().SetRect(0, 0, width, height)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, height)
+	op.Primitive().Draw(screen)
+	screen.Show()
+
+	colors := map[tcell.Color]bool{}
+	cells, w, _ := screen.GetContents()
+	for _, cell := range cells {
+		if len(cell.Runes) == 0 {
+			continue
+		}
+		switch cell.Runes[0] {
+		case '▀', '▄', '█':
+			fg, _, _ := cell.Style.Decompose()
+			colors[fg] = true
+		}
+	}
+	if len(colors) < 4 {
+		t.Errorf("pixel cat rendered with %d foreground colors, want multiple sprite colors (screen width %d)", len(colors), w)
+	}
+}
+
 func TestOperationProgressDeterminateRendering(t *testing.T) {
 	op := NewOperationProgress(newTestHost())
 	op.Show("Moving messages", 4)
@@ -43,15 +81,15 @@ func TestOperationProgressDeterminateRendering(t *testing.T) {
 		t.Error("cat did not move along the track with determinate progress")
 	}
 
-	text := renderedScreenText(t, op.Primitive(), 52, 10)
+	text := renderedScreenText(t, op.Primitive(), 52, 14)
 	if !strings.Contains(text, "Moving messages") {
 		t.Errorf("overlay is missing operation label: %q", text)
 	}
 	if !strings.Contains(text, "50%") || !strings.Contains(text, "Message 2 of 4") {
 		t.Errorf("overlay is missing determinate progress: %q", text)
 	}
-	if !strings.Contains(text, "=^.^=") {
-		t.Errorf("overlay is missing Nyan Cat: %q", text)
+	if !strings.Contains(text, "▀") && !strings.Contains(text, "▄") {
+		t.Errorf("overlay is missing the pixel-art Nyan Cat: %q", text)
 	}
 }
 

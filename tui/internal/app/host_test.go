@@ -25,7 +25,7 @@ func TestOperationProgressHostOwnsOverlayLifecycle(t *testing.T) {
 		t.Fatal("a replacement operation reused the old ownership token")
 	}
 	a.UpdateOperationProgress(first, 3, 4)
-	rows, _, _ := renderedRows(t, a.operationProgress.Primitive(), 54, 10)
+	rows, _, _ := renderedRows(t, a.operationProgress.Primitive(), 54, 14)
 	if got := strings.Join(rows, "\n"); !strings.Contains(got, "Deleting from orders") {
 		t.Errorf("stale update changed the displayed operation: %q", got)
 	}
@@ -34,7 +34,7 @@ func TestOperationProgressHostOwnsOverlayLifecycle(t *testing.T) {
 		t.Error("stale completion hid the current operation")
 	}
 	a.UpdateOperationProgress(second, 2, 4)
-	rows, _, _ = renderedRows(t, a.operationProgress.Primitive(), 54, 10)
+	rows, _, _ = renderedRows(t, a.operationProgress.Primitive(), 54, 14)
 	if got := strings.Join(rows, "\n"); !strings.Contains(got, "50%") || !strings.Contains(got, "Message 2 of 4") {
 		t.Errorf("current progress update was not applied: %q", got)
 	}
