@@ -57,7 +57,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    and tui/CLAUDE.md's "style first, then wire" / sticky-highlight
    gotchas, which should mention `jmsTypeAutocomplete` styling itself.
 
-3. [ ] **Switch looks on keys** (plan "Approach", transitions).
+3. [x] **Switch looks on keys** (plan "Approach", transitions).
    `capture`: first ↑/↓ while not chosen (drop-down open) switches to
    the chosen look by rebuilding the list, marks `chosen`, records the
    current entry (first entry starting with the typed text, else the
@@ -70,6 +70,34 @@ done. Live checks run with an isolated HOME and a separate tmux server
    row; theme switch while chosen → highlight in the new theme's
    selection color. Behavior: Enter after the first ↓ accepts the
    highlighted entry; existing Enter/Tab/click/scan tests still pass.
+   *Done (2026-10-10):* `setChosen` switches the look (styles, then
+   drop and rebuild the drop-down); `firstMatch` mirrors tview's
+   starting-entry rule. Three things beyond the plan, found reading
+   tview's key handling:
+   - **PgUp/PgDn** move tview's current entry like ↑/↓, so they're
+     handled the same way. Otherwise the first PgDn would choose an
+     invisible entry.
+   - **↑ on a closed drop-down** now opens it with the highlight, like
+     ↓ already did (capture can't tell whether a drop-down is open).
+   - **Accepting an entry uses up the choice.** The scan entry leaves
+     the text alone, so the changed func never reset `chosen`. With the
+     new key handling, an Esc right after a scan would have reopened and
+     closed a drop-down instead of closing the prompt.
+   Tests: `…FirstArrowHighlightsTheCurrentEntry` (↓/↑/PgDn on empty
+   text, ↓ on `TypeC` and on an unmatched prefix, then Enter takes that
+   entry), `…LaterArrowsMoveTheHighlight`, `…OtherKeysDropTheHighlight`
+   (typing, Backspace, ←, →, then Enter keeps the text),
+   `…EscAfterAChoiceOnlyClosesTheDropDown`,
+   `…ScanEntryUsesUpTheChoice`,
+   `…SingleEntryHighlightedOnlyAfterAnArrow` and
+   `…ThemeSwitchKeepsTheChoiceHighlighted`. Mutation-checked, each
+   failing at least one test: first arrow not swallowed; first arrow
+   without the rebuild; other keys keeping the highlight; accepting
+   keeping the choice; `firstMatch` ignoring the text; PgUp/PgDn not
+   handled. `task test:tui`, `task test:tui:race`, gofmt and vet pass.
+   Merge-back: spec/08 (around line 188) and spec/09 (around lines 155
+   and 410–432, including the one-entry special case, now gone) for the
+   highlight rule and the PgUp/PgDn and ↑ details.
 
 4. [ ] **Live check and regression run.** `task test`,
    `task test:tui:race`, smoke test (isolated).

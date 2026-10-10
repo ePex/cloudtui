@@ -1,6 +1,8 @@
 package dialog
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
@@ -31,13 +33,14 @@ import (
 // The drop-down's look follows the same rule: tview always has a current
 // entry and draws it in the autocomplete's selected style, so while
 // nothing is chosen that style is the plain row style, and no entry looks
-// selected (see applyStyles).
+// selected (see applyStyles). Only the first arrow key shows the
+// highlight, and any other key but Enter/Tab removes it (see capture).
 type jmsTypeAutocomplete struct {
 	field       *tview.InputField
 	palette     config.Palette
 	suggest     func(currentText string) []string
 	onScan      func()
-	chosen      bool   // highlight moved with the arrow keys since the last text change
+	chosen      bool   // an entry chosen with the arrow keys since the last keystroke
 	highlighted string // the entry the arrow keys last moved to (tests navigate by it)
 	suppress    bool   // makes suggestions return nothing, to close the drop-down
 }
@@ -93,9 +96,11 @@ func (ac *jmsTypeAutocomplete) applyStyles() {
 	ac.field.SetAutocompleteStyles(background, main, selected)
 }
 
-// textChanged is the field's changed func: any text change drops the
-// choice and its look. It runs inside tview's key handling, which holds
-// the drop-down's lock, so it can't rebuild the drop-down itself.
+// textChanged is the field's changed func: any text change (typing, or
+// SetText) drops the choice and its look. It runs inside tview's key
+// handling, which holds the drop-down's lock, so it can't rebuild the
+// drop-down itself; capture already did for keys, and the next drop-down
+// is built plain.
 func (ac *jmsTypeAutocomplete) textChanged() {
 	ac.chosen = false
 	ac.applyStyles()
@@ -109,6 +114,29 @@ func (ac *jmsTypeAutocomplete) closeDropDown() {
 	ac.suppress = false
 }
 
+// setChosen switches between the plain and the chosen look. tview copies
+// the styles only into a new drop-down, so this rebuilds an open one (and
+// opens one if there are suggestions); the rebuilt drop-down's current
+// entry is chosen by tview's rule, see firstMatch. Never call it from the
+// changed func or anything else running inside tview's key handling.
+func (ac *jmsTypeAutocomplete) setChosen(chosen bool) {
+	ac.chosen = chosen
+	ac.applyStyles()
+	ac.closeDropDown()
+	ac.field.Autocomplete()
+}
+
+// firstMatch returns the entry a new drop-down starts on, by tview v0.42's
+// rule: the first entry starting with text, else the first entry.
+func firstMatch(entries []string, text string) string {
+	for _, e := range entries {
+		if strings.HasPrefix(e, text) {
+			return e
+		}
+	}
+	return entries[0]
+}
+
 func (ac *jmsTypeAutocomplete) suggestions(currentText string) []string {
 	if ac.suppress {
 		return nil
@@ -120,12 +148,17 @@ func (ac *jmsTypeAutocomplete) suggestions(currentText string) []string {
 // only records the choice and leaves the text alone: tview rebuilds the
 // drop-down only when a key changed the text, so it stays open. Enter/Tab
 // get here only when chosen (see capture); a click is deliberate anyway.
+// Accepting uses up the choice: tview drops the drop-down, and the next
+// one is built plain (the scan entry leaves the text alone, so the
+// changed func doesn't do this for it).
 func (ac *jmsTypeAutocomplete) autocompleted(text string, _ int, source int) bool {
 	if source == tview.AutocompletedNavigate {
 		ac.chosen = true
 		ac.highlighted = text
 		return false
 	}
+	ac.chosen = false
+	ac.applyStyles()
 	if text == jmsTypeScanSentinel {
 		ac.onScan()
 	} else {
@@ -134,27 +167,46 @@ func (ac *jmsTypeAutocomplete) autocompleted(text string, _ int, source int) boo
 	return true
 }
 
-// capture runs before tview's own key handling.
+// capture runs before tview's own key handling, outside its lock.
 //
 // On Enter/Tab with nothing chosen it closes the drop-down, so the key
 // reaches the field's normal handling with the typed text untouched. A
 // no-op when no drop-down is open.
 //
-// On Up/Down with a single suggestion it records that entry as chosen:
-// the highlight can't move in a one-entry list, so tview reports no
-// navigation — and that's typically the scan entry alone, when there are
-// no types to suggest yet, exactly when the user needs it.
+// The first arrow key (or PgUp/PgDn) with nothing chosen chooses the
+// drop-down's current entry instead of moving it: it shows the highlight
+// on that entry (opening the drop-down if it was closed) and swallows the
+// key, so what lights up is what tview had current, and Enter takes it.
+// This also covers a one-entry list (typically the scan entry alone, when
+// there are no types to suggest yet), where the current entry can't move
+// and tview reports no navigation. Later arrow keys go to tview, whose
+// navigation callback (autocompleted) records the entry they move to.
+//
+// Any other key while chosen drops the choice and its highlight before
+// tview handles it, so typing, Backspace, ←/→ or Esc never leave a
+// highlight that Enter would ignore.
 func (ac *jmsTypeAutocomplete) capture(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEnter, tcell.KeyTab:
 		if !ac.chosen {
 			ac.closeDropDown()
 		}
-	case tcell.KeyDown, tcell.KeyUp:
-		if entries := ac.suggestions(ac.field.GetText()); len(entries) == 1 {
-			ac.chosen = true
-			ac.highlighted = entries[0]
+		return event
+	case tcell.KeyDown, tcell.KeyUp, tcell.KeyPgDn, tcell.KeyPgUp:
+		if ac.chosen {
+			return event
 		}
+		text := ac.field.GetText()
+		entries := ac.suggestions(text)
+		if len(entries) == 0 {
+			return event
+		}
+		ac.setChosen(true)
+		ac.highlighted = firstMatch(entries, text)
+		return nil
+	}
+	if ac.chosen {
+		ac.setChosen(false)
 	}
 	return event
 }
