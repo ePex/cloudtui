@@ -96,6 +96,12 @@ tasks:
     cmds:
       - go test ./...
 
+  test:tui:race:
+    desc: Run tui unit tests with the race detector (needs cgo; CI runs it on Linux).
+    dir: tui
+    cmds:
+      - go test -race ./...
+
   build:proxy:
     desc: Build the mq-proxy JAR and container image.
     deps: [build:proxy:jar]
