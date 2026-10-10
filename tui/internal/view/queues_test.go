@@ -14,6 +14,7 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/dialog"
 	"github.com/ePex/cloudtui/tui/internal/queue"
 	"github.com/ePex/cloudtui/tui/internal/snippet"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 type fakeQueueBackend struct {
@@ -740,5 +741,130 @@ func TestQueuesViewLoadDiscardsStaleResponse(t *testing.T) {
 
 	if got := qv.table.GetCell(1, 0).Text; got != "fresh" {
 		t.Errorf("row(1,0) after stale call 1's draw = %q, want unchanged %q", got, "fresh")
+	}
+}
+
+// blockUntilCancelled is a listFn that waits for the load to be
+// cancelled, as a hung backend would, and signals started first.
+func blockUntilCancelled(started chan<- struct{}) func(context.Context) ([]queue.Summary, error) {
+	return func(ctx context.Context) ([]queue.Summary, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+}
+
+func TestQueuesViewLoadRunsAsAnAbortableOperation(t *testing.T) {
+	backend := &fakeQueueBackend{summaries: []queue.Summary{{Name: "orders"}}}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.Load()
+	<-host.drawn
+
+	op := host.lastOperation()
+	if op == nil {
+		t.Fatal("Load() started no operation")
+	}
+	if op.title != "Loading queues" || op.total != 0 || op.kind != ui.OpAbortable {
+		t.Errorf("operation = %q, total %d, kind %v; want \"Loading queues\", 0, abortable", op.title, op.total, op.kind)
+	}
+	if !op.isFinished() {
+		t.Error("operation not finished after the load")
+	}
+	if got := qv.table.GetCell(1, 0).Text; got != "orders" {
+		t.Errorf("row(1,0) = %q, want orders", got)
+	}
+}
+
+func TestQueuesViewLoadCancelledShowsTheRetryRow(t *testing.T) {
+	started := make(chan struct{})
+	backend := &fakeQueueBackend{listFn: blockUntilCancelled(started)}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.Load()
+	<-started
+	op := host.lastOperation()
+	op.stop()
+	<-host.drawn
+
+	if got := qv.table.GetCell(1, 0).Text; got != loadCancelledStatus {
+		t.Errorf("row(1,0) after Esc = %q, want %q", got, loadCancelledStatus)
+	}
+	if !op.isFinished() {
+		t.Error("cancelled operation not finished")
+	}
+}
+
+func TestQueuesViewStaleLoadFinishesOnlyItsOwnOperation(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	firstCalled, releaseFirst := make(chan struct{}), make(chan struct{})
+	secondCalled, releaseSecond := make(chan struct{}), make(chan struct{})
+	backend := &fakeQueueBackend{}
+	backend.listFn = func(context.Context) ([]queue.Summary, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			close(firstCalled)
+			<-releaseFirst
+			return []queue.Summary{{Name: "stale"}}, nil
+		}
+		close(secondCalled)
+		<-releaseSecond
+		return []queue.Summary{{Name: "fresh"}}, nil
+	}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 2)
+
+	qv.Load()
+	<-firstCalled
+	first := host.lastOperation()
+	qv.Load()
+	<-secondCalled
+	second := host.lastOperation()
+
+	close(releaseFirst)
+	<-host.drawn
+	if !first.isFinished() {
+		t.Error("the stale load didn't finish its own operation")
+	}
+	if second.isFinished() {
+		t.Error("the stale load finished the newer load's operation")
+	}
+	close(releaseSecond)
+	<-host.drawn
+	if !second.isFinished() {
+		t.Error("the newer load didn't finish its operation")
+	}
+}
+
+func TestQueuesViewReauthTextGoesToTheModal(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	backend := &fakeQueueBackend{listFn: func(context.Context) ([]queue.Summary, error) {
+		close(started)
+		<-release
+		return []queue.Summary{{Name: "orders"}}, nil
+	}}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.Load()
+	<-started
+	op := host.lastOperation()
+	qv.ShowReauthWaiting("AWS SSO session expired — code ABCD-EFGH")
+	if got := op.detailText(); got != "AWS SSO session expired — code ABCD-EFGH" {
+		t.Errorf("modal detail = %q, want the SSO text", got)
+	}
+	qv.ShowReauthDone()
+	if got := op.detailText(); got != "" {
+		t.Errorf("modal detail after ShowReauthDone = %q, want it cleared", got)
+	}
+
+	close(release)
+	<-host.drawn
+	qv.ShowReauthWaiting("later")
+	if got := op.detailText(); got != "" {
+		t.Errorf("finished load's modal detail = %q, want it left alone", got)
 	}
 }

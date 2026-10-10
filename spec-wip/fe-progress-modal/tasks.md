@@ -46,7 +46,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    answers — the round's result still counts and no further round
    starts; the same for a Jolokia mutation.
 
-4. [ ] **Queue list and message list loads** (plan §3). `QueuesView.Load`
+4. [x] **Queue list and message list loads** (plan §3). `QueuesView.Load`
    and `MessagesView.Load` run as abortable operations; Esc shows
    `Loading cancelled — press r to retry`; a superseded queue reload
    can't close the newer modal; SSO re-auth text also goes to the
@@ -56,6 +56,17 @@ done. Live checks run with an isolated HOME and a separate tmux server
    a closed port fails too fast to see anything), open the queue list →
    spinner `Loading queues` after a moment; Esc → retry row; `r` →
    modal again. A fast local load shows no modal (no flash).
+   *Done (2026-10-10):* with two fake proxies on localhost instead of
+   `nc` (one never answers; one answers list-queues with a queue but
+   hangs on list-messages): queue list → `⠹ Loading queues…` with `Esc
+   to cancel`; `s` ignored; Esc → `Loading cancelled — press r to
+   retry`; `r` → modal again. Opening the queue → `Loading messages from
+   "demo.orders"…`; `d` ignored (no delete confirm); Esc → the retry
+   row. A fast queue-list load: 0 of 20 screen captures, 50 ms apart,
+   showed the modal. The AWS SSO text in the modal is unit-tested only
+   (no SSO setup to drive locally). The message list also drops its
+   loaded messages and marks on a cancel, since they may be another
+   queue's.
 
 5. [ ] **Purge, move all, single and bulk delete/move** (plan §3).
    Purge (queue list and message list) and move all as stoppable

@@ -359,15 +359,18 @@ func withDefaultMaxCount(f queue.MessageFilter) queue.MessageFilter {
 
 // Load browses the queue in the background. An unfiltered browse also
 // fetches the queue's pending count, concurrently, so the title can say
-// when the browser shows only part of the queue (browseNote).
+// when the browser shows only part of the queue (browseNote). It runs as
+// an abortable operation in the progress modal: Esc cancels the requests
+// and leaves loadCancelledStatus in the table.
 func (mv *MessagesView) Load() {
 	queueName := mv.queueName
 	filter := withDefaultMaxCount(mv.filter)
 	mv.browseNote = "" // the previous load's; a different queue or filter makes it wrong
 	mv.loadHasMore, mv.loadPending = false, -1
 	mv.updateTitle()
+	op := mv.host.StartOperation(fmt.Sprintf("Loading messages from %q", queueName), 0, ui.OpAbortable)
 	go func() {
-		ctx := context.Background()
+		ctx := op.Ctx()
 		backend := mv.host.Backend()
 		pending := int64(-1)
 		var wg sync.WaitGroup
@@ -381,9 +384,30 @@ func (mv *MessagesView) Load() {
 		msgs, hasMore, err := backend.BrowseMessages(ctx, queueName, filter)
 		wg.Wait()
 		mv.host.QueueUpdateDraw(func() {
+			op.Finish()
+			if op.Stopped() {
+				mv.showCancelled()
+				return
+			}
 			mv.applyLoad(queueName, filter, msgs, hasMore, pending, err)
 		})
 	}()
+}
+
+// showCancelled drops whatever the table held — it may be another queue's
+// or filter's messages, which d/m must not act on — and leaves
+// loadCancelledStatus in its place.
+func (mv *MessagesView) showCancelled() {
+	mv.repaint(nil)
+	for mv.table.GetRowCount() > 1 {
+		mv.table.RemoveRow(mv.table.GetRowCount() - 1)
+	}
+	mv.table.SetCell(1, 0,
+		tview.NewTableCell(loadCancelledStatus).
+			SetTextColor(tcell.GetColor(mv.host.Config().Colors.Accent)).
+			SetSelectable(false).
+			SetExpansion(3),
+	)
 }
 
 // applyLoad applies a completed Load — split out from its goroutine so

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -854,5 +855,76 @@ func TestMessagesViewRepaintScrollsToTopWithManyRows(t *testing.T) {
 
 	if row, _ := mv.table.GetOffset(); row != 0 {
 		t.Errorf("table scrolled away from top: rowOffset = %d, want 0", row)
+	}
+}
+
+// newTestMessagesViewWithDrawSignal is newTestMessagesView with a
+// draw-signaling host and backend b, for tests that wait on Load().
+func newTestMessagesViewWithDrawSignal(t *testing.T, b *fakeQueueBackend) (*drawSignalingHost, *MessagesView) {
+	t.Helper()
+	base := newFakeViewHost()
+	base.backend = b
+	host := &drawSignalingHost{fakeViewHost: base, drawn: make(chan struct{}, 4)}
+	mv := NewMessagesView(host, dialog.NewMessageFilter(host),
+		dialog.NewSendMessageOverlay(host, dialog.NewSnippetPicker(host, snippet.NewStore("")), dialog.NewConfirmDialog(host)),
+		dialog.NewConfirmDialog(host), dialog.NewMovePicker(host), dialog.NewJMSTypePrompt(host), dialog.NewTextPrompt(host),
+		func(string, queue.Message) {})
+	return host, mv
+}
+
+func TestMessagesViewLoadRunsAsAnAbortableOperation(t *testing.T) {
+	backend := &fakeQueueBackend{browseFn: func(context.Context, string, queue.MessageFilter) ([]queue.Message, bool, error) {
+		return []queue.Message{{ID: "ID:1", Timestamp: time.Unix(1, 0)}}, false, nil
+	}}
+	host, mv := newTestMessagesViewWithDrawSignal(t, backend)
+	mv.queueName = "orders"
+
+	mv.Load()
+	<-host.drawn
+
+	op := host.lastOperation()
+	if op == nil {
+		t.Fatal("Load() started no operation")
+	}
+	if op.title != `Loading messages from "orders"` || op.total != 0 || op.kind != ui.OpAbortable {
+		t.Errorf("operation = %q, total %d, kind %v; want the queue's loading title, 0, abortable", op.title, op.total, op.kind)
+	}
+	if !op.isFinished() {
+		t.Error("operation not finished after the load")
+	}
+	if len(mv.msgs) != 1 {
+		t.Errorf("loaded %d message(s), want 1", len(mv.msgs))
+	}
+}
+
+func TestMessagesViewLoadCancelledDropsTheOldMessages(t *testing.T) {
+	started := make(chan struct{})
+	backend := &fakeQueueBackend{browseFn: func(ctx context.Context, _ string, _ queue.MessageFilter) ([]queue.Message, bool, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, false, ctx.Err()
+	}}
+	host, mv := newTestMessagesViewWithDrawSignal(t, backend)
+	mv.queueName = "orders"
+	mv.repaint([]queue.Message{{ID: "ID:old", Timestamp: time.Unix(1, 0)}}) // another load's messages
+	mv.marked["ID:old"] = true
+
+	mv.Load()
+	<-started
+	op := host.lastOperation()
+	op.stop()
+	<-host.drawn
+
+	if got := mv.table.GetCell(1, 0).Text; got != loadCancelledStatus {
+		t.Errorf("row(1,0) after Esc = %q, want %q", got, loadCancelledStatus)
+	}
+	if len(mv.msgs) != 0 || len(mv.marked) != 0 {
+		t.Errorf("after Esc: %d message(s), %d mark(s); want none left to act on", len(mv.msgs), len(mv.marked))
+	}
+	if ids := mv.targetIDs(); len(ids) != 0 {
+		t.Errorf("targetIDs() = %v, want nothing for d/m to act on", ids)
+	}
+	if !op.isFinished() {
+		t.Error("cancelled operation not finished")
 	}
 }

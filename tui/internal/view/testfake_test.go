@@ -114,7 +114,8 @@ func (f *fakeViewHost) ToggleFavorite(kind config.FavoriteKind, profile, name st
 }
 func (f *fakeViewHost) ReloadAfterSend(queueName string) {}
 
-// StartOperation records the operation a view starts in f.operations.
+// StartOperation records the operation a view starts in f.operations;
+// tests read it back with lastOperation and press "Esc" with stop.
 func (f *fakeViewHost) StartOperation(title string, total int, kind ui.OpKind) ui.Operation {
 	ctx, cancel := context.WithCancel(context.Background())
 	op := &fakeOperation{title: title, total: total, kind: kind, ctx: ctx, cancel: cancel}
@@ -122,6 +123,16 @@ func (f *fakeViewHost) StartOperation(title string, total int, kind ui.OpKind) u
 	f.operations = append(f.operations, op)
 	f.opsMu.Unlock()
 	return op
+}
+
+// lastOperation is the most recently started operation, or nil.
+func (f *fakeViewHost) lastOperation() *fakeOperation {
+	f.opsMu.Lock()
+	defer f.opsMu.Unlock()
+	if len(f.operations) == 0 {
+		return nil
+	}
+	return f.operations[len(f.operations)-1]
 }
 
 // fakeOperation is a ui.Operation that records what the view reports.
@@ -137,6 +148,28 @@ type fakeOperation struct {
 	detail   string
 	stopped  bool
 	finished bool
+}
+
+// stop is the user pressing Esc.
+func (o *fakeOperation) stop() {
+	o.mu.Lock()
+	o.stopped = true
+	o.mu.Unlock()
+	o.cancel()
+}
+
+// isFinished reports whether the view finished the operation.
+func (o *fakeOperation) isFinished() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.finished
+}
+
+// detailText is the operation's current detail line.
+func (o *fakeOperation) detailText() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.detail
 }
 
 func (o *fakeOperation) Ctx() context.Context { return o.ctx }

@@ -24,6 +24,10 @@ var queueColumns = []string{"NAME", "PENDING", "CONSUMERS", "ENQUEUED", "DEQUEUE
 // ShowReauthDone reverts to, so both stay in sync.
 const loadingQueuesStatus = "Loading queues…"
 
+// loadCancelledStatus replaces a list's rows when the user cancels its
+// load with Esc in the progress modal (spec-wip fe-progress-modal).
+const loadCancelledStatus = "Loading cancelled — press r to retry"
+
 type QueuesView struct {
 	table         *tview.Table
 	filterInput   *tview.InputField
@@ -41,6 +45,7 @@ type QueuesView struct {
 	sortCol       int             // 0=NAME,1=PENDING,2=CONSUMERS,3=ENQUEUED,4=DEQUEUED
 	sortAsc       bool            // true = ascending
 	loadSeq       int             // incremented per Load() call; guards against a stale response landing after a newer one
+	loadOp        ui.Operation    // the running Load()'s progress-modal operation, for the AWS SSO text
 }
 
 var _ ui.View = (*QueuesView)(nil)
@@ -283,16 +288,26 @@ func (qv *QueuesView) setHeader() {
 // connection's queues with no indication a fetch is even in progress).
 // loadSeq guards against a slow, superseded response clobbering a newer
 // one if Load() is called again (another connection switch, or `r`)
-// before the first call resolves.
+// before the first call resolves. The load runs as an abortable
+// operation in the progress modal: Esc cancels the request and leaves
+// loadCancelledStatus in the table.
 func (qv *QueuesView) Load() {
 	qv.loadSeq++
 	seq := qv.loadSeq
 	qv.showStatus(loadingQueuesStatus)
+	op := qv.host.StartOperation("Loading queues", 0, ui.OpAbortable)
+	qv.loadOp = op
 	go func() {
-		summaries, err := qv.backend.List(context.Background())
+		summaries, err := qv.backend.List(op.Ctx())
 		qv.host.QueueUpdateDraw(func() {
+			op.Finish()
 			if seq != qv.loadSeq {
 				return // superseded by a newer Load()
+			}
+			qv.loadOp = nil
+			if op.Stopped() {
+				qv.showStatus(loadCancelledStatus)
+				return
 			}
 			if err != nil {
 				slog.Error("queues: failed to list queues", "error", err)
@@ -452,10 +467,20 @@ func (qv *QueuesView) showStatus(msg string) {
 // reflects that instead of sitting on a generic "Loading queues…" for
 // the whole wait — then reverts once login completes, right before the
 // fetch itself retries.
+//
+// The progress modal covers the table during a load, so the same text
+// also goes to the modal's detail line — it carries the device code the
+// user needs.
 func (qv *QueuesView) ShowReauthWaiting(msg string) {
 	qv.showStatus(msg)
+	if qv.loadOp != nil {
+		qv.loadOp.SetDetail(msg)
+	}
 }
 
 func (qv *QueuesView) ShowReauthDone() {
 	qv.showStatus(loadingQueuesStatus)
+	if qv.loadOp != nil {
+		qv.loadOp.SetDetail("")
+	}
 }
