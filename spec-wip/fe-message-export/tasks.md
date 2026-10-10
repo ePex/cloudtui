@@ -99,6 +99,6 @@ with `jq`.
    a 10-message queue → all 10; on the 1,600-message queue → info line
    `… 400 of 1600 …`; every line parses as JSON.
 
-6. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+6. [x] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and the live checks from tasks 3–5 in one session.
    Remove scratch queues and files; stop `mq-proxy`.
