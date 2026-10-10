@@ -94,6 +94,11 @@ runs plain `go test ./...` (no `-race`), so it went unnoticed.
   real: `startScan`'s goroutine read `jp.queueName` lazily, while
   reopening the prompt (`Show`) writes it. The scan now copies the queue
   name on the UI goroutine before starting.
+- **The message filter always opens with focus on the JMS Type field.**
+  *Added 2026-10-10 (found in task 4):* it reopened with focus wherever
+  it was left — e.g. on Apply after applying — so typing straight away
+  went nowhere. `tview.Form` remembers its focused item across `Show`
+  calls (tui/CLAUDE.md), and `MessageFilter.Show` didn't reset it.
 - **CI runs the TUI tests with `-race` on the Ubuntu job**, so a data
   race fails the build. One platform is enough to catch races; macOS
   and Windows keep running plain `go test`. (Decided 2026-10-10.)

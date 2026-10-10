@@ -283,6 +283,24 @@ func TestMessageFilterKeysKeepTypedText(t *testing.T) {
 	}
 }
 
+// TestMessageFilterReopensOnTheJMSTypeField: tview.Form remembers its
+// focused item across Show calls, so without a reset the filter reopened
+// wherever it was left — e.g. on Apply — and typing went nowhere.
+func TestMessageFilterReopensOnTheJMSTypeField(t *testing.T) {
+	mf, focused := openSettledFilter(t)
+	press(mf.jmsTypeItem, tcell.KeyTab) // focus moves on to From
+	if *focused != mf.form.GetFormItem(1) {
+		t.Fatal("setup: Tab didn't move focus to From")
+	}
+
+	mf.Show()
+	mf.form.Focus(func(p tview.Primitive) { *focused = p })
+
+	if *focused != mf.form.GetFormItem(0) {
+		t.Error("reopened filter didn't focus the JMS Type field")
+	}
+}
+
 func TestMessageFilterArrowChoiceAcceptsTheType(t *testing.T) {
 	mf, focused := openSettledFilter(t)
 

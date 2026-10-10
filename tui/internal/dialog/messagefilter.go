@@ -182,6 +182,9 @@ func (mf *MessageFilter) Show() {
 	ui.SetInputFieldText(mf.form.GetFormItem(3).(*tview.InputField), maxCount)
 
 	mf.host.ShowPage("message-filter")
+	// tview.Form remembers its focused item across Show calls; without
+	// this it reopens wherever it was left, e.g. on Apply.
+	mf.form.SetFocus(0)
 	mf.host.SetFocus(mf.form)
 	mf.visible = true
 }

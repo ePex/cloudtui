@@ -86,9 +86,11 @@ TypeA messages is enough.
    `(filter: type=TypeB max=500)`, no scan; Tab from an emptied field →
    the next keystroke landed in From, no scan; Down + Enter on the lone
    scan entry → a new `maxCount=5000` browse in the `mq-proxy` log,
-   field still empty. Also seen, not part of this bugfix: the filter
-   reopens with focus where it was left (e.g. on Apply) —
-   `MessageFilter.Show` doesn't reset the form's focus.
+   field still empty. Also seen: the filter reopened with focus where
+   it was left (e.g. on Apply) — `MessageFilter.Show` didn't reset the
+   form's focus. Fixed here at the user's request (spec.md amended):
+   `Show` calls `form.SetFocus(0)`, like the send-message and snippet
+   forms; regression test written first, failed, then passed.
 
 5. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated `HOME` + separate tmux server), and the live checks from
