@@ -68,7 +68,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    loaded messages and marks on a cancel, since they may be another
    queue's.
 
-5. [ ] **Purge, move all, single and bulk delete/move** (plan §3).
+5. [x] **Purge, move all, single and bulk delete/move** (plan §3).
    Purge (queue list and message list) and move all as stoppable
    operations reporting `(cancelled)`; `deleteMarked` / `moveMarked`
    with `Step` per message, stop before the next message, and
@@ -79,7 +79,21 @@ done. Live checks run with an isolated HOME and a separate tmux server
    stops after the current message, status line and reloaded list
    agree. Purge the 1,600-message scratch queue → spinner; on the proxy
    backend Esc stops before the next round.
-
+   *Done (2026-10-10):* proxy: 200 marked → `Deleting 200 message(s)
+   from "…"`, `12 of 200` after 1 s; Esc → `Deleted 14 of 200
+   message(s); cancelled`, and the broker held 186. Proxy purge of 1,600
+   with Esc → `Stopping after the current request…`; mq-proxy removed
+   all 1,600 in its one request, which first showed a misleading
+   `(cancelled)` — fixed (`unlessQueueEmptied`), now `Purged 1600
+   message(s) from "…"`. Jolokia: counted bar `400 of 400` (its browse
+   stops at 400); the local broker deletes 400 in about half a second,
+   too fast to press Esc, so Jolokia's stop between messages is covered
+   by unit tests (task 3). Jolokia purge with Esc runs to the end
+   (`purgeQueue()` is one request) and reports `Purged 1600
+   message(s)…`; a purge under 250 ms shows no modal. The detail view's
+   single move isn't unit-tested (it runs through the move picker's
+   async queue list); it shares its code shape with the tested single
+   delete.
 6. [ ] **Smoke test and TUI regression** (plan §Testing). Make
    `tui/scripts/smoke-test.sh` wait for operations to finish before
    sending the next key; `task test`, `task test:tui:race`, smoke test

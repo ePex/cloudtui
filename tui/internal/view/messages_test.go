@@ -2,8 +2,10 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -926,5 +928,188 @@ func TestMessagesViewLoadCancelledDropsTheOldMessages(t *testing.T) {
 	}
 	if !op.isFinished() {
 		t.Error("cancelled operation not finished")
+	}
+}
+
+func TestRunEachStopsBeforeTheNextOne(t *testing.T) {
+	host := newFakeViewHost()
+	op := host.StartOperation("Deleting", 3, ui.OpStoppable).(*fakeOperation)
+	var called []string
+	done, failed := runEach(op, []string{"a", "b", "c"}, func(id string) error {
+		called = append(called, id)
+		if id == "b" {
+			op.stop() // Esc while "b" is in flight
+			return errors.New("broken")
+		}
+		return nil
+	})
+
+	if done != 2 || failed != 1 {
+		t.Errorf("runEach() = %d done, %d failed; want 2, 1", done, failed)
+	}
+	if strings.Join(called, ",") != "a,b" {
+		t.Errorf("called %v, want a and b only (stop before c)", called)
+	}
+	if got, want := fmt.Sprint(op.stepsTaken()), "[[1 0] [2 1]]"; got != want {
+		t.Errorf("steps = %s, want %s (failures count as done)", got, want)
+	}
+}
+
+func TestBulkStatus(t *testing.T) {
+	tests := []struct {
+		verb, target        string
+		done, failed, total int
+		want                string
+	}{
+		{"Deleted", "", 3, 0, 3, "Deleted 3 message(s)"},
+		{"Deleted", "", 1, 0, 1, "Deleted message"},
+		{"Deleted", "", 3, 1, 3, "[red]Deleted 2/3 message(s); 1 failed[-]"},
+		{"Deleted", "", 1, 0, 3, "[yellow]Deleted 1 of 3 message(s); cancelled[-]"},
+		{"Moved", ` to "archive"`, 2, 1, 5, `[red]Moved 1 of 5 message(s) to "archive"; 1 failed; cancelled[-]`},
+		{"Moved", ` to "archive"`, 1, 0, 1, `Moved message to "archive"`},
+	}
+	for _, tt := range tests {
+		if got := bulkStatus(tt.verb, tt.target, tt.done, tt.failed, tt.total); got != tt.want {
+			t.Errorf("bulkStatus(%q, %q, %d, %d, %d) = %q, want %q", tt.verb, tt.target, tt.done, tt.failed, tt.total, got, tt.want)
+		}
+	}
+}
+
+// threeMarked loads three messages into mv and marks them all.
+func threeMarked(mv *MessagesView) {
+	mv.queueName = "orders"
+	mv.repaint([]queue.Message{
+		{ID: "ID:1", Timestamp: time.Unix(3, 0)},
+		{ID: "ID:2", Timestamp: time.Unix(2, 0)},
+		{ID: "ID:3", Timestamp: time.Unix(1, 0)},
+	})
+	for _, m := range mv.msgs {
+		mv.marked[m.ID] = true
+	}
+}
+
+func TestMessagesViewDeleteMarkedRunsACountedOperation(t *testing.T) {
+	var mu sync.Mutex
+	var removed []string
+	backend := &fakeQueueBackend{removeMessageFn: func(_ context.Context, _, id string) error {
+		mu.Lock()
+		removed = append(removed, id)
+		mu.Unlock()
+		return nil
+	}}
+	host, mv := newTestMessagesViewWithDrawSignal(t, backend)
+	threeMarked(mv)
+
+	mv.deleteMarked()
+	confirmYes(mv.confirm)
+	<-host.drawn // the delete's result
+	<-host.drawn // the reload it starts
+
+	ops := host.operationsSnapshot()
+	if len(ops) != 2 {
+		t.Fatalf("started %d operation(s), want the delete and the reload", len(ops))
+	}
+	op := ops[0]
+	if op.title != `Deleting 3 message(s) from "orders"` || op.total != 3 || op.kind != ui.OpStoppable {
+		t.Errorf("operation = %q, total %d, kind %v; want the counted delete, stoppable", op.title, op.total, op.kind)
+	}
+	if got, want := fmt.Sprint(op.stepsTaken()), "[[1 0] [2 0] [3 0]]"; got != want {
+		t.Errorf("steps = %s, want %s", got, want)
+	}
+	if !op.isFinished() {
+		t.Error("delete operation not finished")
+	}
+	if host.status != "Deleted 3 message(s)" {
+		t.Errorf("status = %q, want %q", host.status, "Deleted 3 message(s)")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(removed) != 3 {
+		t.Errorf("removed %v, want all three", removed)
+	}
+}
+
+func TestMessagesViewDeleteStoppedMidwayReportsCancelled(t *testing.T) {
+	var host *drawSignalingHost
+	calls := 0
+	backend := &fakeQueueBackend{removeMessageFn: func(context.Context, string, string) error {
+		calls++
+		host.lastOperation().stop() // Esc during the first removal
+		return nil
+	}}
+	host, mv := newTestMessagesViewWithDrawSignal(t, backend)
+	threeMarked(mv)
+
+	mv.deleteMarked()
+	confirmYes(mv.confirm)
+	<-host.drawn
+	<-host.drawn
+
+	if calls != 1 {
+		t.Errorf("%d removal(s), want 1 (stop before the next)", calls)
+	}
+	if want := "[yellow]Deleted 1 of 3 message(s); cancelled[-]"; host.status != want {
+		t.Errorf("status = %q, want %q", host.status, want)
+	}
+}
+
+func TestMessagesViewDeleteCursorRowRunsAnUncountedOperation(t *testing.T) {
+	host, mv := newTestMessagesViewWithDrawSignal(t, &fakeQueueBackend{})
+	mv.queueName = "orders"
+	mv.repaint([]queue.Message{{ID: "ID:1", Timestamp: time.Unix(1, 0)}})
+	mv.table.Select(1, 0)
+
+	mv.deleteMarked()
+	confirmYes(mv.confirm)
+	<-host.drawn
+	<-host.drawn
+
+	op := host.operationsSnapshot()[0]
+	if op.title != `Deleting message from "orders"` || op.total != 0 {
+		t.Errorf("operation = %q, total %d; want the single delete, uncounted", op.title, op.total)
+	}
+}
+
+func TestMessagesViewRunBulkMove(t *testing.T) {
+	tests := []struct {
+		marked    bool
+		wantTitle string
+		wantTotal int
+	}{
+		{true, `Moving 2 message(s) from "orders" to "archive"`, 2},
+		{false, `Moving message from "orders" to "archive"`, 0},
+	}
+	for _, tt := range tests {
+		var mu sync.Mutex
+		var moved []string
+		backend := &fakeQueueBackend{moveMessageFn: func(_ context.Context, _, id, target string) error {
+			mu.Lock()
+			moved = append(moved, id+">"+target)
+			mu.Unlock()
+			return nil
+		}}
+		host, mv := newTestMessagesViewWithDrawSignal(t, backend)
+		mv.queueName = "orders"
+		restored := false
+		ids := []string{"ID:1", "ID:2"}
+		if !tt.marked {
+			ids = ids[:1]
+		}
+
+		mv.runBulkMove("orders", "archive", ids, tt.marked, func() { restored = true })
+		<-host.drawn // the reload
+
+		op := host.operationsSnapshot()[0]
+		if op.title != tt.wantTitle || op.total != tt.wantTotal || op.kind != ui.OpStoppable {
+			t.Errorf("marked %v: operation = %q, total %d, kind %v; want %q, %d, stoppable", tt.marked, op.title, op.total, op.kind, tt.wantTitle, tt.wantTotal)
+		}
+		if !op.isFinished() || !restored {
+			t.Errorf("marked %v: finished %v, restored %v; want both", tt.marked, op.isFinished(), restored)
+		}
+		mu.Lock()
+		if len(moved) != len(ids) {
+			t.Errorf("marked %v: moved %v, want %d", tt.marked, moved, len(ids))
+		}
+		mu.Unlock()
 	}
 }

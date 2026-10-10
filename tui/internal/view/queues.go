@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -218,25 +219,49 @@ func (qv *QueuesView) restoreShortcuts() {
 }
 
 // pickMoveAllTarget shows the move-picker for srcQueue, and on target
-// selection performs the move via doMoveAll.
+// selection performs the move via runMoveAll.
 func (qv *QueuesView) pickMoveAllTarget(srcQueue, jmsType string) {
 	qv.movePicker.Show(srcQueue, func(target string) {
-		ctx := context.Background()
-		count, err := qv.doMoveAll(ctx, srcQueue, target, jmsType)
-		var warning string
-		if err == nil {
-			warning = filteredRemainderWarning(ctx, qv.backend, srcQueue, jmsType)
-		}
-		qv.host.QueueUpdateDraw(func() {
-			if err != nil {
-				slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
-				qv.showError(err)
-				return
-			}
-			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
-			qv.Load()
-		})
+		qv.runMoveAll(srcQueue, target, jmsType)
 	}, qv.restoreShortcuts)
+}
+
+// runMoveAll moves srcQueue's messages (or only jmsType's) to target via
+// doMoveAll, as a stoppable operation in the progress modal (spec-wip
+// fe-progress-modal), and reports the result. It blocks on the backend,
+// so it must run off the UI goroutine (the move picker calls onSelect in
+// a goroutine of its own).
+func (qv *QueuesView) runMoveAll(srcQueue, target, jmsType string) {
+	op := qv.host.StartOperation(moveAllTitle(srcQueue, target, jmsType), 0, ui.OpStoppable)
+	count, err := qv.doMoveAll(op.Ctx(), srcQueue, target, jmsType)
+	err = unlessQueueEmptied(qv.backend, srcQueue, jmsType, err)
+	var warning string
+	if err == nil {
+		warning = filteredRemainderWarning(context.Background(), qv.backend, srcQueue, jmsType)
+	}
+	qv.host.QueueUpdateDraw(func() {
+		op.Finish()
+		if errors.Is(err, context.Canceled) {
+			qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + cancelledSuffix)
+			qv.Load()
+			return
+		}
+		if err != nil {
+			slog.Error("queues: move all failed", "src", srcQueue, "dst", target, "jmsType", jmsType, "error", err)
+			qv.showError(err)
+			return
+		}
+		qv.host.SetStatus(fmt.Sprintf("Moved %d message(s) from %q to %q", count, srcQueue, target) + warning)
+		qv.Load()
+	})
+}
+
+// moveAllTitle is the progress modal's title for a move-all.
+func moveAllTitle(srcQueue, target, jmsType string) string {
+	if jmsType == "" {
+		return fmt.Sprintf("Moving all messages from %q to %q", srcQueue, target)
+	}
+	return fmt.Sprintf("Moving %s messages from %q to %q", jmsType, srcQueue, target)
 }
 
 // doMoveAll dispatches to the backend call matching jmsType:

@@ -35,6 +35,10 @@ type fakeQueueBackend struct {
 	listFn func(ctx context.Context) ([]queue.Summary, error)
 	// browseFn overrides BrowseMessages when set (the export tests).
 	browseFn func(ctx context.Context, queueName string, filter queue.MessageFilter) ([]queue.Message, bool, error)
+	// removeMessageFn and moveMessageFn override the single-message
+	// calls when set (the progress tests).
+	removeMessageFn func(ctx context.Context, queueName, messageID string) error
+	moveMessageFn   func(ctx context.Context, sourceQueue, messageID, targetQueue string) error
 }
 
 func (f *fakeQueueBackend) List(ctx context.Context) ([]queue.Summary, error) {
@@ -58,11 +62,17 @@ func (f *fakeQueueBackend) PurgeQueue(ctx context.Context, queueName string) (in
 	return f.purgeQueueFn(ctx, queueName)
 }
 
-func (f *fakeQueueBackend) RemoveMessage(_ context.Context, _, _ string) error {
+func (f *fakeQueueBackend) RemoveMessage(ctx context.Context, queueName, messageID string) error {
+	if f.removeMessageFn != nil {
+		return f.removeMessageFn(ctx, queueName, messageID)
+	}
 	return nil
 }
 
-func (f *fakeQueueBackend) MoveMessage(_ context.Context, _, _, _ string) error {
+func (f *fakeQueueBackend) MoveMessage(ctx context.Context, sourceQueue, messageID, targetQueue string) error {
+	if f.moveMessageFn != nil {
+		return f.moveMessageFn(ctx, sourceQueue, messageID, targetQueue)
+	}
 	return nil
 }
 
@@ -866,5 +876,61 @@ func TestQueuesViewReauthTextGoesToTheModal(t *testing.T) {
 	qv.ShowReauthWaiting("later")
 	if got := op.detailText(); got != "" {
 		t.Errorf("finished load's modal detail = %q, want it left alone", got)
+	}
+}
+
+func TestMoveAllTitle(t *testing.T) {
+	if got, want := moveAllTitle("orders", "archive", ""), `Moving all messages from "orders" to "archive"`; got != want {
+		t.Errorf("moveAllTitle() = %q, want %q", got, want)
+	}
+	if got, want := moveAllTitle("orders", "archive", "TypeB"), `Moving TypeB messages from "orders" to "archive"`; got != want {
+		t.Errorf("moveAllTitle(TypeB) = %q, want %q", got, want)
+	}
+}
+
+func TestQueuesViewRunMoveAll(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		pending    int64 // left on "orders" afterwards
+		wantStatus string
+	}{
+		{"done", nil, 0, `Moved 5 message(s) from "orders" to "archive"`},
+		{"stopped", fmt.Errorf("move all: %w", context.Canceled), 3, `Moved 5 message(s) from "orders" to "archive" (cancelled)`},
+		{"stopped after emptying the queue", fmt.Errorf("move all: %w", context.Canceled), 0, `Moved 5 message(s) from "orders" to "archive"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotCtx context.Context
+			backend := &fakeQueueBackend{
+				summaries: []queue.Summary{{Name: "orders", PendingCount: tt.pending}},
+				moveAllMessagesFn: func(ctx context.Context, _, _ string) (int, error) {
+					gotCtx = ctx
+					return 5, tt.err
+				},
+			}
+			host, qv := newTestQueuesViewWithDrawSignal(t, backend, 2)
+
+			qv.runMoveAll("orders", "archive", "")
+			<-host.drawn // the reload
+
+			ops := host.operationsSnapshot()
+			if len(ops) != 2 {
+				t.Fatalf("started %d operation(s), want the move and the reload", len(ops))
+			}
+			op := ops[0]
+			if op.title != `Moving all messages from "orders" to "archive"` || op.kind != ui.OpStoppable {
+				t.Errorf("operation = %q, kind %v; want the move-all, stoppable", op.title, op.kind)
+			}
+			if gotCtx != op.Ctx() {
+				t.Error("move-all didn't run with the operation's context")
+			}
+			if !op.isFinished() {
+				t.Error("move-all operation not finished")
+			}
+			if host.status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", host.status, tt.wantStatus)
+			}
+		})
 	}
 }

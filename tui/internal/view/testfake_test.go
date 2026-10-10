@@ -125,6 +125,31 @@ func (f *fakeViewHost) StartOperation(title string, total int, kind ui.OpKind) u
 	return op
 }
 
+// operationsSnapshot is a copy of every operation started so far.
+func (f *fakeViewHost) operationsSnapshot() []*fakeOperation {
+	f.opsMu.Lock()
+	defer f.opsMu.Unlock()
+	return append([]*fakeOperation(nil), f.operations...)
+}
+
+// stepsTaken is a copy of the steps the view reported.
+func (o *fakeOperation) stepsTaken() [][2]int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([][2]int(nil), o.steps...)
+}
+
+// confirmYes answers Yes in c, as the user would.
+func confirmYes(c *dialog.ConfirmDialog) {
+	prim := c.Primitive()
+	focus := func(p tview.Primitive) {}
+	var focusTree func(tview.Primitive)
+	focusTree = func(p tview.Primitive) { p.Focus(focusTree) }
+	focusTree(prim)
+	prim.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), focus)
+	prim.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), focus)
+}
+
 // lastOperation is the most recently started operation, or nil.
 func (f *fakeViewHost) lastOperation() *fakeOperation {
 	f.opsMu.Lock()

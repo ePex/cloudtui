@@ -104,6 +104,18 @@ StartOperation(title string, total int, kind OpKind) Operation
   it to the backend, where only the proxy's between-rounds check reacts
   (section 4). Esc never aborts a mutating request mid-flight and loses
   its count.
+- As built: the bulk loop is a shared `runEach(op, ids, do)` and the
+  status line a shared `bulkStatus` (unchanged wording when not stopped;
+  `Deleted 3 of 10 message(s); cancelled` when stopped). The move-all
+  and bulk-move bodies moved out of their move-picker callbacks into
+  `QueuesView.runMoveAll` / `MessagesView.runBulkMove`, so tests can
+  call them without driving the picker's async queue list.
+- **A stop that skipped nothing isn't "cancelled":** mq-proxy can empty
+  a queue in one request, so a stop often skips only the check for
+  more. After a stop, an unfiltered purge or move-all reads the queue's
+  pending count (`unlessQueueEmptied`); at 0 it reports as complete. A
+  filtered one keeps `(cancelled)` — the total can't say whether
+  matching messages are left — as does one whose count can't be read.
 - **AWS SSO re-auth during a queue load:** `QueuesView`'s
   `ReauthStatusShower` updates also call `op.SetDetail(text)`, because
   the modal would otherwise cover the row that shows the device code.
