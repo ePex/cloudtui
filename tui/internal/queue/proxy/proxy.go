@@ -322,44 +322,70 @@ func inRounds(ctx context.Context, round func() (int, error)) (int, error) {
 // single request.
 func (c *Client) DeleteMessages(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
 	if filter.MaxCount > 0 {
-		return c.deleteOnce(ctx, queueName, filter)
+		ids, err := c.deleteOnce(ctx, queueName, filter)
+		return len(ids), err
 	}
-	return inRounds(ctx, func() (int, error) { return c.deleteOnce(ctx, queueName, filter) })
+	return inRounds(ctx, func() (int, error) {
+		ids, err := c.deleteOnce(ctx, queueName, filter)
+		return len(ids), err
+	})
 }
 
-// deleteOnce makes a single delete-messages request.
-func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) (int, error) {
+// deleteOnce makes a single delete-messages request and returns the IDs
+// of the messages the server reports as deleted. An entry without a
+// message ID doesn't count: nothing says that message was really removed
+// — a server that browses before consuming can report a browsed message
+// whose consume came back empty (spec/11).
+func (c *Client) deleteOnce(ctx context.Context, queueName string, filter queue.MessageFilter) ([]string, error) {
 	reqs := []deleteMessagesRequest{{SourceQueue: queueName, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[deletedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/delete-messages", reqs, &env); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(env.Data), nil
+	ids := make([]string, 0, len(env.Data))
+	for _, m := range env.Data {
+		if m.MessageID != "" {
+			ids = append(ids, m.MessageID)
+		}
+	}
+	return ids, nil
 }
 
 // MoveMessages implements queue.Backend, repeating like DeleteMessages
 // when filter has no MaxCount.
 func (c *Client) MoveMessages(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
 	if filter.MaxCount > 0 {
-		return c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+		ids, err := c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+		return len(ids), err
 	}
-	return inRounds(ctx, func() (int, error) { return c.moveOnce(ctx, sourceQueue, targetQueue, filter) })
+	return inRounds(ctx, func() (int, error) {
+		ids, err := c.moveOnce(ctx, sourceQueue, targetQueue, filter)
+		return len(ids), err
+	})
 }
 
-// moveOnce makes a single move-messages request.
-func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) (int, error) {
+// moveOnce makes a single move-messages request and returns the IDs of
+// the messages the server reports as moved — like deleteOnce, entries
+// without a message ID don't count.
+func (c *Client) moveOnce(ctx context.Context, sourceQueue, targetQueue string, filter queue.MessageFilter) ([]string, error) {
 	reqs := []moveMessagesRequest{{SourceQueue: sourceQueue, TargetQueue: targetQueue, Filter: toFilterDTO(filter)}}
 	var env listEnvelope[movedMessage]
 	if err := c.postJSON(ctx, "/api/management/command/move-messages", reqs, &env); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := envelopeErr(env.Errors); err != nil {
-		return 0, err
+		return nil, err
 	}
-	return len(env.Data), nil
+	ids := make([]string, 0, len(env.Data))
+	for _, m := range env.Data {
+		if m.MessageID != "" {
+			ids = append(ids, m.MessageID)
+		}
+	}
+	return ids, nil
 }
 
 // envelopeErr builds a Go error from the first entry of a response

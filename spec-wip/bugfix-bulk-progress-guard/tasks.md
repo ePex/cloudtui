@@ -9,13 +9,17 @@ an isolated `HOME` and a separate tmux server (`tmux -L <name>`, or `HOME`
 passed inline in the session command), never the developer's real
 `~/.cloudtui`.
 
-1. [ ] **Count only messages with an ID; requests return IDs** (plan §1).
+1. [x] **Count only messages with an ID; requests return IDs** (plan §1).
    `deleteOnce`/`moveOnce` return the non-empty message IDs; single
    requests count those, so `RemoveMessage`/`MoveMessage` report "not
    found" for an ID-less entry. `cappedServer` gets unique IDs across
    rounds and a `noID` option. Tests: ID-less entries don't count;
    single-message calls with only an ID-less entry → "not found".
    Mutation-checked.
+   *Done 2026-10-10.* The round loop still takes a count for now
+   (`len(ids)`); task 2 changes its signature. Mutation (counting every
+   entry again) fails both new tests; all existing round tests pass
+   with unique IDs. `go test -race ./...` clean.
 
 2. [ ] **Stop repeating when a round makes no progress** (plan §2).
    `inRounds` tracks seen IDs, counts only new ones, and returns
