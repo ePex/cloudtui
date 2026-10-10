@@ -13,6 +13,7 @@ Queue loads and bulk message operations can take noticeable time, especially thr
 - Label the overlay with the operation and relevant queue where available.
 - Remove the overlay when the request finishes, then preserve the existing success, partial-failure, error, and refreshed-view behavior.
 - Prevent additional input from starting conflicting queue operations while the overlay is active.
+- Provide a broker-free `:progress-demo` command that animates a simulated queue operation so the visual can be previewed safely.
 
 ## Scope
 

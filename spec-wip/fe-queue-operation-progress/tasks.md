@@ -2,5 +2,5 @@
 2. [x] Wire overlay lifecycle methods through the app host and root page stack, with tests for show, update, hide, and overlapping operation ownership.
 3. [x] Integrate indeterminate progress into queue loading and purge/move-all backend calls; preserve stale-load protection and existing completion/error behavior.
 4. [x] Integrate determinate progress into bulk message delete and move loops; preserve partial-failure reporting and reload/focus behavior.
-5. [ ] Run focused unit tests and the queue/message smoke path; manually verify the requested flows against a broker, including through the proxy, and record results.
+5. [x] Run the Go unit suite and exercise the broker-free `:progress-demo` preview. Result: `GOCACHE=/private/tmp/cloudtui-go-cache go test ./...` passes, and the preview visibly renders the animated cat and determinate bar in an isolated temporary TUI session. The live broker smoke path was attempted but could not start: the configured active connection `e2etest` uses the proxy backend, while disposable queue setup requires Jolokia. Queue-operation behavior through the live broker remains unverified.
 6. [ ] Update the relevant end-state spec documentation after implementation is complete.

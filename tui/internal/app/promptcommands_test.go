@@ -17,12 +17,21 @@ func TestPromptSuggestionsEmptyPrefixReturnsFullList(t *testing.T) {
 	want := []string{
 		"quit", "home", "settings", "log",
 		"aq", "connections", "ap", "awsprofiles",
+		"progress-demo",
 		"theme ",
 		"queues", "snippets", "ssm-parameters", "secrets-manager",
 		"cloudwatch-logs", "datadog-logs", "codepipeline",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("promptSuggestions(\"\") =\n%v\nwant\n%v", got, want)
+	}
+}
+
+func TestPromptSuggestionsIncludesProgressDemo(t *testing.T) {
+	a := New(config.Default())
+	got := a.promptSuggestions("progress")
+	if !reflect.DeepEqual(got, []string{"progress-demo"}) {
+		t.Errorf("promptSuggestions(\"progress\") = %v, want [progress-demo]", got)
 	}
 }
 

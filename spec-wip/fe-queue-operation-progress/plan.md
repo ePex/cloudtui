@@ -11,6 +11,7 @@ Queue listing and native queue purge are single backend calls with no progress c
 - `tui/internal/dialog/`: add the reusable operation-progress overlay and focused rendering/state tests.
 - `tui/internal/ui/host.go` and `tui/internal/app/host.go`: add and implement the host methods needed to show, update, and close the overlay.
 - `tui/internal/app/`: create and register the overlay with the root pages, following the existing overlay wiring and theme application patterns.
+- `tui/internal/app/promptcommands.go` and its tests: add a discoverable `:progress-demo` preview that simulates progress without backend calls.
 - `tui/internal/view/queues.go`, `messages.go`, and `purge.go`: bracket queue loads and the specified bulk actions with overlay lifecycle calls; report per-message completion for bulk delete/move.
 - `tui/internal/view/*_test.go`, app tests, and dialog tests: cover progress rendering, lifecycle on success/error, progress updates, and unchanged operation outcomes.
 - `spec-wip/fe-queue-operation-progress/tasks.md`: record the approved implementation breakdown in the next gate.

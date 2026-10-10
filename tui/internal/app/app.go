@@ -631,6 +631,31 @@ func (a *App) onPromptDone(key tcell.Key) {
 	}
 }
 
+// previewOperationProgress runs a broker-free, simulated move so users can
+// inspect the animated overlay with :progress-demo.
+func (a *App) previewOperationProgress() {
+	const total = 42
+	id := a.StartOperationProgress("Preview: moving messages from orders", total)
+	go func() {
+		for completed := 1; completed <= total; completed++ {
+			time.Sleep(90 * time.Millisecond)
+			count := completed
+			a.QueueUpdateDraw(func() {
+				if a.progressActive == id {
+					a.UpdateOperationProgress(id, count, total)
+				}
+			})
+		}
+		a.QueueUpdateDraw(func() {
+			if a.progressActive != id {
+				return
+			}
+			a.FinishOperationProgress(id)
+			a.SetStatus("Progress preview complete (no broker requests were made)")
+		})
+	}()
+}
+
 // switchTheme applies the named built-in palette, saves config, and repaints
 // all live shell primitives. Unknown names are silently ignored.
 //
