@@ -5,7 +5,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
 (`TMUX_TMPDIR` set to a short path), never against the real
 `~/.cloudtui`.
 
-1. [ ] **`ui.ClampTableSelection`** (plan "Approach").
+1. [x] **`ui.ClampTableSelection`** (plan "Approach").
    `internal/ui/table.go` + `table_test.go`. Table-driven cases:
    selection beyond the rows → last row; beyond the columns → last
    column; header-only table with a stale row → row 0; inside the
@@ -14,6 +14,12 @@ done. Live checks run with an isolated HOME and a separate tmux server
    `InputHandler` in a goroutine with a 2 s timeout. It times out
    without the clamp and returns with it (mutation-checked). Not wired
    into the app yet.
+   *Done (2026-10-10):* the hang test sends ↓, ↑, `j`, `k`, PgDn, PgUp,
+   Home and End. With the clamp disabled, ↓, ↑, `j`, `k` and PgDn each
+   time out after 2 s (the test fails instead of hanging), and the clamp
+   cases fail too. PgUp, Home and End return even without it, so
+   spec.md now lists only the keys that hang. With the clamp,
+   everything passes.
 
 2. [ ] **Wire it into `onGlobalKey`** (plan "Approach").
    `internal/app/app.go`: clamp the focused `*tview.Table` right after

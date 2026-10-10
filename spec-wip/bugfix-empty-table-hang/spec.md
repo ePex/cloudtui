@@ -4,8 +4,8 @@ Date: 2026-10-10
 
 ## Problem
 
-Pressing ↓ (or ↑, `j`/`k`, PgUp/PgDn, Home/End) in a table that has
-no selectable rows freezes the TUI: the screen stops updating, every
+Pressing ↓ (or ↑, `j`/`k`, PgDn) in a table that has no selectable
+rows freezes the TUI: the screen stops updating, every
 key is ignored, and the process spins at 100 % CPU until it is killed.
 
 Found during the fe-progress-modal regression run, and reproduced on
