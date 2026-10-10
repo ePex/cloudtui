@@ -92,6 +92,17 @@ TypeA messages is enough.
    `Show` calls `form.SetFocus(0)`, like the send-message and snippet
    forms; regression test written first, failed, then passed.
 
-5. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+5. [x] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated `HOME` + separate tmux server), and the live checks from
    tasks 3–4 in one session. Remove the disposable queue.
+   *Done 2026-10-10.* `task test` exit 0 (Go, mq-proxy, mq-proxy-web
+   43/43); `task test:tui:race` exit 0. Smoke test PASS, isolated (the
+   developer's real `cloudtui.log` got no new entry). One live session
+   through `mq-proxy` on 5 × TypeA: typing `TypeB` right after `p`
+   survived the automatic scan, Enter → confirm for `TypeB` (No); Tab
+   on the empty prompt → no scan, Enter → confirm for all messages
+   (No); filter `TypeB` + Tab ×4 + Enter → `(filter: type=TypeB
+   max=500)`; reopening the filter, typing landed in the JMS Type field
+   (`TypeBx`), not on Apply; cleared + Down + Enter on the lone scan
+   entry → one new `maxCount=5000` browse. Scratch queue and its
+   statistics queue removed; `mq-proxy` stopped.
