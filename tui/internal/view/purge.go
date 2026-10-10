@@ -28,20 +28,26 @@ type purgeFlow struct {
 func (pf purgeFlow) start(queueName string, onClose, onDone func(), onError func(error)) {
 	pf.prompt.Show("Purge", queueName, func(jmsType string) {
 		pf.confirm.Show(purgeQuestion(queueName, jmsType), func() {
-			go func() {
-				ctx := context.Background()
-				b := pf.backend()
-				n, err := purge(ctx, b, queueName, jmsType)
-				var warning string
-				if err == nil {
-					warning = filteredRemainderWarning(ctx, b, queueName, jmsType)
-				}
-				pf.host.QueueUpdateDraw(func() {
-					pf.finish(queueName, jmsType, n, warning, err, onDone, onError)
-				})
-			}()
+			pf.execute(queueName, jmsType, onDone, onError)
 		})
 	}, onClose)
+}
+
+func (pf purgeFlow) execute(queueName, jmsType string, onDone func(), onError func(error)) {
+	progressID := pf.host.StartOperationProgress("Purging "+queueName, 0)
+	go func() {
+		ctx := context.Background()
+		b := pf.backend()
+		n, err := purge(ctx, b, queueName, jmsType)
+		var warning string
+		if err == nil {
+			warning = filteredRemainderWarning(ctx, b, queueName, jmsType)
+		}
+		pf.host.QueueUpdateDraw(func() {
+			pf.host.FinishOperationProgress(progressID)
+			pf.finish(queueName, jmsType, n, warning, err, onDone, onError)
+		})
+	}()
 }
 
 // finish applies a completed purge's outcome — split out from start's

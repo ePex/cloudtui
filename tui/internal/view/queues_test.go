@@ -566,6 +566,61 @@ func TestQueuesViewDoMoveAllFilteredCallsMoveMessages(t *testing.T) {
 	}
 }
 
+func TestQueuesViewExecuteMoveAllShowsProgressAndReloadsOnSuccess(t *testing.T) {
+	release := make(chan struct{})
+	backend := &fakeQueueBackend{
+		moveAllMessagesFn: func(context.Context, string, string) (int, error) {
+			<-release
+			return 3, nil
+		},
+		listFn: func(context.Context) ([]queue.Summary, error) {
+			return []queue.Summary{{Name: "orders-archive"}}, nil
+		},
+	}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 2)
+
+	qv.executeMoveAll("orders", "orders-archive", "")
+	if !host.progressVisible || host.progressLabel != "Moving all messages from orders" || host.progressTotal != 0 {
+		t.Fatalf("progress at start = visible %v, label %q, total %d", host.progressVisible, host.progressLabel, host.progressTotal)
+	}
+	close(release)
+	<-host.drawn // move-all completion
+	<-host.drawn // follow-up queue load
+	if host.progressVisible {
+		t.Error("move-all and queue reload left progress visible after success")
+	}
+	if want := `Moved 3 message(s) from "orders" to "orders-archive"`; host.status != want {
+		t.Errorf("status after move-all = %q, want %q", host.status, want)
+	}
+	if got := qv.table.GetCell(1, 0).Text; got != "orders-archive" {
+		t.Errorf("queue list after move-all = %q, want reloaded target queue", got)
+	}
+}
+
+func TestQueuesViewExecuteMoveAllHidesProgressOnError(t *testing.T) {
+	release := make(chan struct{})
+	wantErr := errors.New("move failed")
+	backend := &fakeQueueBackend{moveAllMessagesFn: func(context.Context, string, string) (int, error) {
+		<-release
+		return 0, wantErr
+	}}
+	host, qv := newTestQueuesViewWithDrawSignal(t, backend, 1)
+
+	qv.executeMoveAll("orders", "orders-archive", "")
+	if !host.progressVisible {
+		t.Fatal("move-all did not show progress before the backend returned")
+	}
+	close(release)
+	<-host.drawn
+	if host.progressVisible {
+		t.Error("move-all left progress visible after error")
+	}
+	cell := qv.table.GetCell(1, 0)
+	if cell == nil || !strings.Contains(cell.Text, wantErr.Error()) {
+		t.Errorf("queue list after move-all failure = %+v, want error %q", cell, wantErr)
+	}
+}
+
 // TestQueuesViewPurgeKeyShowsJMSTypePrompt confirms pressing 'p' opens
 // the JMS Type prompt (rather than jumping straight to the confirm
 // dialog, as it did before this filter step existed).
@@ -657,13 +712,16 @@ func TestQueuesViewLoadShowsLoadingStatusImmediately(t *testing.T) {
 			return nil, nil
 		},
 	}
-	_, qv := newTestQueuesViewWithBackend(t, backend)
+	host, qv := newTestQueuesViewWithBackend(t, backend)
 
 	qv.Load()
 
 	cell := qv.table.GetCell(1, 0)
 	if cell == nil || cell.Text != "Loading queues…" {
 		t.Errorf("row(1,0) after Load() = %+v, want text %q", cell, "Loading queues…")
+	}
+	if !host.progressVisible || host.progressLabel != "Loading queues" || host.progressTotal != 0 {
+		t.Errorf("progress after Load() = visible %v, label %q, total %d; want indeterminate queue loading", host.progressVisible, host.progressLabel, host.progressTotal)
 	}
 	close(unblock) // let the goroutine finish so it doesn't leak past the test
 }
@@ -674,6 +732,9 @@ func TestQueuesViewLoadRepaintsOnSuccess(t *testing.T) {
 
 	qv.Load()
 	<-host.drawn
+	if host.progressVisible {
+		t.Error("queue load left progress visible after success")
+	}
 
 	name := qv.table.GetCell(1, 0).Text
 	if name != "orders" {
@@ -692,6 +753,9 @@ func TestQueuesViewLoadShowsErrorOnFailure(t *testing.T) {
 
 	qv.Load()
 	<-host.drawn
+	if host.progressVisible {
+		t.Error("queue load left progress visible after error")
+	}
 
 	cell := qv.table.GetCell(1, 0)
 	if cell == nil || !strings.Contains(cell.Text, wantErr.Error()) {
@@ -740,5 +804,8 @@ func TestQueuesViewLoadDiscardsStaleResponse(t *testing.T) {
 
 	if got := qv.table.GetCell(1, 0).Text; got != "fresh" {
 		t.Errorf("row(1,0) after stale call 1's draw = %q, want unchanged %q", got, "fresh")
+	}
+	if host.progressVisible {
+		t.Error("stale queue load left progress visible")
 	}
 }

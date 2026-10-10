@@ -47,12 +47,19 @@ type fakeViewHost struct {
 	cfg     config.Config
 	backend queue.Backend
 
-	focused     tview.Primitive
-	shownPage   string
-	status      string
-	contextHint string
-	copiedData  string
-	watching    map[string]bool
+	focused          tview.Primitive
+	shownPage        string
+	status           string
+	contextHint      string
+	copiedData       string
+	watching         map[string]bool
+	progressSeq      uint64
+	progressID       uint64
+	progressLabel    string
+	progressTotal    int
+	progressDone     int
+	progressVisible  bool
+	progressFinishes []uint64
 
 	listParametersFn         func(ctx context.Context, profile, path string) ([]awsssm.Parameter, error)
 	revealParameterFn        func(ctx context.Context, profile, name string) (string, error)
@@ -81,15 +88,32 @@ func newFakeViewHost() *fakeViewHost {
 }
 
 // -- ui.Host: recorded state where a test needs to assert on it --
-func (f *fakeViewHost) SetFocus(p tview.Primitive)                { f.focused = p }
-func (f *fakeViewHost) SetStatus(text string)                     { f.status = text }
-func (f *fakeViewHost) SetContextHint(text string)                { f.contextHint = text }
-func (f *fakeViewHost) StartOperationProgress(string, int) uint64 { return 0 }
-func (f *fakeViewHost) UpdateOperationProgress(uint64, int, int)  {}
-func (f *fakeViewHost) FinishOperationProgress(uint64)            {}
-func (f *fakeViewHost) Config() config.Config                     { return f.cfg }
-func (f *fakeViewHost) Backend() queue.Backend                    { return f.backend }
-func (f *fakeViewHost) QueueUpdateDraw(fn func())                 { fn() } // no real event loop; run inline
+func (f *fakeViewHost) SetFocus(p tview.Primitive) { f.focused = p }
+func (f *fakeViewHost) SetStatus(text string)      { f.status = text }
+func (f *fakeViewHost) SetContextHint(text string) { f.contextHint = text }
+func (f *fakeViewHost) StartOperationProgress(label string, total int) uint64 {
+	f.progressSeq++
+	f.progressID = f.progressSeq
+	f.progressLabel = label
+	f.progressTotal = total
+	f.progressDone = 0
+	f.progressVisible = true
+	return f.progressID
+}
+func (f *fakeViewHost) UpdateOperationProgress(id uint64, completed, total int) {
+	if id == f.progressID {
+		f.progressDone, f.progressTotal = completed, total
+	}
+}
+func (f *fakeViewHost) FinishOperationProgress(id uint64) {
+	f.progressFinishes = append(f.progressFinishes, id)
+	if id == f.progressID {
+		f.progressVisible = false
+	}
+}
+func (f *fakeViewHost) Config() config.Config     { return f.cfg }
+func (f *fakeViewHost) Backend() queue.Backend    { return f.backend }
+func (f *fakeViewHost) QueueUpdateDraw(fn func()) { fn() } // no real event loop; run inline
 
 // -- ui.Host: no-ops (nothing under test needs these) --
 func (f *fakeViewHost) ShowPage(name string)         {}
