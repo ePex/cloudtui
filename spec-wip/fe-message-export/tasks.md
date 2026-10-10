@@ -70,13 +70,24 @@ with `jq`.
    `ActiveMQ.Statistics.Destination.*` queues (mq-proxy hides them);
    exporting one gives 0 messages, correctly.
 
-4. [ ] **TUI: `e` in the message list** (plan §3). Marked messages, or
+4. [x] **TUI: `e` in the message list** (plan §3). Marked messages, or
    else the shown ones; `MessagesView` keeps the last load's `hasMore`/
    pending count for the incomplete note. Tests for marked, unmarked
    with quick search, and the note.
    *Live check:* mark 3 messages, `e` → file has exactly those 3; no
    marks with a quick search active → file has exactly the shown rows;
    on the 1,600-message queue unmarked → the "of" note.
+   *Done 2026-10-10.* The note's reason here is "only what the list
+   shows"; an empty list says `No messages to export` instead of opening
+   the prompt. The shortcut panel holds 12 entries and `e` made 13, so
+   `a` and `n` now share one line (`a/n  mark all/none`, like the queue
+   list's `o/O`) — both keys work as before. Mutations caught: marks
+   ignored, all loaded messages exported instead of the shown ones.
+   `go test -race ./...` clean. Live via `mq-proxy`: 3 marked → file
+   with exactly those 3 (`m10 m9 m8`); quick search `m1` → the 2 shown
+   rows (`m10`, `m1`); the 1,600-message queue unmarked → `Exported 400
+   of 1600 message(s) (only what the list shows)`, matching the title's
+   `(showing 400 of 1600)`.
 
 5. [ ] **Web console Export button** (plan §4). `export.js` with
    `node --test` tests, `truncated` in `api.js`, the toolbar button and
