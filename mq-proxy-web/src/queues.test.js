@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterQueues, sortQueues } from './queues.js';
+import { filterQueues, sortQueues, purgeTitle, moveAllTitle } from './queues.js';
 
 const SAMPLE_QUEUES = [
   { name: 'orders', messageCount: 5, consumerCount: 2, enqueuedCount: 10, dequeuedCount: 5, producerCount: 1 },
@@ -41,4 +41,11 @@ test('sortQueues does not mutate its input', () => {
   const original = SAMPLE_QUEUES.map((q) => ({ ...q }));
   sortQueues(SAMPLE_QUEUES, 'name', 'asc');
   assert.deepEqual(SAMPLE_QUEUES, original);
+});
+
+test('purgeTitle and moveAllTitle name the queues and the JMS Type, if any', () => {
+  assert.equal(purgeTitle('orders', ''), 'Purging "orders"');
+  assert.equal(purgeTitle('orders', 'created'), 'Purging created messages from "orders"');
+  assert.equal(moveAllTitle('orders', 'dlq', ''), 'Moving all messages from "orders" to "dlq"');
+  assert.equal(moveAllTitle('orders', 'dlq', 'created'), 'Moving created messages from "orders" to "dlq"');
 });

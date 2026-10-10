@@ -96,6 +96,19 @@ function renderQueues(queues) {
   });
 }
 
+// purgeTitle and moveAllTitle are the progress overlay's titles, worded
+// like the TUI's.
+export function purgeTitle(queueName, jmsType) {
+  return jmsType ? 'Purging ' + jmsType + ' messages from "' + queueName + '"' : 'Purging "' + queueName + '"';
+}
+
+export function moveAllTitle(queueName, target, jmsType) {
+  var what = jmsType ? jmsType + ' messages' : 'all messages';
+  return 'Moving ' + what + ' from "' + queueName + '" to "' + target + '"';
+}
+
+// Purge and move all are one request each, under the progress overlay:
+// one that's sent can't be taken back, so Esc only says it's stopping.
 export function purgeQueue(queueName) {
   jmsTypePrompt('Purge "' + queueName + '" — JMS Type (optional)', queueName).then(function (result) {
     if (result.cancelled) return;
@@ -105,12 +118,13 @@ export function purgeQueue(queueName) {
       : 'Purge "' + queueName + '"? All messages will be deleted.';
     confirmDialog(question).then(function (confirmed) {
       if (!confirmed) return;
+      var op = startOperation({ title: purgeTitle(queueName, result.jmsType) });
       apiCall(state.conn, 'delete-messages', {
         method: 'POST',
         body: [{ sourceQueue: queueName, filter: filter }],
       }).then(loadQueues, function (err) {
         showError($('queuesError'), err);
-      });
+      }).finally(op.finish);
     });
   });
 }
@@ -120,10 +134,11 @@ export function moveAllMessages(queueName) {
     if (result.cancelled) return;
     var filter = buildBulkFilter(result.jmsType);
     openMovePicker(queueName, function (target) {
+      var op = startOperation({ title: moveAllTitle(queueName, target, result.jmsType) });
       return apiCall(state.conn, 'move-messages', {
         method: 'POST',
         body: [{ sourceQueue: queueName, targetQueue: target, filter: filter }],
-      }).then(loadQueues);
+      }).then(loadQueues).finally(op.finish);
     }, $('queuesError'));
   });
 }

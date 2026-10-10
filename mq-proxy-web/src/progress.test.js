@@ -127,6 +127,7 @@ test('footerText says what Esc does, then what happens instead', () => {
   assert.equal(footerText(false, 10), 'Esc to cancel');
   assert.equal(footerText(true, 10), 'Stopping after the current message…');
   assert.equal(footerText(true, 0), 'Stopping after the current request…');
+  assert.equal(footerText(true, 100, 'batch'), 'Stopping after the current batch…');
 });
 
 test('catSpriteSvg draws both frames side by side on a 20x6 grid', () => {

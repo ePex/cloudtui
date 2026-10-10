@@ -214,3 +214,75 @@ export function apiCall(conn, verb, opts) {
 export function isAbortError(err) {
   return !!err && err.name === 'AbortError';
 }
+
+// How many messages one delete-messages/move-messages request handles
+// when deleting or moving selected messages: few enough requests for
+// mq-proxy's per-request auth check, enough steps for a real progress
+// count (spec-wip fe-progress-modal).
+export var BULK_BATCH_SIZE = 25;
+
+// chunk splits items into arrays of at most size, in order.
+export function chunk(items, size) {
+  var batches = [];
+  for (var i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+}
+
+// reportedCount is how many messages a delete-messages/move-messages
+// response says it acted on: only entries with a message ID count
+// (spec/11), and never more than the batch held.
+function reportedCount(data, batchSize) {
+  if (!Array.isArray(data)) return 0;
+  var n = data.filter(function (entry) { return entry && entry.messageId; }).length;
+  return Math.min(n, batchSize);
+}
+
+// runBatches sends verb for items in batches of BULK_BATCH_SIZE, one
+// request after the other. call(verb, opts) is apiCall bound to a
+// connection; buildBody(batch) is the request body. A batch's messages
+// the response doesn't report count as failed, as does a whole batch
+// whose request fails — the rest still run. opts.onStep(done, failed)
+// follows each batch; opts.stopped() is checked before each one.
+// Resolves to { done, failed, cancelled, lastError }: done counts every
+// message attempted, failed included.
+export function runBatches(call, items, buildBody, verb, opts) {
+  var batches = chunk(items, BULK_BATCH_SIZE);
+  var result = { done: 0, failed: 0, cancelled: false, lastError: null };
+  function next(i) {
+    if (i >= batches.length) return Promise.resolve(result);
+    if (opts.stopped()) {
+      result.cancelled = true;
+      return Promise.resolve(result);
+    }
+    var batch = batches[i];
+    return call(verb, { method: 'POST', body: buildBody(batch) }).then(function (data) {
+      result.failed += batch.length - reportedCount(data, batch.length);
+    }, function (err) {
+      result.failed += batch.length;
+      result.lastError = err;
+    }).then(function () {
+      result.done += batch.length;
+      opts.onStep(result.done, result.failed);
+      return next(i + 1);
+    });
+  }
+  return next(0);
+}
+
+// bulkSummary is the result line after deleting or moving selected
+// messages, worded like the TUI's: verb ("Deleted", "Moved") of done
+// attempts, failed of which failed, out of total; target is
+// ' to "queue"' for a move, else empty. Fewer attempts than total means
+// the user stopped it.
+export function bulkSummary(verb, target, done, failed, total) {
+  var succeeded = done - failed;
+  if (done < total && failed > 0) {
+    return verb + ' ' + succeeded + ' of ' + total + ' message(s)' + target + '; ' + failed + ' failed; cancelled';
+  }
+  if (done < total) return verb + ' ' + succeeded + ' of ' + total + ' message(s)' + target + '; cancelled';
+  if (failed > 0) return verb + ' ' + succeeded + '/' + total + ' message(s)' + target + '; ' + failed + ' failed';
+  if (total === 1) return verb + ' message' + target;
+  return verb + ' ' + total + ' message(s)' + target;
+}

@@ -142,7 +142,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    the demo too. Note: Dark Reader in the browser recolors the page
    (the navy track turned gray); its styles were removed for the check.
 
-8. [ ] **Web: purge, move all, single and batched bulk actions**
+8. [x] **Web: purge, move all, single and batched bulk actions**
    (plan §6). `chunk` / `runBatches` (unit-tested: counts, failures
    from the response, stop between batches); Delete/Move selected in
    batches of 25 (>25 counted, ≤25 spinner); Purge / Move all and the
@@ -150,6 +150,24 @@ done. Live checks run with an isolated HOME and a separate tmux server
    *Live check:* select 100 messages, Delete selected → bar steps
    25/50/75/100; Esc after the first batch → `Deleted 25 of 100
    message(s); cancelled`, the list and queue counts agree.
+   *Done (2026-10-10):* `runBatches` counts a batch's unreported
+   messages as failed and a failed request as a whole failed batch,
+   carrying on with the rest (as the TUI does per message). The result
+   line uses the TUI's wording (`bulkSummary`) and shows in the info
+   line after the reload. The footer for batches says `Stopping after
+   the current batch…`. Live (real mq-proxy with `CORS_ALLOWED_ORIGINS`
+   set to the page's origin, local broker, scratch queues): deleting
+   100 selected → `25/50/75/100 of 100`, then the reloads took the
+   overlay over, `Deleted 100 message(s)`. Esc at `25 of 100` →
+   `Deleted 50 of 100 message(s); cancelled`, with the list and the
+   queue's pending count both at 50: the second batch was already sent
+   when Esc came, because the next batch goes out in the same tick as
+   the step is reported, so it stops before the *third*. Move 30
+   selected → `0/25/30 of 30`; move 10 → spinner, no count; detail
+   delete and move; move all; purge with Esc → `Stopping after the
+   current request…`, and the queue still emptied (200 → 0). In a
+   background tab Chrome slows timers, so the overlay showed about 1 s
+   in rather than at 250 ms (the delay is unit-tested).
 
 9. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and the live checks from tasks 2, 4, 5, 7 and 8 in one

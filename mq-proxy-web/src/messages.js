@@ -8,6 +8,9 @@ import {
   buildSingleMessageFilter,
   DEFAULT_MAX_COUNT,
   isAbortError,
+  BULK_BATCH_SIZE,
+  runBatches,
+  bulkSummary,
 } from './api.js';
 import { state } from './state.js';
 import { loadQueues } from './queues.js';
@@ -220,6 +223,46 @@ function exportMessages() {
   });
 }
 
+// runSelected deletes or moves the selected messages (opts.ids) in
+// batches under the progress overlay — counted when there's more than
+// one batch, else a spinner; Esc stops before the next batch — then
+// reloads and reports the result in the info line. opts: ids, verb
+// (the mq-proxy command), buildBody(batch), title, pastVerb ("Deleted",
+// "Moved"), target (' to "queue"' or '').
+function runSelected(opts) {
+  var counted = opts.ids.length > BULK_BATCH_SIZE;
+  var op = startOperation({
+    title: opts.title,
+    total: counted ? opts.ids.length : 0,
+    stopUnit: counted ? 'batch' : undefined,
+  });
+  var call = function (verb, callOpts) { return apiCall(state.conn, verb, callOpts); };
+  return runBatches(call, opts.ids, opts.buildBody, opts.verb, { onStep: op.step, stopped: op.stopped })
+    .then(function (result) {
+      var summary = bulkSummary(opts.pastVerb, opts.target, result.done, result.failed, opts.ids.length);
+      // The reloads start before this operation finishes, so they take
+      // the overlay over instead of closing and reopening it.
+      var reload = loadMessages();
+      loadQueues();
+      op.finish();
+      return reload.then(function () {
+        if ($('messagesInfo').hidden) {
+          $('messagesInfo').textContent = summary;
+          $('messagesInfo').hidden = false;
+        }
+        if (result.lastError && $('messagesError').hidden) showError($('messagesError'), result.lastError);
+      });
+    });
+}
+
+// selectedTitle is the progress overlay's title for deleting or moving
+// n selected messages (verb "Deleting"/"Moving", target as in
+// runSelected), worded like the TUI's.
+function selectedTitle(verb, n, queueName, target) {
+  var what = n === 1 ? 'message' : n + ' message(s)';
+  return verb + ' ' + what + ' from "' + queueName + '"' + target;
+}
+
 // Wires the messages view's own static controls — called once at startup.
 export function initMessages() {
   $('exportMessagesBtn').addEventListener('click', exportMessages);
@@ -240,14 +283,13 @@ export function initMessages() {
     var ids = Array.from(state.selectedMessageIds);
     confirmDialog('Delete ' + ids.length + ' selected message' + (ids.length === 1 ? '' : 's') + '?').then(function (confirmed) {
       if (!confirmed) return;
-      apiCall(state.conn, 'delete-messages', {
-        method: 'POST',
-        body: buildBulkDeleteBody(queueName, ids),
-      }).then(function () {
-        loadMessages();
-        loadQueues();
-      }, function (err) {
-        showError($('messagesError'), err);
+      runSelected({
+        ids: ids,
+        verb: 'delete-messages',
+        buildBody: function (batch) { return buildBulkDeleteBody(queueName, batch); },
+        title: selectedTitle('Deleting', ids.length, queueName, ''),
+        pastVerb: 'Deleted',
+        target: '',
       });
     });
   });
@@ -256,12 +298,14 @@ export function initMessages() {
     var queueName = state.currentQueue;
     var ids = Array.from(state.selectedMessageIds);
     openMovePicker(queueName, function (target) {
-      return apiCall(state.conn, 'move-messages', {
-        method: 'POST',
-        body: buildBulkMoveBody(queueName, target, ids),
-      }).then(function () {
-        loadMessages();
-        loadQueues();
+      var to = ' to "' + target + '"';
+      return runSelected({
+        ids: ids,
+        verb: 'move-messages',
+        buildBody: function (batch) { return buildBulkMoveBody(queueName, target, batch); },
+        title: selectedTitle('Moving', ids.length, queueName, to),
+        pastVerb: 'Moved',
+        target: to,
       });
     }, $('messagesError'));
   });
@@ -275,6 +319,7 @@ export function initMessages() {
     var queueName = state.currentQueue;
     confirmDialog('Delete message "' + message.messageId + '"?').then(function (confirmed) {
       if (!confirmed) return;
+      var op = startOperation({ title: selectedTitle('Deleting', 1, queueName, '') });
       apiCall(state.conn, 'delete-messages', {
         method: 'POST',
         body: [{ sourceQueue: queueName, filter: buildSingleMessageFilter(message.messageId) }],
@@ -284,13 +329,14 @@ export function initMessages() {
         loadQueues();
       }, function (err) {
         showError($('messageDetailError'), err);
-      });
+      }).finally(op.finish);
     });
   });
 
   $('moveMessageBtn').addEventListener('click', function () {
     openMovePicker(state.currentQueue, function (target) {
       var message = state.currentMessage;
+      var op = startOperation({ title: selectedTitle('Moving', 1, state.currentQueue, ' to "' + target + '"') });
       return apiCall(state.conn, 'move-messages', {
         method: 'POST',
         body: [{ sourceQueue: state.currentQueue, targetQueue: target, filter: buildSingleMessageFilter(message.messageId) }],
@@ -298,7 +344,7 @@ export function initMessages() {
         showView('messagesView');
         loadMessages();
         loadQueues();
-      });
+      }).finally(op.finish);
     }, $('messageDetailError'));
   });
 }

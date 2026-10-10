@@ -10,8 +10,6 @@ export var SHOW_DELAY_MS = 250;
 export var MIN_VISIBLE_MS = 400;
 
 var FOOTER_CANCEL = 'Esc to cancel';
-var FOOTER_STOPPING_MESSAGE = 'Stopping after the current message…';
-var FOOTER_STOPPING_REQUEST = 'Stopping after the current request…';
 
 // createShowTimer is the overlay's timing, free of the DOM. begin() is
 // called when an operation starts, end() when the last one has finished:
@@ -74,9 +72,11 @@ export function progressCount(done, total, failed) {
 
 // footerText is the overlay's last line for an operation: what Esc does,
 // or, once pressed on one that can't be cut off, what happens instead.
-export function footerText(stopped, total) {
+// stopUnit names the step it stops after; by default a message for a
+// counted operation, a request otherwise.
+export function footerText(stopped, total, stopUnit) {
   if (!stopped) return FOOTER_CANCEL;
-  return total > 0 ? FOOTER_STOPPING_MESSAGE : FOOTER_STOPPING_REQUEST;
+  return 'Stopping after the current ' + (stopUnit || (total > 0 ? 'message' : 'request')) + '…';
 }
 
 // The cat's two animation frames, the same pixel grid as the TUI's
@@ -205,7 +205,7 @@ function render() {
   var fraction = counted ? Math.min(op.done / op.total, 1) : 0;
   el('progressTrack').style.setProperty('--p', String(fraction));
   el('progressCount').textContent = progressCount(op.done, op.total, op.failed);
-  el('progressFooter').textContent = footerText(op.stopped, op.total);
+  el('progressFooter').textContent = footerText(op.stopped, op.total, op.stopUnit);
 }
 
 // startOperation blocks the page for a slow operation and returns its
@@ -213,6 +213,7 @@ function render() {
 // (total > 0), stopped() once Esc was pressed, and finish(). abortable
 // operations (loads) close at once on Esc; the others stay until
 // finish(), so a request that's already sent can't be left hanging.
+// stopUnit is what such an operation stops after (see footerText).
 export function startOperation(opts) {
   if (ops.length === 0) {
     init();
@@ -222,6 +223,7 @@ export function startOperation(opts) {
     title: opts.title,
     total: opts.total || 0,
     abortable: !!opts.abortable,
+    stopUnit: opts.stopUnit,
     done: 0,
     failed: 0,
     stopped: false,
