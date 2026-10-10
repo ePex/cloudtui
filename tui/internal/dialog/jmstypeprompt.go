@@ -61,16 +61,11 @@ func NewJMSTypePrompt(host ui.Host) *JMSTypePrompt {
 	p := host.Config().Colors
 	jp.field.SetFieldBackgroundColor(tcell.GetColor(p.SelectionBg))
 	jp.field.SetFieldTextColor(tcell.GetColor(p.SelectionText))
-	// StyleInputFieldAutocomplete must run before SetAutocompleteFunc —
-	// see tui/internal/app/app.go's identical ordering requirement for
-	// the ':' prompt (SetAutocompleteFunc eagerly builds and permanently
-	// styles the drop-down's internal list from whatever styles are set
-	// at that exact moment).
-	ui.StyleInputFieldAutocomplete(jp.field, p)
 	// Enter/Tab only accept a suggestion the user chose with the arrow
-	// keys; otherwise Enter reaches the done func below with the typed
-	// text (blank = no filter) — see jmsTypeAutocomplete.
-	jp.ac = newJMSTypeAutocomplete(jp.field, jp.jmsTypeSuggestions, func() { jp.startScan(jmsTypeScanCount) })
+	// keys, and only that one is highlighted; otherwise Enter reaches the
+	// done func below with the typed text (blank = no filter) — see
+	// jmsTypeAutocomplete, which also styles the drop-down.
+	jp.ac = newJMSTypeAutocomplete(jp.field, p, jp.jmsTypeSuggestions, func() { jp.startScan(jmsTypeScanCount) })
 	jp.field.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
@@ -206,7 +201,7 @@ func (jp *JMSTypePrompt) ApplyPalette(p config.Palette) {
 	jp.field.SetBorderColor(tcell.GetColor(p.Border))
 	jp.field.SetTitleColor(tcell.GetColor(p.Border))
 	ui.StyleFilterInput(jp.field, p)
-	ui.StyleInputFieldAutocomplete(jp.field, p)
+	jp.ac.applyPalette(p)
 }
 
 var _ ui.Themeable = (*JMSTypePrompt)(nil)

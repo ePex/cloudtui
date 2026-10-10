@@ -22,7 +22,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    gofmt and vet pass. Merge-back: add `AutocompleteStyles` to
    spec/03's `style.go` helper list.
 
-2. [ ] **Two looks in `jmsTypeAutocomplete`** (plan "Approach",
+2. [x] **Two looks in `jmsTypeAutocomplete`** (plan "Approach",
    "Theme switches").
    `internal/dialog/jmstypeautocomplete.go`: store the palette in
    `applyPalette(p)` and apply the plain or chosen styles for the
@@ -36,6 +36,26 @@ done. Live checks run with an isolated HOME and a separate tmux server
    several suggestions → no row in the selection background; a theme
    switch keeps none; `reset()` → none. Mutation-check: with the
    selected style left at the selection colors, these fail.
+   *Done (2026-10-10):* `newJMSTypeAutocomplete` now takes the palette
+   and styles the field itself before `SetAutocompleteFunc`, so the
+   callers no longer call `ui.StyleInputFieldAutocomplete`; their
+   `ApplyPalette` calls `ac.applyPalette`. The changed func became
+   `textChanged` (drop the choice, plain styles, no rebuild), and the
+   Enter/Tab close moved into `closeDropDown`, which `reset()` reuses.
+   Tests: `TestJMSTypeAutocompleteNothingChosenHighlightsNothing`,
+   `…ThemeSwitchKeepsNothingHighlighted` (an unfocused field's cached
+   drop-down redrawn only in cyberpunk's row background) and
+   `…ResetDropsTheHighlight` (a chosen look built by a theme switch,
+   then `reset()`). Mutation-checked, each breaking change failing at
+   least one test: selected style always the selection colors (all
+   three fail); `reset()` without restyling, or without dropping the
+   list; `applyPalette` without the blur. The last one first went
+   uncaught because the test blurred the field itself; the test now
+   checks the new theme's row colors on a never-focused field.
+   `task test:tui`, gofmt and vet pass. Merge-back: spec/08 line about
+   the filter's drop-down styling (`ui.StyleInputFieldAutocomplete`),
+   and tui/CLAUDE.md's "style first, then wire" / sticky-highlight
+   gotchas, which should mention `jmsTypeAutocomplete` styling itself.
 
 3. [ ] **Switch looks on keys** (plan "Approach", transitions).
    `capture`: first ↑/↓ while not chosen (drop-down open) switches to

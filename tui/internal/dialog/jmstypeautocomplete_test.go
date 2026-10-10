@@ -1,10 +1,14 @@
 package dialog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/ePex/cloudtui/tui/internal/config"
+	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
 // press sends keys through p's real input handling (input capture
@@ -36,13 +40,86 @@ func navigateTo(t *testing.T, field *tview.InputField, ac *jmsTypeAutocomplete, 
 	t.Fatalf("never highlighted %q (last: %q)", want, ac.highlighted)
 }
 
+// testPalette returns the embedded theme name's palette.
+func testPalette(t *testing.T, name string) config.Palette {
+	t.Helper()
+	p, ok := config.PaletteForTheme(name)
+	if !ok {
+		t.Fatalf("no embedded theme %q", name)
+	}
+	return p
+}
+
+// dropDownRow is one drawn drop-down row: its text (trimmed) and the
+// backgrounds of its non-blank cells.
+type dropDownRow struct {
+	text string
+	bgs  map[tcell.Color]bool
+}
+
+// drawDropDown focuses field, draws it with its drop-down on a simulation
+// screen, and returns the drop-down's rows, failing the test if no
+// drop-down is drawn.
+func drawDropDown(t *testing.T, field *tview.InputField) []dropDownRow {
+	t.Helper()
+	const width, height = 60, 6
+	field.Focus(func(tview.Primitive) {})
+	field.SetRect(0, 0, width, 1)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, height)
+	field.Draw(screen)
+	screen.Show()
+
+	cells, w, h := screen.GetContents()
+	var rows []dropDownRow
+	for y := 1; y < h; y++ { // the drop-down opens below the field's row
+		var text strings.Builder
+		bgs := map[tcell.Color]bool{}
+		for x := 0; x < w; x++ {
+			c := cells[y*w+x]
+			if len(c.Runes) == 0 || c.Runes[0] == ' ' {
+				text.WriteRune(' ')
+				continue
+			}
+			text.WriteRune(c.Runes[0])
+			_, bg, _ := c.Style.Decompose()
+			bgs[bg] = true
+		}
+		if row := strings.TrimSpace(text.String()); row != "" {
+			rows = append(rows, dropDownRow{text: row, bgs: bgs})
+		}
+	}
+	if len(rows) == 0 {
+		t.Fatal("no drop-down drawn")
+	}
+	return rows
+}
+
+// highlightedEntries returns the drop-down rows drawn in p's selection
+// background (see drawDropDown).
+func highlightedEntries(t *testing.T, field *tview.InputField, p config.Palette) []string {
+	t.Helper()
+	var highlighted []string
+	for _, row := range drawDropDown(t, field) {
+		if row.bgs[tcell.GetColor(p.SelectionBg)] {
+			highlighted = append(highlighted, row.text)
+		}
+	}
+	return highlighted
+}
+
 // newTestAutocomplete wires a bare field with TypeA/TypeC plus the scan
-// entry, an open drop-down, and a done func recording keys.
+// entry, styled from the "dark" theme, an open drop-down, and a done func
+// recording keys.
 func newTestAutocomplete(t *testing.T) (*tview.InputField, *jmsTypeAutocomplete, *int, *[]tcell.Key) {
 	t.Helper()
 	field := tview.NewInputField()
 	scans := 0
-	ac := newJMSTypeAutocomplete(field, func(string) []string {
+	ac := newJMSTypeAutocomplete(field, testPalette(t, "dark"), func(string) []string {
 		return []string{"TypeA", "TypeC", jmsTypeScanSentinel}
 	}, func() { scans++ })
 	var done []tcell.Key
@@ -110,7 +187,7 @@ func TestJMSTypeAutocompleteArrowOnASingleEntryChoosesIt(t *testing.T) {
 	for _, key := range []tcell.Key{tcell.KeyDown, tcell.KeyUp} {
 		field := tview.NewInputField()
 		scans := 0
-		newJMSTypeAutocomplete(field, func(string) []string {
+		newJMSTypeAutocomplete(field, testPalette(t, "dark"), func(string) []string {
 			return []string{jmsTypeScanSentinel}
 		}, func() { scans++ })
 		field.Autocomplete()
@@ -151,5 +228,57 @@ func TestJMSTypeAutocompleteTypingAfterNavigatingDropsTheChoice(t *testing.T) {
 	}
 	if got := field.GetText(); got != "TypeB" || len(*done) != 1 {
 		t.Errorf("text = %q, done = %v; want TypeB kept and Enter passed on", got, *done)
+	}
+}
+
+// TestJMSTypeAutocompleteNothingChosenHighlightsNothing: tview always has
+// a current entry, but while nothing is chosen it must look like the
+// others — the highlight means "Enter takes this" (spec.md).
+func TestJMSTypeAutocompleteNothingChosenHighlightsNothing(t *testing.T) {
+	field, _, _, _ := newTestAutocomplete(t)
+
+	if got := highlightedEntries(t, field, testPalette(t, "dark")); len(got) != 0 {
+		t.Errorf("highlighted %q with nothing chosen, want none", got)
+	}
+}
+
+// TestJMSTypeAutocompleteThemeSwitchKeepsNothingHighlighted: a live
+// switch while the dialog is closed (the field unfocused, its drop-down
+// cached) draws every row in the new theme's plain row colors.
+func TestJMSTypeAutocompleteThemeSwitchKeepsNothingHighlighted(t *testing.T) {
+	field, ac, _, _ := newTestAutocomplete(t)
+	cyber := testPalette(t, "cyberpunk")
+
+	ac.applyPalette(cyber)
+	field.Autocomplete()
+
+	_, main, _ := ui.AutocompleteStyles(cyber)
+	_, rowBg, _ := main.Decompose()
+	for _, row := range drawDropDown(t, field) {
+		if len(row.bgs) != 1 || !row.bgs[rowBg] {
+			t.Errorf("row %q drawn on %v, want only the new theme's row background %v", row.text, row.bgs, rowBg)
+		}
+	}
+}
+
+// TestJMSTypeAutocompleteResetDropsTheHighlight: a choice's look (here
+// built by a theme switch while chosen) doesn't survive the dialog
+// reopening.
+func TestJMSTypeAutocompleteResetDropsTheHighlight(t *testing.T) {
+	field, ac, _, _ := newTestAutocomplete(t)
+	dark := testPalette(t, "dark")
+	navigateTo(t, field, ac, "TypeC")
+	field.Blur()
+	ac.applyPalette(dark)
+	field.Autocomplete()
+	if got := highlightedEntries(t, field, dark); len(got) != 1 {
+		t.Fatalf("highlighted %q while chosen, want one entry (test setup)", got)
+	}
+
+	ac.reset()
+	field.Autocomplete()
+
+	if got := highlightedEntries(t, field, dark); len(got) != 0 {
+		t.Errorf("highlighted %q after reset, want none", got)
 	}
 }

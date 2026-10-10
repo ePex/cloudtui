@@ -75,16 +75,11 @@ func NewMessageFilter(host ui.Host) *MessageFilter {
 	})
 
 	mf.jmsTypeItem = mf.form.GetFormItem(0).(*tview.InputField)
-	// StyleInputFieldAutocomplete must run before SetAutocompleteFunc —
-	// see tui/internal/app/app.go's identical ordering requirement for
-	// the ':' prompt (SetAutocompleteFunc eagerly builds and permanently
-	// styles the drop-down's internal list from whatever styles are set
-	// at that exact moment).
-	ui.StyleInputFieldAutocomplete(mf.jmsTypeItem, host.Config().Colors)
 	// Enter/Tab only accept a suggestion the user chose with the arrow
-	// keys; otherwise they move on in the form with the typed text — see
-	// jmsTypeAutocomplete.
-	mf.ac = newJMSTypeAutocomplete(mf.jmsTypeItem, mf.jmsTypeSuggestions, mf.startScan)
+	// keys, and only that one is highlighted; otherwise they move on in
+	// the form with the typed text — see jmsTypeAutocomplete, which also
+	// styles the drop-down.
+	mf.ac = newJMSTypeAutocomplete(mf.jmsTypeItem, host.Config().Colors, mf.jmsTypeSuggestions, mf.startScan)
 
 	return mf
 }
@@ -212,7 +207,7 @@ func (mf *MessageFilter) ApplyPalette(p config.Palette) {
 	mf.form.SetBorderColor(tcell.GetColor(p.Border))
 	mf.form.SetTitleColor(tcell.GetColor(p.Border))
 	ui.StyleForm(mf.form, p)
-	ui.StyleInputFieldAutocomplete(mf.jmsTypeItem, p)
+	mf.ac.applyPalette(p)
 }
 
 var _ ui.Themeable = (*MessageFilter)(nil)
