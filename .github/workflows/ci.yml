@@ -18,7 +18,11 @@ jobs:
         with:
           go-version-file: tui/go.mod
       - uses: go-task/setup-task@v2
-      - run: task test:tui
+      # The race detector needs cgo; one platform is enough to catch races.
+      - if: runner.os == 'Linux'
+        run: task test:tui:race
+      - if: runner.os != 'Linux'
+        run: task test:tui
       - run: task build:tui
 
   shellcheck:

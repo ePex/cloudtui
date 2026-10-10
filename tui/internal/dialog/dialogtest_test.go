@@ -199,6 +199,10 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 			return mf, mf.Show
 		}},
 		{"JMSTypePrompt", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			// Show starts the automatic scan; the test host would run its
+			// result handler on the scan's goroutine, racing this test's
+			// drawing and re-theming. Keep it from completing.
+			host.scanJMSTypesFn = blockForever
 			jp := NewJMSTypePrompt(host)
 			return jp, func() { jp.Show("Purge", "orders", func(string) {}, func() {}) }
 		}},
