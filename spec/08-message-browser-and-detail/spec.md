@@ -165,10 +165,20 @@ reloads and are reflected in the table title):
   a `ui.JMSTypeScan{Types, Scanned, HasMore}` for this. The scanned set is dialog-local,
   merged into suggestions only for the rest of that dialog session, and
   reset on every `Show()` (never persisted or cached across queues/opens).
-  While a scan is in flight, the field visibly holds the sentinel's own
-  text (clearing it immediately on selection was tried and reverted —
-  see the gotcha below) and `apply()` refuses to submit until it
-  completes.
+
+  **Keys in the JMS Type field** follow the same rule as the
+  purge/move-all prompt (spec/09, "JMS Type autocomplete"): `Enter` and
+  `Tab` keep exactly what's typed and move on to the next form field, so
+  a type that isn't among the suggestions can be applied; a suggestion
+  is only accepted after the user moves the highlight onto it with the
+  arrow keys (or clicks it), and only the scan entry chosen that way
+  starts the scan. The scan entry's text never goes into the field, so
+  Apply works while a scan is still running.
+
+  The form **always opens with focus on the JMS Type field**: `Show()`
+  calls `form.SetFocus(0)`, because `tview.Form` remembers its focused
+  item across `Show` calls — without it the filter reopened wherever it
+  was left (e.g. on Apply) and typing went nowhere (tui/CLAUDE.md).
 
 Both hotkeys appear in `MessagesView.Shortcuts()`/the context panel.
 
@@ -324,18 +334,13 @@ Backend-specific filter behavior:
   types, until the user typed something.
 - **Reentrant `SetText` on the same field, called from inside its own
   change-notification callback, corrupts tview's text buffer — found
-  live as garbled/duplicated rendered text.** The JMS Type field's
-  `SetChangedFunc` originally cleared the field back to `""` immediately
-  upon detecting the scan-trigger sentinel — but that detection runs
-  *from inside* the very `SetText` call that put the sentinel there
-  (accepting it via Enter calls `SetText(sentinel)`, which synchronously
-  invokes `SetChangedFunc`, from which the code called `SetText` again on
-  the same field). The fix moved the clear to run once the scan
-  completes (from a background goroutine's `QueueUpdateDraw` — genuinely
-  outside the original input handler's call stack) instead of
-  immediately — meaning the field visibly holds the sentinel's own text
-  for the whole scan, not just an instant, so `apply()` now also refuses
-  to submit while a scan is in flight.
+  live as garbled/duplicated rendered text.** An earlier design detected
+  the scan entry in `SetChangedFunc` and cleared the field from there,
+  i.e. from inside the `SetText` that had put the scan entry in. Today
+  the scan entry never goes into the field at all (the shared
+  `jmsTypeAutocomplete` starts the scan from tview's autocompleted
+  callback, spec/09), and the changed func only resets the arrow-key
+  choice — never call `SetText` from a changed func.
 - Per-column `Expansion`/`MaxWidth` values are defined once, in
   `messageColumns` (`messages.go`) — used by **both** the header row and
   every data row, rather than each setting its own. Found live: with

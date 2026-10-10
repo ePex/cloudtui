@@ -98,6 +98,17 @@ this before adding or restyling a widget.
   no suggestions, so styles set later don't reach it. That's why
   `StyleInputFieldAutocomplete` blurs an unfocused field after
   restyling.
+- **In an open autocomplete drop-down, Tab acts like Enter**: both
+  accept the highlighted entry, before the field's own Enter/Tab
+  handling runs. And **the highlight is sticky**: a rebuilt drop-down
+  keeps whichever entry was highlighted before, so an entry that was
+  alone on the first build (e.g. an action like "↻ Scan …") stays
+  highlighted until the arrow keys move it. Don't assume Enter/Tab on
+  typed text reach your done func. `dialog.jmsTypeAutocomplete` shows
+  the fix: accept only what the arrow keys chose, otherwise close the
+  drop-down in the input capture (`Autocomplete()` with no entries) and
+  let the key through. A one-entry list can't move its highlight, so
+  arrow keys there report no navigation.
 - **Widgets copy `tview.Styles` at construction.** Setting
   `tview.Styles` later (a live theme switch) doesn't reach widgets that
   already exist. What keeps its construction-time colors unless

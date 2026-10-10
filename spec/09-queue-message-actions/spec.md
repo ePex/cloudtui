@@ -125,13 +125,20 @@ Both `p` and `M` share one prompt type (`JMSTypePrompt`) for narrowing
 what they act on:
 
 - A single bordered `tview.InputField` (not a full `tview.Form` — one
-  field doesn't need one). `Enter` on a blank field continues with no
-  filter (identical to this feature's pre-existing behavior) —
-  **immediately, regardless of whether the automatic scan below has
-  finished** (see the gotcha further down for why this matters more than
-  it might sound like it should); `Enter` with text entered continues
-  with that as the JMS Type; `Esc` cancels the whole purge/move-all
-  operation, same as `Esc` already did before this filter step existed.
+  field doesn't need one). Keys:
+  - `Enter` continues with **exactly what's typed** — blank means no
+    filter — **immediately, regardless of whether the automatic scan
+    below has finished**.
+  - `Tab` keeps the typed text in the field.
+  - Neither ever starts a scan or picks a suggestion on its own: a
+    suggestion is only accepted after the user moves the highlight onto
+    it with the arrow keys (or clicks it). Then `Enter`/`Tab` put that
+    type in the field (a second `Enter` continues), or, on the "↻ Scan
+    up to …" entry, start the wider scan. See "JMS Type autocomplete"
+    in Implementation notes.
+  - `Esc` cancels the whole purge/move-all operation.
+- Text typed while a scan runs stays; the scan's types become
+  suggestions for it.
 - Autocomplete, styled like the message filter overlay's own JMS Type
   field (spec/08). Unlike the Messages view, the Queues view hasn't
   necessarily browsed any messages for the selected queue, so there's
@@ -362,51 +369,52 @@ every other queue operation (spec/07).
   explicitly generous — 9 spare rows below the field — to comfortably
   cover a typical suggestions list without the drop-down overlapping the
   border.
-- **`tview.InputField` accepts an open autocomplete drop-down's
-  highlighted entry on Enter before its own `SetDoneFunc` ever runs —
-  found live, breaking `JMSTypePrompt`'s "blank field + Enter continues
-  unfiltered" contract.** On an untouched field, an open drop-down's
-  highlighted entry could be the scan-trigger sentinel (before the
-  automatic scan below completes, or if it found nothing), and without
-  intervention, the very first Enter on a blank field would accept that
-  sentinel and kick off the wider scan, never reaching "continue with no
-  filter" at all. Fixed with `field.SetInputCapture`: when
-  `event.Key() == tcell.KeyEnter` and the field is genuinely empty, call
-  the continue handler directly and swallow the event —
-  `SetInputCapture` runs before `InputField`'s own `InputHandler` (per
-  `tview.Box`'s own doc comment), so only that exact case is affected;
-  typing or navigating into the drop-down with arrows still uses tview's
-  normal accept-then-second-Enter flow, same as every other autocomplete
-  field in this app.
-- **`Show()`'s automatic scan sets `scanning = true` *synchronously*,
-  before `Show()` even returns — so gating "continue with no filter" on
-  "is any scan in flight" would block it for the entire duration of
-  every automatic scan, not just the opt-in wider one.** Found live,
-  once the automatic-scan design (above) was added: the field's own
-  submit guard originally refused whenever `jp.scanning` was true, which
-  was safe under the original opt-in-only design (a scan only started on
-  deliberate user action) but became wrong once `Show()` itself started
-  a scan unconditionally on every open. The guard now checks a narrower,
-  actually-unsafe condition instead: whether the field is *literally*
-  showing the scan-trigger sentinel's own text (only possible via the
-  opt-in wider scan, which is the only path that ever writes that text
-  into the field) — the automatic scan never touches the field's text at
-  all while in flight, so it never blocks this path, however long it's
-  still running.
-- **A directly-set field text that matches the scan-trigger sentinel
-  fires the field's real production `SetChangedFunc` wiring, starting a
-  genuine background scan — a test-writing trap, not a production bug,
-  but one that produced a real `go test -race` failure.** A test
-  simulating "the sentinel was just selected" via
-  `jp.field.SetText(jmsTypeScanSentinel)` inadvertently triggers the same
-  scan a live keystroke would, and with the test's default fake
-  `ScanJMSTypes` returning immediately (not blocked), that scan's
-  goroutine could call `SetStatus` concurrently with the test's own
-  subsequent assertions doing the same, unsynchronized — caught by
-  `-race`, not by a plain test run. Every test in this file that starts
-  a real scan (via `Show()` or by triggering the sentinel) needs an
-  explicitly non-returning fake `ScanJMSTypes` unless it's actually
-  waiting on that scan's completion through a channel.
+- **JMS Type autocomplete** (`tui/internal/dialog/jmstypeautocomplete.go`,
+  shared with the message filter's JMS Type field, spec/08). Two tview
+  v0.42 behaviors made the plain wiring lose what the user typed:
+  - While the drop-down is open, `InputField` treats **Tab exactly like
+    Enter**: "accept the highlighted entry", before the field's own
+    Enter/Tab handling runs.
+  - When it rebuilds the drop-down it **keeps whichever entry was
+    highlighted before**. The scan entry is the only entry on the very
+    first build, so it stayed highlighted until the user used the arrow
+    keys.
+
+  So Enter or Tab on an empty field, an unlisted type, or even a
+  matching prefix started a 5,000-message scan and lost the text. The
+  shared `jmsTypeAutocomplete` fixes it:
+  - It tracks `chosen`: the arrow keys moved the highlight since the
+    last text change (tview's `AutocompletedNavigate`). Its
+    `SetAutocompletedFunc` callback leaves the text alone on navigation,
+    so tview doesn't rebuild the drop-down and it stays open (tview
+    only rebuilds when a key changed the text).
+  - Its input capture, on Enter/Tab without `chosen`, closes the
+    drop-down — tview has no public "close", but `Autocomplete()` with
+    no entries removes it — and lets the key through to its normal job.
+  - With `chosen`, the callback puts a real type in the field (tview
+    leaves setting the text to the callback) or calls the dialog's
+    `onScan` for the scan entry.
+  - Up/Down with a **single** suggestion count as choosing it: tview
+    can't move the highlight in a one-entry list, so it reports no
+    navigation — and that's typically the scan entry alone, when there
+    are no types to suggest yet (found live).
+  - The scan entry's text never goes into the field. That retired three
+    workarounds: an Enter-on-empty input capture, clearing the field
+    after every scan (which wiped text typed during the automatic scan),
+    and refusing to continue while the field held the scan entry.
+- **`startScan` reads the queue name on the UI goroutine**, before
+  starting the scan's goroutine. It used to read `jp.queueName` inside
+  the goroutine, racing with a reopened prompt's `Show` writing it
+  (caught by `go test -race`).
+- **Tests that let a scan start need a non-returning fake
+  `ScanJMSTypes`** (`blockForever`) unless they wait for completion
+  through a channel: the test host runs `QueueUpdateDraw` inline, so a
+  scan that completes runs its result handler on the scan's goroutine,
+  concurrently with the test. A theming test missed this and failed
+  under `-race`; CI now runs the TUI tests with `-race` on Linux
+  (spec/02). Key behavior is tested by sending real key events through
+  the field's input handling (`press`/`navigateTo` in
+  `jmstypeautocomplete_test.go`), input capture included.
 
 ## Out of scope (deliberate)
 
