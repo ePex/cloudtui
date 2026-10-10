@@ -42,6 +42,13 @@ done. Live checks run with an isolated HOME and a separate tmux server
    Home ↓ ↑ Enter opened the first queue, not the header. Scratch
    queues removed.
 
-3. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
+3. [x] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and the live checks from task 2 in one session. Remove
    scratch queues.
+   *Done (2026-10-10):* `task test` (Go, mq-proxy, 78 web tests) and
+   `task test:tui:race` pass; the smoke test passes (scratch HOME, own
+   tmux server). Both repros again in one session with a fresh build:
+   empty queue after scrolling a full one, ↓ ↑ `j` `k` PgDn Home End →
+   CPU 0.0 %, `h` went home; queue filter with no match, same keys →
+   CPU 0.0 %; cleared filter, Home ↓ ↑ Enter → the first queue opened.
+   Scratch queues removed.
