@@ -149,6 +149,10 @@ func TestDialogsFullyRecolorOnLiveThemeSwitch(t *testing.T) {
 		staysOpen bool
 		build     func(t *testing.T, host *testHost) (overlay, func())
 	}{
+		{"OperationProgress", false, func(t *testing.T, host *testHost) (overlay, func()) {
+			op := NewOperationProgress(host)
+			return op, func() { op.Show("Loading queues", 0) }
+		}},
 		{"ConfirmDialog", false, func(t *testing.T, host *testHost) (overlay, func()) {
 			c := NewConfirmDialog(host)
 			return c, func() { c.Show("Delete?", func() {}) }
