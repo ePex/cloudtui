@@ -15,6 +15,7 @@ import {
   buildBulkDeleteBody,
   buildBulkMoveBody,
   apiCall,
+  isAbortError,
 } from './api.js';
 
 test('buildAuthHeader encodes username:password as HTTP Basic', () => {
@@ -231,4 +232,46 @@ test('apiCall rejects with the server error message on a non-ok HTTP response', 
     /Bad credentials/,
   );
   delete global.fetch;
+});
+
+test('apiCall passes the abort signal to fetch', async () => {
+  const controller = new AbortController();
+  let seen;
+  global.fetch = async (url, opts) => {
+    seen = opts.signal;
+    return { ok: true, status: 200, json: async () => ({ data: [], errors: [] }) };
+  };
+  await apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues', { signal: controller.signal });
+  assert.equal(seen, controller.signal);
+  delete global.fetch;
+});
+
+test('apiCall rejects with an AbortError when the request is cancelled', async () => {
+  const controller = new AbortController();
+  global.fetch = (url, opts) => new Promise((resolve, reject) => {
+    opts.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+  });
+  const call = apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues', { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(call, (err) => isAbortError(err));
+  delete global.fetch;
+});
+
+test('apiCall rejects with an AbortError when cancelled while reading the body', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => { throw new DOMException('aborted', 'AbortError'); },
+  });
+  await assert.rejects(
+    apiCall({ baseUrl: 'http://localhost:8080', username: 'x', password: 'y' }, 'list-queues'),
+    (err) => isAbortError(err),
+  );
+  delete global.fetch;
+});
+
+test('isAbortError tells a cancel from a real failure', () => {
+  assert.equal(isAbortError(new DOMException('aborted', 'AbortError')), true);
+  assert.equal(isAbortError(new Error('HTTP 500')), false);
+  assert.equal(isAbortError(null), false);
 });

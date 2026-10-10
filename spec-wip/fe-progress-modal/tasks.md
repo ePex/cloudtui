@@ -109,7 +109,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    made the socket name too long on macOS. Its scratch queues were
    removed afterwards and mq-proxy was stopped.
 
-7. [ ] **Web: overlay, demo and loads** (plan §6). `src/progress.js`
+7. [x] **Web: overlay, demo and loads** (plan §6). `src/progress.js`
    with `createShowTimer` (unit-tested), the overlay markup/CSS in
    `index.html` (rainbow, pixel cat, stars, spinner, reduced motion),
    `apiCall` passing `opts.signal`, abort handling, `#progress-demo`,
@@ -120,6 +120,27 @@ done. Live checks run with an isolated HOME and a separate tmux server
    ends it; clicks on the page underneath do nothing while it shows;
    with "reduce motion" emulated in DevTools the bar and cat are still.
    A slow load shows the spinner; Esc cancels it.
+   *Done (2026-10-10):* the runner tracks several operations at once (a
+   mutation reloads messages and queues together): the overlay stays
+   until all have ended, shows the newest, and one Esc cancels them
+   all. Esc aborts the signal of every kind of operation; abortable ones
+   also close at once. The cat sprite is built in JS from the TUI's
+   pixel grid (`catSpriteSvg`, tested). `apiCall` rethrows an abort that
+   lands while reading the body, so it can't resolve as an empty
+   success. Live in Chrome (page on `http://localhost`, a fake proxy
+   with a settable delay): `#progress-demo` counts `1 of 20`… with
+   `(1 failed)`, then hands over to the spinner without closing; a click
+   on the field below didn't focus it, typing was swallowed; Esc →
+   closed, `Progress demo cancelled`. The reduced-motion rules (applied
+   by copying them into a stylesheet, since the extension can't emulate
+   the media query) stop the cat and stars and show `Working…`. A fast
+   load showed no overlay; a slow queue load → `Loading queues…`, Esc →
+   the last list back plus `Loading cancelled — press Refresh to
+   retry`; the same for messages (`… Apply …`, list emptied) and Load
+   more (`… Load more …`, list kept); messages and queues loading
+   together → one Esc cancelled both. The built `dist/index.html` runs
+   the demo too. Note: Dark Reader in the browser recolors the page
+   (the navy track turned gray); its styles were removed for the check.
 
 8. [ ] **Web: purge, move all, single and batched bulk actions**
    (plan §6). `chunk` / `runBatches` (unit-tested: counts, failures

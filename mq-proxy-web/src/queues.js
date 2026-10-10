@@ -1,9 +1,10 @@
 import { $, showError, clearError, escapeHtml, makeButton, showView } from './dom.js';
-import { apiCall, buildBulkFilter } from './api.js';
+import { apiCall, buildBulkFilter, isAbortError } from './api.js';
 import { state } from './state.js';
 import { openMessages } from './messages.js';
 import { openMovePicker } from './movepicker.js';
 import { jmsTypePrompt, confirmDialog, openSendModal } from './dialogs.js';
+import { startOperation } from './progress.js';
 
 // Client-side only — list-queues (spec/11) has no server-side filter
 // param, so this narrows the already-fetched list. Case-insensitive
@@ -25,17 +26,27 @@ export function sortQueues(queues, column, direction) {
   });
 }
 
+// Runs under the progress overlay; Esc cancels the request and puts the
+// last-loaded list back, saying how to retry.
 export function loadQueues() {
   clearError($('queuesError'));
+  $('queuesInfo').hidden = true;
   var tbody = $('queuesTable').querySelector('tbody');
   tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
-  return apiCall(state.conn, 'list-queues').then(function (queues) {
+  var op = startOperation({ title: 'Loading queues', abortable: true });
+  return apiCall(state.conn, 'list-queues', { signal: op.signal }).then(function (queues) {
     state.queues = queues || [];
     applyQueueView();
   }, function (err) {
+    if (isAbortError(err)) {
+      applyQueueView();
+      $('queuesInfo').textContent = 'Loading cancelled — press Refresh to retry';
+      $('queuesInfo').hidden = false;
+      return;
+    }
     tbody.innerHTML = '';
     showError($('queuesError'), err);
-  });
+  }).finally(op.finish);
 }
 
 // Applies the current filter text + sort column/direction to

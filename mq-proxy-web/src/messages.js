@@ -7,11 +7,13 @@ import {
   buildBulkMoveBody,
   buildSingleMessageFilter,
   DEFAULT_MAX_COUNT,
+  isAbortError,
 } from './api.js';
 import { state } from './state.js';
 import { loadQueues } from './queues.js';
 import { openMovePicker } from './movepicker.js';
 import { confirmDialog, openSendModal } from './dialogs.js';
+import { startOperation } from './progress.js';
 import {
   EXPORT_CAP,
   toExportRecord,
@@ -31,6 +33,8 @@ export function openMessages(queueName) {
   loadMessages();
 }
 
+// Runs under the progress overlay. Esc cancels the request and empties
+// the list, since what it showed may be another queue's.
 export function loadMessages() {
   var queueName = state.currentQueue;
   var maxCount = parseInt($('msgFilterMax').value, 10) || DEFAULT_MAX_COUNT;
@@ -43,8 +47,10 @@ export function loadMessages() {
   $('loadMoreMessagesBtn').hidden = true;
   var tbody = $('messagesTable').querySelector('tbody');
   tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+  var op = startOperation({ title: 'Loading messages from "' + queueName + '"', abortable: true });
   return apiCall(state.conn, 'list-messages', {
     query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount }),
+    signal: op.signal,
   }).then(function (messages) {
     state.messages = messages || [];
     state.messagesHasMore = !!(messages && messages.hasMore);
@@ -52,9 +58,23 @@ export function loadMessages() {
     updateLoadMoreButton();
     updateBulkActionsUI();
   }, function (err) {
+    if (isAbortError(err)) {
+      state.messages = [];
+      renderMessages(state.messages);
+      updateBulkActionsUI();
+      showCancelledLoad('Apply');
+      return;
+    }
     tbody.innerHTML = '';
     showError($('messagesError'), err);
-  });
+  }).finally(op.finish);
+}
+
+// showCancelledLoad says in the info line that a load was cancelled, and
+// which button retries it.
+function showCancelledLoad(retryButton) {
+  $('messagesInfo').textContent = 'Loading cancelled — press ' + retryButton + ' to retry';
+  $('messagesInfo').hidden = false;
 }
 
 // "Load more" — fetches the next page after the last currently-rendered
@@ -62,7 +82,8 @@ export function loadMessages() {
 // loadMessages does for every other reload: Apply, opening a queue, or
 // after an action completes). The cursor is read directly off the last
 // rendered row rather than tracked as separate state, so it can't drift
-// out of sync with what's actually on screen.
+// out of sync with what's actually on screen. Esc on the progress overlay
+// cancels it and keeps the loaded messages.
 export function loadMoreMessages() {
   var queueName = state.currentQueue;
   var maxCount = parseInt($('msgFilterMax').value, 10) || DEFAULT_MAX_COUNT;
@@ -70,8 +91,11 @@ export function loadMoreMessages() {
   var lastMessage = state.messages[state.messages.length - 1];
   if (!lastMessage) return;
   clearError($('messagesError'));
+  $('messagesInfo').hidden = true;
+  var op = startOperation({ title: 'Loading more messages from "' + queueName + '"', abortable: true });
   return apiCall(state.conn, 'list-messages', {
     query: buildListMessagesParams(queueName, { jmsType: jmsType, maxCount: maxCount, afterMessageId: lastMessage.messageId }),
+    signal: op.signal,
   }).then(function (page) {
     page = page || [];
     state.messages = appendMessages(state.messages, page);
@@ -80,8 +104,12 @@ export function loadMoreMessages() {
     updateLoadMoreButton();
     updateBulkActionsUI();
   }, function (err) {
+    if (isAbortError(err)) {
+      showCancelledLoad('Load more');
+      return;
+    }
     showError($('messagesError'), err);
-  });
+  }).finally(op.finish);
 }
 
 function updateLoadMoreButton() {

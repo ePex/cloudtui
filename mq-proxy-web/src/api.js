@@ -164,21 +164,28 @@ export function buildBulkMoveBody(sourceQueue, targetQueue, messageIds) {
 }
 
 // conn: { baseUrl, username, password }. verb: e.g. "list-queues".
-// opts: { method, query, body } — query is a (possibly nested) params
-// object per buildQueryString; body is a plain object, JSON-encoded.
+// opts: { method, query, body, signal } — query is a (possibly nested)
+// params object per buildQueryString; body is a plain object,
+// JSON-encoded; signal (an AbortSignal) cancels the request, rejecting
+// with an AbortError (see isAbortError).
 export function apiCall(conn, verb, opts) {
   opts = opts || {};
   var url = conn.baseUrl.replace(/\/$/, '') + '/api/management/command/' + verb;
   var qs = opts.query ? buildQueryString(opts.query) : '';
   if (qs) url += '?' + qs;
   var headers = { Authorization: buildAuthHeader(conn.username, conn.password) };
-  var fetchOpts = { method: opts.method || 'GET', headers: headers };
+  var fetchOpts = { method: opts.method || 'GET', headers: headers, signal: opts.signal };
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
     fetchOpts.body = JSON.stringify(opts.body);
   }
   return fetch(url, fetchOpts).then(function (res) {
-    return res.json().catch(function () { return null; }).then(function (json) {
+    // An unreadable body counts as no body, but an abort while reading
+    // it is still a cancel, not an empty success.
+    return res.json().catch(function (err) {
+      if (isAbortError(err)) throw err;
+      return null;
+    }).then(function (json) {
       var envelope = parseEnvelope(json);
       if (!res.ok) {
         throw new Error(errorMessageFrom(envelope, 'HTTP ' + res.status + ' ' + res.statusText));
@@ -199,4 +206,11 @@ export function apiCall(conn, verb, opts) {
       return envelope.data;
     });
   });
+}
+
+// isAbortError tells a request cancelled through its signal (Esc on the
+// progress overlay) from a real failure: callers report it as cancelled,
+// not as an error.
+export function isAbortError(err) {
+  return !!err && err.name === 'AbortError';
 }
