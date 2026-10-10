@@ -23,27 +23,32 @@ test('buildAuthHeader encodes username:password as HTTP Basic', () => {
 
 test('parseEnvelope normalizes a list-style { data, errors } response', () => {
   const result = parseEnvelope({ data: [1, 2], errors: [] });
-  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: false });
+  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: false, truncated: false });
 });
 
 test('parseEnvelope normalizes an item-style { data, error } response', () => {
   const result = parseEnvelope({ data: null, error: { code: 'not_found', message: 'no such queue' } });
-  assert.deepEqual(result, { data: null, errors: [{ code: 'not_found', message: 'no such queue' }], hasMore: false });
+  assert.deepEqual(result, { data: null, errors: [{ code: 'not_found', message: 'no such queue' }], hasMore: false, truncated: false });
 });
 
 test('parseEnvelope treats a null error as no errors', () => {
   const result = parseEnvelope({ data: { messageId: 'ID:1' }, error: null });
-  assert.deepEqual(result, { data: { messageId: 'ID:1' }, errors: [], hasMore: false });
+  assert.deepEqual(result, { data: { messageId: 'ID:1' }, errors: [], hasMore: false, truncated: false });
 });
 
 test('parseEnvelope carries hasMore through for list-messages pagination', () => {
   const result = parseEnvelope({ data: [1, 2], errors: [], hasMore: true });
-  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: true });
+  assert.deepEqual(result, { data: [1, 2], errors: [], hasMore: true, truncated: false });
+});
+
+test('parseEnvelope carries truncated through, separately from hasMore', () => {
+  const result = parseEnvelope({ data: [], errors: [], hasMore: false, truncated: true });
+  assert.deepEqual(result, { data: [], errors: [], hasMore: false, truncated: true });
 });
 
 test('parseEnvelope tolerates a missing/malformed body', () => {
-  assert.deepEqual(parseEnvelope(null), { data: undefined, errors: [], hasMore: false });
-  assert.deepEqual(parseEnvelope(undefined), { data: undefined, errors: [], hasMore: false });
+  assert.deepEqual(parseEnvelope(null), { data: undefined, errors: [], hasMore: false, truncated: false });
+  assert.deepEqual(parseEnvelope(undefined), { data: undefined, errors: [], hasMore: false, truncated: false });
 });
 
 test('errorMessageFrom prefers the first error message, falls back otherwise', () => {
@@ -197,6 +202,20 @@ test('apiCall surfaces hasMore on the resolved data, for list-messages paginatio
     'list-messages',
   );
   assert.equal(data.hasMore, true);
+  delete global.fetch;
+});
+
+test('apiCall surfaces truncated on the resolved data', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ data: [{ messageId: 'ID:1' }], errors: [], hasMore: false, truncated: true }),
+  });
+  const data = await apiCall(
+    { baseUrl: 'http://localhost:8080', username: 'cloudtui', password: 'changeme' },
+    'list-messages',
+  );
+  assert.equal(data.truncated, true);
+  assert.equal(data.hasMore, false);
   delete global.fetch;
 });
 

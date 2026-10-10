@@ -89,14 +89,15 @@ with `jq`.
    of 1600 message(s) (only what the list shows)`, matching the title's
    `(showing 400 of 1600)`.
 
-5. [ ] **Web console Export button** (plan §4). `export.js` with
+5. [x] **Web console Export button** (plan §4). `export.js` with
    `node --test` tests, `truncated` in `api.js`, the toolbar button and
    info line in `messages.js`/`index.html`.
-   *Live check (built `dist/index.html` against `mq-proxy`, opened via
-   `file://` in Chrome):* Export with 2 selected → downloaded file has
-   those 2; no selection on a 10-message queue → all 10; on the
-   1,600-message queue → info line `… 400 of 1,600 …`; files valid per
-   `jq`.
+   *Live check (built `dist/index.html` against `mq-proxy`, served over
+   `http://localhost` with that origin allowed in mq-proxy's CORS
+   settings, since the browser automation can't open `file://`):*
+   Export with 2 selected → downloaded file has those 2; no selection on
+   a 10-message queue → all 10; on the 1,600-message queue → info line
+   `… 400 of 1600 …`; every line parses as JSON.
 
 6. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
    (isolated), and the live checks from tasks 3–5 in one session.

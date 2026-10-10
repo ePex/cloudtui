@@ -164,6 +164,10 @@
   #loadMoreMessagesBtn { margin-top: 0.5rem; }
   #messagesSelectedCount { color: var(--muted); font-size: 0.85rem; }
   #messagesTable td:first-child, #messagesTable th:first-child { width: 1.5rem; }
+  p.info {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
   p.error {
     color: var(--danger);
     font-size: 0.9rem;
@@ -275,6 +279,7 @@
     </label>
     <button id="applyMsgFilterBtn" type="button">Apply</button>
     <button id="sendFromMessagesBtn" type="button" class="btn-primary">Send message&hellip;</button>
+    <button id="exportMessagesBtn" type="button" title="Download the selected messages, or else everything the filter matches, as NDJSON">Export</button>
     <div id="messagesBulkActions">
       <button id="selectAllMessagesBtn" type="button">Select all</button>
       <button id="selectNoneMessagesBtn" type="button">Select none</button>
@@ -292,6 +297,7 @@
       <tbody></tbody>
     </table>
     <button id="loadMoreMessagesBtn" type="button" hidden>Load more&hellip;</button>
+    <p id="messagesInfo" class="info" hidden></p>
     <p id="messagesError" class="error" hidden></p>
   </section>
 
