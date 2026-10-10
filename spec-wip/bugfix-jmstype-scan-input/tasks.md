@@ -21,11 +21,15 @@ TypeA messages is enough.
    goroutine (spec.md amended). Each fix alone still fails `-race`;
    both together pass, three runs in a row, and `go test ./...` passes.
 
-2. [ ] **CI runs the TUI tests with `-race` on Ubuntu** (plan §3). New
+2. [x] **CI runs the TUI tests with `-race` on Ubuntu** (plan §3). New
    `task test:tui:race`; the `tui` job runs it on Linux and `task
    test:tui` on macOS/Windows.
    *Check:* `task test:tui:race` passes locally; the PR's CI shows the
    Linux job running with `-race` and passing.
+   *Done 2026-10-10.* Locally: 19 packages pass, `actionlint` clean. CI
+   run 38009270849: `tui (ubuntu-latest)` ran `task: [test:tui:race] go
+   test -race ./...` and passed (1m45s); Windows/macOS ran `go test
+   ./...`; all 12 checks green.
 
 3. [ ] **Shared JMS Type autocomplete, wired into the purge/move-all
    prompt** (plan §1). New `jmstypeautocomplete.go` (`chosen` tracking,
