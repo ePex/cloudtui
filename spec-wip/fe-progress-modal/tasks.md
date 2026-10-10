@@ -169,7 +169,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    background tab Chrome slows timers, so the overlay showed about 1 s
    in rather than at 250 ms (the delay is unit-tested).
 
-9. [ ] **Web: orbiting cat spinner** (spec "Web console specifics",
+9. [x] **Web: orbiting cat spinner** (spec "Web console specifics",
    plan §6). Replace the CSS ring spinner with the pixel cat running
    around a circle, trailing a rainbow arc, on a starry dark disc. CSS
    only, in `index.html`, plus the markup; the sprite stays the one
@@ -180,6 +180,17 @@ done. Live checks run with an isolated HOME and a separate tmux server
    it, nose first, legs animating; it looks right in light and dark
    mode and at phone width; a slow load (fake proxy) shows it too; the
    reduced-motion rules show the static `Working…` instead.
+   *Done (2026-10-10):* a 96 px starry disc; one element spins every
+   1.2 s with the six bands as rings (radius 25–43 px, red outside), cut
+   by a conic mask to the 105° behind the cat and fading toward the
+   tail, and the sprite at 3 px per pixel at 12 o'clock. Live in Chrome:
+   the cat laps clockwise nose first, feet toward the middle, legs
+   animating, rainbow trailing; in the demo's no-count part and in a
+   slow queue load through the fake proxy; on the dark palette and with
+   the light palette forced; the disc fits a 338 px box (phone width,
+   simulated by narrowing the box); the reduced-motion rules hide the
+   disc and show `Working…`. Dark Reader's styles removed for the check
+   again.
 
 10. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke test
     (isolated), and the live checks from tasks 2, 4, 5, 7, 8 and 9 in one

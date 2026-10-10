@@ -275,17 +275,59 @@
   @keyframes progress-cat {
     to { background-position: -120px 0; }
   }
-  .progress-spinner { display: flex; justify-content: center; padding: 0.5rem 0; }
-  .progress-spinner .spinner {
-    width: 1.75rem;
-    height: 1.75rem;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
+  .progress-spinner { display: flex; justify-content: center; padding: 0.25rem 0; }
+  /* The orbiting cat (uncounted operations): a starry disc; inside it one
+     element spins, carrying the rainbow arc and the cat at its head. The
+     cat sits at 12 o'clock and the lap runs clockwise, so it runs nose
+     first with its feet toward the middle. The ring's centerline is at
+     radius 34px, six 3px bands, red outside like the bar's top band. */
+  .orbit {
+    position: relative;
+    width: 96px;
+    height: 96px;
     border-radius: 50%;
+    background-color: #00005f;
+    background-image:
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px),
+      radial-gradient(circle, #ffffff 0 1px, transparent 1.5px);
+    background-size: 32px 24px, 24px 32px;
+    background-position: 4px 6px, 16px 18px;
   }
-  .progress-overlay.shown .spinner { animation: progress-spin 0.8s linear infinite; }
-  @keyframes progress-spin {
+  .progress-overlay.shown .orbit { animation: progress-orbit-stars 3s linear infinite; }
+  @keyframes progress-orbit-stars {
+    to { background-position: -28px 6px, -8px 18px; }
+  }
+  .orbit-spin { position: absolute; inset: 0; }
+  .progress-overlay.shown .orbit-spin { animation: progress-orbit 1.2s linear infinite; }
+  @keyframes progress-orbit {
     to { transform: rotate(360deg); }
+  }
+  /* The trail: the six bands as rings, cut to the ~110° behind the cat
+     and fading out toward the tail; it ends under the cat's middle. */
+  .orbit-trail {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle,
+      transparent 0 25px, #6633ff 25px 28px, #0099ff 28px 31px, #33ff00 31px 34px,
+      #ffff00 34px 37px, #ff9900 37px 40px, #ff0000 40px 43px, transparent 43px);
+    -webkit-mask-image: conic-gradient(transparent 0 250deg, #000 355deg, transparent 355deg);
+    mask-image: conic-gradient(transparent 0 250deg, #000 355deg, transparent 355deg);
+  }
+  /* The same sprite as on the bar, at 3px per pixel: 30x18, both frames
+     side by side in 60x18. */
+  .orbit-cat {
+    position: absolute;
+    left: 33px;
+    top: 5px;
+    width: 30px;
+    height: 18px;
+    background-image: var(--cat-sprite);
+    background-size: 60px 18px;
+    image-rendering: pixelated;
+  }
+  .progress-overlay.shown .orbit-cat { animation: progress-orbit-cat 0.4s steps(2) infinite; }
+  @keyframes progress-orbit-cat {
+    to { background-position: -60px 0; }
   }
   .progress-spinner .spinner-static { display: none; color: var(--muted); }
   #progressCount { margin: 0.6rem 0 0; font-size: 0.9rem; min-height: 1.2em; }
@@ -293,7 +335,7 @@
   @media (prefers-reduced-motion: reduce) {
     .progress-overlay.shown .progress-track,
     .progress-overlay.shown .progress-cat { animation: none; }
-    .progress-spinner .spinner { display: none; }
+    .progress-spinner .orbit { display: none; }
     .progress-spinner .spinner-static { display: inline; }
   }
 </style>
@@ -454,7 +496,12 @@
       <div class="progress-cat"></div>
     </div>
     <div id="progressSpinner" class="progress-spinner">
-      <span class="spinner"></span>
+      <div class="orbit" aria-hidden="true">
+        <div class="orbit-spin">
+          <div class="orbit-trail"></div>
+          <div class="orbit-cat"></div>
+        </div>
+      </div>
       <span class="spinner-static">Working…</span>
     </div>
     <p id="progressCount"></p>
