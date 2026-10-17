@@ -119,5 +119,13 @@ done. Live checks run with an isolated HOME and a separate tmux server
    Scratch queue removed, mq-proxy stopped, TUI closed. `go test
    ./...`, gofmt and vet pass.
 
-5. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
+5. [x] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated). Remove the scratch setup.
+   *Done (2026-10-17):* `task test` (Go, mq-proxy, 78/78 web tests)
+   and `task test:tui:race` pass. The smoke test passes against the
+   local broker with a scratch HOME and its own tmux server (a
+   `tmux -L` wrapper on `PATH`); the scratch HOME was unchanged
+   afterwards (the script restores it, so its log can't be inspected
+   afterwards; the live check in task 4 covered the log's content). No
+   smoke or scratch queues left, nothing on 8080, no scratch processes;
+   scratch setup removed.
