@@ -225,8 +225,10 @@ func (r *opRunner) draw(screen tcell.Screen) {
 	m.SetFrame(op.frame)
 	r.mu.Unlock()
 
+	// Taller than ProgressModalHeight for a long title or detail; clipped
+	// to a short screen.
 	w, h := screen.Size()
-	width, height := min(dialog.ProgressModalWidth, w), min(dialog.ProgressModalHeight, h)
+	width, height := min(dialog.ProgressModalWidth, w), min(m.Height(screen), h)
 	m.SetRect((w-width)/2, (h-height)/2, width, height)
 	m.Draw(screen)
 }

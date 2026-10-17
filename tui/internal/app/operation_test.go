@@ -290,6 +290,62 @@ func TestStepAndDetailAreDrawn(t *testing.T) {
 	}
 }
 
+// TestModalGrowsForALongTitle: a title with long queue names makes the
+// modal taller than ProgressModalHeight, still centered and drawn in
+// full; a short title keeps it 60×11.
+func TestModalGrowsForALongTitle(t *testing.T) {
+	const long = `Moving all OrderCreated messages from "dlq.example.orders.fulfilment.backend.eu" to "example.orders.fulfilment.backend.eu"`
+	cases := []struct {
+		title      string
+		wantTaller bool
+	}{
+		{long, true},
+		{"Loading queues", false},
+	}
+	for _, c := range cases {
+		r, clock := newTestRunner()
+		r.start(c.title, 300, ui.OpStoppable, false)
+		clock.advance(opShowDelay)
+
+		got := drawnText(t, r)
+		_, y, w, h := r.modal.GetRect()
+		if c.wantTaller && h <= dialog.ProgressModalHeight {
+			t.Errorf("%q: modal height %d, want taller than %d", c.title, h, dialog.ProgressModalHeight)
+		}
+		if !c.wantTaller && (w != dialog.ProgressModalWidth || h != dialog.ProgressModalHeight) {
+			t.Errorf("%q: modal %d×%d, want %d×%d", c.title, w, h, dialog.ProgressModalWidth, dialog.ProgressModalHeight)
+		}
+		if y != (24-h)/2 {
+			t.Errorf("%q: modal top %d, want %d (centered on 24 rows)", c.title, y, (24-h)/2)
+		}
+		for _, name := range []string{"dlq.example.orders.fulfilment.backend.eu", "example.orders.fulfilment.backend.eu"} {
+			if c.wantTaller && !strings.Contains(strings.ReplaceAll(got, " ", ""), name) {
+				t.Errorf("%q: queue name %q not drawn in full: %q", c.title, name, got)
+			}
+		}
+	}
+}
+
+// TestModalIsClippedToAShortScreen: on a screen shorter than the grown
+// modal, the modal takes the screen's height, not more.
+func TestModalIsClippedToAShortScreen(t *testing.T) {
+	r, clock := newTestRunner()
+	r.start(`Moving all OrderCreated messages from "dlq.example.orders.fulfilment.backend.eu" to "example.orders.fulfilment.backend.eu"`, 300, ui.OpStoppable, false)
+	clock.advance(opShowDelay)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 8)
+
+	r.draw(screen)
+
+	if _, y, _, h := r.modal.GetRect(); y != 0 || h != 8 {
+		t.Errorf("modal top %d, height %d, want 0 and 8 (the whole short screen)", y, h)
+	}
+}
+
 func TestModalAnimatesOnlyWhileVisible(t *testing.T) {
 	r, c := newTestRunner()
 	op := r.start("Loading queues", 0, ui.OpAbortable, false)

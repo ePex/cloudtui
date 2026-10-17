@@ -24,8 +24,9 @@ type drawnCell struct {
 	fg, bg tcell.Color
 }
 
-// drawModal draws m at its full size on a simulation screen reporting
-// colors colors, and returns the cells row by row.
+// drawModal draws m at its full size (ProgressModalWidth × its Height)
+// on a simulation screen reporting colors colors, and returns the cells
+// row by row.
 func drawModal(t *testing.T, m *ProgressModal, colors int) [][]drawnCell {
 	t.Helper()
 	sim := tcell.NewSimulationScreen("")
@@ -33,12 +34,13 @@ func drawModal(t *testing.T, m *ProgressModal, colors int) [][]drawnCell {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer sim.Fini()
-	sim.SetSize(ProgressModalWidth, ProgressModalHeight)
 	var screen tcell.Screen = sim
 	if colors != 256 {
 		screen = fewColorsScreen{Screen: sim, colors: colors}
 	}
-	m.SetRect(0, 0, ProgressModalWidth, ProgressModalHeight)
+	height := m.Height(screen)
+	sim.SetSize(ProgressModalWidth, height)
+	m.SetRect(0, 0, ProgressModalWidth, height)
 	m.Draw(screen)
 	sim.Show()
 
@@ -356,18 +358,164 @@ func TestProgressModalSpinnerAnimates(t *testing.T) {
 	}
 }
 
+// stripped is s without spaces and box borders, to compare wrapped text
+// with the text it came from.
+func stripped(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '│' || r == '─' || r == '┌' || r == '┐' || r == '└' || r == '┘' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// rowsText is the text of drawn rows from (inclusive) to (exclusive).
+func rowsText(rows [][]drawnCell, from, to int) string {
+	return screenText(rows[from:to])
+}
+
+// longTitle names two long, dotted queues, as a move between them does.
+const longTitle = `Moving all OrderCreated messages from "dlq.example.orders.fulfilment.backend.eu" to "example.orders.fulfilment.backend.eu"`
+
+// TestProgressModalWrapsTheDetail: the AWS SSO message with its code and
+// device URL, as the app shows it (spec/14), wraps over three rows,
+// nothing cut, the footer below.
 func TestProgressModalWrapsTheDetail(t *testing.T) {
+	const detail = "AWS SSO session expired — opening browser to log in... Verify code ABCD-EFGH at https://device.sso.eu-central-1.amazonaws.com/"
 	m := NewProgressModal()
 	m.Reset("Loading queues", 0)
-	m.SetDetail("AWS SSO session expired — opening browser to log in. Enter the code ABCD-EFGH at https://device.sso.example.com/ to continue, then wait here while it finishes")
+	m.SetDetail(detail)
+	m.SetFooter("Esc to cancel")
 
 	rows := drawModal(t, m, 256)
-	first, second := rowText(rows[7]), rowText(rows[8]) // inner rows 6 and 7
-	if !strings.Contains(first, "AWS SSO session expired") {
-		t.Errorf("detail row 1 = %q", first)
+	if got, want := len(rows), ProgressModalHeight+1; got != want {
+		t.Fatalf("modal is %d rows, want %d (one more detail row)", got, want)
 	}
-	if !strings.Contains(second, "ABCD-EFGH") || !strings.Contains(second, "…") {
-		t.Errorf("detail row 2 = %q, want the code and a trailing … for the rest", second)
+	if got := stripped(rowsText(rows, 7, 10)); got != stripped(detail) { // inner rows 6–8
+		t.Errorf("detail rows = %q, want the whole detail %q", got, stripped(detail))
+	}
+	if got := rowText(rows[10]); !strings.Contains(got, "Esc to cancel") {
+		t.Errorf("row below the detail = %q, want the footer", got)
+	}
+}
+
+func TestProgressModalCutsADetailLongerThanThreeRows(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset("Loading queues", 0)
+	m.SetDetail(strings.Repeat("word ", 60))
+
+	rows := drawModal(t, m, 256)
+	if got, want := len(rows), ProgressModalHeight+1; got != want {
+		t.Fatalf("modal is %d rows, want %d (detail capped at three rows)", got, want)
+	}
+	if got := rowText(rows[9]); !strings.Contains(got, "…") {
+		t.Errorf("third detail row = %q, want it to end in …", got)
+	}
+}
+
+// TestProgressModalWrapsALongTitle: the reported bug. The title with two
+// long queue names is drawn in full over several lines, the bar below it
+// and the modal taller by the extra lines.
+func TestProgressModalWrapsALongTitle(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset(longTitle, 300)
+	m.SetProgress(120, 0)
+	m.SetDetail("Verify code ABCD-EFGH")
+	m.SetFooter("Esc to cancel")
+
+	l := m.layout(true)
+	lines := l.titleRows()
+	if lines < 2 {
+		t.Fatalf("title takes %d line(s), want it wrapped", lines)
+	}
+	rows := drawModal(t, m, 256)
+	if got, want := len(rows), ProgressModalHeight+lines-1; got != want {
+		t.Errorf("modal is %d rows, want %d", got, want)
+	}
+	if got := stripped(rowsText(rows, 1, 1+lines)); got != stripped(longTitle) {
+		t.Errorf("title rows = %q, want the whole title %q", got, stripped(longTitle))
+	}
+	if n := countBarCells(rows[:1+lines+1]); n != 0 {
+		t.Errorf("%d bar cells drawn among the title rows", n)
+	}
+	if n := countBarCells(rows[1+lines+1 : 1+lines+4]); n == 0 {
+		t.Error("no bar below the title")
+	}
+	if got := rowText(rows[1+lines+4]); !strings.Contains(got, "120 of 300") {
+		t.Errorf("row under the bar = %q, want the count", got)
+	}
+	if got := rowText(rows[1+lines+5]); !strings.Contains(got, "Verify code ABCD-EFGH") {
+		t.Errorf("row under the count = %q, want the detail", got)
+	}
+	if got := rowText(rows[len(rows)-2]); !strings.Contains(got, "Esc to cancel") {
+		t.Errorf("last row inside the border = %q, want the footer", got)
+	}
+}
+
+// TestProgressModalWrapsALongTitleInTheSpinnerLook: the same title in
+// the spinner look, with the spinner first and the count after it.
+func TestProgressModalWrapsALongTitleInTheSpinnerLook(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset(longTitle, 300)
+	m.SetProgress(120, 0)
+
+	rows := drawModal(t, m, 16)
+	lines := m.layout(false).titleRows()
+	if lines < 2 {
+		t.Fatalf("spinner text takes %d line(s), want it wrapped", lines)
+	}
+	first := rowText(rows[4]) // inner row 3
+	if !strings.ContainsRune(first, spinnerRune(0)) {
+		t.Errorf("first spinner line = %q, want the spinner", first)
+	}
+	want := string(spinnerRune(0)) + longTitle + "…" + "120of300"
+	if got := stripped(rowsText(rows, 4, 4+lines)); got != stripped(want) {
+		t.Errorf("spinner lines = %q, want %q", got, stripped(want))
+	}
+	if got, wantH := len(rows), ProgressModalHeight+lines-1; got != wantH {
+		t.Errorf("modal is %d rows, want %d", got, wantH)
+	}
+}
+
+func TestProgressModalCutsATitleLongerThanFourLines(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset(strings.Repeat("queue ", 60), 10)
+
+	rows := drawModal(t, m, 256)
+	if got, want := len(rows), ProgressModalHeight+progressTitleMaxRows-1; got != want {
+		t.Fatalf("modal is %d rows, want %d (title capped at four lines)", got, want)
+	}
+	if got := rowText(rows[progressTitleMaxRows]); !strings.Contains(got, "…") {
+		t.Errorf("fourth title line = %q, want it to end in …", got)
+	}
+}
+
+// TestProgressModalShortTitleKeepsItsLayout: an ordinary operation looks
+// exactly as before: 11 rows, title on inner row 0, bar on 2–4, count on
+// 5, footer on 8.
+func TestProgressModalShortTitleKeepsItsLayout(t *testing.T) {
+	m := NewProgressModal()
+	m.Reset(`Deleting 10 message(s) from "orders"`, 10)
+	m.SetProgress(3, 0)
+	m.SetFooter("Esc to cancel")
+
+	rows := drawModal(t, m, 256)
+	if len(rows) != ProgressModalHeight {
+		t.Fatalf("modal is %d rows, want %d", len(rows), ProgressModalHeight)
+	}
+	if got := rowText(rows[1]); !strings.Contains(got, `Deleting 10 message(s) from "orders"`) {
+		t.Errorf("inner row 0 = %q, want the title", got)
+	}
+	for r := 3; r <= 5; r++ {
+		if countBarCells(rows[r:r+1]) == 0 {
+			t.Errorf("inner row %d has no bar", r-1)
+		}
+	}
+	if got := rowText(rows[6]); !strings.Contains(got, "3 of 10") {
+		t.Errorf("inner row 5 = %q, want the count", got)
+	}
+	if got := rowText(rows[9]); !strings.Contains(got, "Esc to cancel") {
+		t.Errorf("inner row 8 = %q, want the footer", got)
 	}
 }
 
@@ -406,7 +554,15 @@ func TestWrapLines(t *testing.T) {
 		{"short", 10, 2, []string{"short"}},
 		{"one two three", 7, 2, []string{"one two", "three"}},
 		{"one two three four", 7, 2, []string{"one two", "three…"}},
-		{"abcdefghijkl", 5, 2, []string{"abcd…"}},
+		// A word longer than a row is broken, not cut.
+		{"abcdefghijkl", 5, 3, []string{"abcde", "fghij", "kl"}},
+		{"abcdefghij", 5, 3, []string{"abcde", "fghij"}},
+		{"to abcdefghijkl x", 5, 4, []string{"to", "abcde", "fghij", "kl x"}},
+		{"abcde fg", 5, 2, []string{"abcde", "fg"}},
+		{"from \"dlq.orders.backend\"", 10, 3, []string{"from", "\"dlq.order", "s.backend\""}},
+		// Beyond maxRows, the last row still ends in "…".
+		{"abcdefghijkl", 5, 2, []string{"abcde", "fghi…"}},
+		{"ab ünïcödé", 4, 3, []string{"ab", "ünïc", "ödé"}},
 	}
 	for _, tt := range tests {
 		got := wrapLines(tt.text, tt.width, tt.maxRows)
