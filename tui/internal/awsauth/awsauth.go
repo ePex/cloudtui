@@ -15,6 +15,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 
@@ -48,6 +49,10 @@ func NeedsReauth(err error, authType awsprofile.AuthType) bool {
 		strings.Contains(msg, "failed to read cached SSO token file")
 }
 
+// loginWaitDelay is how long Login keeps reading the CLI's output after
+// its context is done and the CLI was killed (exec.Cmd.WaitDelay).
+const loginWaitDelay = time.Second
+
 // Login runs `aws sso login --profile <profile>`, which opens the
 // user's default browser to complete the SSO device-authorization flow
 // and writes the resulting token to ~/.aws/sso/cache — the same cache
@@ -72,6 +77,11 @@ func Login(ctx context.Context, profile string, onCode func(code, url string)) e
 	}
 
 	cmd := exec.CommandContext(ctx, "aws", "sso", "login", "--profile", profile)
+	// Once ctx is done the CLI is killed, but a child it started may
+	// still hold its output open, and Run would wait for that child. Stop
+	// reading its output after loginWaitDelay instead, so cancelling
+	// (quitting cloudtui) never hangs.
+	cmd.WaitDelay = loginWaitDelay
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
 	cmd.Stderr = pw

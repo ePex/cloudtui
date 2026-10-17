@@ -2,13 +2,16 @@ package awsauth
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
@@ -194,4 +197,62 @@ func TestLoginStreamsDeviceCodeBeforeCompleting(t *testing.T) {
 	if gotCode != "WDJB-MJHT" || gotURL != "https://device.sso.us-east-1.amazonaws.com/" {
 		t.Errorf("onCode(%q, %q), want (%q, %q)", gotCode, gotURL, "WDJB-MJHT", "https://device.sso.us-east-1.amazonaws.com/")
 	}
+}
+
+// TestLoginCancelReturnsDespiteAChildHoldingOutput: when Login's context
+// is cancelled (quitting cloudtui), the CLI is killed, but a child it
+// started may still hold the output pipe open. Login must return
+// anyway, not wait for that child, or quitting hangs (found live with a
+// fake CLI).
+func TestLoginCancelReturnsDespiteAChildHoldingOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake aws script needs a POSIX shebang")
+	}
+
+	// The fake CLI starts a child that inherits its output, records the
+	// child's PID once it exists, and waits for it.
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	script := "#!/bin/sh\n/bin/sleep 8 &\necho $! > '" + pidFile + "'\nwait\n"
+	if err := os.WriteFile(filepath.Join(dir, "aws"), []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake aws script) error = %v", err)
+	}
+	t.Setenv("PATH", dir)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- Login(ctx, "some-profile", nil) }()
+	childPID := waitForPIDFile(t, pidFile)
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(childPID); err == nil {
+			_ = p.Kill() // the orphaned child; Login no longer waits for it
+		}
+	})
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Login() error = nil after cancelling, want an error")
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("Login didn't return after its context was cancelled (a child still holds its output)")
+	}
+}
+
+// waitForPIDFile waits for path to hold a PID and returns it, failing
+// the test if it doesn't appear.
+func waitForPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(path); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				return pid
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("the fake aws script never wrote %s", path)
+	return 0
 }

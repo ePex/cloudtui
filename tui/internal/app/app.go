@@ -95,6 +95,7 @@ type App struct {
 	listAWSProfiles            func(context.Context) ([]awsprofile.Profile, error)
 	awsAuthTypeFor             func(ctx context.Context, profile string) (awsprofile.AuthType, error)
 	awsSSOLogin                func(ctx context.Context, profile string, onCode func(code, url string)) error
+	ssoLogins                  *awsauth.LoginCoordinator
 	ssmParamsV                 *view.SSMParamsView
 	secretsV                   *view.SecretsView
 	paramDetailV               *view.ParamDetailView
@@ -202,7 +203,10 @@ func New(cfg config.Config) *App {
 	a.statusBar = ui.NewStatusBar(cfg)
 	a.listAWSProfiles = awsprofile.List
 	a.awsAuthTypeFor = awsprofile.AuthTypeFor
-	a.awsSSOLogin = awsauth.Login
+	// One `aws sso login` per profile at a time, shared by every caller
+	// (spec/14); closed when Run returns.
+	a.ssoLogins = awsauth.NewLoginCoordinator(awsauth.Login)
+	a.awsSSOLogin = a.ssoLogins.Login
 	a.listParameters = awsssm.List
 	a.revealParameter = awsssm.Reveal
 	a.listSecrets = awssecrets.List
@@ -534,7 +538,9 @@ func New(cfg config.Config) *App {
 
 // Run starts the terminal event loop; it blocks until the app exits.
 func (a *App) Run() error {
-	return a.tv.Run()
+	err := a.tv.Run()
+	a.ssoLogins.Close() // quitting ends an `aws sso login` that's still waiting
+	return err
 }
 
 // onGlobalKey handles the app's hotkeys (h/s/q/?) and the ':' command

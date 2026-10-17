@@ -47,7 +47,7 @@ real `~/.cloudtui` or `~/.aws`.
    error. `go test ./...` (with `-race` for `awsauth`), gofmt and vet
    pass.
 
-3. [ ] **Wire it into the app** (plan "Approach", "Quitting").
+3. [x] **Wire it into the app** (plan "Approach", "Quitting").
    `internal/app/app.go`: create the coordinator around
    `awsauth.Login`, use its `Login` as `a.awsSSOLogin`, and `Close()`
    it in `Run` after `tv.Run()` returns.
@@ -58,6 +58,32 @@ real `~/.cloudtui` or `~/.aws`.
    shows one `aws sso login`, which runs to the end. Remove the token
    file and reload: a login is offered (one call) instead of a plain
    error. Quit during a login: the fake `aws` process is gone.
+   *Done (2026-10-17):* `app.New` keeps the coordinator on `App`
+   (`ssoLogins`) and uses its `Login` as `a.awsSSOLogin`; `Run` closes
+   it after `tv.Run()` returns. Live (fake `aws` waiting 10 s, scratch
+   HOME, own tmux server):
+   - **Esc, then `r`:** Esc left "Loading cancelled — press r to
+     retry"; `r` joined the running login and showed its code at once.
+     The log has one `aws sso login`, which ran its full 10 s to the end
+     (before the fix, Esc killed it and `r` started a second one).
+   - **Token file removed, `r`:** the login was offered (one call, the
+     code shown) instead of a plain error.
+   - **Quit during a login (Esc, then `q`):** the fake `aws` process was
+     killed, but cloudtui took **7.7 s** to exit (idle: 0.15 s). The
+     fake's `sleep` child inherited the CLI's output, and `exec.Cmd.Run`
+     reads output until EOF, so `Close()` waited for that child. The
+     real CLI usually runs as one process, but a child holding its
+     output would hang quitting the same way. Fixed beyond the plan in
+     `awsauth.Login`: `cmd.WaitDelay = loginWaitDelay` (1 s) stops
+     reading the output 1 s after the kill. New test
+     `TestLoginCancelReturnsDespiteAChildHoldingOutput`: a fake CLI
+     starts a background child, writes its PID once it exists (a fixed
+     sleep first let the test cancel before the child existed, so it
+     passed without the fix), and is cancelled; it hangs past 4 s
+     without `WaitDelay` and passes with it. Live after the fix:
+     cloudtui exits **1.1 s** after `q`, no fake `aws` left.
+   `go test ./...` (with `-race` for `awsauth`), gofmt and vet pass.
+   Merge-back: spec/14 should mention the bounded wait on quitting.
 
 4. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated HOME and tmux server). Remove the scratch setup.
