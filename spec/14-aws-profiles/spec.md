@@ -45,7 +45,26 @@ user dropping to a terminal.
   call once. If the retry also fails, the second error is shown normally
   (`showError`) — no retry loops. Any other failure (network error, real
   `AccessDenied`, bad parameter path, no profile selected, or a non-SSO
-  auth type) is shown as a plain error immediately, unchanged.
+  auth type) is shown as a plain error immediately, unchanged. "Missing"
+  includes an SSO profile that has never logged in, or whose token cache
+  was cleared: it gets the same login-and-retry, not a plain error.
+- **One login per profile at a time.** While `aws sso login` runs for a
+  profile, anything else that needs a login for it (another view, a
+  reload, a watched pipeline, a secret-backed connection) waits for that
+  same login instead of starting another one: each run opens its own
+  browser window, and approving one would leave the other waiting for a
+  code nobody enters. A caller that joins shows the same status message,
+  gets the verification code (below) at once if it was already printed,
+  and retries its own call once when the login finishes. If the login
+  fails, every caller waiting on it reports the error; none starts
+  another login. Logins for different profiles run independently.
+- **Cancelling stops waiting, not the login.** Esc on an operation that
+  is waiting for a login (e.g. "Loading queues", spec/24) cancels that
+  operation, but `aws sso login` keeps running, so approving the browser
+  tab that's already open still logs in. A load started while it runs
+  joins it; one started after it succeeded needs no login. Quitting
+  cloudtui ends a login that is still running, waiting at most a second
+  for it, so no `aws sso login` is left behind and quitting never hangs.
 - **Device verification code/URL**: the same status message is updated
   in place, once `aws sso login`'s device-authorization flow prints them
   (while the browser is still open, not just after login completes), to
@@ -102,8 +121,11 @@ auto-reauth for it (reauth is gated on `AuthType == AuthSSO`).
   `NeedsReauth` is true only when both: the active profile's `AuthType`
   is SSO, and the error indicates an invalid/missing/expired cached
   token — `errors.As` against `*ssocreds.InvalidTokenError` (legacy
-  `sso_start_url` profiles) plus a narrow string check for the
-  `sso-session`-style expired-token error. `Login` streams the CLI
+  `sso_start_url` profiles, which also covers their missing token file)
+  plus two narrow string checks for `sso-session`-style profiles, whose
+  SSO token provider returns untyped errors: "cached SSO token is
+  expired, or not present" and "failed to read cached SSO token file"
+  (the cache file is missing). `Login` streams the CLI
   subprocess's output live (`io.Pipe` + a scanning goroutine, not
   `CombinedOutput()`) so `onCode` can fire — exactly once, with the
   device verification code and URL — as soon as both are printed, well
@@ -114,7 +136,24 @@ auto-reauth for it (reauth is gated on `AuthType == AuthSSO`).
   the following URL:" then "Then enter the code:", each followed by the
   value on the next non-blank line — not a code-format regex, so a
   future CLI wording change just means `onCode` doesn't fire rather than
-  `Login` misbehaving.
+  `Login` misbehaving. `Login` sets `exec.Cmd.WaitDelay` (1 s): once its
+  context is done the CLI is killed, but a child it started could keep
+  the output pipe open, and `Run` would otherwise wait for that child
+  (found live with a fake CLI: quitting took 7.7 s instead of 0.15 s).
+- `tui/internal/awsauth/coordinator.go` — `LoginCoordinator`, with the
+  same `Login(ctx, profile, onCode)` signature, wraps `awsauth.Login`
+  and is what the app uses as `AWSSSOLogin` (`app.New`), so every
+  `WithReauth` caller goes through it. It keeps the login in flight per
+  profile; later callers join it. A run uses the coordinator's own
+  context, not the caller's: a caller whose context is done returns
+  `ctx.Err()` at once and is dropped from the callers to get the code
+  (so a cancelled load's status isn't updated later), while the run
+  goes on. Each caller gets the code once. `Close()` cancels the
+  coordinator's context and waits for the runs to return; `App.Run`
+  calls it after the tview loop ends. Before this, `Login` ran on the
+  caller's context, so Esc on "Loading queues" killed the CLI while its
+  browser tab stayed open, and the next load opened a second browser
+  window (bugfix-sso-double-login, PR #48).
 - SSM Parameters', Secrets Manager's, CloudWatch Logs', and CodePipeline's
   (list, detail, and the background watcher) `load()`/poll functions all
   go through one shared retry helper, `awsauth.WithReauth`, rather than
