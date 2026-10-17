@@ -5,7 +5,7 @@ done. Live checks run with an isolated HOME, a fake `aws` first on
 `PATH`, and a separate tmux server (`tmux -L <name>`), never against the
 real `~/.cloudtui` or `~/.aws`.
 
-1. [ ] **`awsauth.LoginCoordinator`** (plan "Approach").
+1. [x] **`awsauth.LoginCoordinator`** (plan "Approach").
    `internal/awsauth/coordinator.go` + `coordinator_test.go`:
    `NewLoginCoordinator(run)`, `Login(ctx, profile, onCode)` and
    `Close()`. Tests with a channel-controlled fake `run`: one run for
@@ -17,6 +17,19 @@ real `~/.cloudtui` or `~/.aws`.
    waiting caller; `Close()` cancelling the run's context and returning
    only after the run returned. Mutation-check each. Not wired into
    the app yet.
+   *Done (2026-10-17):* one addition to the plan: a caller that stops
+   waiting is also dropped from the callers to get the code, so a
+   cancelled queue load doesn't later get "Verify code …" written into
+   its status. Six tests (`TestLoginCoordinator…`), with a fake run
+   controlled through channels and every wait bounded at 2 s, pass
+   with `-race` (5 runs). Mutation-checked, each failing at least one
+   test: no shared run; the run on the caller's context; a cancelled
+   caller keeping its `onCode`; no code for a late joiner; callers kept
+   after the code (so a second report reaches them again); `Close`
+   without waiting; `Close` without cancelling. A guard against the
+   run reporting the code twice survived its mutation: clearing the
+   callers after the first report already covers it, so the guard was
+   removed. `go test ./...`, gofmt and vet pass.
 
 2. [ ] **Missing token file counts as expired** (plan "Missing token
    file"). `internal/awsauth/awsauth.go` + `awsauth_test.go`: the new
