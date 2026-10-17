@@ -94,5 +94,11 @@ destructive key.
    running; the moves back and forth after it were captured. Scratch
    queues removed. `go test ./...`, gofmt and vet pass.
 
-4. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
+4. [x] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated). Remove the scratch setup.
+   *Done (2026-10-17):* `task test` (Go, mq-proxy, 78/78 web tests)
+   and `task test:tui:race` pass. The smoke test passes against the
+   local broker with a scratch HOME and its own tmux server (a
+   `tmux -L` wrapper on `PATH`); the scratch HOME was unchanged
+   afterwards. No smoke or scratch queues left, nothing on 8080, no
+   scratch processes; scratch setup removed.
