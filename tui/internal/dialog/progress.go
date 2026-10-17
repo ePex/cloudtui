@@ -307,7 +307,9 @@ func (m *ProgressModal) Draw(screen tcell.Screen) {
 }
 
 // wrapLines word-wraps text into at most maxRows rows of width
-// characters; the last row ends in "…" when text doesn't fit.
+// characters; the last row ends in "…" when text doesn't fit. A word
+// longer than a row (a queue name, a URL) starts a new row and is broken
+// into width-long pieces rather than cut.
 func wrapLines(text string, width, maxRows int) []string {
 	if text == "" || width <= 0 {
 		return nil
@@ -315,6 +317,16 @@ func wrapLines(text string, width, maxRows int) []string {
 	var rows []string
 	line := ""
 	for _, word := range strings.Fields(text) {
+		runes := []rune(word)
+		for len(runes) > width {
+			if line != "" {
+				rows = append(rows, line)
+				line = ""
+			}
+			rows = append(rows, string(runes[:width]))
+			runes = runes[width:]
+		}
+		word = string(runes)
 		switch {
 		case line == "":
 			line = word
@@ -326,11 +338,6 @@ func wrapLines(text string, width, maxRows int) []string {
 		}
 	}
 	rows = append(rows, line)
-	for i, r := range rows {
-		if len([]rune(r)) > width {
-			rows[i] = string([]rune(r)[:width-1]) + "…"
-		}
-	}
 	if len(rows) > maxRows {
 		last := []rune(rows[maxRows-1])
 		if len(last) >= width {

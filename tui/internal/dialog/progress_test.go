@@ -406,7 +406,15 @@ func TestWrapLines(t *testing.T) {
 		{"short", 10, 2, []string{"short"}},
 		{"one two three", 7, 2, []string{"one two", "three"}},
 		{"one two three four", 7, 2, []string{"one two", "three…"}},
-		{"abcdefghijkl", 5, 2, []string{"abcd…"}},
+		// A word longer than a row is broken, not cut.
+		{"abcdefghijkl", 5, 3, []string{"abcde", "fghij", "kl"}},
+		{"abcdefghij", 5, 3, []string{"abcde", "fghij"}},
+		{"to abcdefghijkl x", 5, 4, []string{"to", "abcde", "fghij", "kl x"}},
+		{"abcde fg", 5, 2, []string{"abcde", "fg"}},
+		{"from \"dlq.orders.backend\"", 10, 3, []string{"from", "\"dlq.order", "s.backend\""}},
+		// Beyond maxRows, the last row still ends in "…".
+		{"abcdefghijkl", 5, 2, []string{"abcde", "fghi…"}},
+		{"ab ünïcödé", 4, 3, []string{"ab", "ünïc", "ödé"}},
 	}
 	for _, tt := range tests {
 		got := wrapLines(tt.text, tt.width, tt.maxRows)
