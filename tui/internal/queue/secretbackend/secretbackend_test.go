@@ -1,8 +1,14 @@
 package secretbackend
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
@@ -346,5 +352,47 @@ func TestResolveDoesNotReauthForNonSSOProfile(t *testing.T) {
 	}
 	if revealCalls != 1 {
 		t.Errorf("reveal called %d times, want 1 (no retry for a non-SSO profile)", revealCalls)
+	}
+}
+
+// TestNewLogsRequestsUnderTheConnectionName: a backend built for a
+// connection (either kind) logs each HTTP request, naming the
+// connection (spec/06).
+func TestNewLogsRequestsUnderTheConnectionName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "list-queues") {
+			json.NewEncoder(w).Encode(map[string]any{"data": []any{}}) // mq-proxy
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"status": 200, "value": []string{}}) // Jolokia search
+	}))
+	defer srv.Close()
+
+	cases := []struct {
+		conn    config.Connection
+		backend string
+	}{
+		{config.Connection{Name: "local-broker", Backend: "jolokia", Queue: config.QueueConfig{URL: srv.URL, BrokerName: "localhost"}}, "jolokia"},
+		{config.Connection{Name: "proxied-broker", Backend: "proxy", Proxy: config.ProxyConfig{URL: srv.URL}}, "proxy"},
+	}
+	for _, c := range cases {
+		t.Run(c.backend, func(t *testing.T) {
+			var logs bytes.Buffer
+			saved := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(saved) })
+
+			if _, err := New(nil, c.conn).List(t.Context()); err != nil {
+				t.Fatalf("List() error = %v", err)
+			}
+
+			var line map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &line); err != nil {
+				t.Fatalf("want one JSON log line, got %q: %v", logs.String(), err)
+			}
+			if line["connection"] != c.conn.Name || line["backend"] != c.backend {
+				t.Errorf("line = %v, want connection %q, backend %q", line, c.conn.Name, c.backend)
+			}
+		})
 	}
 }

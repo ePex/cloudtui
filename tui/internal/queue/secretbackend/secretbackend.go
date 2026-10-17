@@ -171,12 +171,13 @@ func connWithPassword(conn config.Connection, password string) config.Connection
 }
 
 // buildBackend constructs the appropriate queue.Backend for conn's backend
-// type and connection fields, as-is (no secret resolution).
+// type and connection fields, as-is (no secret resolution). Every HTTP
+// request it sends is logged under conn's name (spec/06).
 func buildBackend(conn config.Connection) queue.Backend {
 	if conn.Backend == "proxy" {
-		return proxy.NewClient(conn.Proxy)
+		return proxy.NewClient(conn.Proxy).WithRequestLog(conn.Name)
 	}
-	return jolokia.NewClient(conn.Queue)
+	return jolokia.NewClient(conn.Queue).WithRequestLog(conn.Name)
 }
 
 // New constructs the queue.Backend for conn. Connections without a

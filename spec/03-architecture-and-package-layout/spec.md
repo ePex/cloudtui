@@ -38,7 +38,9 @@ Current file contents (production `.go` files; each also has a colocated `_test.
 
 **`internal/app`** — the composition root: `app.go` (`App` struct + `New()` + global hotkeys + `SwitchTo`/theme switch/connection switch), `host.go` (implements `ui.Host` on `*App`), `viewhost.go` (implements the per-resource host interfaces on `*App`), `viewwiring.go` (the 8 `OpenX` cross-view navigation trampolines), `codepipelinewatch.go` (3 thin trampoline methods forwarding to `view.PipelineWatcher`), `theme.go` (`reapplyTheme`, iterates `a.themables`).
 
-**`internal/queue/secretbackend`** — `secretbackend.go`: `SecretResolver` (caches AWS-Secrets-Manager-resolved passwords, keyed by profile+secret name, re-resolving on staleness) and a `queue.Backend` decorator that wraps the real backend and resolves its password lazily on first use via the resolver. Pure backend-construction plumbing, no UI surface — this is why it lives under `internal/queue/`, not `internal/dialog` or `internal/view`, even though it moved out of `internal/app` in the same refactor series.
+**`internal/queue/secretbackend`** — `secretbackend.go`: `SecretResolver` (caches AWS-Secrets-Manager-resolved passwords, keyed by profile+secret name, re-resolving on staleness) and a `queue.Backend` decorator that wraps the real backend and resolves its password lazily on first use via the resolver. Pure backend-construction plumbing, no UI surface — this is why it lives under `internal/queue/`, not `internal/dialog` or `internal/view`, even though it moved out of `internal/app` in the same refactor series. `buildBackend` turns on request logging for both clients (spec/06).
+
+**`internal/queue/httplog`** — `httplog.go`: `Transport`, the `http.RoundTripper` that logs each queue backend HTTP request as one line (spec/06), and `RequestBody`. Backend-neutral: the Jolokia and mq-proxy clients supply the operation and status parsing (`jolokia/httplog.go`, `proxy/httplog.go`) and install it with `WithRequestLog`.
 
 ## The Host interface (`internal/ui/host.go`)
 
