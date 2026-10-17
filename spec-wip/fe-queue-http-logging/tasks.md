@@ -29,13 +29,30 @@ done. Live checks run with an isolated HOME and a separate tmux server
    cancelled request logged as a failure; the body not handed on to the
    client. `go test ./...`, gofmt and vet pass.
 
-2. [ ] **Jolokia** (plan "Backend specifics").
+2. [x] **Jolokia** (plan "Backend specifics").
    `internal/queue/jolokia/httplog.go` + test: `describeRequest` and
    `appStatus` (table tests: single exec, single read, bulk, search
    GET, non-JSON), and `Client.WithRequestLog`. A test of the real
    `Client` with request logging against a fake Jolokia server: `List`
    logs the search and the bulk read, and a Jolokia error status inside
    a 200 response is a `WARN` line. Mutation-check.
+   *Done (2026-10-17):* one choice beyond the plan: the target is the
+   queue name from the MBean's `destinationName` when it has one
+   (`exec removeMessage on orders`), the whole MBean otherwise, so
+   lines stay readable. An operation's signature is dropped
+   (`removeMessage(java.lang.String)` → `removeMessage`); a bulk reply's
+   status is always counted (`200×8`). `TestDescribeRequest` and
+   `TestAppStatus` (table tests) plus two real-client tests:
+   `TestWithRequestLogLogsList` (search and bulk read as two `INFO`
+   lines naming backend and connection, no user name or password in the
+   log) and `TestWithRequestLogWarnsOnAJolokiaError` (HTTP 200 with
+   Jolokia status 403 → `WARN`). All pass with `-race`.
+   Mutation-checked, each failing at least one test: no wrapping in
+   `WithRequestLog`; no `jolokiaStatus` key; no `AppStatus`; a single
+   error status counted as ok; bulk errors counted as ok; the operation
+   signature kept; the whole MBean as the target; bulk names not
+   deduplicated; the search not recognised. `go test ./...`, gofmt and
+   vet pass.
 
 3. [ ] **mq-proxy** (plan "Backend specifics").
    `internal/queue/proxy/httplog.go` + test: the operation is the URL
