@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 
 	"github.com/ePex/cloudtui/tui/internal/awsprofile"
@@ -43,6 +44,57 @@ func TestNeedsReauth(t *testing.T) {
 				t.Errorf("NeedsReauth(%v, %v) = %v, want %v", c.err, c.authType, got, c.want)
 			}
 		})
+	}
+}
+
+// missingSSOTokenError returns the real SDK's error for an sso-session
+// profile that has never logged in: its token cache file doesn't exist.
+// Built locally from a temp ~/.aws/config, no network.
+func missingSSOTokenError(t *testing.T) error {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // the SDK's home directory on Windows
+	configFile := filepath.Join(home, "config")
+	err := os.WriteFile(configFile, []byte(`[profile example-sso]
+sso_session = example
+sso_account_id = 111111111111
+sso_role_name = ExampleRole
+region = eu-central-1
+
+[sso-session example]
+sso_start_url = https://example.invalid/start
+sso_region = eu-central-1
+`), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadDefaultConfig(t.Context(),
+		config.WithSharedConfigProfile("example-sso"),
+		config.WithSharedConfigFiles([]string{configFile}),
+		config.WithSharedCredentialsFiles([]string{filepath.Join(home, "credentials")}),
+	)
+	if err != nil {
+		t.Fatalf("loading the example profile: %v", err)
+	}
+	_, err = cfg.Credentials.Retrieve(t.Context())
+	if err == nil {
+		t.Fatal("retrieving credentials without a token cache succeeded, want the SDK's error")
+	}
+	return fmt.Errorf("revealing secret %q: %w", "example/secret", err)
+}
+
+// TestNeedsReauthMissingSSOTokenFile: a profile that never logged in (or
+// whose token cache was cleared) gets the same login-and-retry as an
+// expired token — but only for an SSO profile.
+func TestNeedsReauthMissingSSOTokenFile(t *testing.T) {
+	err := missingSSOTokenError(t)
+
+	if !NeedsReauth(err, awsprofile.AuthSSO) {
+		t.Errorf("NeedsReauth(%v, SSO) = false, want true", err)
+	}
+	if NeedsReauth(err, awsprofile.AuthStaticKeys) {
+		t.Errorf("NeedsReauth(%v, static-keys) = true, want false", err)
 	}
 }
 

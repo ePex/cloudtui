@@ -31,12 +31,21 @@ real `~/.cloudtui` or `~/.aws`.
    callers after the first report already covers it, so the guard was
    removed. `go test ./...`, gofmt and vet pass.
 
-2. [ ] **Missing token file counts as expired** (plan "Missing token
+2. [x] **Missing token file counts as expired** (plan "Missing token
    file"). `internal/awsauth/awsauth.go` + `awsauth_test.go`: the new
    string in `NeedsReauth`. Test with the real SDK's error from an
    `sso-session` profile in a temp `~/.aws/config` with no token cache
    (no network); the same error for a non-SSO auth type stays a plain
    error. Mutation-check.
+   *Done (2026-10-17):* `TestNeedsReauthMissingSSOTokenFile` gets the
+   error from the real SDK (`config.LoadDefaultConfig` on a temp
+   config, then `Credentials.Retrieve`), wrapped like
+   `awssecrets.Reveal` wraps it. Run before the fix, it failed on that
+   error ("…failed to read cached SSO token file, open …/.aws/sso/
+   cache/….json: no such file or directory, SSO) = false, want true");
+   with the fix it passes, and a static-keys profile still gets a plain
+   error. `go test ./...` (with `-race` for `awsauth`), gofmt and vet
+   pass.
 
 3. [ ] **Wire it into the app** (plan "Approach", "Quitting").
    `internal/app/app.go`: create the coordinator around

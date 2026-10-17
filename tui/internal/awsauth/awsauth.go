@@ -39,8 +39,13 @@ func NeedsReauth(err error, authType awsprofile.AuthType) bool {
 	// sso-session-style profiles refresh through ssocreds'
 	// SSOTokenProvider, which doesn't wrap a typed error the way the
 	// legacy sso_start_url provider's InvalidTokenError does — see
-	// ssocreds/sso_token_provider.go in aws-sdk-go-v2/credentials.
-	return strings.Contains(err.Error(), "cached SSO token is expired, or not present")
+	// ssocreds/sso_token_provider.go in aws-sdk-go-v2/credentials. Two
+	// texts: an expired token, and a token cache file that can't be read
+	// (never logged in, or the cache was cleared; loadCachedToken in
+	// ssocreds/sso_cached_token.go).
+	msg := err.Error()
+	return strings.Contains(msg, "cached SSO token is expired, or not present") ||
+		strings.Contains(msg, "failed to read cached SSO token file")
 }
 
 // Login runs `aws sso login --profile <profile>`, which opens the
