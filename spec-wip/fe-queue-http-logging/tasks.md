@@ -4,7 +4,7 @@ Each task needs its own approval before it starts, and is pushed once
 done. Live checks run with an isolated HOME and a separate tmux server
 (`tmux -L <name>`), never against the real `~/.cloudtui`.
 
-1. [ ] **`httplog.Transport`** (plan "Approach").
+1. [x] **`httplog.Transport`** (plan "Approach").
    `internal/queue/httplog/httplog.go` + `httplog_test.go`. Tests
    against an `httptest` server with a capturing `slog` handler: a 200
    gives one `INFO` line with every attribute and the client gets the
@@ -14,6 +14,20 @@ done. Live checks run with an isolated HOME and a separate tmux server
    the URL and the bodies never appear in the log; the request body
    reaches the server intact after `Describe` read it.
    Mutation-check. Not used by any client yet.
+   *Done (2026-10-17):* one addition to the plan: an exported
+   `httplog.RequestBody(req)` reads a copy of the body through
+   `req.GetBody` for `Describe` funcs, so the "never consume `req.Body`"
+   rule lives in one place. The app-status attribute name is set by the
+   backend (`AppStatusKey`, e.g. `jolokiaStatus`). Six tests
+   (`TestTransport…`) pass with `-race`; the secrets test checks for the
+   URL password, the header password (also base64-encoded), the word
+   `Authorization`, and a request and a response body value.
+   Mutation-checked, each failing at least one test: `RequestBody`
+   reading `req.Body`; headers logged; the response body logged; URL
+   credentials kept; an app-status failure ignored (first attempt only
+   broke the build, redone so it compiles); the HTTP status ignored; a
+   cancelled request logged as a failure; the body not handed on to the
+   client. `go test ./...`, gofmt and vet pass.
 
 2. [ ] **Jolokia** (plan "Backend specifics").
    `internal/queue/jolokia/httplog.go` + test: `describeRequest` and
