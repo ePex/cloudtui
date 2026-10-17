@@ -70,7 +70,7 @@ done. Live checks run with an isolated HOME and a separate tmux server
    operation; the wrong backend name; no connection name. `go test
    ./...`, gofmt and vet pass.
 
-4. [ ] **Wire it in** (plan "Backend specifics").
+4. [x] **Wire it in** (plan "Backend specifics").
    `internal/queue/secretbackend/secretbackend.go`: `buildBackend`
    turns on request logging with the connection's name, for both
    backends (test: a request through the built backend writes a line
@@ -81,6 +81,43 @@ done. Live checks run with an isolated HOME and a separate tmux server
    operations, `INFO`/`WARN` as expected, no password. The same against
    mq-proxy (`task dev:proxy:start`). Try Esc during a large browse for
    a cancelled line.
+   *Done (2026-10-17):* `buildBackend` calls `WithRequestLog(conn.Name)`
+   on both clients. `TestNewLogsRequestsUnderTheConnectionName` (via
+   `New`, both backends, `slog.Default()` swapped for a buffer) passes
+   with `-race`; mutation-checked (each backend without logging; the
+   wrong connection name). Live (scratch HOME, own tmux server, local
+   broker, scratch queue `httplog-scratch` with 3 `OrderCreated` and 2
+   `OrderCancelled`):
+   - **A mistake first:** keys were sent before the queue list loaded,
+     so the `/` filter never applied and two purges (and a `d` that hit
+     nothing) went to the broker's `ActiveMQ.Advisory.Connection` queue
+     instead. It had never held a message (QueueSize, EnqueueCount and
+     DequeueCount all 0 afterwards), so nothing was lost. Redone with a
+     check that the screen names `httplog-scratch` before every
+     destructive key.
+   - **Jolokia:** delete → `exec removeMessage on httplog-scratch`;
+     purge of `OrderCancelled` → a browse, then `exec removeMessage`;
+     unfiltered purge → `read QueueSize`, `exec purgeQueue` (Jolokia
+     400, `WARN`), then the fallback `exec removeMatchingMessages`
+     (`INFO`, spec/09). The queue list is `search` plus `bulk: 672 ×
+     read QueueSize/ConsumerCount/EnqueueCount/DequeueCount`
+     (`jolokiaStatus=200×672`). Every browse of a non-empty queue logs
+     `exec browseMessages` with Jolokia 500 (`WARN`), then the fallback
+     `exec browse` (`INFO`, spec/07). Both fallback `WARN`s are kept, as
+     decided with the user. 30 lines, no user name, password or
+     `Authorization` (also not base64) in the log.
+   - **mq-proxy** (`task dev:proxy:start`, connection `proxied-broker`):
+     `list-queues`, `list-messages` (queue name and `maxCount` in the
+     URL) and a delete (`delete-messages`), all `INFO`; no password.
+   - **Cancelled:** `r` on the queue list through mq-proxy, Esc after
+     0.4 s: "Loading cancelled", and two `INFO` lines with
+     `result=cancelled`: the request (504 ms) and an extra one (0 s).
+     The extra one is `proxy.doRequest`'s warm-up retry, which retries
+     a GET even when the failure was the cancellation. Existing
+     behavior, made visible by this log; harmless (it fails at once).
+     Possible follow-up, not changed here.
+   Scratch queue removed, mq-proxy stopped, TUI closed. `go test
+   ./...`, gofmt and vet pass.
 
 5. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated). Remove the scratch setup.
