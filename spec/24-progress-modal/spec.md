@@ -44,6 +44,16 @@ and the AWS/Datadog views.
   from "orders"`, `Moving all messages from "orders" to "dlq"`,
   `Purging created messages from "orders"` or `Loading queues`. It sits
   on top of everything; the view underneath stays visible.
+- **Long text wraps, nothing is cut silently.** The TUI modal is 60
+  columns wide and 11 rows tall for a one-line title. A longer title
+  (long queue names) wraps over up to 4 lines, centered, and the modal
+  grows taller by the extra lines, its bar, count, detail and footer
+  moving down. The detail text under the count (e.g. the AWS SSO
+  message with its code and URL, spec/14) wraps over up to 3 rows.
+  Lines break at spaces; a word longer than a line (a queue name, a
+  URL) starts a new line and is broken inside the word rather than
+  cut. Only text beyond those limits ends in "…". On a terminal too
+  short for the modal, it's clipped to the screen.
 - **Blocking:** while an operation runs, every key except **Esc** is
   ignored (no view switching, no `:` prompt, no second action), and on
   the web clicks on the page are caught too. Ctrl+C still quits the
@@ -77,7 +87,8 @@ and the AWS/Datadog views.
 - **TUI:** a braille spinner (`⠋⠙⠹…`) in the theme's accent color next
   to the title: `⠹ Loading queues…`. If the terminal reports fewer than
   256 colors, counted operations use it too, with `3 of 10` next to the
-  title.
+  title. A long spinner line wraps like the title (above), with the
+  spinner at the start of its first line.
 - **Web console:** the same pixel cat runs clockwise around a small
   starry disc, nose first and feet toward the middle, legs animating,
   trailing a rainbow arc that fades out behind it.
@@ -151,7 +162,19 @@ What can be stopped depends on what's already been sent:
 ### TUI
 
 - **`dialog.ProgressModal`** (`internal/dialog/progress.go`): a custom
-  primitive, 60×11 cells (title, bar, count, two detail rows, footer).
+  primitive, 60 cells wide (`ProgressModalWidth`); inside the border:
+  the title, a blank row, the bar (three rows), the count, the detail
+  (at least two rows, kept even when empty so the modal doesn't jump
+  when a detail appears, up to three) and the footer. That's 11 rows
+  (`ProgressModalHeight`) for a one-line title. `layout` wraps the
+  title (in the spinner look, the whole line: spinner rune, title, "…"
+  and count, wrapped together so the spinner stays first) and the
+  detail with `wrapLines`; `Height(screen)` and `Draw` both use it, so
+  they can't disagree, and `opRunner.draw` sizes the modal
+  `min(Height, screen height)`. Before, the title went through
+  `tview.Print` on one row and was cut at the edge without "…", which
+  hid long queue names or a move's target (bugfix-progress-long-titles,
+  PR #50).
   It decides its look from the screen it's drawn on: rainbow bar when
   `screen.Colors() >= 256`, the operation is counted and the spinner
   isn't forced; otherwise the spinner. The bar is three text rows of
