@@ -202,7 +202,15 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
   response may already have been applied server-side, so blind retry risks
   double-applying it; a GET is idempotent and side-effect-free, so
   replaying it is always safe. Exactly one retry, no backoff; a second
-  failure surfaces as a real error.
+  failure surfaces as a real error. **No retry once the caller's
+  context is done** (Esc on a load, spec/24, a superseded load, or a
+  caller deadline): the caller gave up, and a retry on that context
+  could only fail, so the GET fails with the original error after one
+  attempt. The client's own 30 s `http.Client.Timeout` doesn't cancel
+  the caller's context, so a slow first response is still retried.
+  (Before, a cancelled GET was retried too, and the request log,
+  spec/06, showed a second, instantly cancelled line;
+  bugfix-proxy-retry-after-cancel, PR #51.)
 - **Client-side default `maxCount`**: the TUI's message browser
   (`internal/app/messages.go` or its post-refactor location — see
   spec/03) applies a default of **500** whenever the user hasn't set
