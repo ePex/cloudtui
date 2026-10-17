@@ -1133,3 +1133,87 @@ func TestPostDoesNotRetryOnTransportError(t *testing.T) {
 		t.Errorf("handler called %d times, want exactly 1 (a POST must never be retried)", got)
 	}
 }
+
+// countingTransport counts the attempts the client makes, including ones
+// that fail before reaching the server (a request on an already done
+// context never gets there, so counting at the server would miss it).
+type countingTransport struct {
+	n *atomic.Int32
+}
+
+func (t countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.n.Add(1)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// TestGetIsNotRetriedOnceTheContextIsDone: a GET whose caller gave up
+// (cancelled, or past its deadline) fails with that error after one
+// attempt; retrying it on the same done context could only fail.
+func TestGetIsNotRetriedOnceTheContextIsDone(t *testing.T) {
+	cases := []struct {
+		name   string
+		newCtx func() (context.Context, context.CancelFunc)
+		cancel bool // cancel once the request reached the server
+		want   error
+	}{
+		{"cancelled", func() (context.Context, context.CancelFunc) { return context.WithCancel(context.Background()) }, true, context.Canceled},
+		{"deadline", func() (context.Context, context.CancelFunc) {
+			return context.WithTimeout(context.Background(), 100*time.Millisecond)
+		}, false, context.DeadlineExceeded},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			arrived := make(chan struct{}, 2)
+			c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				arrived <- struct{}{}
+				<-r.Context().Done() // never answers; the caller gives up
+			}))
+			defer stop()
+			var attempts atomic.Int32
+			c.httpClient.Transport = countingTransport{n: &attempts}
+
+			ctx, cancel := tc.newCtx()
+			defer cancel()
+			if tc.cancel {
+				go func() {
+					<-arrived
+					cancel()
+				}()
+			}
+
+			_, err := c.List(ctx)
+			if !errors.Is(err, tc.want) {
+				t.Errorf("List() error = %v, want %v", err, tc.want)
+			}
+			if got := attempts.Load(); got != 1 {
+				t.Errorf("%d attempts, want 1 (no retry once the context is done)", got)
+			}
+		})
+	}
+}
+
+// TestGetIsStillRetriedAfterTheClientTimeout: the client's own Timeout
+// (a proxy slow on its first request) doesn't cancel the caller's
+// context, so that GET is still retried.
+func TestGetIsStillRetriedAfterTheClientTimeout(t *testing.T) {
+	var calls atomic.Int32
+	c, stop := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			select { // too slow for the client's timeout
+			case <-r.Context().Done():
+			case <-time.After(2 * time.Second):
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": []any{}, "errors": []any{}})
+	}))
+	defer stop()
+	c.httpClient.Timeout = 200 * time.Millisecond
+
+	if _, err := c.List(context.Background()); err != nil {
+		t.Fatalf("List() error = %v, want the retry's success", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Errorf("handler called %d times, want 2 (the timed-out attempt and the retry)", got)
+	}
+}

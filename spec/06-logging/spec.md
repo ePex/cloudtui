@@ -26,7 +26,7 @@ Every HTTP request the queue backends make — Jolokia (spec/07) and mq-proxy (s
 - `status` (HTTP), and for Jolokia `jolokiaStatus`, the status inside its JSON reply (Jolokia answers HTTP 200 even when the operation failed): `200`, or per status for a bulk reply (`200×46, 404×2`),
 - `duration` (including reading the body) and `bytes` (response size).
 
-Levels: `INFO` normally; `WARN` (with `error`) when there's no response, the HTTP status isn't 2xx, or a Jolokia status isn't 200; a request cancelled by the user (Esc, spec/24) is `INFO` with `result=cancelled`. Two expected broker fallbacks therefore leave a `WARN` line followed by the fallback's `INFO` line, deliberately kept so the log shows exactly what the broker answered: `browseMessages` → `browse()` (spec/07) and `purgeQueue` → `removeMatchingMessages` (spec/09). A cancelled mq-proxy GET also logs its warm-up retry as a second, instantly cancelled line (`proxy.doRequest` retries any failed GET).
+Levels: `INFO` normally; `WARN` (with `error`) when there's no response, the HTTP status isn't 2xx, or a Jolokia status isn't 200; a request cancelled by the user (Esc, spec/24) is `INFO` with `result=cancelled`. Two expected broker fallbacks therefore leave a `WARN` line followed by the fallback's `INFO` line, deliberately kept so the log shows exactly what the broker answered: `browseMessages` → `browse()` (spec/07) and `purgeQueue` → `removeMatchingMessages` (spec/09).
 
 **Never logged:** request or response bodies, headers (including `Authorization` with the broker password) and passwords in any form, so the log stays safe to attach to a ticket. Datadog and AWS SDK requests aren't logged this way.
 

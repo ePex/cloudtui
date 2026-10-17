@@ -505,7 +505,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		return fmt.Errorf("creating request: %w", err)
 	}
 	resp, err := c.httpClient.Do(req)
-	if err != nil && method == http.MethodGet {
+	if err != nil && method == http.MethodGet && ctx.Err() == nil {
 		// The proxy can time out waiting for headers on its first request
 		// after a period of inactivity (JVM/DB connection warmup on
 		// AWS-hosted deployments) even though it's otherwise healthy — a
@@ -515,6 +515,9 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		// response may already have been applied server-side, so retrying
 		// it risks applying it twice. body is always nil for GET (only
 		// postJSON passes a non-nil body), so newReq() needs no rewind.
+		// Not retried once ctx is done (Esc, a superseded load): the
+		// caller gave up, and a retry on that ctx could only fail. The
+		// client's own Timeout doesn't cancel ctx, so it's still retried.
 		if retryReq, rerr := newReq(); rerr == nil {
 			resp, err = c.httpClient.Do(retryReq)
 		}
