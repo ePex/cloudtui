@@ -15,6 +15,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 
@@ -39,9 +40,18 @@ func NeedsReauth(err error, authType awsprofile.AuthType) bool {
 	// sso-session-style profiles refresh through ssocreds'
 	// SSOTokenProvider, which doesn't wrap a typed error the way the
 	// legacy sso_start_url provider's InvalidTokenError does — see
-	// ssocreds/sso_token_provider.go in aws-sdk-go-v2/credentials.
-	return strings.Contains(err.Error(), "cached SSO token is expired, or not present")
+	// ssocreds/sso_token_provider.go in aws-sdk-go-v2/credentials. Two
+	// texts: an expired token, and a token cache file that can't be read
+	// (never logged in, or the cache was cleared; loadCachedToken in
+	// ssocreds/sso_cached_token.go).
+	msg := err.Error()
+	return strings.Contains(msg, "cached SSO token is expired, or not present") ||
+		strings.Contains(msg, "failed to read cached SSO token file")
 }
+
+// loginWaitDelay is how long Login keeps reading the CLI's output after
+// its context is done and the CLI was killed (exec.Cmd.WaitDelay).
+const loginWaitDelay = time.Second
 
 // Login runs `aws sso login --profile <profile>`, which opens the
 // user's default browser to complete the SSO device-authorization flow
@@ -67,6 +77,11 @@ func Login(ctx context.Context, profile string, onCode func(code, url string)) e
 	}
 
 	cmd := exec.CommandContext(ctx, "aws", "sso", "login", "--profile", profile)
+	// Once ctx is done the CLI is killed, but a child it started may
+	// still hold its output open, and Run would wait for that child. Stop
+	// reading its output after loginWaitDelay instead, so cancelling
+	// (quitting cloudtui) never hangs.
+	cmd.WaitDelay = loginWaitDelay
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
 	cmd.Stderr = pw

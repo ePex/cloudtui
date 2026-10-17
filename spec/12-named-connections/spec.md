@@ -168,7 +168,9 @@ activeConnection: local
   device verification code/URL once `aws sso login` prints them — see
   spec/14 for why), then `aws sso login` opens the browser, then the
   secret resolution (and whichever `queue.Backend` call needed it)
-  retries once. Wired in
+  retries once. The login is the shared one per profile (spec/14): a
+  reload while it runs, or after Esc on "Loading queues", waits for it
+  instead of opening a second browser window. Wired in
   `secretbackend.SecretResolver.Resolve` — the one place that actually
   calls AWS Secrets Manager — so it covers every operation on a
   secret-backed connection (list, browse, send, delete, move, purge),

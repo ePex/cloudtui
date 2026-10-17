@@ -15,7 +15,8 @@ checking the AWS Console.
   `cfg.ActiveAWSProfile` for credentials (including FE 36-style SSO
   auto-reauth — a background poll can trigger a browser SSO login
   unexpectedly while the user is in a different view, consistent with how
-  every other AWS-backed view behaves).
+  every other AWS-backed view behaves; it shares a login already running
+  for the profile instead of opening a second browser window, spec/14).
 - **Loading indicator**: every load of the pipeline list shows an
   immediate accent-colored "Loading pipelines…" placeholder row rather
   than leaving stale data on screen with no indication a fetch is in
