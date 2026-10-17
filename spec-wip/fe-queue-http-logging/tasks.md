@@ -54,11 +54,21 @@ done. Live checks run with an isolated HOME and a separate tmux server
    deduplicated; the search not recognised. `go test ./...`, gofmt and
    vet pass.
 
-3. [ ] **mq-proxy** (plan "Backend specifics").
+3. [x] **mq-proxy** (plan "Backend specifics").
    `internal/queue/proxy/httplog.go` + test: the operation is the URL
    path; `Client.WithRequestLog`. A test of the real `Client` against a
    fake mq-proxy: one line per request, including each warm-up retry.
    Mutation-check.
+   *Done (2026-10-17):* `TestWithRequestLogLogsEachRequest` (list and a
+   filtered browse: two `INFO` lines with the paths as operations, the
+   queue name and JMS type in the browse URL, no password) and
+   `TestWithRequestLogLogsTheWarmupRetry` (the server drops the first
+   connection without a response; `doRequest` retries the GET; the
+   failed attempt is a `WARN` with the error, the retry an `INFO` with
+   status 200). Both pass with `-race`. Mutation-checked, each failing
+   at least one test: no wrapping; the whole URL as the operation; no
+   operation; the wrong backend name; no connection name. `go test
+   ./...`, gofmt and vet pass.
 
 4. [ ] **Wire it in** (plan "Backend specifics").
    `internal/queue/secretbackend/secretbackend.go`: `buildBackend`
