@@ -37,6 +37,10 @@ this module.
   depending on `ui.ViewHost` rather than `internal/app`'s concrete `*App`.
 - `internal/queue/` — `Backend` interface and `Summary` type for queue data sources.
 - `internal/queue/jolokia/` — Jolokia HTTP client implementing `queue.Backend`.
+- `internal/queue/httplog/` — `http.RoundTripper` that logs each queue
+  backend HTTP request as one line, never headers or bodies (see
+  `spec/06-logging`); the Jolokia and mq-proxy clients install it with
+  `WithRequestLog`.
 - `internal/queue/secretbackend/` — `queue.Backend` decorator that
   resolves a connection's password from AWS Secrets Manager on first
   use, caching and transparently re-resolving on a stale/rotated

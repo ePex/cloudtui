@@ -129,6 +129,9 @@ both map to HTTP 400 via `GlobalExceptionHandler`.
 
 ## The Go client (`tui/internal/queue/proxy/proxy.go`)
 
+- Every request it sends, including each warm-up retry, is logged as one
+  line with the URL path as the operation (spec/06, "Queue backend
+  requests").
 - Sends `list-messages` filter fields **only in nested `filter.*` form** —
   no flat/legacy duplicate params.
 - Maps the real `jmsType` response field to `queue.Message.JMSType`,

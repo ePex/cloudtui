@@ -127,6 +127,8 @@ ActiveMQ broker, reachable via the Home dashboard (spec/05) and via
 - The Jolokia client (`tui/internal/queue/jolokia/`) reads queue summaries,
   including Enqueue/DequeueCount, from the broker MBean over Jolokia HTTP
   using only `net/http` + `encoding/json` — no JMX library dependency.
+  Every request it sends is logged as one line, with the operation and
+  Jolokia's own status (spec/06, "Queue backend requests").
 
 ## Notable gotchas worth preserving
 
