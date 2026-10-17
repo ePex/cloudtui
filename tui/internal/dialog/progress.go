@@ -11,12 +11,28 @@ import (
 	"github.com/ePex/cloudtui/tui/internal/ui"
 )
 
-// ProgressModalWidth and ProgressModalHeight are the progress modal's
-// fixed outer size, border included.
+// ProgressModalWidth is the progress modal's outer width, border
+// included. ProgressModalHeight is its outer height for a one-line title
+// and up to two detail rows; a longer title or detail makes it taller
+// (Height).
 const (
 	ProgressModalWidth  = 60
 	ProgressModalHeight = 11
 )
+
+// Limits of the modal's wrapped text: the title gets up to
+// progressTitleMaxRows lines, the detail at least progressDetailMinRows
+// rows (kept even when empty, so the modal doesn't jump when a detail
+// appears) and up to progressDetailMaxRows. Text beyond them ends in "…".
+const (
+	progressTitleMaxRows  = 4
+	progressDetailMinRows = 2
+	progressDetailMaxRows = 3
+)
+
+// progressTextWidth is the width text gets: inside the border, with one
+// column of margin on each side.
+const progressTextWidth = ProgressModalWidth - 4
 
 // rainbowMinColors is the fewest colors a screen must report for the
 // rainbow bar; below that the modal falls back to the spinner.
@@ -233,7 +249,7 @@ func (m *ProgressModal) SetProgress(done, failed int) {
 	m.done, m.failed = done, failed
 }
 
-// SetDetail sets the extra text shown under the count (up to two rows).
+// SetDetail sets the extra text shown under the count (up to three rows).
 func (m *ProgressModal) SetDetail(text string) { m.detail = text }
 
 // SetFooter sets the last line, e.g. "Esc to cancel".
@@ -252,13 +268,57 @@ func (m *ProgressModal) rainbow(screen tcell.Screen) bool {
 	return m.total > 0 && !m.forceSpinner && screen.Colors() >= rainbowMinColors
 }
 
-// Draw paints the modal. Its layout, inside the border:
+// progressLayout is the modal's wrapped text and where it goes.
+type progressLayout struct {
+	rainbow bool
+	// title is the title's lines; in the spinner look, the spinner's
+	// line: the spinner rune, a space, the title, "…" and the count.
+	title  []string
+	detail []string
+}
+
+// titleRows is how many rows the title takes (at least one).
+func (l progressLayout) titleRows() int { return max(1, len(l.title)) }
+
+// detailRows is how many rows are kept for the detail.
+func (l progressLayout) detailRows() int { return max(progressDetailMinRows, len(l.detail)) }
+
+// innerHeight is the rows the layout needs inside the border: the title,
+// a blank row, the bar (or the spinner's area), the count, the detail
+// and the footer.
+func (l progressLayout) innerHeight() int { return l.titleRows() + 6 + l.detailRows() }
+
+// layout wraps the modal's text for the rainbow or the spinner look.
+func (m *ProgressModal) layout(rainbow bool) progressLayout {
+	l := progressLayout{rainbow: rainbow}
+	if rainbow {
+		l.title = wrapLines(m.title, progressTextWidth, progressTitleMaxRows)
+	} else {
+		text := string(spinnerRune(m.frame)) + " " + m.title + "…"
+		if count := progressCount(m.done, m.total, m.failed); count != "" {
+			text += "  " + count
+		}
+		l.title = wrapLines(text, progressTextWidth, progressTitleMaxRows)
+	}
+	l.detail = wrapLines(m.detail, progressTextWidth, progressDetailMaxRows)
+	return l
+}
+
+// Height is the modal's outer height, border included, for its current
+// text when drawn on screen: ProgressModalHeight for a one-line title,
+// taller for a longer title or a three-row detail.
+func (m *ProgressModal) Height(screen tcell.Screen) int {
+	return m.layout(m.rainbow(screen)).innerHeight() + 2
+}
+
+// Draw paints the modal. Its layout inside the border, with t title
+// lines (one for a short title) and d detail rows (at least two):
 //
-//	row 0     title, above the rainbow bar
-//	rows 2–4  rainbow bar, or on row 3 the spinner, title and count
-//	row 5     count, under the rainbow bar
-//	rows 6–7  detail, wrapped
-//	row 8     footer
+//	rows 0…t-1     title, above the rainbow bar
+//	rows t+1…t+3   rainbow bar; or from row 3, the spinner line(s)
+//	row t+4        count, under the rainbow bar
+//	rows t+5…      detail, wrapped
+//	row t+5+d      footer
 func (m *ProgressModal) Draw(screen tcell.Screen) {
 	m.Box.DrawForSubclass(screen, m)
 	x, y, width, height := m.GetInnerRect()
@@ -270,40 +330,48 @@ func (m *ProgressModal) Draw(screen tcell.Screen) {
 			tview.Print(screen, tview.Escape(text), x+1, y+row, width-2, align, color)
 		}
 	}
+	l := m.layout(m.rainbow(screen))
+	t := l.titleRows()
 
-	if m.rainbow(screen) {
-		line(m.title, 0, tview.AlignCenter, m.textColor)
+	if l.rainbow {
+		for i, text := range l.title {
+			line(text, i, tview.AlignCenter, m.textColor)
+		}
 		bar := rainbowCells(width-2, m.done, m.total, m.frame)
 		for r, cells := range bar {
-			if 2+r >= height {
+			if t+1+r >= height {
 				break
 			}
 			for c, cell := range cells {
-				screen.SetContent(x+1+c, y+2+r, cell.r, nil,
+				screen.SetContent(x+1+c, y+t+1+r, cell.r, nil,
 					tcell.StyleDefault.Foreground(cell.fg).Background(cell.bg))
 			}
 		}
-		line(progressCount(m.done, m.total, m.failed), 5, tview.AlignCenter, m.textColor)
+		line(progressCount(m.done, m.total, m.failed), t+4, tview.AlignCenter, m.textColor)
 	} else {
-		// "⠹ Loading queues…  3 of 10": the spinner in the accent color,
-		// the rest in the text color.
-		text := m.title + "…"
-		if count := progressCount(m.done, m.total, m.failed); count != "" {
-			text += "  " + count
-		}
-		spin := string(spinnerRune(m.frame))
-		if hex := m.accentColor.Hex(); hex >= 0 {
-			spin = fmt.Sprintf("[#%06x]%s[-]", hex, spin)
-		}
-		if height > 3 {
-			tview.Print(screen, spin+" "+tview.Escape(text), x+1, y+3, width-2, tview.AlignCenter, m.textColor)
+		// "⠹ Loading queues…  3 of 10": the spinner (first rune of the
+		// first line) in the accent color, the rest in the text color.
+		for i, text := range l.title {
+			row := 3 + i
+			if i > 0 {
+				line(text, row, tview.AlignCenter, m.textColor)
+				continue
+			}
+			runes := []rune(text)
+			spin := string(runes[0])
+			if hex := m.accentColor.Hex(); hex >= 0 {
+				spin = fmt.Sprintf("[#%06x]%s[-]", hex, spin)
+			}
+			if row < height {
+				tview.Print(screen, spin+tview.Escape(string(runes[1:])), x+1, y+row, width-2, tview.AlignCenter, m.textColor)
+			}
 		}
 	}
 
-	for i, row := range wrapLines(m.detail, width-2, 2) {
-		line(row, 6+i, tview.AlignCenter, m.textColor)
+	for i, text := range l.detail {
+		line(text, t+5+i, tview.AlignCenter, m.textColor)
 	}
-	line(m.footer, 8, tview.AlignCenter, m.footerColor)
+	line(m.footer, t+5+l.detailRows(), tview.AlignCenter, m.footerColor)
 }
 
 // wrapLines word-wraps text into at most maxRows rows of width

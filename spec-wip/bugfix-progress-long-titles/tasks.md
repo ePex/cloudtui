@@ -28,7 +28,7 @@ destructive key.
    and a first "bytes" mutation was a no-op, redone. `go test ./...`,
    gofmt and vet pass.
 
-2. [ ] **Layout and height from the content** (plan "Layout from the
+2. [x] **Layout and height from the content** (plan "Layout from the
    content").
    `progress.go`: `layout`, `Height(screen)`, `Draw` using it, the
    title wrapped (up to 4 lines) in both looks, detail up to 3 rows.
@@ -36,6 +36,30 @@ destructive key.
    with the bar below it and `Height` grown; the spinner look the same;
    an SSO detail with a long URL drawn in full on 3 rows; a short title
    giving exactly today's rows and `Height` 11. Mutation-check.
+   *Done (2026-10-17):* `progressLayout` holds the wrapped title (in the
+   spinner look the whole spinner line: spinner rune, title, "…" and
+   count, wrapped together so the spinner stays first) and detail;
+   `Height` and `Draw` both use it. The test helper `drawModal` now
+   draws at the modal's own `Height` (still 60×11 for every existing
+   test). Tests: `…WrapsALongTitle` (two long dotted queue names: the
+   title's text in full over its lines, no bar among them, the bar,
+   count, detail and footer each on its row below, `Height` 11 +
+   extra lines), `…WrapsALongTitleInTheSpinnerLook`,
+   `…CutsATitleLongerThanFourLines`, `…WrapsTheDetail` (rewritten: the
+   SSO message in the app's format, `… Verify code ABCD-EFGH at
+   https://device.sso.eu-central-1.amazonaws.com/`, in full on 3 rows,
+   modal 12 rows; it used to expect the cut "…"),
+   `…CutsADetailLongerThanThreeRows`, `…ShortTitleKeepsItsLayout`. A
+   URL longer than a row (56) starts its own row, so a message with
+   one can still need a fourth row and end in "…"; the device URL the
+   CLI prints is shorter. Mutation-checked, each failing at least one
+   test: the title on one line (rainbow; spinner); detail capped at
+   two rows; no minimum detail rows; no title line limit; `Height`
+   constant; the bar, count, detail or footer at today's fixed rows;
+   only the first spinner line drawn. The count, detail and footer
+   positions first survived (the long-title test only looked for the
+   text anywhere); the test now checks each row. `go test ./...`,
+   gofmt and vet pass. The app still sizes the modal 60×11 (task 3).
 
 3. [ ] **Size the modal from `Height`** (plan "Sizing").
    `internal/app/operation.go` + test: a long title gives a taller,
