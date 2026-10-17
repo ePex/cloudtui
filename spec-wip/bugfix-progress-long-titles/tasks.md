@@ -61,7 +61,7 @@ destructive key.
    text anywhere); the test now checks each row. `go test ./...`,
    gofmt and vet pass. The app still sizes the modal 60×11 (task 3).
 
-3. [ ] **Size the modal from `Height`** (plan "Sizing").
+3. [x] **Size the modal from `Height`** (plan "Sizing").
    `internal/app/operation.go` + test: a long title gives a taller,
    still centered modal; a short one 60×11.
    *Live check (isolated HOME, local broker):* two scratch queues with
@@ -69,6 +69,30 @@ destructive key.
    Move all, then marked messages, from one to the other, capturing
    the screen while the modal shows: the title in full, the modal
    grown, nothing cut. The same with `TERM=xterm` for the spinner look.
+   *Done (2026-10-17):* `opRunner.draw` sizes the modal
+   `min(m.Height(screen), h)`. Tests: `TestModalGrowsForALongTitle`
+   (taller than 11, centered on 24 rows, both queue names drawn in
+   full; a short title stays 60×11) and `TestModalIsClippedToAShortScreen`
+   (an 8-row screen: the modal takes exactly those 8 rows). Mutation-
+   checked: the fixed height again fails the first; no clipping
+   survived until the short-screen test was added, then fails it.
+   Live (scratch HOME, own tmux server, local broker): queues
+   `scratch.progresscheck.orders.fulfilment.backend.eu` and
+   `dlq.scratch.progresscheck.orders.fulfilment.backend.eu`, the source
+   seeded with 400 messages; every destructive step confirmed on screen
+   (the picker filtered to the one scratch target). Moving all 400
+   marked messages shows the modal for about a second; the screen was
+   captured every 0.1 s. Rainbow look (`TERM=xterm-256color`): "Moving
+   400 message(s) from" / both quoted names on their own lines, the bar
+   below, `333 of 400`, the modal 13 rows. Spinner look: `TERM=xterm`
+   alone still gave the rainbow, because the shell's
+   `COLORTERM=truecolor` makes tcell report full color; with
+   `COLORTERM` unset and `TERM=xterm-16color`: `⠼ Moving 400 message(s)
+   from`, both names in full, the "…" after the second, the count
+   wrapped to its own line, the modal 14 rows. The first move (a plain
+   move-all, no confirmation step) finished before a capture was
+   running; the moves back and forth after it were captured. Scratch
+   queues removed. `go test ./...`, gofmt and vet pass.
 
 4. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated). Remove the scratch setup.
