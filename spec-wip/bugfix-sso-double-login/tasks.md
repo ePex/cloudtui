@@ -85,5 +85,12 @@ real `~/.cloudtui` or `~/.aws`.
    `go test ./...` (with `-race` for `awsauth`), gofmt and vet pass.
    Merge-back: spec/14 should mention the bounded wait on quitting.
 
-4. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
+4. [x] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated HOME and tmux server). Remove the scratch setup.
+   *Done (2026-10-17):* `task test` (Go, mq-proxy, 78/78 web tests)
+   and `task test:tui:race` pass. The smoke test passes against the
+   local broker with a scratch HOME and its own tmux server (a
+   `tmux -L` wrapper on `PATH`); the scratch HOME was unchanged
+   afterwards and no smoke queues were left. Scratch setup removed (the
+   fake `aws`, the fake SSO profile and token cache, the scratch
+   HOMEs); no scratch processes left and nothing listening on 8080.
