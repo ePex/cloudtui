@@ -39,5 +39,11 @@ destructive key.
    a second, 0 s cancelled line). `r` then loaded normally (`INFO`,
    status 200). mq-proxy stopped. `go test ./...`, gofmt and vet pass.
 
-2. [ ] **Regression run.** `task test`, `task test:tui:race`, smoke
+2. [x] **Regression run.** `task test`, `task test:tui:race`, smoke
    test (isolated). Stop mq-proxy, remove the scratch setup.
+   *Done (2026-10-17):* `task test` (Go, mq-proxy, 78/78 web tests)
+   and `task test:tui:race` pass. The smoke test (which also switches to
+   the mq-proxy backend) passes against the local broker with a scratch
+   HOME and its own tmux server; the scratch HOME was unchanged
+   afterwards. No smoke queues left, mq-proxy stopped (nothing on
+   8080), no scratch processes; scratch setup removed.
